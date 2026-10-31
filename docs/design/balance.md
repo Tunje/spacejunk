@@ -1,6 +1,6 @@
 # Balance Report
 
-Status: task B6, report stage. `data/` is unchanged. The owner chooses a pacing option, then B6 applies it. All figures are from the slice's first-pass data, on `main` at 9c74767.
+Status: task B6, report stage. `data/` is unchanged. The owner chooses a pacing option, then B6 applies it. All figures are from the slice's first-pass data, measured on `main` at 9c74767. `data/` and `sim/` have not changed since.
 
 ## 1. Summary
 
@@ -186,5 +186,6 @@ Every option changes the data hash, so existing saves fail to load with `data_mi
 These are for the owner and the Lead. None of them is a data change.
 
 - **The drone arrives after the hauling is over.** The ship's last unload is at 20 to 32 minutes of a run of 86 to 100, and from then on nothing flies. At handover the station already holds spare ore, up to 1900 kg of hematite, 1000 kg of chalcopyrite and 1400 kg of olivine. So the drone takes over a job the player stopped doing an hour earlier, and its ore is not yet needed. Option A shortens that gap but does not close it. This bears on M4's question of whether the handover is satisfying.
-- **The goal hints do not point at the cheap first module.** The Ore Container needs only iron, so it can be built from the first haul, while the radiator needs a copper trip. A hint naming it should bring a new player's first module down from 34 minutes towards the practised 15, for no data change. That figure is an estimate, since the first-time run was not measured with this plan. The hint text is Agent D's.
+- **The Install hint blocks check 10 for a player who follows it.** It says to fit a Heat Radiator. With one fitted, the ship rejects 400 kW, so the second laser's 280 kW fits and the failure the Fix hint describes (280 of 200 kW) never happens. A third laser would then fail on power instead, at 472 kW of 420 kW, and fixing that needs a new power part. This run's first-time player holds the radiator back, so the table above does not show the problem.
+- **The Install hint also points away from the cheap first module.** The Ore Container needs only iron, so it can be built from the first haul, while the radiator needs a copper trip. Naming it in the hint would fix the block above too, and should bring a new player's first module down from 34 minutes towards the practised 15, for no data change. That figure is an estimate, since the first-time run was not measured with this plan. The hint text is Agent D's.
 - **Giving orders is the main cost at 8x.** Each trip needs six orders. Data cannot change that, but pausing to think would, as would an order queue or letting a Basic Core repeat a route. Those are design changes for after M4.
