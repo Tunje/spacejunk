@@ -5,6 +5,7 @@ class_name TimeControls extends PanelContainer
 signal map_pressed
 signal policy_pressed
 signal fit_pressed
+signal jobs_pressed
 
 var bridge: SimBridge
 
@@ -41,6 +42,11 @@ func _ready() -> void:
 	fit_button.focus_mode = Control.FOCUS_NONE
 	fit_button.pressed.connect(func() -> void: fit_pressed.emit())
 	row.add_child(fit_button)
+	var jobs_button := Button.new()
+	jobs_button.text = "Jobs"
+	jobs_button.focus_mode = Control.FOCUS_NONE
+	jobs_button.pressed.connect(func() -> void: jobs_pressed.emit())
+	row.add_child(jobs_button)
 	var policy_button := Button.new()
 	policy_button.text = "Policy"
 	policy_button.focus_mode = Control.FOCUS_NONE

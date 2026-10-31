@@ -8,6 +8,7 @@ class_name ScreenshotDriver extends Node
 ##   --policy=1                      opens the standing-orders mock
 ##   --then=<order key>              pressed --then-delay frames after --order
 ##   --last=<order key>              pressed --last-delay frames after --then
+##   --jobs=<recipe id>              opens the jobs screen and starts that recipe
 ##   --fit=<item>  --fit-slot=<connector>  opens fitting after the orders and picks both
 
 var main: Node3D
@@ -66,6 +67,18 @@ func _run() -> void:
 		await _press_after(parsed["last"], int(parsed.get("last-delay", "60")))
 	if parsed.has("fit"):
 		await _open_fitting()
+	if parsed.has("jobs"):
+		await _open_jobs()
+
+
+func _open_jobs() -> void:
+	main.toggle_industry()
+	var screen: IndustryScreen = main.industry_screen
+	for entry: Dictionary in IndustryLogic.facilities(main.bridge.current_view["units"][screen.unit_id], screen._defs["modules"]):
+		for recipe: Dictionary in IndustryLogic.recipes_for(entry["type"], screen._defs["recipes"]):
+			if recipe["id"] == parsed["jobs"]:
+				screen.choose_facility(entry)
+				screen.start(recipe)
 
 
 func _open_fitting() -> void:
