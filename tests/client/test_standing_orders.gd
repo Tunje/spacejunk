@@ -75,7 +75,7 @@ func test_ore_target_caps_at_the_fleet() -> void:
 
 
 func test_scene_toggles_with_the_key_and_closes_with_escape() -> void:
-	var main: Node = add_child_autofree(load("res://client/main.tscn").instantiate())
+	var main: Node = add_child_autofree(StubScene.build())
 	main.get_node("Bridge").set_paused(true)
 	var screen: StandingOrdersScreen = main.standing_orders
 	assert_false(screen.visible)
@@ -90,7 +90,7 @@ func test_scene_toggles_with_the_key_and_closes_with_escape() -> void:
 
 
 func test_escape_closes_the_screen_before_the_map() -> void:
-	var main: Node = add_child_autofree(load("res://client/main.tscn").instantiate())
+	var main: Node = add_child_autofree(StubScene.build())
 	main.get_node("Bridge").set_paused(true)
 	main.toggle_map()
 	main.standing_orders.toggle()
@@ -103,7 +103,7 @@ func test_escape_closes_the_screen_before_the_map() -> void:
 
 
 func test_screen_never_touches_the_simulation() -> void:
-	var main: Node = add_child_autofree(load("res://client/main.tscn").instantiate())
+	var main: Node = add_child_autofree(StubScene.build())
 	var bridge: SimBridge = main.get_node("Bridge")
 	bridge.set_paused(true)
 	var before: String = bridge.sim.state_hash()

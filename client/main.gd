@@ -1,11 +1,10 @@
 extends Node3D
 ## Client root: starts the backend and wires the bridge to the view and overlay.
 
-const SCENARIO := "stub"
+const SCENARIO := "reference"
 const SEED_VALUE := 1
 
-## Any scenario other than the stub's runs on the real Sim. The game defaults to
-## the stub until the kernel has movement.
+## The stub stays reachable for tests and tools, with `--scenario=stub` after `--`.
 @export var scenario := SCENARIO
 
 @onready var bridge: SimBridge = $Bridge

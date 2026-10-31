@@ -108,7 +108,7 @@ func test_spread_offsets_differ_and_stay_close() -> void:
 
 
 func test_craft_sharing_a_stop_spread_on_screen_but_not_in_the_sim() -> void:
-	var main: Node = add_child_autofree(load("res://client/main.tscn").instantiate())
+	var main: Node = add_child_autofree(StubScene.build())
 	var bridge: SimBridge = main.get_node("Bridge")
 	bridge.set_paused(true)
 	var sim := StubSim.new_game("stub_load", 1)
@@ -133,7 +133,7 @@ func test_craft_sharing_a_stop_spread_on_screen_but_not_in_the_sim() -> void:
 
 
 func test_a_docked_ship_does_not_push_its_station_aside() -> void:
-	var main: Node = add_child_autofree(load("res://client/main.tscn").instantiate())
+	var main: Node = add_child_autofree(StubScene.build())
 	var bridge: SimBridge = main.get_node("Bridge")
 	bridge.set_paused(true)
 	var local: LocalView = main.get_node("LocalView")
@@ -151,7 +151,7 @@ func test_a_docked_ship_does_not_push_its_station_aside() -> void:
 
 
 func test_a_lone_craft_sits_exactly_on_its_sim_position() -> void:
-	var main: Node = add_child_autofree(load("res://client/main.tscn").instantiate())
+	var main: Node = add_child_autofree(StubScene.build())
 	main.get_node("Bridge").set_paused(true)
 	var local: LocalView = main.get_node("LocalView")
 	local.refresh(0.016)
@@ -160,7 +160,7 @@ func test_a_lone_craft_sits_exactly_on_its_sim_position() -> void:
 
 func _order_view() -> Dictionary:
 	return {
-		"units": { 1: { "op": { "type": "idle" }, "at_target": 0 } },
+		"units": { 1: { "op": { "type": "idle" }, "at_target": 0, "dock": {} } },
 		"bodies": { 5: { "scanned": false }, 6: { "scanned": false } },
 		"deposits": {},
 	}
@@ -200,7 +200,7 @@ func test_ship_at_an_empty_scanned_rock_moves_on() -> void:
 
 
 func test_load_runs_in_the_scene_with_every_ship_busy() -> void:
-	var main: Node = add_child_autofree(load("res://client/main.tscn").instantiate())
+	var main: Node = add_child_autofree(StubScene.build())
 	var bridge: SimBridge = main.get_node("Bridge")
 	bridge.set_paused(true)
 	bridge.start(StubSim.new_game("stub_load", 1))

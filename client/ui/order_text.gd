@@ -39,6 +39,7 @@ const REASONS: Dictionary = {
 	"port_busy": "Docking port is busy",
 	"root_part": "The root part cannot be removed",
 	"tier_too_low": "AI core tier is too low",
+	"too_hard": "Too hard for this laser",
 	"unknown_deposit": "Deposit not found",
 	"malformed_command": "Invalid order",
 	"unknown_command": "Not available yet",
@@ -103,6 +104,9 @@ static func event(entry: Dictionary, unit_name: String, items: Dictionary) -> St
 			return "%s: %s" % [unit_name, reason(data["reason"], data.get("detail", {}))]
 		"mining_stopped":
 			return "%s: mining stopped. %s" % [unit_name, reason(data["reason"])]
+		"transfer_done":
+			var moved: String = items.get(data["item"], {}).get("name", data["item"])
+			return "%s: moved %s of %s" % [unit_name, tonnes(data["grams"]), moved]
 		"arrived":
 			return "%s arrived" % unit_name
 		"docked":

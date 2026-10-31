@@ -107,7 +107,7 @@ func test_asteroid_scale_matches_its_radius() -> void:
 
 
 func test_field_follows_the_focus_in_the_scene() -> void:
-	var main: Node = add_child_autofree(load("res://client/main.tscn").instantiate())
+	var main: Node = add_child_autofree(StubScene.build())
 	var local: LocalView = main.get_node("LocalView")
 	var bridge: SimBridge = main.get_node("Bridge")
 	bridge.set_paused(true)
@@ -119,7 +119,7 @@ func test_field_follows_the_focus_in_the_scene() -> void:
 
 
 func test_shadow_range_follows_the_camera() -> void:
-	var main: Node = add_child_autofree(load("res://client/main.tscn").instantiate())
+	var main: Node = add_child_autofree(StubScene.build())
 	var local: LocalView = main.get_node("LocalView")
 	main.get_node("Bridge").set_paused(true)
 	local.camera.distance_m = 40.0

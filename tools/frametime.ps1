@@ -7,7 +7,8 @@ param(
     [int]$Warmup = 4000,
     [int]$Samples = 8000,
     [int]$Speed = 8,
-    [int]$Rocks = 6000
+    [int]$Rocks = 6000,
+    [string]$Scenario = 'stub_load'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -44,7 +45,7 @@ foreach ($view in $views) {
     $outFile = Join-Path $outDir "frametime_$($view.Name).json"
     if (Test-Path $outFile) { Remove-Item $outFile }
     $ErrorActionPreference = 'Continue'
-    & cmd /c "`"$godot`" --path `"$projectRoot`" --resolution $Size -- --scenario=stub_load --rocks=$Rocks --speed=$Speed --warmup=$Warmup --samples=$Samples --frametime=$($outFile -replace '\\', '/') $($view.Args -join ' ') 2>&1" | Out-Null
+    & cmd /c "`"$godot`" --path `"$projectRoot`" --resolution $Size -- --scenario=$Scenario --rocks=$Rocks --speed=$Speed --warmup=$Warmup --samples=$Samples --frametime=$($outFile -replace '\\', '/') $($view.Args -join ' ') 2>&1" | Out-Null
     $code = $LASTEXITCODE
     $ErrorActionPreference = 'Stop'
     if (-not (Test-Path $outFile)) {
