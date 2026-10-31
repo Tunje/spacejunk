@@ -189,16 +189,14 @@ func test_real_ore_refines_through_the_screen() -> void:
 
 func test_screen_swaps_with_fitting_and_restores_orders() -> void:
 	main.toggle_industry()
-	assert_false(panel.visible)
+	assert_true(panel.visible, "orders stay reachable")
 	main.toggle_fitting()
 	assert_false(screen.visible)
 	assert_true(main.fitting_screen.visible)
-	assert_false(panel.visible)
+	assert_true(panel.visible)
 	main.toggle_industry()
 	assert_false(main.fitting_screen.visible)
 	assert_true(screen.visible)
-	main.toggle_industry()
-	assert_true(panel.visible)
 
 
 func test_the_key_and_escape_work() -> void:

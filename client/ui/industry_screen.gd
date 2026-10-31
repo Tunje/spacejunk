@@ -3,7 +3,7 @@ class_name IndustryScreen extends PanelContainer
 ## Start stays enabled without stock, because a job may wait for ore on its way.
 
 const WIDTH_PX := 400
-const RECIPES_HEIGHT_PX := 500
+const RECIPES_HEIGHT_PX := 250
 const MAX_COUNT := 99
 
 signal closed

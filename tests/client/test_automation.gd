@@ -263,6 +263,5 @@ func test_only_one_side_screen_shows_at_a_time() -> void:
 	assert_false(main.fitting_screen.visible)
 	main.toggle_automation()
 	assert_false(main.industry_screen.visible)
-	assert_false(panel.visible)
-	main.toggle_automation()
-	assert_true(panel.visible)
+	assert_true(panel.visible, "orders stay reachable")
+	assert_true(panel.button_for("Undock") != null)

@@ -4,6 +4,11 @@ class_name OrderText extends RefCounted
 
 const REASONS: Dictionary = {
 	"cargo_full": "Cargo hold is full",
+	"corrupt": "The save file is damaged",
+	"data_mismatch": "The save was made with different game data",
+	"no_save": "No saved game yet",
+	"unknown_scenario": "The save names an unknown scenario",
+	"version_mismatch": "The save is from a different version",
 	"bad_cycle": "That cycle is not valid",
 	"busy_docking": "Wait for docking to finish",
 	"connector_occupied": "That connector is already in use",
