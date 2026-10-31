@@ -98,7 +98,7 @@ The loader applies these by field name, and `defs()` returns the converted names
 | `fabrication` | object or null | `{ "recipe": id }`, or null for root parts |
 | `connectors` | array | Section 6 |
 | `collision` | object | Section 7 |
-| `visual` | object | `{ "model": id or null }`. Null shows the labelled placeholder. Read by the client only, and it may add fields. |
+| `visual` | object | `{ "model": id or null, "tint": "#rrggbb" }`. Null `model` shows the labelled placeholder. `tint` is a lowercase hex string from the slice palette, so placeholders keep their colour blocks. Read by the client only, and it may add fields, but never numbers. |
 
 `fabrication` names only the recipe, unlike the workplan's example. The recipe already states its facility, so a second copy could disagree.
 

@@ -22,7 +22,7 @@ func _module(id: String, mass: float, capabilities: Dictionary, connectors: Arra
 		"fabrication": { "recipe": id },
 		"connectors": connectors,
 		"collision": { "shape": "box", "center_mm": [0, 0, 0], "size_mm": [10, 10, 10] },
-		"visual": { "model": null },
+		"visual": { "model": null, "tint": "#8a8d91" },
 	}
 
 
@@ -239,6 +239,16 @@ func test_module_item_cannot_be_authored() -> void:
 
 func test_visual_cannot_hold_numbers() -> void:
 	_entry("modules", "laser")["visual"]["scale"] = [1, 2]
+	_assert_error("bad_visual")
+
+
+func test_visual_needs_a_tint() -> void:
+	_entry("modules", "laser")["visual"].erase("tint")
+	_assert_error("bad_visual")
+
+
+func test_tint_must_be_lowercase_hex() -> void:
+	_entry("modules", "laser")["visual"]["tint"] = "#E8E4D8"
 	_assert_error("bad_visual")
 
 

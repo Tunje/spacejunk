@@ -17,6 +17,7 @@ const FILES := {
 }
 
 const ID_PATTERN := "^[a-z][a-z0-9_]*$"
+const TINT_PATTERN := "^#[0-9a-f]{6}$"
 const CARGO_CLASSES := ["ore", "goods", "propellant"]
 const REALISM := ["established", "extrapolation", "speculative", "fictional"]
 const CONNECTOR_TYPES := ["stack", "side", "dock"]
@@ -86,6 +87,7 @@ var _deposits: Dictionary = {}
 var _templates: Dictionary = {}
 var _sinks: Dictionary = {}
 var _id_regex := RegEx.create_from_string(ID_PATTERN)
+var _tint_regex := RegEx.create_from_string(TINT_PATTERN)
 
 
 ## Reads every data file. A missing or unparsable file becomes a null entry,
@@ -297,6 +299,9 @@ func _shape_module(module: Dictionary) -> void:
 		_err("bad_visual", where, "model is not a string or null")
 	elif _holds_number(module["visual"]):
 		_err("bad_visual", where, "numbers parse as floats, which the data hash rejects")
+	elif not module["visual"].get("tint") is String \
+			or _tint_regex.search(module["visual"]["tint"]) == null:
+		_err("bad_visual", where, "tint is not a #rrggbb string")
 	if not module["connectors"] is Array:
 		_err("bad_connectors", where, "connectors is not an array")
 		return
