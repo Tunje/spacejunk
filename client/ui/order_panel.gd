@@ -12,6 +12,9 @@ var _modules: Dictionary = {}
 var _items: Dictionary = {}
 var _orders: Array[Dictionary] = []
 var _buttons: Dictionary = {}
+## An atomic order just pressed, shown as started until the next tick runs it.
+var _clicked_key := ""
+var _clicked_tick := 0
 
 var _commanded_label: Label
 var _status_label: Label
@@ -56,6 +59,8 @@ func refresh() -> void:
 	var view: Dictionary = bridge.current_view
 	var commanded: int = local_view.commanded_unit
 	var unit: Dictionary = view["units"].get(commanded, {})
+	if view["tick"] != _clicked_tick:
+		_clicked_key = ""
 	_commanded_label.text = "Orders: %s" % unit.get("name", "no craft")
 	_status_label.text = _status_of(unit)
 	_selection_label.text = _selection_title(view)
@@ -93,16 +98,50 @@ func _sync_buttons() -> void:
 			button.pressed.connect(_issue.bind(key))
 			_button_box.add_child(button)
 			_buttons[key] = button
-		var check: Dictionary = bridge.check(order["command"])
 		var shown: Button = _buttons[key]
+		var progress := _progress_text(order)
+		_show_running(shown, not progress.is_empty())
+		_button_box.move_child(shown, index)
+		if not progress.is_empty():
+			shown.text = progress
+			shown.disabled = true
+			shown.tooltip_text = ""
+			continue
+		var check: Dictionary = bridge.check(order["command"])
 		shown.text = order["label"]
 		shown.disabled = not check["ok"]
-		shown.tooltip_text = "" if check["ok"] else OrderText.reason(check["reason"], check["detail"])
-		_button_box.move_child(shown, index)
+		shown.tooltip_text = "" if check["ok"] else _refusal_text(check)
 		if why.is_empty() and not check["ok"]:
 			why = shown.tooltip_text
 	_why_label.text = why
 	_why_label.visible = not why.is_empty()
+
+
+func _refusal_text(check: Dictionary) -> String:
+	if check["reason"] == "busy_docking":
+		return OrderText.busy(bridge.current_view["units"][local_view.commanded_unit]["op"]["type"])
+	return OrderText.reason(check["reason"], check["detail"])
+
+
+## What an atomic order's button reads while it runs, or "" for any other order.
+func _progress_text(order: Dictionary) -> String:
+	var op_type: String = OrderList.ATOMIC_OPS.get(order["command"]["type"], "")
+	if op_type.is_empty():
+		return ""
+	var op: Dictionary = bridge.current_view["units"][local_view.commanded_unit]["op"]
+	if op["type"] == op_type:
+		return _op_text(op)
+	return "%s 0%%" % OrderText.operation(op_type) if order["key"] == _clicked_key else ""
+
+
+## A refused button is grey, so one that is running has to look different.
+func _show_running(button: Button, running: bool) -> void:
+	if running:
+		button.add_theme_stylebox_override("disabled", ClientTheme.running_button())
+		button.add_theme_color_override("font_disabled_color", ClientTheme.ORANGE)
+	else:
+		button.remove_theme_stylebox_override("disabled")
+		button.remove_theme_color_override("font_disabled_color")
 
 
 func _issue(key: String) -> void:
@@ -110,6 +149,10 @@ func _issue(key: String) -> void:
 		if order["key"] == key:
 			bridge.submit(order["command"])
 			order_issued.emit(order["command"])
+			if OrderList.ATOMIC_OPS.has(order["command"]["type"]):
+				_clicked_key = key
+				_clicked_tick = bridge.current_view["tick"]
+				refresh()
 			return
 
 
@@ -123,14 +166,18 @@ func _add_label(parent: Control) -> Label:
 func _status_of(unit: Dictionary) -> String:
 	if unit.is_empty():
 		return ""
-	var op: Dictionary = unit["op"]
+	var text := _op_text(unit["op"])
+	if not unit["dock"].is_empty():
+		text += ", docked"
+	return text
+
+
+func _op_text(op: Dictionary) -> String:
 	var text := OrderText.operation(op["type"])
 	if op["end_tick"] > op["start_tick"]:
 		var total: int = op["end_tick"] - op["start_tick"]
 		var done: int = clampi(bridge.current_view["tick"] - op["start_tick"], 0, total)
 		text += " %d%%" % (done * 100 / total)
-	if not unit["dock"].is_empty():
-		text += ", docked"
 	return text
 
 
