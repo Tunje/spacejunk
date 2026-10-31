@@ -74,7 +74,7 @@ docs/design/         canonical spec (Agent B, Lead approves)
 **Simulation rules**
 - Fixed tick, proposed 10 per second and provisional until the first performance and gameplay tests. The rate is one constant. Data states rates per second, never per tick, so changing it touches no content. No substeps in the slice. Rendering interpolates and never drives logic.
 - Time is counted in ticks. All randomness comes from a seeded generator held in the state, so a run replays identically for a given seed and command list.
-- All simulation state is 64-bit integer: matter in grams, power in watts, energy in joules, positions as 3D vectors in millimetres, and travel as progress along a route. Millimetre positions reach about 0.97 light-years either side of the origin, which is enough for one star system. Interstellar play will use a star-system ID plus local coordinates; that is not built in the slice. Floats are for display only. This lets conservation be tested exactly and keeps state hashes stable.
+- All simulation state is 64-bit integer: matter in grams, power in watts, energy in joules, positions as 3D vectors in millimetres, and travel as progress along a route. Positions are limited to about 0.42 light-years either side of the origin, so differences cannot overflow, which is enough for one star system. Interstellar play will use a star-system ID plus local coordinates; that is not built in the slice. Floats are for display only. This lets conservation be tested exactly and keeps state hashes stable.
 - Rounding: per-tick amounts round down, and the remainder is stored in the state and carried to the next tick, so nothing is ever lost or created. `contracts.md` documents each unit's valid range, and calculations that could overflow are tested at those limits.
 - Ship movement in the slice is order-based along routes, not free Newtonian flight.
 - Systems process entities in ascending ID order, so results never depend on creation or dictionary order.
@@ -90,7 +90,7 @@ docs/design/         canonical spec (Agent B, Lead approves)
 5. Run propulsion, mining and industry.
 6. Update inventories, battery charge and heat.
 7. Detect damage, faults and shutdowns, and set them in the state.
-8. Emit events and commit. Saves and state hashes happen only here.
+8. Emit events and commit. Saves and state hashes happen only between ticks.
 
 Fault timing: a fault is detected and set in step 7, and reported in step 8 of the same tick. Its consequences apply from the start of the next tick. Commands aimed at the faulted module are rejected in step 1, and it receives no power or new work in steps 3 and 4. Its running job pauses with its inputs still held, and the job resumes or cancels under the C0 rules.
 
@@ -112,7 +112,7 @@ Fault timing: a fault is detected and set in step 7, and reported in step 8 of t
 
 **Cargo operations.** Travel, dock, load, unload and undock are separate operations, and each takes time. Capacity limits apply to mass and volume. Transfer rate is limited by the docking port.
 
-**Autonomy.** Every task has one owner and moves through a defined state machine. Task C0 specifies the states, reservations, failure reporting and resumption, and what happens on each interruption: a player order, a module fault, lost power, full cargo and an exhausted deposit. The minimum behaviour: tier 1 stops and waits for orders when interrupted, and tier 2 resumes its cycle from the last safe step.
+**Autonomy.** Every task has one owner and moves through a defined state machine. Task C0 specifies the states, reservations, failure reporting and resumption, and what happens on each interruption: a player order, a module fault, lost power, full cargo, an exhausted deposit and no propellant. The minimum behaviour: tier 1 stops and waits for orders when interrupted, and tier 2 resumes its cycle from the last safe step.
 
 **Attachment contract.** One set of rules covers ship fitting and station expansion, and it is defined in `data/` and enforced by the simulation.
 - **Connector:** each one states its type (stack, side or dock), size, position and orientation, whether it is occupied, and the load it can carry.
@@ -268,7 +268,7 @@ Exit: the bot passes the reference scenario and all ten checks in a headless run
 | A4 | A | Power network: output, storage, priorities, load shedding, energy ledger test | A3 |
 | A5 | A | Heat network: waste heat, radiators, fault shutdown, heat ledger test | A4 |
 | A6 | A | Cargo operations: inventories, travel, docking, transfer, throughput limits | A3 |
-| A7 | A | Perf test across all load types, and budget | A4, A5, A6 |
+| A7 | A | Perf test across all load types plus one `view()` per tick, and budget | A4, A5, A6 |
 | C1 | C | Scanning and deposits | A3 |
 | C2 | C | Mining with depletion and power and heat draw | C1, A5 |
 | C3 | C | Refining and fabrication with throughput limits | A6 |
