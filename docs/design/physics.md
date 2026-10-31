@@ -1,6 +1,6 @@
 # Fictional Physics Rules
 
-Status: draft for Lead approval (task B2). Changes after approval go through the Lead.
+Status: approved by the Lead (task B2). Changes go through the Lead.
 
 This gives the game's fictional technology stated laws, as section 5 of [spec.md](spec.md) requires. **Nothing here is in the slice.** No item, module or capability below goes into `data/` until the post-slice steps in workplan section 9 reach it, and any capability it needs is then a schema change through the Lead.
 
