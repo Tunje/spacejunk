@@ -1,4 +1,4 @@
-# Measures frame time at full slice load in three views, windowed, on this PC's GPU.
+# Measures frame time at full slice load in four views, one with a side screen open, windowed, on this PC's GPU.
 # Cannot run headless. Refuses to run during a GPU hold. Exit code 0 means every view met the target.
 # Results are written to tools/output/.
 
@@ -35,7 +35,8 @@ New-Item -ItemType Directory -Force $outDir | Out-Null
 $views = @(
     @{ Name = 'close'; Args = @('--zoom=40') },
     @{ Name = 'field'; Args = @('--zoom=3500', '--pitch=-0.3') },
-    @{ Name = 'map'; Args = @('--map=1') }
+    @{ Name = 'map'; Args = @('--map=1') },
+    @{ Name = 'fit'; Args = @('--zoom=40', '--fit=none', '--fit-delay=5') }
 )
 
 & $godot --headless --path $projectRoot --import | Out-Null
