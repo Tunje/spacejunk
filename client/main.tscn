@@ -1,6 +1,32 @@
-[gd_scene format=3]
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://client/main.gd" id="1_main"]
+[ext_resource type="Script" path="res://client/sim_bridge.gd" id="2_bridge"]
+[ext_resource type="Script" path="res://client/ui/time_controls.gd" id="3_time"]
+
+[sub_resource type="Environment" id="Environment_space"]
+background_mode = 1
+background_color = Color(0.012, 0.014, 0.024, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.32, 0.35, 0.42, 1)
+ambient_light_energy = 0.35
+tonemap_mode = 2
 
 [node name="Main" type="Node3D"]
+script = ExtResource("1_main")
+
+[node name="Bridge" type="Node" parent="."]
+script = ExtResource("2_bridge")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_space")
 
 [node name="Camera3D" type="Camera3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 10)
+
+[node name="Overlay" type="CanvasLayer" parent="."]
+
+[node name="TimeControls" type="PanelContainer" parent="Overlay"]
+offset_left = 12.0
+offset_top = 12.0
+script = ExtResource("3_time")

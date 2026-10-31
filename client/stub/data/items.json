@@ -1,0 +1,6 @@
+[
+  { "id": "hematite", "name": "Hematite Ore", "cargo_class": "ore", "density_kg_m3": 5000 },
+  { "id": "chalcopyrite", "name": "Chalcopyrite Ore", "cargo_class": "ore", "density_kg_m3": 4200 },
+  { "id": "silica_sand", "name": "Silica Sand", "cargo_class": "ore", "density_kg_m3": 2600 },
+  { "id": "propellant", "name": "Propellant", "cargo_class": "propellant", "density_kg_m3": 1000 }
+]

@@ -1,0 +1,63 @@
+class_name TimeControls extends PanelContainer
+## Pause and speed controls with the mission clock. Space pauses; keys 1 to 4
+## pick a speed. These are raw keys so project.godot needs no input map.
+
+var bridge: SimBridge
+
+var _pause_button: Button
+var _speed_buttons: Dictionary = {}
+var _clock: Label
+
+
+func _ready() -> void:
+	theme = ClientTheme.build()
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	add_child(row)
+	_pause_button = Button.new()
+	_pause_button.custom_minimum_size = Vector2(84, 0)
+	_pause_button.focus_mode = Control.FOCUS_NONE
+	_pause_button.pressed.connect(func() -> void: bridge.set_paused(not bridge.paused))
+	row.add_child(_pause_button)
+	for value: int in SimBridge.SPEEDS:
+		var button := Button.new()
+		button.text = "%dx" % value
+		button.toggle_mode = true
+		button.focus_mode = Control.FOCUS_NONE
+		button.pressed.connect(func() -> void: bridge.set_speed(value))
+		row.add_child(button)
+		_speed_buttons[value] = button
+	_clock = Label.new()
+	_clock.custom_minimum_size = Vector2(190, 0)
+	_clock.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	row.add_child(_clock)
+
+
+func bind(new_bridge: SimBridge) -> void:
+	bridge = new_bridge
+	bridge.time_changed.connect(_refresh)
+	bridge.view_updated.connect(_refresh)
+	_refresh()
+
+
+func _unhandled_key_input(event: InputEvent) -> void:
+	var key := event as InputEventKey
+	if key == null or not key.pressed or key.echo:
+		return
+	if key.physical_keycode == KEY_SPACE:
+		bridge.set_paused(not bridge.paused)
+		get_viewport().set_input_as_handled()
+		return
+	var index: int = key.physical_keycode - KEY_1
+	if index >= 0 and index < SimBridge.SPEEDS.size():
+		bridge.set_speed(SimBridge.SPEEDS[index])
+		get_viewport().set_input_as_handled()
+
+
+func _refresh() -> void:
+	_pause_button.text = "Resume" if bridge.paused else "Pause"
+	for value: int in _speed_buttons:
+		_speed_buttons[value].set_pressed_no_signal(value == bridge.speed)
+	var seconds := floori(bridge.game_seconds())
+	_clock.text = "T+%02d:%02d:%02d" % [seconds / 3600, seconds / 60 % 60, seconds % 60]
+	_clock.modulate = ClientTheme.ORANGE if bridge.paused else Color.WHITE
