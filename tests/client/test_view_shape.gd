@@ -4,7 +4,7 @@ extends GutTest
 
 const SIM_SCRIPT := "res://sim/kernel/sim.gd"
 const UNIT_FIELDS: Array[String] = [
-	"def", "kind", "name", "pos_mm", "core", "core_tier", "task", "cycle_task", "last_cycle",
+	"def", "kind", "name", "pos_mm", "at_target", "core", "core_tier", "task", "cycle_task", "last_cycle",
 	"op", "route", "dock",
 	"parts", "inventory", "mass_g", "cargo", "fit", "power", "heat",
 ]

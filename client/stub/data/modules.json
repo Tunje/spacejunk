@@ -15,7 +15,7 @@
       { "id": "sensor", "type": "side", "size": "medium", "pos_mm": [0, 3300, 1250], "facing": "+z", "up": "+y", "load_limit_kg": 500 }
     ],
     "collision": { "shape": "cylinder", "center_mm": [0, 2000, 0], "size_mm": [2500, 4000, 2500] },
-    "visual": { "model": "stub_hull", "tint": "white" }
+    "visual": { "model": "stub_hull", "tint": "#e8e6db" }
   },
   {
     "id": "stub_tank", "name": "Propellant Tank", "mass_kg": 600, "volume_m3": 12, "power_kw": 0, "heat_kw": 0,
@@ -27,7 +27,7 @@
       { "id": "bottom", "type": "stack", "size": "medium", "pos_mm": [0, -2600, 0], "facing": "-y", "up": "+z", "load_limit_kg": 3000 }
     ],
     "collision": { "shape": "cylinder", "center_mm": [0, -1300, 0], "size_mm": [2500, 2600, 2500] },
-    "visual": { "model": "stub_tank", "tint": "orange" }
+    "visual": { "model": "stub_tank", "tint": "#f26b14" }
   },
   {
     "id": "stub_thruster", "name": "Chemical Thruster", "mass_kg": 500, "volume_m3": 3, "power_kw": 5, "heat_kw": 4,
@@ -38,7 +38,7 @@
       { "id": "mount", "type": "stack", "size": "medium", "pos_mm": [0, 0, 0], "facing": "+y", "up": "+z", "load_limit_kg": 3000 }
     ],
     "collision": { "shape": "cylinder", "center_mm": [0, -900, 0], "size_mm": [1800, 1800, 1800] },
-    "visual": { "model": "stub_thruster", "tint": "grey" }
+    "visual": { "model": "stub_thruster", "tint": "#7a8085" }
   },
   {
     "id": "stub_port", "name": "Docking Port", "mass_kg": 150, "volume_m3": 1, "power_kw": 1, "heat_kw": 0,
@@ -50,7 +50,7 @@
       { "id": "dock", "type": "dock", "size": "small", "pos_mm": [0, 700, 0], "facing": "+y", "up": "+z", "load_limit_kg": 2000 }
     ],
     "collision": { "shape": "cylinder", "center_mm": [0, 350, 0], "size_mm": [1500, 700, 1500] },
-    "visual": { "model": "stub_port", "tint": "gold" }
+    "visual": { "model": "stub_port", "tint": "#d4a640" }
   },
   {
     "id": "stub_laser", "name": "Mining Laser", "mass_kg": 400, "volume_m3": 2, "power_kw": 150, "heat_kw": 120,
@@ -61,7 +61,7 @@
       { "id": "mount", "type": "side", "size": "medium", "pos_mm": [0, 0, 0], "facing": "-x", "up": "+y", "load_limit_kg": 1000 }
     ],
     "collision": { "shape": "box", "center_mm": [1100, 0, 0], "size_mm": [2200, 900, 900] },
-    "visual": { "model": "stub_laser", "tint": "orange" }
+    "visual": { "model": "stub_laser", "tint": "#f26b14" }
   },
   {
     "id": "stub_lidar", "name": "LIDAR Scanner", "mass_kg": 80, "volume_m3": 1, "power_kw": 10, "heat_kw": 6,
@@ -72,7 +72,7 @@
       { "id": "mount", "type": "side", "size": "medium", "pos_mm": [0, 0, 0], "facing": "-z", "up": "+y", "load_limit_kg": 500 }
     ],
     "collision": { "shape": "box", "center_mm": [0, 0, 500], "size_mm": [1000, 1000, 1000] },
-    "visual": { "model": "stub_lidar", "tint": "gold" }
+    "visual": { "model": "stub_lidar", "tint": "#d4a640" }
   },
   {
     "id": "stub_solar", "name": "Solar Slab", "mass_kg": 220, "volume_m3": 4, "power_kw": 0, "heat_kw": 0,
@@ -83,7 +83,7 @@
       { "id": "mount", "type": "side", "size": "medium", "pos_mm": [0, 0, 0], "facing": "-z", "up": "+y", "load_limit_kg": 500 }
     ],
     "collision": { "shape": "box", "center_mm": [0, 0, 2400], "size_mm": [2400, 240, 4800] },
-    "visual": { "model": "stub_solar", "tint": "gold" }
+    "visual": { "model": "stub_solar", "tint": "#d4a640" }
   },
   {
     "id": "stub_radiator", "name": "Heat Radiator", "mass_kg": 260, "volume_m3": 3, "power_kw": 0, "heat_kw": 0,
@@ -94,7 +94,7 @@
       { "id": "mount", "type": "side", "size": "medium", "pos_mm": [0, 0, 0], "facing": "-z", "up": "+y", "load_limit_kg": 500 }
     ],
     "collision": { "shape": "box", "center_mm": [0, 0, 1800], "size_mm": [2000, 200, 3600] },
-    "visual": { "model": "stub_radiator", "tint": "white" }
+    "visual": { "model": "stub_radiator", "tint": "#e8e6db" }
   },
   {
     "id": "stub_container", "name": "Ore Container", "mass_kg": 700, "volume_m3": 14, "power_kw": 0, "heat_kw": 0,
@@ -105,7 +105,7 @@
       { "id": "mount", "type": "side", "size": "medium", "pos_mm": [0, 0, 0], "facing": "+x", "up": "+y", "load_limit_kg": 9000 }
     ],
     "collision": { "shape": "box", "center_mm": [-1300, 0, 0], "size_mm": [2600, 2200, 2200] },
-    "visual": { "model": "stub_container", "tint": "grey" }
+    "visual": { "model": "stub_container", "tint": "#7a8085" }
   },
   {
     "id": "stub_hub", "name": "Command Hub", "mass_kg": 12000, "volume_m3": 180, "power_kw": 20, "heat_kw": 8,
@@ -120,7 +120,7 @@
       { "id": "side_nx", "type": "side", "size": "large", "pos_mm": [-3500, 0, 0], "facing": "-x", "up": "+y", "load_limit_kg": 90000 }
     ],
     "collision": { "shape": "cylinder", "center_mm": [0, 0, 0], "size_mm": [7000, 6000, 7000] },
-    "visual": { "model": "stub_hub", "tint": "white" }
+    "visual": { "model": "stub_hub", "tint": "#e8e6db" }
   },
   {
     "id": "stub_refinery", "name": "Ore Refinery", "mass_kg": 9000, "volume_m3": 120, "power_kw": 400, "heat_kw": 300,
@@ -132,7 +132,7 @@
       { "id": "end", "type": "stack", "size": "large", "pos_mm": [0, 8000, 0], "facing": "+y", "up": "+z", "load_limit_kg": 60000 }
     ],
     "collision": { "shape": "cylinder", "center_mm": [0, 4000, 0], "size_mm": [6000, 8000, 6000] },
-    "visual": { "model": "stub_refinery", "tint": "orange" }
+    "visual": { "model": "stub_refinery", "tint": "#f26b14" }
   },
   {
     "id": "stub_storage", "name": "Ore Storage", "mass_kg": 6000, "volume_m3": 300, "power_kw": 5, "heat_kw": 1,
@@ -144,7 +144,7 @@
       { "id": "end", "type": "stack", "size": "medium", "pos_mm": [0, -9000, 0], "facing": "-y", "up": "+z", "load_limit_kg": 8000 }
     ],
     "collision": { "shape": "cylinder", "center_mm": [0, -4500, 0], "size_mm": [6000, 9000, 6000] },
-    "visual": { "model": "stub_storage", "tint": "grey" }
+    "visual": { "model": "stub_storage", "tint": "#7a8085" }
   },
   {
     "id": "stub_solar_farm", "name": "Solar Farm", "mass_kg": 4000, "volume_m3": 60, "power_kw": 0, "heat_kw": 0,
@@ -155,7 +155,7 @@
       { "id": "mount", "type": "side", "size": "large", "pos_mm": [0, 0, 0], "facing": "+x", "up": "+y", "load_limit_kg": 90000 }
     ],
     "collision": { "shape": "box", "center_mm": [-7000, 0, 0], "size_mm": [14000, 400, 9000] },
-    "visual": { "model": "stub_solar_farm", "tint": "gold" }
+    "visual": { "model": "stub_solar_farm", "tint": "#d4a640" }
   },
   {
     "id": "stub_station_port", "name": "Station Dock", "mass_kg": 800, "volume_m3": 8, "power_kw": 2, "heat_kw": 0,
@@ -167,6 +167,6 @@
       { "id": "dock", "type": "dock", "size": "small", "pos_mm": [2400, 0, 0], "facing": "+x", "up": "+y", "load_limit_kg": 40000 }
     ],
     "collision": { "shape": "box", "center_mm": [1200, 0, 0], "size_mm": [2400, 3000, 3000] },
-    "visual": { "model": "stub_station_port", "tint": "gold" }
+    "visual": { "model": "stub_station_port", "tint": "#d4a640" }
   }
 ]

@@ -2,12 +2,6 @@ class_name CraftNode extends Node3D
 ## One unit drawn as labelled placeholder parts built from `collision` data.
 ## Models replace the meshes later; layout and selection stay data-driven.
 
-const TINTS: Dictionary = {
-	"white": ClientTheme.OFF_WHITE,
-	"grey": ClientTheme.MID_GREY,
-	"orange": ClientTheme.ORANGE,
-	"gold": ClientTheme.GOLD,
-}
 const LABEL_RANGE_M := 60.0
 const FLANGE_M := 0.16
 
@@ -17,6 +11,10 @@ var part_transforms: Dictionary = {}
 var fit_radius_m := 10.0
 var heading := Quaternion.IDENTITY
 var dock_blend := 0.0
+## Where a docking approach began, in the host's frame.
+var dock_start := Transform3D.IDENTITY
+## The last docked transform, which an undock eases away from.
+var undock_from := Transform3D.IDENTITY
 
 var _materials: Dictionary = {}
 
@@ -26,6 +24,12 @@ static func signature_of(root: Dictionary) -> String:
 	for child: Dictionary in root["children"]:
 		ids.append(signature_of(child))
 	return str(ids)
+
+
+## Display colour from `visual.tint`, a hex string. The simulation never reads it.
+static func tint_of(visual: Dictionary) -> Color:
+	var tint: String = visual.get("tint", "")
+	return Color.html(tint) if Color.html_is_valid(tint) else ClientTheme.OFF_WHITE
 
 
 func build(id: int, root: Dictionary, modules: Dictionary) -> void:
@@ -62,7 +66,7 @@ func _add_part(part: Dictionary, modules: Dictionary) -> void:
 	add_child(body)
 
 	var material := StandardMaterial3D.new()
-	material.albedo_color = TINTS.get(module["visual"].get("tint", "white"), ClientTheme.OFF_WHITE)
+	material.albedo_color = CraftNode.tint_of(module["visual"])
 	material.metallic = 0.25
 	material.roughness = 0.55
 	_materials[part["id"]] = material

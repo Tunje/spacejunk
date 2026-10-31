@@ -209,10 +209,18 @@ func _place_craft(craft: CraftNode, id: int, before: Dictionary, after: Dictiona
 			craft.heading = craft.heading.slerp(CraftLayout.heading_towards(aim), 1.0 - exp(-HEADING_RATE * delta))
 	var free := Transform3D(Basis(craft.heading), relative)
 	var docked := _docked_transform(craft, unit)
+	var is_docked: bool = not unit["dock"].is_empty()
+	if is_docked and craft.dock_blend == 0.0:
+		craft.dock_start = crafts[unit["dock"]["target_unit"]].transform.affine_inverse() * craft.transform
 	var step := delta / DOCK_BLEND_SECONDS
-	craft.dock_blend = move_toward(craft.dock_blend, 0.0 if unit["dock"].is_empty() else 1.0, step)
-	if craft.dock_blend > 0.0 and docked != Transform3D.IDENTITY:
-		craft.transform = free.interpolate_with(docked, smoothstep(0.0, 1.0, craft.dock_blend))
+	var was_blending := craft.dock_blend > 0.0
+	craft.dock_blend = move_toward(craft.dock_blend, 1.0 if is_docked else 0.0, step)
+	if is_docked:
+		var start: Transform3D = crafts[unit["dock"]["target_unit"]].transform * craft.dock_start
+		craft.transform = start.interpolate_with(docked, smoothstep(0.0, 1.0, craft.dock_blend))
+		craft.undock_from = docked
+	elif was_blending:
+		craft.transform = free.interpolate_with(craft.undock_from, smoothstep(0.0, 1.0, craft.dock_blend))
 	else:
 		craft.transform = free
 

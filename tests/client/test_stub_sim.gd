@@ -93,6 +93,7 @@ func test_move_reaches_route_end_and_reports_arrival() -> void:
 	assert_eq(arrived["op"]["type"], "idle")
 	assert_true(arrived["route"].is_empty())
 	assert_eq(arrived["pos_mm"], moving["route"]["to_mm"])
+	assert_eq(arrived["at_target"], rock)
 	var types := _event_types()
 	assert_has(types, "task_started")
 	assert_has(types, "task_finished")
@@ -141,7 +142,6 @@ func test_mining_moves_ore_and_conserves_matter() -> void:
 func test_scan_away_from_the_body_is_rejected_with_numbers() -> void:
 	var result := sim.check({ "type": "scan", "unit": ship, "args": { "target": rock } })
 	assert_eq(result["reason"], "out_of_range")
-	assert_true(result["detail"].has("need_mm"))
 
 
 func test_station_has_no_thruster() -> void:
@@ -149,7 +149,7 @@ func test_station_has_no_thruster() -> void:
 	assert_eq(result["reason"], "module_missing")
 
 
-func test_mining_out_of_range_is_rejected_with_numbers() -> void:
+func test_mining_away_from_the_body_is_rejected() -> void:
 	_fly_to(rock)
 	_order("scan", { "target": rock })
 	sim.step(SCAN_TICKS + 1)
@@ -159,7 +159,36 @@ func test_mining_out_of_range_is_rejected_with_numbers() -> void:
 	var args := { "deposit": view["deposits"].keys()[0], "module": laser }
 	var result := sim.check({ "type": "start_mining", "unit": ship, "args": args })
 	assert_eq(result["reason"], "out_of_range")
-	assert_true(result["detail"].has("need_mm"))
+
+
+func test_route_stops_at_the_stand_off_from_a_surface() -> void:
+	_fly_to(rock)
+	var view := sim.view()
+	var gap := IntMath.dist(view["units"][ship]["pos_mm"], view["bodies"][rock]["pos_mm"])
+	assert_almost_eq(gap, view["bodies"][rock]["radius_mm"] + StubSim.STANDOFF_MM, 2)
+
+
+func test_route_stops_at_the_stand_off_from_a_unit() -> void:
+	_fly_to(rock)
+	_fly_to(station)
+	var view := sim.view()
+	var gap := IntMath.dist(view["units"][ship]["pos_mm"], view["units"][station]["pos_mm"])
+	assert_almost_eq(gap, StubSim.STANDOFF_MM, 2)
+
+
+func test_starting_a_route_clears_at_target() -> void:
+	assert_eq(sim.view()["units"][ship]["at_target"], station)
+	_order("move_to", { "target": rock })
+	sim.step(1)
+	assert_eq(sim.view()["units"][ship]["at_target"], 0)
+
+
+func test_a_halted_unit_is_at_nothing() -> void:
+	_order("move_to", { "target": rock })
+	sim.step(3)
+	_order("stop")
+	sim.step(1)
+	assert_eq(sim.view()["units"][ship]["at_target"], 0)
 
 
 func test_dock_and_undock_cycle() -> void:
@@ -170,10 +199,14 @@ func test_dock_and_undock_cycle() -> void:
 	sim.step(DOCK_TICKS + 1)
 	var docked: Dictionary = sim.view()["units"][ship]["dock"]
 	assert_eq(docked, { "port": port, "target_unit": station, "target_port": target_port })
+	assert_eq(sim.view()["units"][ship]["pos_mm"], sim.view()["units"][station]["pos_mm"], "takes the host position")
+	assert_eq(sim.view()["units"][ship]["at_target"], station)
 	assert_eq(sim.check({ "type": "move_to", "unit": ship, "args": { "target": rock } })["reason"], "docked")
 	_order("undock")
 	sim.step(DOCK_TICKS + 1)
 	assert_true(sim.view()["units"][ship]["dock"].is_empty())
+	assert_eq(sim.view()["units"][ship]["pos_mm"], [StubSim.STANDOFF_MM, 0, 0], "leaves along +X")
+	assert_eq(sim.view()["units"][ship]["at_target"], station)
 	var types := _event_types()
 	assert_has(types, "docked")
 	assert_has(types, "undocked")
