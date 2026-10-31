@@ -206,6 +206,44 @@ func test_docked_ship_sits_on_the_station_port() -> void:
 	assert_almost_eq(host_point.distance_to(own_point), 0.0, 0.01)
 
 
+func test_docking_eases_in_without_snapping_to_the_host_position() -> void:
+	view.select("unit", station, 0)
+	assert_true(panel.press("Dock"))
+	_run_ticks(21)
+	var undocked_gap := 150.0
+	var host: CraftNode = view.crafts[station]
+	var craft: CraftNode = view.crafts[ship]
+	craft.dock_blend = 0.0
+	craft.dock_start = host.transform.affine_inverse() * Transform3D(Basis.IDENTITY, host.position + Vector3(undocked_gap, 0, 0))
+	craft.dock_blend = 0.01
+	view.refresh(0.0)
+	assert_gt(craft.position.distance_to(host.position), 140.0, "still out at the stand-off as the blend starts")
+
+
+func test_undock_eases_away_and_settles_on_the_sim_position() -> void:
+	view.select("unit", station, 0)
+	assert_true(panel.press("Dock"))
+	_run_ticks(28)
+	for i in range(80):
+		view.refresh(0.016)
+	var docked_at: Vector3 = view.crafts[ship].position
+	assert_true(panel.press("Undock"))
+	_run_ticks(28)
+	view.refresh(0.0)
+	assert_lt(view.crafts[ship].position.distance_to(docked_at), 1.0, "no jump on the undock tick")
+	for i in range(80):
+		view.refresh(0.016)
+	assert_almost_eq(view.crafts[ship].dock_blend, 0.0, 0.001)
+	var expected: Vector3 = view.crafts[station].position + Vector3(150, 0, 0)
+	assert_almost_eq(view.crafts[ship].position.distance_to(expected), 0.0, 0.01)
+
+
+func test_tint_comes_from_the_hex_string() -> void:
+	assert_eq(CraftNode.tint_of({ "tint": "#ff0000" }), Color.RED)
+	assert_eq(CraftNode.tint_of({}), ClientTheme.OFF_WHITE)
+	assert_eq(CraftNode.tint_of({ "tint": "not a colour" }), ClientTheme.OFF_WHITE)
+
+
 func test_panel_offers_orders_for_an_asteroid_and_greys_invalid_ones() -> void:
 	view.select("body", rock, 0)
 	assert_not_null(panel.button_for("Move to"))

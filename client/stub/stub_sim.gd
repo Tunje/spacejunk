@@ -10,9 +10,7 @@ const SAVE_HEADER := "stub-save:1\n"
 const SAVE_PREFIX := "stub-save:"
 const EVENT_LIMIT := 4096
 
-const STANDOFF_MM := 60000
-const DOCK_RANGE_MM := 200000
-const AT_BODY_MM := 150000
+const STANDOFF_MM := 150000
 
 static var _last_error := ""
 
@@ -220,13 +218,20 @@ static func _build_state(module_defs: Dictionary, seed_value: int) -> Dictionary
 		var id := _next_id(state)
 		state["units"][id] = {
 			"id": id, "def": entry["def"], "kind": entry["kind"], "name": entry["name"],
-			"pos_mm": entry["pos_mm"], "core": 0, "core_tier": 0, "task": 0,
+			"pos_mm": entry["pos_mm"], "at_target": _unit_named(state, entry.get("at", "")), "core": 0, "core_tier": 0, "task": 0,
 			"cycle_task": 0, "last_cycle": [],
 			"op": _idle_op(), "route": {}, "dock": {},
 			"parts": _build_part(state, module_defs, entry["parts"]),
 			"inventory": entry["inventory"],
 		}
 	return state
+
+
+static func _unit_named(state: Dictionary, unit_name: String) -> int:
+	for id: int in state["units"]:
+		if state["units"][id]["name"] == unit_name:
+			return id
+	return 0
 
 
 static func _build_part(state: Dictionary, module_defs: Dictionary, entry: Dictionary) -> Dictionary:
@@ -369,10 +374,10 @@ func _space_left_g(unit: Dictionary, item: String) -> int:
 	return maxi(0, mini(by_mass, by_volume))
 
 
-# --- Geometry (integer only; distances here are Chebyshev, which suits a stub) ---
+# --- Geometry ---
 
 func _distance_mm(a: Array, b: Array) -> int:
-	return maxi(maxi(absi(a[0] - b[0]), absi(a[1] - b[1])), absi(a[2] - b[2]))
+	return IntMath.dist(a, b)
 
 
 func _target_pos(target: int) -> Array:
@@ -467,15 +472,12 @@ func _validate_scan(unit: Dictionary, args: Dictionary) -> Dictionary:
 		return _result("docked")
 	if not _state["bodies"].has(target) or _state["bodies"][target]["kind"] != "asteroid":
 		return _result("invalid_target")
-	return _at_body(unit, target)
+	return _at(unit, target)
 
 
-func _at_body(unit: Dictionary, body: int) -> Dictionary:
-	var reach := _target_radius(body) + AT_BODY_MM
-	var gap := _distance_mm(unit["pos_mm"], _target_pos(body))
-	if gap > reach:
-		return _result("out_of_range", { "need_mm": reach, "have_mm": gap })
-	return _result()
+## "At" is what arrival recorded, never geometry (networks section 6).
+func _at(unit: Dictionary, target: int) -> Dictionary:
+	return _result() if unit["at_target"] == target else _result("out_of_range")
 
 
 func _validate_dock(unit: Dictionary, args: Dictionary) -> Dictionary:
@@ -487,9 +489,9 @@ func _validate_dock(unit: Dictionary, args: Dictionary) -> Dictionary:
 		return _result("invalid_target")
 	if _dock_connector(port).is_empty() or _dock_connector(_find_part(owner, args["target_port"])).is_empty():
 		return _result("invalid_target")
-	var gap := _distance_mm(unit["pos_mm"], owner["pos_mm"])
-	if gap > DOCK_RANGE_MM:
-		return _result("out_of_range", { "need_mm": DOCK_RANGE_MM, "have_mm": gap })
+	var placement := _at(unit, owner["id"])
+	if not placement["ok"]:
+		return placement
 	for id: int in _state["units"]:
 		if _state["units"][id]["dock"].get("target_port", 0) == args["target_port"]:
 			return _result("connector_occupied")
@@ -505,7 +507,7 @@ func _validate_mining(unit: Dictionary, args: Dictionary) -> Dictionary:
 		return _result("module_missing")
 	if not unit["dock"].is_empty():
 		return _result("docked")
-	var placement := _at_body(unit, _state["deposits"][deposit]["body"])
+	var placement := _at(unit, _state["deposits"][deposit]["body"])
 	if not placement["ok"]:
 		return placement
 	if _space_left_g(unit, _state["deposits"][deposit]["item"]) <= 0:
@@ -558,6 +560,7 @@ func _apply(command: Dictionary) -> void:
 			_find_part(unit, args["module"])["priority"] = args["priority"]
 		"move_to":
 			_begin(unit, command, "moving", args["target"], 0, _travel_ticks(unit, args["target"]))
+			unit["at_target"] = 0
 			unit["route"] = {
 				"target": args["target"], "from_mm": unit["pos_mm"].duplicate(),
 				"to_mm": _arrival_point(unit["pos_mm"], args["target"]), "eta_tick": unit["op"]["end_tick"],
@@ -630,6 +633,7 @@ func _advance_move(unit: Dictionary) -> void:
 		unit["pos_mm"][axis] = route["from_mm"][axis] + span * mini(done, total) / total
 	if done >= total:
 		var target: int = route["target"]
+		unit["at_target"] = target
 		_end_task(unit, "task_finished")
 		_emit("arrived", unit["id"], { "target": target })
 
@@ -661,11 +665,14 @@ func _finish_timed_op(unit: Dictionary) -> void:
 		"docking":
 			var owner := _unit_of_part(op["target"])
 			unit["dock"] = { "port": op["part"], "target_unit": owner["id"], "target_port": op["target"] }
+			unit["pos_mm"] = owner["pos_mm"].duplicate()
 			_end_task(unit, "task_finished")
 			_emit("docked", unit["id"], { "target": owner["id"] })
 		"undocking":
 			var target: int = unit["dock"]["target_unit"]
 			unit["dock"] = {}
+			var host: Array = _state["units"][target]["pos_mm"]
+			unit["pos_mm"] = [host[0] + STANDOFF_MM, host[1], host[2]]
 			_end_task(unit, "task_finished")
 			_emit("undocked", unit["id"], { "target": target })
 

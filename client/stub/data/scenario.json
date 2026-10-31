@@ -25,7 +25,7 @@
       ] }
     },
     {
-      "def": "stub_probe", "kind": "ship", "name": "First Probe", "pos_mm": [120000, 16000, -60000],
+      "def": "stub_probe", "kind": "ship", "name": "First Probe", "pos_mm": [150000, 0, 0], "at": "Foothold",
       "inventory": { "propellant": 1800000 },
       "parts": { "def": "stub_hull", "children": [
         { "def": "stub_port", "parent_connector": "top", "connector": "mount", "children": [] },
