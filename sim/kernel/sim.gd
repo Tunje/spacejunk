@@ -30,12 +30,19 @@ var _violations := PackedStringArray()
 
 
 static func new_game(scenario_id: String, seed_value: int) -> Sim:
-	if scenario_id != SCENARIO_EMPTY:
+	if scenario_id != SCENARIO_EMPTY and not DataLoader.has_scenario(scenario_id):
 		_last_error = ERROR_UNKNOWN_SCENARIO
 		return null
 	var definitions := _load_defs(scenario_id)
+	var state := _new_state(scenario_id, seed_value, definitions)
+	if definitions.is_empty() or state["data_hash"] == "":
+		_last_error = ERROR_CORRUPT
+		return null
 	var sim := Sim.new()
-	sim._setup(_new_state(scenario_id, seed_value, definitions), definitions)
+	sim._setup(state, definitions)
+	if scenario_id != SCENARIO_EMPTY and not sim._populate(scenario_id):
+		_last_error = ERROR_CORRUPT
+		return null
 	_last_error = ""
 	return sim
 
@@ -48,11 +55,8 @@ static func from_save(save_text: String) -> Sim:
 	if state["contract_version"] != CONTRACT_VERSION or state["ticks_per_second"] != TICKS_PER_SECOND:
 		_last_error = ERROR_VERSION_MISMATCH
 		return null
-	if state["scenario"] != SCENARIO_EMPTY:
-		_last_error = ERROR_UNKNOWN_SCENARIO
-		return null
 	var definitions := _load_defs(state["scenario"])
-	if state["data_hash"] != _data_hash(definitions):
+	if definitions.is_empty() or state["data_hash"] != _data_hash(definitions):
 		_last_error = ERROR_DATA_MISMATCH
 		return null
 	var sim := Sim.new()
@@ -128,9 +132,13 @@ func state_hash() -> String:
 ## For tests only: the ledger figures after the last commit and any range violations so far.
 ## Systems fill the places they own. The kernel owns the sinks and the total.
 func ledger() -> Dictionary:
+	var sinks := _sink_totals()
+	var sinks_g := 0
+	for sink: String in sinks:
+		sinks_g += sinks[sink]
 	var matter := {
 		"start_g": _state["matter_start_g"], "total_g": 0, "deposits_g": 0,
-		"inventories_g": 0, "jobs_g": 0, "installed_g": 0, "sinks_g": _sink_total(),
+		"inventories_g": 0, "jobs_g": 0, "installed_g": 0, "sinks_g": sinks_g, "sinks": sinks,
 	}
 	var result := {
 		"tick": _state["tick"], "matter": matter, "energy": {}, "heat": {},
@@ -157,6 +165,7 @@ static func _new_state(scenario_id: String, seed_value: int, defs_value: Diction
 		"rng": {},
 		"commands": [],
 		"units": {},
+		"parts": {},
 		"bodies": {},
 		"deposits": {},
 		"jobs": {},
@@ -165,12 +174,29 @@ static func _new_state(scenario_id: String, seed_value: int, defs_value: Diction
 	}
 
 
-static func _load_defs(_scenario_id: String) -> Dictionary:
-	return { "modules": {}, "items": {}, "recipes": {}, "templates": {}, "sinks": {} }
+## Definitions for a game. Only the built-in `empty` scenario runs without data/.
+static func _load_defs(scenario_id: String) -> Dictionary:
+	if scenario_id == SCENARIO_EMPTY:
+		return { "modules": {}, "items": {}, "recipes": {}, "templates": {}, "sinks": {} }
+	var definitions := DataLoader.load_defs()
+	if DataLoader.error != "":
+		push_error("Data did not load: %s" % DataLoader.error)
+	return definitions
 
 
+## A hash of what the simulation reads after load, or "" if that cannot be encoded.
 static func _data_hash(defs_value: Dictionary) -> String:
-	return Canon.encode(defs_value).sha256_text()
+	var text := Canon.encode(DataLoader.read_after_load(defs_value))
+	if text == "":
+		push_error("Definitions are not canonical: %s" % Canon.error)
+		return ""
+	return text.sha256_text()
+
+
+## The same systems in the same order for every game, so a loaded game has working handlers.
+## The order is the phase-list order within each phase.
+static func _default_systems() -> Array[SimSystem]:
+	return [UnitSystem.new(), FittingSystem.new()]
 
 
 ## A saved state must hold every field with the right type before anything reads it.
@@ -182,19 +208,37 @@ static func _has_state_shape(state: Dictionary) -> bool:
 	return true
 
 
-func _sink_total() -> int:
-	var total := 0
+## Grams per sink.
+func _sink_totals() -> Dictionary:
+	var totals := {}
 	var sinks: Dictionary = _state["sinks"]
 	for sink: String in sinks:
 		var items: Dictionary = sinks[sink]
+		var total := 0
 		for item: String in items:
 			total += items[item]
-	return total
+		totals[sink] = total
+	return totals
 
 
 func _setup(state: Dictionary, defs_value: Dictionary) -> void:
 	_state = state
 	_ctx = SimContext.new(state, defs_value)
+	for system in _default_systems():
+		_register_system(system)
+
+
+## Builds a new game's entities. False if the scenario cannot be built.
+func _populate(scenario_id: String) -> bool:
+	var scenario := DataLoader.load_scenario(scenario_id, _ctx.defs["items"])
+	if DataLoader.error != "":
+		push_error("Scenario did not load: %s" % DataLoader.error)
+		return false
+	var problem := ScenarioBuilder.populate(_ctx, scenario, DataLoader.load_deposits())
+	if problem != "":
+		push_error("Scenario did not build: %s" % problem)
+		return false
+	return true
 
 
 func _register_system(system: SimSystem) -> void:
@@ -321,3 +365,4 @@ func _commit(tick: int) -> void:
 	_state["tick"] = tick
 	if _strict:
 		_violations.append_array(Invariants.violations(_state))
+		_violations.append_array(Units.broken_stacks(_state, _ctx.defs))
