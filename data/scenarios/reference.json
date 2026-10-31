@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "id": "reference",
+  "name": "Reference Scenario",
+  "seed": 12345,
+  "bodies": [
+    { "key": "star", "name": "Star", "kind": "star", "pos_mm": [149597870700000, 0, 0],
+      "radius_mm": 696000000000, "visual_seed": 1, "deposits": [] },
+    { "key": "rock_hematite", "name": "Red Rock", "kind": "asteroid", "pos_mm": [50000000, 0, 0],
+      "radius_mm": 500000, "visual_seed": 2, "deposits": ["hematite_deposit"] },
+    { "key": "rock_chalcopyrite", "name": "Brass Rock", "kind": "asteroid", "pos_mm": [30000000, 0, 40000000],
+      "radius_mm": 400000, "visual_seed": 3, "deposits": ["chalcopyrite_deposit"] },
+    { "key": "rock_olivine", "name": "Green Rock", "kind": "asteroid", "pos_mm": [-20000000, 15000000, 20000000],
+      "radius_mm": 300000, "visual_seed": 4, "deposits": ["olivine_deposit"] }
+  ],
+  "units": [
+    { "key": "station", "template": "starter_station", "name": "Station", "pos_mm": [0, 0, 0],
+      "inventory": [{ "item": "propellant", "kg": 4000 }], "dock": null },
+    { "key": "ship", "template": "starter_ship", "name": "Probe", "pos_mm": [0, 0, 0],
+      "inventory": [{ "item": "propellant", "kg": 1000 }],
+      "dock": { "host": "station", "port": 0, "host_port": 1 } }
+  ]
+}

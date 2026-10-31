@@ -16,8 +16,7 @@ All numbers in the examples are illustrative. B5 sets the real ones.
 | `data/deposits.json` | Deposit definitions |
 | `data/templates.json` | Unit templates |
 | `data/sinks.json` | Declared sinks |
-
-Scenarios are separate and belong to B8. A scenario places deposits on bodies and units in the world, and sets starting inventories.
+| `data/scenarios/<id>.json` | One scenario per file (section 14) |
 
 Every file has the same envelope, with entries sorted by `id` so diffs stay small:
 
@@ -308,3 +307,26 @@ B4 enforces these on top of section 3 of the accounting spec.
 | 3 | A module and a recipe both state `power_kw`, and A0 does not say which a running job draws. | A running job draws the recipe's `power_kw`. The module's is its rating, which the fit check sums. Waste heat always comes from the module's `heat_kw`. |
 | 4 | Contracts section 10 says mated connectors have opposite facings and equal ups, without saying in which frame. In the module's own frame, a part with one mount could fit only one side of a hull. | Read it as the craft's frame, as section 6 says. |
 | 5 | The capability list in contracts section 10 stops at `max_mass_kg`, and `defs()` lists only some renames. Contracts section 10 now points at section 5 of this page. |
+
+## 14. Scenarios
+
+A scenario places bodies, deposits and units in the world and sets starting inventories. It is what `Sim.new_game(scenario_id, seed)` loads. The file holds one object, with no `entries` list, and its `id` matches the file name.
+
+| Field | Type | Meaning |
+| ----- | ---- | ------- |
+| `schema_version` | whole | 1 |
+| `id` | string | Scenario ID |
+| `name` | string | Display name |
+| `seed` | whole | Seed the scenario is tested with. `new_game`'s argument still decides the run. |
+| `bodies` | array | Listed in entity ID order |
+| `units` | array | Listed in entity ID order |
+
+A body has `key`, `name`, `kind` (`star` or `asteroid`), `pos_mm`, `radius_mm`, `visual_seed` and `deposits`, a list of deposit definition IDs.
+
+A unit has `key`, `template`, `name`, `pos_mm`, `inventory` and `dock`. `inventory` is a list of `{ "item": id }` plus `kg` or `count`, as in recipe inputs. `dock` is null or `{ "host": key, "port": index, "host_port": index }`. An index counts the unit's `port` parts in part ID order, from 0.
+
+`key` is a name used only inside the file, unique across bodies and units. Whole-number fields must stay within 2^53, because Godot parses JSON numbers as floats.
+
+**Entity IDs.** The counter starts at 1 and issues IDs in file order: each body, then that body's deposits, then each unit, then that unit's parts in template order. This makes IDs known in advance.
+
+**Start state.** Batteries start full and heat loops start at 0. Every deposit starts unfound. A template with a core has it assigned (section 10). A docked unit starts with `at_target` set to its host, as after arrival.
