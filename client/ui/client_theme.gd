@@ -45,6 +45,14 @@ static func solid_panel() -> StyleBoxFlat:
 	return box
 
 
+## A button whose order is under way, so it does not read as refused.
+static func running_button() -> StyleBoxFlat:
+	var box := _box(BUTTON, 4, 6)
+	box.set_border_width_all(1)
+	box.border_color = ORANGE
+	return box
+
+
 ## An empty box that stays visible on dark panels.
 static func _outline_box_icon() -> ImageTexture:
 	var image := Image.create(CHECK_ICON_PX, CHECK_ICON_PX, false, Image.FORMAT_RGBA8)

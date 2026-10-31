@@ -10,7 +10,7 @@ const REASONS: Dictionary = {
 	"unknown_scenario": "The save names an unknown scenario",
 	"version_mismatch": "The save is from a different version",
 	"bad_cycle": "That cycle is not valid",
-	"busy_docking": "Wait for docking to finish",
+	"busy_docking": "Wait for the craft to finish at the port",
 	"connector_occupied": "That connector is already in use",
 	"connector_size_mismatch": "Connector sizes do not match",
 	"connector_type_mismatch": "Connector types do not match",
@@ -79,6 +79,11 @@ static func reason(code: String, detail: Dictionary = {}) -> String:
 
 static func operation(code: String) -> String:
 	return OPERATIONS.get(code, code.capitalize())
+
+
+## `busy_docking` covers both directions, so the operation comes from the view.
+static func busy(op_type: String) -> String:
+	return "Wait for %s to finish" % operation(op_type).to_lower()
 
 
 static func metres(mm: int) -> String:

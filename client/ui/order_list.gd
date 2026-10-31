@@ -4,6 +4,8 @@ class_name OrderList extends RefCounted
 
 const SHOWN_KIND_ASTEROID := "asteroid"
 const PROPELLANT_CLASS := "propellant"
+## Orders whose operation always runs to its end (autonomy.md section 4), and that operation.
+const ATOMIC_OPS: Dictionary = { "dock": "docking", "undock": "undocking" }
 
 
 static func build(view: Dictionary, modules: Dictionary, items: Dictionary, commanded: int,
@@ -25,9 +27,28 @@ static func build(view: Dictionary, modules: Dictionary, items: Dictionary, comm
 	if not unit["dock"].is_empty():
 		_add(orders, "Undock", commanded, "undock", {})
 		_add_transfer_orders(orders, view, items, commanded)
-	if unit["op"]["type"] != "idle":
-		_add(orders, "Stop", commanded, "stop", {})
+	_add_stop_order(orders, view, commanded)
 	return orders
+
+
+## Stop cannot end an atomic operation, so it is offered then only to end a cycle.
+## Docking keeps its row with any selection, so its progress is always on show.
+static func _add_stop_order(orders: Array[Dictionary], view: Dictionary, commanded: int) -> void:
+	var unit: Dictionary = view["units"][commanded]
+	var op_type: String = unit["op"]["type"]
+	if op_type == "idle":
+		return
+	if not ATOMIC_OPS.values().has(op_type):
+		_add(orders, "Stop", commanded, "stop", {})
+		return
+	if op_type == ATOMIC_OPS["dock"] and not orders.any(_is_dock_order):
+		_add(orders, "Dock", commanded, "dock", {})
+	if not CyclePlan.running_cycle(unit, view).is_empty():
+		_add(orders, "Stop cycle", commanded, "stop", {}, "Stop")
+
+
+static func _is_dock_order(order: Dictionary) -> bool:
+	return order["command"]["type"] == "dock"
 
 
 ## Unload everything aboard except propellant, and refill from the host what
