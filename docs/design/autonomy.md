@@ -326,7 +326,7 @@ Each failure emits exactly one event (contracts section 6), and the view shows t
 | `core_offline`, `no_core`, `tier_too_low` | Core problems |
 | `port_busy`, `busy_docking` | Ports and atomic operations |
 | `bad_cycle`, `no_safe_step` | Cycles |
-| `out_of_range`, `docked`, `not_docked`, `unknown_deposit` | Step validation |
+| `out_of_range`, `docked`, `not_docked`, `unknown_deposit`, `too_hard` | Step validation. `too_hard` means a deposit is harder than the laser's `hardness_max`. |
 | `facility_busy`, `missing_inputs`, `output_full` | Jobs |
 
 `part_busy` is defined in contracts section 5.
