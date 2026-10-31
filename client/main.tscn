@@ -1,15 +1,20 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://client/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://client/sim_bridge.gd" id="2_bridge"]
 [ext_resource type="Script" path="res://client/ui/time_controls.gd" id="3_time"]
+[ext_resource type="Script" path="res://client/view/local_view.gd" id="4_view"]
+[ext_resource type="Script" path="res://client/view/orbit_camera.gd" id="5_camera"]
+[ext_resource type="Script" path="res://client/ui/order_panel.gd" id="6_orders"]
+[ext_resource type="Script" path="res://client/ui/event_log.gd" id="7_log"]
+[ext_resource type="Script" path="res://client/ui/entity_markers.gd" id="8_markers"]
 
 [sub_resource type="Environment" id="Environment_space"]
 background_mode = 1
 background_color = Color(0.012, 0.014, 0.024, 1)
 ambient_light_source = 2
 ambient_light_color = Color(0.32, 0.35, 0.42, 1)
-ambient_light_energy = 0.35
+ambient_light_energy = 0.7
 tonemap_mode = 2
 
 [node name="Main" type="Node3D"]
@@ -21,12 +26,55 @@ script = ExtResource("2_bridge")
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_space")
 
-[node name="Camera3D" type="Camera3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 10)
+[node name="LocalView" type="Node3D" parent="."]
+script = ExtResource("4_view")
+
+[node name="Camera" type="Camera3D" parent="LocalView"]
+current = true
+script = ExtResource("5_camera")
+
+[node name="Sun" type="DirectionalLight3D" parent="LocalView"]
+light_energy = 1.5
+light_color = Color(1, 0.96, 0.88, 1)
+shadow_enabled = true
+directional_shadow_max_distance = 600.0
 
 [node name="Overlay" type="CanvasLayer" parent="."]
 
+[node name="Markers" type="Control" parent="Overlay"]
+unique_name_in_owner = true
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("8_markers")
+
 [node name="TimeControls" type="PanelContainer" parent="Overlay"]
+unique_name_in_owner = true
 offset_left = 12.0
 offset_top = 12.0
 script = ExtResource("3_time")
+
+[node name="OrderPanel" type="PanelContainer" parent="Overlay"]
+unique_name_in_owner = true
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -312.0
+offset_top = 12.0
+offset_right = -12.0
+grow_horizontal = 0
+script = ExtResource("6_orders")
+
+[node name="EventLog" type="PanelContainer" parent="Overlay"]
+unique_name_in_owner = true
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = -12.0
+offset_bottom = -12.0
+grow_vertical = 0
+script = ExtResource("7_log")

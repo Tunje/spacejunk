@@ -100,6 +100,16 @@ func test_time_controls_reflect_and_drive_the_bridge() -> void:
 	assert_true(bridge.paused)
 
 
+func test_time_controls_ignore_key_release_and_repeat() -> void:
+	var controls := TimeControls.new()
+	add_child_autofree(controls)
+	controls.bind(bridge)
+	var release := InputEventKey.new()
+	release.physical_keycode = KEY_SPACE
+	controls._unhandled_key_input(release)
+	assert_false(bridge.paused)
+
+
 func test_screenshot_args_parse() -> void:
 	var parsed := ScreenshotRunner.parse_args(["--shot=C:/a/b.png", "--frames=9", "ignored"])
 	assert_eq(parsed, { "shot": "C:/a/b.png", "frames": "9" })
