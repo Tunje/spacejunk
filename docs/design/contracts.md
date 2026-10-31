@@ -75,7 +75,7 @@ Rules:
 - `current_tick()` is the number of completed ticks and is 0 in a new game. `step` runs tick `current_tick() + 1`. `step` with `tick_count < 1` does nothing.
 - `submit` deep-copies its argument and stamps `current_tick() + 1`. A float in a command is rejected in phase 1.
 - `check` runs phase 1 validation without effects and returns `{ ok, reason, detail }`. For `attach_part` and `detach_part`, `detail` gives projected mass, power and heat against limits. For `move_to`, it gives ticks and propellant. It is advisory: `submit` can still be rejected if the state changes.
-- `defs()` returns `{ modules, items, recipes, templates, sinks }`, each keyed by definition ID, including connectors, collision and visual, so clients never parse data units. Fields are renamed to their sim unit: `mass_kg` to `mass_g`, `power_kw` to `power_w`, `heat_kw` to `heat_w`, `volume_m3` to `volume_l`, `load_limit_kg` to `load_limit_g`, `density_kg_m3` to `density_g_l`, and likewise for any other unit-suffixed field.
+- `defs()` returns `{ modules, items, recipes, templates, sinks }`, each keyed by definition ID, including connectors, collision and visual, so clients never parse data units. Fields are renamed to their sim unit: `mass_kg` to `mass_g`, `power_kw` to `power_w`, `heat_kw` to `heat_w`, `volume_m3` to `volume_l`, `load_limit_kg` to `load_limit_g`, `density_kg_m3` to `density_g_l`, `seconds` to `ticks`, and likewise for any other unit-suffixed field (`docs/design/schemas.md` section 2).
 - Scenario `"empty"` is built into the kernel for tests that precede `data/`.
 - The event queue is bounded (A1 sets the bound) and starts empty on load.
 - The client drains events before calling `to_save`, because undrained events are not saved.
@@ -271,9 +271,9 @@ Task B3 owns the schemas. These fields are fixed here because other agents depen
 - **Items:** `id`, `name`, `cargo_class`, `density_kg_m3`, and `unit_mass_kg` for discrete items.
 - **Deposits:** item, grams, `hardness`.
 - **Cargo classes:** `ore`, `goods`, `propellant`.
-- **Capabilities:** `scan`, `mine`, `ai_core.tier`, `storage` (capacity by class), `max_mass_kg`.
+- **Capabilities:** the closed list in `docs/design/schemas.md` section 5.
 - **`realism`:** `established`, `extrapolation`, `speculative` or `fictional`.
-- **Connectors:** `id` (unique within a module), `type` (`stack`, `side`, `dock`), `size`, `pos_mm`, `facing`, `up`, `load_limit_kg`. `facing` and `up` are axis values (+/-x, +/-y, +/-z). Mated connectors have opposite facings and equal ups. `load_limit_kg` is the mass carried below the connector.
+- **Connectors:** `id` (unique within a module), `type` (`stack`, `side`, `dock`), `size`, `pos_mm`, `facing`, `up`, `load_limit_kg`. `facing` and `up` are axis values (+/-x, +/-y, +/-z), written in the module's own frame. A child part is turned as it mates, so that in the craft's frame the connectors have opposite facings and equal ups. `load_limit_kg` is the mass carried below the connector.
 - **Collision:** `{ shape, center_mm, size_mm }`, where `shape` is `box` or `cylinder`, with the cylinder axis along the module's Y. `size_mm` is full extents `[x, y, z]`; a cylinder's diameter is `x` and its height is `y`. Placeholders use the same shape. B3 may extend it.
 - **Recipes:** `id`, `facility`, `seconds`, `power_kw`, `inputs`, `outputs`, `abstract`. An output may route straight to a declared sink, such as `slag_vent`, instead of an inventory. B3 defines how.
 - `visual` is read by the client only. The simulation never reads it.
