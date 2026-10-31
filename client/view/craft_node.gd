@@ -2,7 +2,6 @@ class_name CraftNode extends Node3D
 ## One unit drawn as labelled placeholder parts built from `collision` data.
 ## Models replace the meshes later; layout and selection stay data-driven.
 
-const LABEL_RANGE_M := 60.0
 const FLANGE_M := 0.16
 const SELECT_ENERGY := 0.45
 const PULSE_ENERGY := 1.6
@@ -27,6 +26,8 @@ var undock_from := Transform3D.IDENTITY
 
 var _materials: Dictionary = {}
 var _meshes: Dictionary = {}
+var _labels: Dictionary = {}
+var _hovered_part := 0
 var _tips: Dictionary = {}
 var _plumes: Array[MeshInstance3D] = []
 var _radiators: Array[int] = []
@@ -58,6 +59,7 @@ func build(id: int, root: Dictionary, modules: Dictionary) -> void:
 		child.queue_free()
 	_materials.clear()
 	_meshes.clear()
+	_labels.clear()
 	_tips.clear()
 	_plumes.clear()
 	_radiators.clear()
@@ -71,11 +73,23 @@ func build(id: int, root: Dictionary, modules: Dictionary) -> void:
 				_growing[part_id] = 0.0
 	_known_parts = ids
 	_paint()
+	_show_labels()
 
 
 func highlight(part_id: int) -> void:
 	_selected_part = part_id
 	_paint()
+	_show_labels()
+
+
+func hover(part_id: int) -> void:
+	_hovered_part = part_id
+	_show_labels()
+
+
+func _show_labels() -> void:
+	for id: int in _labels:
+		_labels[id].visible = id == _selected_part or id == _hovered_part
 
 
 ## A part's tip and outward direction in the craft frame, for beams and heading.
@@ -197,7 +211,8 @@ func _add_part(part: Dictionary, modules: Dictionary) -> void:
 	label.pixel_size = 0.0006
 	label.font_size = 22
 	label.outline_size = 8
-	label.visibility_range_end = LABEL_RANGE_M
+	label.visible = false
+	_labels[part["id"]] = label
 	body.add_child(label)
 
 	for child: Dictionary in part["children"]:

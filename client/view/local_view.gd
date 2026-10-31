@@ -40,6 +40,8 @@ var _press_position := Vector2.ZERO
 var _pressed := false
 var _orbiting := false
 var _pending_click: Variant = null
+var _hovered_craft := 0
+var _hover_at := Vector2(-1, -1)
 
 @onready var camera: OrbitCamera = $Camera
 @onready var sun: DirectionalLight3D = $Sun
@@ -81,6 +83,7 @@ func _process(delta: float) -> void:
 
 
 func _physics_process(_delta: float) -> void:
+	hover_at(get_viewport().get_mouse_position())
 	if _pending_click == null:
 		return
 	var click: Vector2 = _pending_click
@@ -182,6 +185,20 @@ func click_at(screen: Vector2) -> void:
 		clear_selection()
 	else:
 		select(hit["kind"], hit["id"], hit["part"])
+
+
+## Shows the label of the part under the mouse. Must run in a physics step.
+func hover_at(screen: Vector2) -> void:
+	if not visible or screen == _hover_at:
+		return
+	_hover_at = screen
+	var hit := pick_ray(camera.project_ray_origin(screen), camera.project_ray_normal(screen))
+	var craft_id: int = hit.get("id", 0) if hit.get("kind", "") == "unit" else 0
+	if crafts.has(_hovered_craft) and _hovered_craft != craft_id:
+		crafts[_hovered_craft].hover(0)
+	_hovered_craft = craft_id
+	if crafts.has(craft_id):
+		crafts[craft_id].hover(hit["part"])
 
 
 func pick_ray(from: Vector3, direction: Vector3) -> Dictionary:

@@ -2,5 +2,8 @@
   { "id": "hematite", "name": "Hematite Ore", "cargo_class": "ore", "density_kg_m3": 5000 },
   { "id": "chalcopyrite", "name": "Chalcopyrite Ore", "cargo_class": "ore", "density_kg_m3": 4200 },
   { "id": "olivine", "name": "Olivine", "cargo_class": "ore", "density_kg_m3": 2600 },
-  { "id": "propellant", "name": "Propellant", "cargo_class": "propellant", "density_kg_m3": 1000 }
+  { "id": "propellant", "name": "Propellant", "cargo_class": "propellant", "density_kg_m3": 1000 },
+  { "id": "stub_laser", "name": "Mining Laser", "cargo_class": "goods", "density_kg_m3": 200, "unit_mass_kg": 400 },
+  { "id": "stub_solar", "name": "Solar Slab", "cargo_class": "goods", "density_kg_m3": 55, "unit_mass_kg": 220 },
+  { "id": "stub_radiator", "name": "Heat Radiator", "cargo_class": "goods", "density_kg_m3": 86, "unit_mass_kg": 260 }
 ]

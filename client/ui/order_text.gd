@@ -40,6 +40,7 @@ const REASONS: Dictionary = {
 	"root_part": "The root part cannot be removed",
 	"tier_too_low": "AI core tier is too low",
 	"unknown_deposit": "Deposit not found",
+	"malformed_command": "Invalid order",
 	"unknown_command": "Not available yet",
 	"unknown_part": "Part no longer exists",
 	"unknown_unit": "Craft no longer exists",
@@ -60,6 +61,10 @@ static func reason(code: String, detail: Dictionary = {}) -> String:
 	var text: String = REASONS.get(code, code.replace("_", " ").capitalize())
 	if detail.has("need_mm") and detail.has("have_mm"):
 		text += " (%s, needs %s)" % [metres(detail["have_mm"]), metres(detail["need_mm"])]
+	elif detail.has("need_w") and detail.has("have_w"):
+		text += ": needs %s, has %s" % [InspectText.watts(detail["need_w"]), InspectText.watts(detail["have_w"])]
+	elif detail.has("need_g") and detail.has("have_g"):
+		text += ": needs %s, has %s" % [tonnes(detail["need_g"]), tonnes(detail["have_g"])]
 	return text
 
 

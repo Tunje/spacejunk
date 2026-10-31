@@ -14,6 +14,8 @@ const SEED_VALUE := 1
 @onready var order_panel: OrderPanel = %OrderPanel
 @onready var event_log: EventLog = %EventLog
 @onready var inspection_panel: InspectionPanel = %InspectionPanel
+@onready var fitting_screen: FittingScreen = %FittingScreen
+@onready var fitting_markers: FittingMarkers = %FittingMarkers
 @onready var markers: EntityMarkers = %Markers
 @onready var system_map: SystemMap = $SystemMap
 @onready var standing_orders: StandingOrdersScreen = %StandingOrders
@@ -34,9 +36,12 @@ func _ready() -> void:
 	order_panel.bind(bridge, local_view)
 	event_log.bind(bridge)
 	inspection_panel.bind(bridge, local_view)
+	fitting_screen.bind(bridge, local_view, fitting_markers)
 	system_map.bind(bridge, local_view)
 	time_controls.map_pressed.connect(toggle_map)
 	time_controls.policy_pressed.connect(standing_orders.toggle)
+	time_controls.fit_pressed.connect(toggle_fitting)
+	fitting_screen.closed.connect(_on_fitting_closed)
 	ScreenshotDriver.attach_if_requested(self, args)
 	ScreenshotRunner.attach_if_requested(self, args)
 	FrameProbe.attach_if_requested(self, args)
@@ -55,6 +60,12 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	if key.physical_keycode == KEY_M:
 		toggle_map()
 		get_viewport().set_input_as_handled()
+	elif key.physical_keycode == KEY_G:
+		toggle_fitting()
+		get_viewport().set_input_as_handled()
+	elif key.physical_keycode == KEY_ESCAPE and fitting_screen.visible:
+		toggle_fitting()
+		get_viewport().set_input_as_handled()
 	elif key.physical_keycode == KEY_P:
 		standing_orders.toggle()
 		get_viewport().set_input_as_handled()
@@ -64,6 +75,19 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	elif key.physical_keycode == KEY_ESCAPE and system_map.is_open():
 		toggle_map()
 		get_viewport().set_input_as_handled()
+
+
+## The fitting screen works on the 3D hull, so it closes the map and takes the
+## order panel's place while open.
+func toggle_fitting() -> void:
+	if system_map.is_open():
+		toggle_map()
+	fitting_screen.toggle()
+	order_panel.visible = not fitting_screen.visible
+
+
+func _on_fitting_closed() -> void:
+	order_panel.visible = true
 
 
 func toggle_map() -> void:
