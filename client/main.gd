@@ -23,7 +23,9 @@ const SEED_VALUE := 1
 
 func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
-	scenario = ScreenshotRunner.parse_args(args).get("scenario", scenario)
+	var parsed := ScreenshotRunner.parse_args(args)
+	scenario = parsed.get("scenario", scenario)
+	AsteroidField.count_override = int(parsed.get("rocks", "0"))
 	var backend := _new_backend(scenario)
 	if backend == null:
 		push_error("Could not start scenario %s: %s" % [scenario, Sim.last_error()])

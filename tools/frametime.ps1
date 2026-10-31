@@ -6,7 +6,8 @@ param(
     [string]$Size = '1920x1080',
     [int]$Warmup = 4000,
     [int]$Samples = 8000,
-    [int]$Speed = 8
+    [int]$Speed = 8,
+    [int]$Rocks = 6000
 )
 
 $ErrorActionPreference = 'Stop'
@@ -43,7 +44,7 @@ foreach ($view in $views) {
     $outFile = Join-Path $outDir "frametime_$($view.Name).json"
     if (Test-Path $outFile) { Remove-Item $outFile }
     $ErrorActionPreference = 'Continue'
-    & cmd /c "`"$godot`" --path `"$projectRoot`" --resolution $Size -- --scenario=stub_load --speed=$Speed --warmup=$Warmup --samples=$Samples --frametime=$($outFile -replace '\\', '/') $($view.Args -join ' ') 2>&1" | Out-Null
+    & cmd /c "`"$godot`" --path `"$projectRoot`" --resolution $Size -- --scenario=stub_load --rocks=$Rocks --speed=$Speed --warmup=$Warmup --samples=$Samples --frametime=$($outFile -replace '\\', '/') $($view.Args -join ' ') 2>&1" | Out-Null
     $code = $LASTEXITCODE
     $ErrorActionPreference = 'Stop'
     if (-not (Test-Path $outFile)) {
@@ -56,6 +57,6 @@ foreach ($view in $views) {
     if (-not $result.passed) { $failed += 1 }
     Write-Output ("{0,-6} {1}  avg {2:N2} ms ({3:N0} fps)  p95 {4:N2}  p99 {5:N2}  worst {6:N2}" -f `
         $view.Name, $verdict, $result.average_ms, $result.average_fps, $result.p95_ms, $result.p99_ms, $result.worst_ms)
-    Write-Output "       ship time: $($result.ship_op_share | ConvertTo-Json -Compress)"
+    Write-Output "       ship time: $($result.ship_op_share | ConvertTo-Json -Compress), rocks: $($result.decorative_rocks)"
 }
 if ($failed -gt 0) { exit 5 }

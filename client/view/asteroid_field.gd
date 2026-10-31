@@ -12,6 +12,9 @@ const MAX_SIZE_M := 90.0
 const CLEARANCE_M := 500.0
 const REACH_MARGIN := 1.25
 
+## Forces the rock count for tools/frametime.ps1. 0 means the normal count.
+static var count_override := 0
+
 var anchor_mm: Array = [0, 0, 0]
 var instance_total := 0
 
@@ -57,6 +60,8 @@ static func half_width_for(clear: Array[Dictionary]) -> float:
 
 ## Rock count that keeps the default density across a wider field.
 static func count_for(half_width_m: float) -> int:
+	if count_override > 0:
+		return count_override
 	var scale_up := half_width_m / HALF_WIDTH_M
 	return mini(roundi(COUNT * scale_up * scale_up), MAX_COUNT)
 
