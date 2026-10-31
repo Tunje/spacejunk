@@ -225,7 +225,7 @@ func test_attach_from_a_unit_not_docked_is_refused() -> void:
 
 func test_attach_to_a_faulted_parent_is_refused() -> void:
 	_give(STATION, "lidar_mk1")
-	state["parts"][HULL]["fault"] = "over_heat_limit"
+	state["parts"][HULL]["fault"] = "test_fault"
 	_assert_refused(_attach(SHIP, "lidar_mk1", HULL, "side_c_pz"), "module_fault")
 
 
@@ -331,7 +331,7 @@ func test_detaching_the_assigned_core_clears_it() -> void:
 
 
 func test_detach_is_allowed_on_a_faulted_part() -> void:
-	state["parts"][LIDAR]["fault"] = "over_heat_limit"
+	state["parts"][LIDAR]["fault"] = "test_fault"
 	assert_eq(_run(_detach(SHIP, LIDAR))["type"], "part_detached")
 
 
