@@ -241,8 +241,15 @@ static func are_docked(state: Dictionary, a: int, b: int) -> bool:
 	return units[a]["dock"].get("target_unit", 0) == b or units[b]["dock"].get("target_unit", 0) == a
 
 
-## True if a port part has a unit docked at it, on either side of the dock.
+## True if a unit is at a body or unit. This is the one test of placement (networks.md section 6).
+static func at(state: Dictionary, unit_id: int, target: int) -> bool:
+	return target != 0 and state["units"][unit_id]["at_target"] == target
+
+
+## True if a port part has a unit docked at it, on either side of the dock, or is promised to one.
 static func port_in_use(state: Dictionary, part_id: int) -> bool:
+	if state["parts"][part_id].get("claimed_by", 0) != 0:
+		return true
 	var units: Dictionary = state["units"]
 	for id: int in units:
 		var dock: Dictionary = units[id]["dock"]
@@ -259,6 +266,25 @@ static func ports(state: Dictionary, defs: Dictionary, unit_id: int) -> Array[in
 			result.append(part_id)
 	result.sort()
 	return result
+
+
+## How many grams of an item a unit can still take (networks.md section 5). `incoming` lists stock
+## already promised to the unit this tick.
+static func grams_that_fit(
+	state: Dictionary, defs: Dictionary, unit_id: int, item: String, incoming: Dictionary = {}
+) -> int:
+	var item_def: Dictionary = defs["items"][item]
+	var table := cargo(state, defs, unit_id, [] as Array[int], incoming)
+	var entry: Dictionary = table.get(item_def["cargo_class"], {})
+	if entry.is_empty():
+		return 0
+	var density: int = item_def["density_g_l"]
+	var held_g: int = state["units"][unit_id]["inventory"].get(item, 0) + incoming.get(item, 0)
+	var litres_left: int = entry["cap_l"] - entry["used_l"] - entry["reserved_l"] + litres(held_g, density)
+	var by_volume := IntMath.mul_div(maxi(0, litres_left), density, 1) - held_g
+	var fits := maxi(0, mini(entry["cap_g"] - entry["used_g"] - entry["reserved_g"], by_volume))
+	var unit_mass_g: int = item_def.get("unit_mass_g", 0)
+	return fits - fits % unit_mass_g if unit_mass_g != 0 else fits
 
 
 ## Moves grams into a stack.

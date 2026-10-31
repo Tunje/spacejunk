@@ -15,11 +15,21 @@ const NARROW_AXIS_LIMIT := 1_700_000_000
 
 ## floor(a * b / d) with a 128-bit intermediate. Arguments are non-negative and d is positive.
 static func mul_div(a: int, b: int, d: int) -> int:
+	return _mul_div(a, b, d, false)
+
+
+## ceil(a * b / d), the rounded-up form of mul_div.
+static func mul_div_ceil(a: int, b: int, d: int) -> int:
+	return _mul_div(a, b, d, true)
+
+
+static func _mul_div(a: int, b: int, d: int, round_up: bool) -> int:
 	assert(a >= 0 and b >= 0 and d > 0, "mul_div takes non-negative values")
 	if a == 0 or b == 0:
 		return 0
 	if a <= MAX_INT / b:
-		return a * b / d
+		var product := a * b
+		return product / d + (1 if round_up and product % d != 0 else 0)
 	if b > a:
 		var swap := a
 		a = b
@@ -45,6 +55,8 @@ static func mul_div(a: int, b: int, d: int) -> int:
 				quotient += 1
 			else:
 				rem += step_rem
+	if round_up and rem != 0:
+		quotient += 1
 	if result > MAX_INT - quotient:
 		return _overflow("mul_div")
 	return result + quotient

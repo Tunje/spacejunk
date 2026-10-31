@@ -38,7 +38,7 @@ func validate(ctx: SimContext, unit_id: int, args: Dictionary) -> Dictionary:
 	if not deposits.has(deposit_id) or not deposits[deposit_id]["found"]:
 		return SimSystem.reject(REASON_UNKNOWN_DEPOSIT)
 	var deposit: Dictionary = deposits[deposit_id]
-	if unit["at_target"] != deposit["body"]:
+	if not Units.at(state, unit_id, deposit["body"]):
 		return SimSystem.reject(TaskSystem.REASON_OUT_OF_RANGE)
 	if deposit["remaining_g"] == 0:
 		return SimSystem.reject(REASON_EXHAUSTED)
@@ -69,11 +69,12 @@ func run(ctx: SimContext, unit_id: int, system: SimSystem) -> void:
 	var deposit: Dictionary = state["deposits"][deposit_id]
 	var claims: Dictionary = ctx.flows.get_or_add(CLAIMS_FLOW, {})
 	var left: int = deposit["remaining_g"] - claims.get(deposit_id, 0)
-	var grams: int = mini(wanted, mini(left, _room(ctx, unit_id, deposit["item"])))
+	var grams: int = mini(wanted, mini(left, Reservations.free_space(ctx, unit_id, deposit["item"])))
 	if grams == wanted:
 		op["mine_remainder"] = Rate.carry(rate, remainder)
 	if grams > 0:
 		claims[deposit_id] = claims.get(deposit_id, 0) + grams
+		Reservations.claim_space(ctx, unit_id, deposit["item"], grams)
 		ctx.record_delta(unit_id, system, {
 			"step": type(), "unit": unit_id, "deposit": deposit_id, "grams": grams,
 		})
@@ -94,7 +95,7 @@ func end_test(ctx: SimContext, unit_id: int) -> bool:
 	var deposit: Dictionary = ctx.state["deposits"][op["target"]]
 	if deposit["remaining_g"] == 0:
 		op["end_reason"] = REASON_EXHAUSTED
-	elif _room(ctx, unit_id, deposit["item"]) == 0:
+	elif Units.grams_that_fit(ctx.state, ctx.defs, unit_id, deposit["item"]) == 0:
 		op["end_reason"] = REASON_CARGO_FULL
 	return op["end_reason"] != ""
 
@@ -113,16 +114,3 @@ func _is_laser_on(ctx: SimContext, unit_id: int, part_id: int) -> bool:
 		return false
 	return Units.module_of(ctx.state, ctx.defs, part_id)["capabilities"].has(CAPABILITY)
 
-
-## Grams of an item that still fit, by networks.md section 5.
-func _room(ctx: SimContext, unit_id: int, item: String) -> int:
-	var item_def: Dictionary = ctx.defs["items"][item]
-	var entry: Dictionary = Units.cargo(ctx.state, ctx.defs, unit_id).get(item_def["cargo_class"], {})
-	if entry.is_empty():
-		return 0
-	var density: int = item_def["density_g_l"]
-	var held: int = ctx.state["units"][unit_id]["inventory"].get(item, 0)
-	var free_l: int = entry["cap_l"] - entry["used_l"] - entry["reserved_l"]
-	var by_mass: int = entry["cap_g"] - entry["used_g"] - entry["reserved_g"]
-	var by_volume: int = IntMath.mul_div(maxi(0, free_l + Units.litres(held, density)), density, 1) - held
-	return maxi(0, mini(by_mass, by_volume))

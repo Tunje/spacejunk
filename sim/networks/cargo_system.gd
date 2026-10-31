@@ -1,0 +1,209 @@
+class_name CargoSystem
+extends SimSystem
+## Travel, docking and cargo transfer: the running half of networks.md sections 5 and 6. Steps set
+## a unit's operation in phase 2, and this system carries it out.
+
+const DELTA_BURN := "burn"
+const DELTA_TRANSFER := "transfer"
+
+
+## Ends a unit's open transfer, reporting what it moved.
+static func close_transfer(ctx: SimContext, unit_id: int) -> void:
+	var unit: Dictionary = ctx.state["units"][unit_id]
+	if not unit.has(TransferStep.OPEN_KEY):
+		return
+	ctx.emit_event("transfer_done", unit_id, unit[TransferStep.OPEN_KEY])
+	unit.erase(TransferStep.OPEN_KEY)
+
+
+## Stops a unit where it is, with no refund (networks.md section 6).
+static func halt(ctx: SimContext, id: int) -> void:
+	ctx.state["units"][id]["route"] = {}
+	_clear_followers(ctx, id)
+
+
+static func release_ports(ctx: SimContext, op: Dictionary) -> void:
+	if op.has("granted"):
+		ctx.state["parts"][op["port"]].erase("claimed_by")
+		ctx.state["parts"][op["target_port"]].erase("claimed_by")
+
+
+func allocate(ctx: SimContext) -> void:
+	for id: int in _sorted(ctx.state["units"]):
+		var unit: Dictionary = ctx.state["units"][id]
+		var op_type: String = unit["op"]["type"]
+		if op_type == MoveStep.OP_MOVING and unit["op"]["start_tick"] == ctx.tick:
+			_depart(ctx, id)
+		elif op_type == DockStep.OP_DOCKING and unit["task"] != 0 and not unit["op"].has("granted"):
+			_grant_ports(ctx, id)
+
+
+func run(ctx: SimContext) -> void:
+	for id: int in _sorted(ctx.state["units"]):
+		var unit: Dictionary = ctx.state["units"][id]
+		if not unit["route"].is_empty():
+			_advance(ctx, id)
+		match unit["op"]["type"]:
+			TransferStep.OP_LOADING, TransferStep.OP_UNLOADING:
+				if unit["task"] != 0 and not unit["op"].has("reason"):
+					_transfer(ctx, id)
+			DockStep.OP_DOCKING:
+				if ctx.tick >= unit["op"]["end_tick"] and unit["op"].has("granted"):
+					_finish_dock(ctx, id)
+			UndockStep.OP_UNDOCKING:
+				if ctx.tick >= unit["op"]["end_tick"]:
+					_finish_undock(ctx, id)
+	_follow_hosts(ctx)
+
+
+func apply_delta(ctx: SimContext, payload: Dictionary) -> void:
+	var units: Dictionary = ctx.state["units"]
+	if payload["kind"] == DELTA_BURN:
+		Units.remove_stock(units[payload["unit"]]["inventory"], Travel.PROPELLANT, payload["grams"])
+		var sink: Dictionary = ctx.state["sinks"].get_or_add(Travel.SINK, {})
+		sink[Travel.PROPELLANT] = sink.get(Travel.PROPELLANT, 0) + payload["grams"]
+	else:
+		Units.remove_stock(units[payload["from"]]["inventory"], payload["item"], payload["grams"])
+		Units.add_stock(units[payload["to"]]["inventory"], payload["item"], payload["grams"])
+
+
+## Prices a trip from current state, claims the propellant and sets the route.
+func _depart(ctx: SimContext, id: int) -> void:
+	var unit: Dictionary = ctx.state["units"][id]
+	var op: Dictionary = unit["op"]
+	var quoted := Travel.quote(ctx, id, op["target"])
+	if quoted.has("reason"):
+		op["reason"] = quoted["reason"]
+		return
+	var cost_g: int = quoted["cost_g"]
+	if cost_g > Reservations.free_stock(ctx, id, Travel.PROPELLANT):
+		op["reason"] = MoveStep.REASON_NO_PROPELLANT
+		return
+	if cost_g > 0:
+		Reservations.claim_stock(ctx, id, Travel.PROPELLANT, cost_g)
+		ctx.record_delta(id, self, { "kind": DELTA_BURN, "unit": id, "grams": cost_g })
+	op["end_tick"] = ctx.tick + quoted["ticks"] - 1
+	unit["route"] = {
+		"target": op["target"], "from_mm": quoted["from_mm"], "to_mm": quoted["to_mm"],
+		"length_mm": quoted["length_mm"], "speed_mm_s": quoted["speed_mm_s"], "progress_mm": 0,
+		"speed_remainder": 0, "eta_tick": op["end_tick"],
+	}
+	unit["at_target"] = 0
+	_clear_followers(ctx, id)
+
+
+## Nothing stays at a target that has left. Docked guests keep theirs and follow their host.
+static func _clear_followers(ctx: SimContext, moved: int) -> void:
+	var units: Dictionary = ctx.state["units"]
+	var ids: Array = units.keys()
+	ids.sort()
+	for id: int in ids:
+		if units[id]["at_target"] == moved and units[id]["dock"].is_empty():
+			units[id]["at_target"] = 0
+
+
+func _advance(ctx: SimContext, id: int) -> void:
+	var unit: Dictionary = ctx.state["units"][id]
+	var route: Dictionary = unit["route"]
+	var remainder: int = route["speed_remainder"]
+	var length_mm: int = route["length_mm"]
+	route["progress_mm"] = mini(length_mm,
+		route["progress_mm"] + Rate.amount(route["speed_mm_s"], remainder))
+	route["speed_remainder"] = Rate.carry(route["speed_mm_s"], remainder)
+	if route["progress_mm"] < length_mm:
+		for axis in 3:
+			unit["pos_mm"][axis] = Travel.along(route["from_mm"][axis], route["to_mm"][axis],
+				route["progress_mm"], length_mm)
+		return
+	unit["pos_mm"] = route["to_mm"].duplicate()
+	unit["at_target"] = route["target"]
+	var target: int = route["target"]
+	unit["route"] = {}
+	ctx.emit_event("arrived", id, { "target": target })
+
+
+func _grant_ports(ctx: SimContext, id: int) -> void:
+	var op: Dictionary = ctx.state["units"][id]["op"]
+	var parts: Dictionary = ctx.state["parts"]
+	if Units.port_in_use(ctx.state, op["port"]) or Units.port_in_use(ctx.state, op["target_port"]):
+		op["reason"] = DockStep.REASON_PORT_BUSY
+		return
+	parts[op["port"]]["claimed_by"] = id
+	parts[op["target_port"]]["claimed_by"] = id
+	op["granted"] = true
+
+
+func _finish_dock(ctx: SimContext, id: int) -> void:
+	var unit: Dictionary = ctx.state["units"][id]
+	var op: Dictionary = unit["op"]
+	release_ports(ctx, op)
+	unit["dock"] = { "port": op["port"], "target_unit": op["target"], "target_port": op["target_port"] }
+	unit["pos_mm"] = ctx.state["units"][op["target"]]["pos_mm"].duplicate()
+	unit["at_target"] = op["target"]
+	ctx.emit_event("docked", id, { "target": op["target"] })
+
+
+func _finish_undock(ctx: SimContext, id: int) -> void:
+	var unit: Dictionary = ctx.state["units"][id]
+	var host: int = unit["dock"]["target_unit"]
+	var host_mm: Array = ctx.state["units"][host]["pos_mm"]
+	unit["dock"] = {}
+	unit["pos_mm"] = [host_mm[0] + Travel.STANDOFF_MM, host_mm[1], host_mm[2]]
+	unit["at_target"] = host
+	ctx.emit_event("undocked", id, { "target": host })
+
+
+func _transfer(ctx: SimContext, id: int) -> void:
+	var unit: Dictionary = ctx.state["units"][id]
+	var op: Dictionary = unit["op"]
+	var task: Dictionary = ctx.state["tasks"][unit["task"]]
+	var from: int = op["from"]
+	var to: int = op["to"]
+	var item: String = op["item"]
+	var rate := _transfer_rate(ctx, from, to)
+	var remainder: int = task.get("transfer_remainder", 0)
+	var grams: int = task.get("credit_g", 0) + Rate.amount(rate, remainder)
+	task["transfer_remainder"] = Rate.carry(rate, remainder)
+	var limit := mini(Reservations.free_stock(ctx, from, item), Reservations.free_space(ctx, to, item))
+	if op["limit_g"] != 0:
+		limit = mini(limit, op["limit_g"] - task.get("moved_g", 0))
+	var moved := mini(grams, limit)
+	var unit_mass_g: int = ctx.defs["items"][item].get("unit_mass_g", 0)
+	if unit_mass_g != 0:
+		moved -= moved % unit_mass_g
+		task["credit_g"] = mini(grams - moved, unit_mass_g)
+	if moved <= 0:
+		return
+	Reservations.claim_stock(ctx, from, item, moved)
+	Reservations.claim_space(ctx, to, item, moved)
+	ctx.record_delta(id, self, {
+		"kind": DELTA_TRANSFER, "from": from, "to": to, "item": item, "grams": moved,
+	})
+	task["moved_g"] = task.get("moved_g", 0) + moved
+	unit[TransferStep.OPEN_KEY]["grams"] += moved
+
+
+## The smaller of the two docked ports' rates.
+func _transfer_rate(ctx: SimContext, from: int, to: int) -> int:
+	var units: Dictionary = ctx.state["units"]
+	var dock: Dictionary = units[from]["dock"]
+	if dock.get("target_unit", 0) != to:
+		dock = units[to]["dock"]
+	var near: Dictionary = Units.module_of(ctx.state, ctx.defs, dock["port"])["capabilities"]["port"]
+	var far: Dictionary = Units.module_of(ctx.state, ctx.defs, dock["target_port"])["capabilities"]["port"]
+	return mini(near["transfer_g_per_s"], far["transfer_g_per_s"])
+
+
+## A docked unit takes its host's position, whenever the host moves.
+func _follow_hosts(ctx: SimContext) -> void:
+	var units: Dictionary = ctx.state["units"]
+	for id: int in _sorted(units):
+		var dock: Dictionary = units[id]["dock"]
+		if not dock.is_empty() and units[id]["pos_mm"] != units[dock["target_unit"]]["pos_mm"]:
+			units[id]["pos_mm"] = units[dock["target_unit"]]["pos_mm"].duplicate()
+
+
+func _sorted(table: Dictionary) -> Array:
+	var ids: Array = table.keys()
+	ids.sort()
+	return ids

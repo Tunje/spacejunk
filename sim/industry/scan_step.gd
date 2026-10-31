@@ -29,7 +29,7 @@ func validate(ctx: SimContext, unit_id: int, args: Dictionary) -> Dictionary:
 	var bodies: Dictionary = ctx.state["bodies"]
 	if not bodies.has(target) or bodies[target]["kind"] != BODY_ASTEROID:
 		return SimSystem.reject(TaskSystem.REASON_INVALID_TARGET)
-	if unit["at_target"] != target:
+	if not Units.at(ctx.state, unit_id, target):
 		return SimSystem.reject(TaskSystem.REASON_OUT_OF_RANGE)
 	return SimSystem.ok()
 
