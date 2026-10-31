@@ -210,7 +210,7 @@ This shape is frozen. Fields may be added, but changes or removals go through th
 {
   tick = 120, seed = 12345,
   units = { 7: {
-    def = "...", kind = "ship", name = "...", pos_mm = [0, 0, 0],
+    def = "...", kind = "ship", name = "...", pos_mm = [0, 0, 0], at_target = 3,   # 0 means at nothing
     core = 21, core_tier = 1, task = 4,   # core 0 and tier 0 mean no core
     op = { type = "mining", target = 12, part = 9, start_tick = 100, end_tick = 0 },
     route = { target = 3, from_mm = [], to_mm = [], eta_tick = 180 },  # {} when not moving

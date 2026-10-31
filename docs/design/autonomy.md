@@ -345,7 +345,7 @@ A save taken while a task is blocked, overriding or mid-step must resume identic
 All four are confirmed by Agent A.
 1. Propellant for a trip is paid in full at departure and is priced from current mass, as `check` reports it. A route then runs to arrival, unaffected by faults or power. The thruster is not a load during a trip.
 2. A player order or `stop` halts a moving unit at its current position, with the route cleared.
-3. One predicate for "at" a body or unit, shared by `check`, validation and re-entry. It is true when the unit has no route and its `pos_mm` equals the target's exactly, so a halted unit is at nothing.
+3. One predicate for "at" a body or unit, shared by `check`, validation and re-entry. It reads the unit's `at_target` ([networks.md](networks.md) section 6), so a halted unit is at nothing.
 4. A module with no active operation demands no power, and a held module keeps demanding it. An assigned core always demands power, so it can be shed and go offline. A fitted but unassigned core demands nothing.
 
 **B5 and B8:**

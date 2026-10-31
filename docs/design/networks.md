@@ -107,7 +107,9 @@ The fault takes effect from the next tick, as the contracts require.
 
 **Bodies and stations do not move in the slice**, so a route is fixed when it starts.
 
-**At.** `at(unit, target)` is true when the unit has no route and its `pos_mm` equals the target's exactly. It lives in the kernel, and `check`, validation and re-entry all share it. A docked unit takes its host's position. A halted unit is at nothing.
+**Stand-off.** A unit never flies to a target's centre, which would put it inside an asteroid. It stops short by `STANDOFF_MM`, a kernel constant of 150000 (150 m), measured from the surface of a body (`radius_mm + STANDOFF_MM` from its centre) or from the position of a unit. `to_mm` is that stop point on the straight line from `from_mm` to the target, calculated with `IntMath`. If the unit is already inside that distance, the route has zero length, costs nothing, and arrives on the next tick.
+
+**At.** Each unit stores `at_target`, the entity ID it has arrived at, or 0. `arrived` sets it. Starting a route or a halt clears it. `undock` sets it to the host and places the unit `STANDOFF_MM` from the host along +X. `at(unit, target)` is true when `at_target` equals the target, and is never derived from geometry. A docked unit takes its host's position and keeps `at_target` set to the host. A halted unit is at nothing. The function lives in the kernel, and `check`, validation and re-entry all share it.
 
 **Thruster.** The fastest healthy thruster on the unit at departure, with the lowest part ID on a tie. Only that one is priced. Its speed is stored on the route, so nothing that happens to it later matters.
 
