@@ -26,7 +26,16 @@ static func build() -> Theme:
 	built.set_color("font_hover_pressed_color", "Button", Color.BLACK)
 	built.set_color("font_disabled_color", "Button", MID_GREY)
 	built.set_color("font_color", "Label", OFF_WHITE)
+	for state: String in ["normal", "hover", "pressed", "hover_pressed", "disabled"]:
+		built.set_stylebox(state, "CheckBox", StyleBoxEmpty.new())
+	built.set_color("font_pressed_color", "CheckBox", OFF_WHITE)
+	built.set_color("font_hover_pressed_color", "CheckBox", Color.WHITE)
 	return built
+
+
+## A panel that hides the scene behind it, for full screens.
+static func solid_panel() -> StyleBoxFlat:
+	return _box(Color(PANEL, 1.0), 8, 16)
 
 
 static func _box(colour: Color, radius: int, margin: int) -> StyleBoxFlat:

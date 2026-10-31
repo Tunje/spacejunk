@@ -5,6 +5,7 @@ class_name ScreenshotDriver extends Node
 ##   --order=<order key>             pressed after --delay frames
 ##   --speed=1|2|4|8  --zoom=<metres>  --yaw=<radians>  --pitch=<radians>
 ##   --map=1                         opens the system map
+##   --policy=1                      opens the standing-orders mock
 
 var main: Node3D
 var parsed: Dictionary = {}
@@ -52,6 +53,8 @@ func _run() -> void:
 		if parsed.has("zoom"):
 			camera.target_distance_m = float(parsed["zoom"])
 			camera.distance_m = camera.target_distance_m
+	if parsed.has("policy"):
+		main.standing_orders.toggle()
 	if parsed.has("order"):
 		for i in range(int(parsed.get("delay", "5"))):
 			await get_tree().process_frame

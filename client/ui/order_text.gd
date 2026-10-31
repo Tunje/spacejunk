@@ -26,7 +26,7 @@ const REASONS: Dictionary = {
 	"not_docked": "Not docked",
 	"not_in_stub": "Not available in the stub simulation",
 	"not_whole_unit": "Must be whole units",
-	"out_of_range": "Out of range",
+	"out_of_range": "Move there first",
 	"output_full": "No room for the output",
 	"over_heat_budget": "Over the heat budget",
 	"over_heat_limit": "Heat limit exceeded",
