@@ -94,7 +94,30 @@ func before_each() -> void:
 			{ "id": "propellant_exhaust", "name": "Exhaust", "items": ["propellant"] },
 			{ "id": "slag_vent", "name": "Slag Vent", "items": ["slag"] },
 		]),
+		"scenarios": [{
+			"schema_version": 1, "id": "test", "name": "Test", "seed": 7,
+			"bodies": [
+				{ "key": "star", "name": "Star", "kind": "star", "pos_mm": [0, 0, 0],
+					"radius_mm": 10, "visual_seed": 1, "deposits": [] },
+				{ "key": "rock", "name": "Rock", "kind": "asteroid", "pos_mm": [9, 0, 0],
+					"radius_mm": 10, "visual_seed": 2, "deposits": ["hematite_small"] },
+			],
+			"units": [
+				{ "key": "ship", "template": "ship", "name": "Ship", "pos_mm": [0, 0, 0],
+					"inventory": [{ "item": "hematite", "kg": 50 }], "dock": null },
+				{ "key": "stock", "template": "tanker", "name": "Tanker", "pos_mm": [0, 0, 0],
+					"inventory": [{ "item": "propellant", "kg": 500 }], "dock": null },
+			],
+		}],
 	}
+	var hull := _entry("modules", "hull")
+	hull["capabilities"]["storage"]["propellant"] = { "mass_kg": 500, "volume_m3": 1 }
+	hull["capabilities"]["port"] = {
+		"transfer_kg_per_s": 1, "dock_seconds": 1, "undock_seconds": 1,
+	}
+	hull["connectors"].append(_connector("dock", "dock", "medium", [0, 9, 0]))
+	data["templates"]["entries"].append({ "id": "tanker", "name": "Tanker", "kind": "ship",
+		"root": { "part": "hull", "children": [] } })
 
 
 func _fabrication(id: String, frames: int, output: String) -> Dictionary:
@@ -514,10 +537,13 @@ func test_thruster_needs_propellant_storage() -> void:
 	_entry("modules", "laser")["capabilities"]["thruster"] = {
 		"speed_m_s": 1, "propellant_kg_per_s": 1, "rated_mass_kg": 100,
 	}
+	_entry("modules", "hull")["capabilities"]["storage"].erase("propellant")
 	_assert_error("propellant_storage_missing")
 
 
 func test_item_without_source() -> void:
+	_scenario()["bodies"][1]["deposits"] = []
+	_scenario()["units"][0]["inventory"].clear()
 	data["deposits"]["entries"].clear()
 	_assert_error("item_without_source")
 
@@ -526,6 +552,96 @@ func test_item_without_use() -> void:
 	data["items"]["entries"].append({ "id": "zinc", "name": "Zinc", "stage": 3,
 		"cargo_class": "goods", "density_kg_m3": 7000 })
 	_assert_error("item_without_use")
+
+
+func _scenario() -> Dictionary:
+	return data["scenarios"][0]
+
+
+func test_no_scenario() -> void:
+	data["scenarios"] = []
+	_assert_error("scenario_missing")
+
+
+func test_unparsable_scenario() -> void:
+	data["scenarios"].append(null)
+	_assert_error("bad_scenario")
+
+
+func test_scenario_unknown_field() -> void:
+	_scenario()["sede"] = 1
+	_assert_error("unknown_field")
+
+
+func test_scenario_duplicate_key() -> void:
+	_scenario()["units"][1]["key"] = "rock"
+	_assert_error("duplicate_id")
+
+
+func test_scenario_position_must_fit_json() -> void:
+	_scenario()["bodies"][1]["pos_mm"] = [1e17, 0, 0]
+	_assert_error("out_of_range")
+
+
+func test_star_cannot_hold_deposits() -> void:
+	_scenario()["bodies"][0]["deposits"] = ["hematite_small"]
+	_assert_error("star_with_deposits")
+
+
+func test_scenario_unknown_deposit() -> void:
+	_scenario()["bodies"][1]["deposits"] = ["gold"]
+	_assert_error("unknown_deposit")
+
+
+func test_scenario_unknown_template() -> void:
+	_scenario()["units"][0]["template"] = "nothing"
+	_assert_error("unknown_template")
+
+
+func test_scenario_stock_uses_recipe_amount_forms() -> void:
+	_scenario()["units"][0]["inventory"] = [{ "item": "frame", "kg": 10 }]
+	_assert_error("wrong_amount_form")
+
+
+func test_scenario_stock_must_fit_by_mass() -> void:
+	_scenario()["units"][1]["inventory"][0]["kg"] = 501
+	_assert_error("start_stock_too_large")
+
+
+func test_scenario_stock_must_fit_by_volume() -> void:
+	_entry("modules", "hull")["capabilities"]["storage"]["propellant"]["volume_m3"] = 0.1
+	_assert_error("start_stock_too_large")
+
+
+func test_start_stock_is_a_source() -> void:
+	_scenario()["units"][1]["inventory"].clear()
+	_assert_error("item_without_source")
+
+
+func test_start_dock_passes() -> void:
+	_scenario()["units"][1]["dock"] = { "host": "ship", "port": 0, "host_port": 0 }
+	assert_eq(DataValidator.validate(data), [] as Array[String])
+
+
+func test_start_dock_unknown_host() -> void:
+	_scenario()["units"][1]["dock"] = { "host": "nobody", "port": 0, "host_port": 0 }
+	_assert_error("bad_start_dock")
+
+
+func test_start_dock_port_out_of_range() -> void:
+	_scenario()["units"][1]["dock"] = { "host": "ship", "port": 0, "host_port": 1 }
+	_assert_error("bad_start_dock")
+
+
+func test_start_dock_needs_the_host_position() -> void:
+	_scenario()["units"][1]["pos_mm"] = [5, 0, 0]
+	_scenario()["units"][1]["dock"] = { "host": "ship", "port": 0, "host_port": 0 }
+	_assert_error("bad_start_dock")
+
+
+func test_load_dir_reads_scenarios() -> void:
+	var loaded := DataValidator.load_dir()
+	assert_gt(loaded["scenarios"].size(), 0)
 
 
 func test_load_dir_reports_missing_files() -> void:

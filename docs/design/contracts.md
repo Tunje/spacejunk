@@ -249,7 +249,7 @@ Save text comes from one kernel codec. `JSON.stringify` is not used for output.
 - Derived caches are not saved. `to_save(from_save(x)) == x`, byte for byte.
 - `state_hash` is the SHA-256 of that text. It is the only accepted way to compare states.
 
-The save includes the contract version, `TICKS_PER_SECOND`, a hash of the loaded data, all RNG streams, all remainders, both ID counters, the pending command queue, `matter_start_g` and the running totals in `sinks`. The view may omit the last two.
+The save includes the contract version, `TICKS_PER_SECOND`, a hash of every definition the simulation reads after load (so not `visual` or scenarios, since a scenario is read once and its results are in the state), all RNG streams, all remainders, both ID counters, the pending command queue, `matter_start_g` and the running totals in `sinks`. The view may omit the last two.
 
 The save excludes undrained events and the command log. Replay harnesses step to the tick before, then submit. A version or data mismatch makes `from_save` return null with a reason code.
 
@@ -257,7 +257,7 @@ The save excludes undrained events and the command log. Replay harnesses step to
 
 ## 9. Ledgers
 
-`ledger()` is rebuilt each tick, is not saved, and is for tests only. It returns `{ tick, matter, energy, heat, violations }`, with the matter fields of `accounting.md` section 6 under `matter`. Each check runs every tick in tests and fails on any difference.
+`ledger()` is rebuilt each tick, is not saved, and is for tests only. It returns `{ tick, matter, energy, heat, violations }`, with the matter fields of `accounting.md` section 6 under `matter`, plus a `sinks` map of grams per sink, so tests can assert each sink separately. Each check runs every tick in tests and fails on any difference.
 
 Commit-time range checks match state by key name, so state fields keep their unit suffix (`_g`, `_w`, `_j`, `_l`, `_mm`, `_tick`, `_remainder`).
 

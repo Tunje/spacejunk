@@ -492,7 +492,7 @@
         "storage": {
           "goods": {
             "mass_kg": 20000,
-            "volume_m3": 20
+            "volume_m3": 40
           }
         }
       },

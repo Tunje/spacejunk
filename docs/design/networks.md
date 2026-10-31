@@ -105,6 +105,10 @@ The fault takes effect from the next tick, as the contracts require.
 
 ## 6. Travel and docking
 
+**Operation timing.** Every timed operation works the same way, so durations add up. An operation of N ticks starting on tick S is active on S to S + N - 1, and ends in phase 6 of S + N - 1, after that tick's deltas. Its own event (`arrived`, `docked`, `undocked`, `scan_finished`, `transfer_done`) fires on that tick. Phase 2 of S + N completes the step and starts the next one, so a step takes exactly N ticks from its start to the next step's start.
+
+Transfers and mining test their end conditions in phase 6, after the tick's delta, so a store that fills exactly ends on that tick with no idle tick after it. A job run works the same way: started in phase 4 of S, it counts down in phase 5 from S and delivers on S + N - 1, so the next run starts on S + N.
+
 **Bodies and stations do not move in the slice**, so a route is fixed when it starts.
 
 **Stand-off.** A unit never flies to a target's centre, which would put it inside an asteroid. It stops short by `STANDOFF_MM`, a kernel constant of 150000 (150 m), measured from the surface of a body (`radius_mm + STANDOFF_MM` from its centre) or from the position of a unit. `to_mm` is that stop point on the straight line from `from_mm` to the target, calculated with `IntMath`:
@@ -135,14 +139,14 @@ cost_g  = mul_div_ceil(base_g, mass_g, rated_mass_g)
 
 A zero-length route skips these formulas: `ticks` is 1 and `cost_g` is 0, and `check` reports those. It still goes through normal `move_to` validation, including the need for a healthy thruster, so there is one path and a unit with no thruster cannot arrive by order.
 
-**Departure, on tick T.** Phase 1 validation and `check` compare `cost_g` with the unit's propellant. Phase 4 prices the trip again from current state and reserves `cost_g` on the stack. If the stack cannot pay in full, the trip does not start, and the task follows [autonomy.md](autonomy.md) section 7 for `no_propellant`. In phase 6 the whole `cost_g` moves to `propellant_exhaust` in one tick, and the route is set.
+**Departure, on tick T.** Phase 1 validation and `check` compare `cost_g` with the unit's propellant. Phase 4 prices the trip again from current state, reserves `cost_g` on the stack, and sets the route. If the stack cannot pay in full, the trip does not start, and the task follows [autonomy.md](autonomy.md) section 7 for `no_propellant`. In phase 6 of the same tick the whole `cost_g` moves to `propellant_exhaust`. The reservation is what makes this safe, since nothing else can spend those grams in between.
 
-**Route.** The route stores `from_mm`, `to_mm`, `length_mm`, `speed_mm_s`, `progress_mm`, a remainder and `eta_tick = T + ticks`. From tick T + 1, each tick:
+**Route.** The route stores `from_mm`, `to_mm`, `length_mm`, `speed_mm_s`, `progress_mm`, a remainder and `eta_tick = T + ticks - 1`, the tick `arrived` fires. From tick T, each tick:
 - Add `Rate.amount(speed_mm_s, remainder)` to `progress_mm`, clamped to `length_mm`.
 - Each axis of `pos_mm` is `from + sign * mul_div(abs(to - from), progress_mm, length_mm)`. A zero-length route skips this step, because `length_mm` is 0.
-- On reaching `length_mm`, `pos_mm` is exactly `to_mm`, and `arrived` fires. A zero-length route therefore arrives on tick T + 1.
+- On reaching `length_mm`, `pos_mm` is exactly `to_mm`, and `arrived` fires. A zero-length route therefore arrives on tick T, and its step ends at phase 2 of T + 1.
 
-The remainder carries, so the route takes exactly `ticks`. Position always derives from progress, so rounding never accumulates and arrival is exact. Once paid, a route runs to arrival, unaffected by faults or power, and a trip under way cannot run out.
+The remainder carries, so the route takes exactly `ticks` of movement. Position always derives from progress, so rounding never accumulates and arrival is exact. Once paid, a route runs to arrival, unaffected by faults or power, and a trip under way cannot run out.
 
 **Halt.** A player order or `stop` holds the unit at its current `pos_mm`, clears the route, and refunds nothing. A later `move_to` prices a new route from there.
 

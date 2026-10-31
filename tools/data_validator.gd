@@ -38,6 +38,12 @@ const RECIPE_FIELDS := ["id", "facility", "seconds", "power_kw", "inputs", "outp
 const DEPOSIT_FIELDS := ["id", "item", "mass_kg", "hardness"]
 const TEMPLATE_FIELDS := ["id", "name", "kind", "root"]
 const SINK_FIELDS := ["id", "name", "items"]
+const SCENARIO_DIR := "scenarios/"
+const SCENARIO_FIELDS := ["schema_version", "id", "name", "seed", "bodies", "units"]
+const BODY_FIELDS := ["key", "name", "kind", "pos_mm", "radius_mm", "visual_seed", "deposits"]
+const UNIT_FIELDS := ["key", "template", "name", "pos_mm", "inventory", "dock"]
+const DOCK_FIELDS := ["host", "port", "host_port"]
+const BODY_KINDS := ["star", "asteroid"]
 
 ## Capability fields as field -> [factor, whole number only].
 const CAPABILITIES := {
@@ -67,6 +73,8 @@ const MAX_STORE_J := 1_000_000_000_000_000
 const MAX_STORE_L := 1_000_000_000_000
 const MAX_RATE := 1_000_000_000_000
 const PPM := 1_000_000
+## The largest whole number JSON keeps exactly, since Godot parses numbers as floats.
+const MAX_JSON_WHOLE := 9_007_199_254_740_992
 
 ## Refining yields may not pass the element's real mass share (spec section 7.1).
 const YIELD_CEILINGS_PPM := {
@@ -75,10 +83,6 @@ const YIELD_CEILINGS_PPM := {
 	"olivine": { "silicon": 190_000 },
 }
 
-## Items whose only source is scenario stock. B8 replaces this with a read of the
-## scenario files, which do not exist yet.
-const SCENARIO_STOCK_ITEMS := ["propellant"]
-
 var _errors: Array[String] = []
 var _items: Dictionary = {}
 var _modules: Dictionary = {}
@@ -86,6 +90,7 @@ var _recipes: Dictionary = {}
 var _deposits: Dictionary = {}
 var _templates: Dictionary = {}
 var _sinks: Dictionary = {}
+var _scenarios: Array = []
 var _id_regex := RegEx.create_from_string(ID_PATTERN)
 var _tint_regex := RegEx.create_from_string(TINT_PATTERN)
 
@@ -99,10 +104,20 @@ static func load_dir(dir: String = DATA_DIR) -> Dictionary:
 		data[key] = null
 		if FileAccess.file_exists(path):
 			data[key] = JSON.parse_string(FileAccess.get_file_as_string(path))
+	data["scenarios"] = []
+	if not DirAccess.dir_exists_absolute(dir + SCENARIO_DIR):
+		return data
+	var files := DirAccess.get_files_at(dir + SCENARIO_DIR)
+	files.sort()
+	for file_name: String in files:
+		if file_name.ends_with(".json"):
+			var text := FileAccess.get_file_as_string(dir + SCENARIO_DIR + file_name)
+			data["scenarios"].append(JSON.parse_string(text))
 	return data
 
 
-## Returns all errors in `data`, a map of FILES key to parsed file. Empty means valid.
+## Returns all errors in `data`, a map of FILES key to parsed file, plus `scenarios`,
+## an array of parsed scenarios. Empty means valid.
 static func validate(data: Dictionary) -> Array[String]:
 	return DataValidator.new()._run(data)
 
@@ -129,6 +144,11 @@ func _run(data: Dictionary) -> Array[String]:
 		_shape_template(_templates[id])
 	for id: String in _sorted(_sinks):
 		_shape_sink(_sinks[id])
+	_scenarios = data.get("scenarios", [])
+	if _scenarios.is_empty():
+		_err("scenario_missing", "data/scenarios", "at least one scenario is needed")
+	for scenario: Variant in _scenarios:
+		_shape_scenario(scenario)
 	# Cross-checks assume every entry has the right shape.
 	if not _errors.is_empty():
 		return _errors
@@ -144,6 +164,8 @@ func _run(data: Dictionary) -> Array[String]:
 		_cross_deposit(_deposits[id])
 	for id: String in _sorted(_templates):
 		_cross_template(_templates[id])
+	for scenario: Dictionary in _scenarios:
+		_cross_scenario(scenario)
 	_check_coverage()
 	return _errors
 
@@ -830,12 +852,167 @@ func _stores_propellant(parts: Array[Dictionary]) -> bool:
 		return module["capabilities"].get("storage", {}).has("propellant"))
 
 
+func _check_position(where: String, value: Variant) -> void:
+	_check_vector(where, "pos_mm", value, -INF)
+	if value is Array and value.any(func(axis: Variant) -> bool:
+			return _is_number(axis) and absf(float(axis)) > MAX_JSON_WHOLE):
+		_err("out_of_range", where, "pos_mm is too large for JSON to keep exactly")
+
+
+func _shape_scenario(scenario: Variant) -> void:
+	if not scenario is Dictionary or not scenario.get("id") is String:
+		_err("bad_scenario", "data/scenarios", "missing, unparsable or has no id")
+		return
+	var where := "scenarios/%s" % scenario["id"]
+	if not _has_fields(where, scenario, SCENARIO_FIELDS):
+		return
+	if scenario["schema_version"] != SCHEMA_VERSION:
+		_err("bad_schema_version", where, str(scenario["schema_version"]))
+	_check_name(where, scenario)
+	_check_whole(where, "seed", scenario["seed"], 0, MAX_JSON_WHOLE)
+	if not scenario["bodies"] is Array or not scenario["units"] is Array:
+		_err("bad_scenario", where, "bodies and units are arrays")
+		return
+	var keys := {}
+	for body: Variant in scenario["bodies"]:
+		_shape_body(where, body, keys)
+	for unit: Variant in scenario["units"]:
+		_shape_scenario_unit(where, unit, keys)
+
+
+func _claim_key(where: String, entry: Dictionary, keys: Dictionary) -> void:
+	if not entry.get("key") is String or _id_regex.search(entry["key"]) == null:
+		_err("bad_id", where, "key %s" % str(entry.get("key")))
+	elif keys.has(entry["key"]):
+		_err("duplicate_id", where, entry["key"])
+	else:
+		keys[entry["key"]] = true
+
+
+func _shape_body(where: String, body: Variant, keys: Dictionary) -> void:
+	if not body is Dictionary:
+		_err("bad_scenario", where, "body is not an object")
+		return
+	if not _has_fields(where, body, BODY_FIELDS):
+		return
+	_claim_key(where, body, keys)
+	_check_name(where, body)
+	_check_enum(where, "kind", body["kind"], BODY_KINDS)
+	_check_position(where, body["pos_mm"])
+	_check_whole(where, "radius_mm", body["radius_mm"], 1, MAX_JSON_WHOLE)
+	_check_whole(where, "visual_seed", body["visual_seed"], 0, MAX_JSON_WHOLE)
+	if not body["deposits"] is Array:
+		_err("bad_scenario", where, "deposits is not an array")
+
+
+func _shape_scenario_unit(where: String, unit: Variant, keys: Dictionary) -> void:
+	if not unit is Dictionary:
+		_err("bad_scenario", where, "unit is not an object")
+		return
+	if not _has_fields(where, unit, UNIT_FIELDS):
+		return
+	_claim_key(where, unit, keys)
+	_check_name(where, unit)
+	_check_position(where, unit["pos_mm"])
+	if not unit["inventory"] is Array:
+		_err("bad_scenario", where, "inventory is not an array")
+	else:
+		for entry: Variant in unit["inventory"]:
+			_shape_amount(where, entry, [])
+	if unit["dock"] != null:
+		if not unit["dock"] is Dictionary:
+			_err("bad_scenario", where, "dock is not an object or null")
+		elif _has_fields(where, unit["dock"], DOCK_FIELDS):
+			_check_whole(where, "port", unit["dock"]["port"], 0, MAX_RATE)
+			_check_whole(where, "host_port", unit["dock"]["host_port"], 0, MAX_RATE)
+
+
+func _cross_scenario(scenario: Dictionary) -> void:
+	var where := "scenarios/%s" % scenario["id"]
+	for body: Dictionary in scenario["bodies"]:
+		if body["kind"] == "star" and not body["deposits"].is_empty():
+			_err("star_with_deposits", where, body["key"])
+		for id: Variant in body["deposits"]:
+			if not _deposits.has(id):
+				_err("unknown_deposit", where, str(id))
+	var units := {}
+	for unit: Dictionary in scenario["units"]:
+		units[unit["key"]] = unit
+	var used_ports := {}
+	for unit: Dictionary in scenario["units"]:
+		var at := "%s.%s" % [where, unit["key"]]
+		if not _templates.has(unit["template"]):
+			_err("unknown_template", at, str(unit["template"]))
+			continue
+		var parts: Array[Dictionary] = []
+		_walk_node(at, _templates[unit["template"]]["root"], parts)
+		_check_inventory(at, unit, parts)
+		if unit["dock"] != null:
+			_check_start_dock(at, unit, parts, units, used_ports)
+
+
+## Starting stock must fit the unit's own storage, by mass and volume per cargo class.
+func _check_inventory(where: String, unit: Dictionary, parts: Array[Dictionary]) -> void:
+	var used_g := {}
+	var used_l := {}
+	var seen := {}
+	for entry: Dictionary in unit["inventory"]:
+		if seen.has(entry["item"]):
+			_err("repeated_item", where, entry["item"])
+		seen[entry["item"]] = true
+		var grams := _entry_grams(where, entry)
+		if not _items.has(entry["item"]):
+			continue
+		var item: Dictionary = _items[entry["item"]]
+		var cargo_class: String = item["cargo_class"]
+		var density: int = _to_sim(item["density_kg_m3"], 1)
+		used_g[cargo_class] = used_g.get(cargo_class, 0) + grams
+		used_l[cargo_class] = used_l.get(cargo_class, 0) + ceili(float(grams) / density)
+	for cargo_class: String in _sorted(used_g):
+		var cap_g := 0
+		var cap_l := 0
+		for module: Dictionary in parts:
+			var capacity: Variant = module["capabilities"].get("storage", {}).get(cargo_class)
+			if capacity != null:
+				cap_g += _to_sim(capacity["mass_kg"], 1000)
+				cap_l += _to_sim(capacity["volume_m3"], 1000)
+		if used_g[cargo_class] > cap_g or used_l[cargo_class] > cap_l:
+			_err("start_stock_too_large", where, cargo_class)
+
+
+func _port_count(parts: Array[Dictionary]) -> int:
+	return parts.filter(func(module: Dictionary) -> bool:
+		return module["capabilities"].has("port")).size()
+
+
+func _check_start_dock(
+		where: String, unit: Dictionary, parts: Array[Dictionary], units: Dictionary,
+		used_ports: Dictionary) -> void:
+	var dock: Dictionary = unit["dock"]
+	if not units.has(dock["host"]) or not _templates.has(units[dock["host"]]["template"]):
+		_err("bad_start_dock", where, "unknown host %s" % str(dock["host"]))
+		return
+	var host: Dictionary = units[dock["host"]]
+	var host_parts: Array[Dictionary] = []
+	_walk_node(where, _templates[host["template"]]["root"], host_parts)
+	if dock["port"] >= _port_count(parts) or dock["host_port"] >= _port_count(host_parts):
+		_err("bad_start_dock", where, "port index is out of range")
+	if unit["pos_mm"] != host["pos_mm"]:
+		_err("bad_start_dock", where, "a docked unit takes its host's position")
+	var port_key := "%s:%d" % [dock["host"], int(dock["host_port"])]
+	if used_ports.has(port_key):
+		_err("bad_start_dock", where, "host port is already taken")
+	used_ports[port_key] = true
+
+
 ## Every item has a source and a use (schemas section 12).
 func _check_coverage() -> void:
 	var sources := {}
 	var uses := {}
-	for id: String in SCENARIO_STOCK_ITEMS:
-		sources[id] = true
+	for scenario: Dictionary in _scenarios:
+		for unit: Dictionary in scenario["units"]:
+			for entry: Dictionary in unit["inventory"]:
+				sources[entry["item"]] = true
 	for id: String in _sorted(_deposits):
 		sources[_deposits[id]["item"]] = true
 	for id: String in _sorted(_sinks):
