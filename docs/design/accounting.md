@@ -46,9 +46,11 @@ Each row moves the same number of grams out of one place and into another, in th
 
 Rules for these movements:
 
-**Mining and burning.** The amount per tick is the rate through the kernel helper, then clamped to what the source holds and, for mining, to free cargo space. Source and destination change by the clamped amount. A clamp drops the excess, which was never matter (contracts section 1).
+**Mining.** The amount per tick is the rate through the kernel helper, then clamped to what the source holds and to free cargo space. Source and destination change by the clamped amount. A clamp drops the excess, which was never matter (contracts section 1).
 
-**Job start is all or nothing.** All inputs of a run move together in phase 4, or none do and the job blocks with a reason. Output cargo space is reserved at the same moment, so a finishing run always has room. A sink output needs no space. A unit output reserves a port instead.
+**Burning.** A trip's full propellant cost moves to `propellant_exhaust` in one tick at departure, all or nothing ([autonomy.md](autonomy.md) section 4). A trip that cannot pay in full does not start. There is no per-tick burn or clamp.
+
+**Job start is all or nothing.** All inputs of a run move together in phase 4, or none do and the job blocks with a reason. Output cargo space is reserved at the same moment, so a finishing run always has room. A sink output needs no space. A unit output needs a port, which it claims on the tick the run ends ([autonomy.md](autonomy.md) section 8). If none is free, the run waits with its inputs held.
 
 **Job finish is all or nothing.** All outputs of a run are delivered in one tick. A run never delivers part of its output, and the job's held grams reach zero on that tick.
 
@@ -116,7 +118,7 @@ Required tests, each owned by the agent building that operation:
 | `count` above 1, cancelled between runs and during one | C |
 | Unit built, with the port reserved and with none free | C |
 | Attach and detach of a subtree, including a rejected detach | A |
-| Propellant burn to an empty tank | A |
+| A trip paying exactly the whole tank, and one short by 1 g that does not start | A |
 | Save and load midway through a running job, with sinks non-zero | A |
 | Discrete stacks stay whole multiples at every commit | A |
 

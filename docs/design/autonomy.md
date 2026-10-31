@@ -1,6 +1,6 @@
 # Autonomy Spec (C0)
 
-Status: draft for Lead review. Built on contract version 1.
+Status: approved by the Lead (task C0). Built on contract version 1. Changes go through the Lead.
 
 This spec defines tasks, reservations, failure reporting, resumption and the six interruptions. It covers the C0 items in section 12 of [contracts.md](contracts.md). The contracts win if the two disagree. C5 implements this spec and owns `sim/autonomy/`.
 
@@ -235,7 +235,7 @@ Other conditions:
 Notes:
 - Mining and unloading filling up are the same event in cargo terms, but mining's job is to fill the hold, so it counts as success. For tier 1, a full hold is a finished order, and the player gives the next one.
 - A held operation keeps its demand, so the power network can restore a shed module. Faulted modules get no power, as the contracts require.
-- `scan`, `load_cargo`, `unload_cargo` and `start_mining` can be held. `move_to`, `dock` and `undock` have no held state, because of the section 4 rules.
+- `load_cargo`, `unload_cargo` and `start_mining` can be held. `move_to`, `dock` and `undock` have no held state, because of the section 4 rules. `scan` is not in the cycle whitelist, so it only runs as an order and is never held.
 - A blocked cycle at the end of a `move_to` or undock is simply waiting at its current position.
 - A cycle stranded in space with `no_propellant` stays blocked. The slice accepts this: [spec.md](spec.md) says running out ends the run. It reports the reason, and does not stall silently.
 
@@ -247,7 +247,7 @@ A fault set in phase 7 of tick T shows as `fault` at T. Commands aimed at it are
 
 ## 8. Reservations
 
-Phase 4 makes all reservations. Each one has one holder and is released by that holder.
+Phase 4 makes all reservations except deposit yield, which is claimed as phase 5 calculates it. Each one has one holder and is released by that holder.
 
 | Resource | Holder | Taken | Released |
 | -------- | ------ | ----- | -------- |
@@ -265,7 +265,7 @@ Only a `dock` step or a unit-building job can hold a port before arrival, so `po
 
 A dock step names one port and waits for that port. A unit-building job takes any free port.
 
-Waiters are served in order of `since_tick`, then entity ID. A port going free goes to the earliest waiter. A waiter keeps its place in the queue if its block reason changes. First come, first served is used so three drones on one port cannot starve the highest ID.
+Waiters are served in order of `since_tick`, then entity ID. A job's `since_tick` is the tick its run began waiting for a port. A port going free goes to the earliest waiter. A waiter keeps its place in the queue if its block reason changes. First come, first served is used so three drones on one port cannot starve the highest ID.
 
 A job claims a port only on the tick its run ends, not for the whole build. Otherwise a long build would close the port to the drones feeding the station.
 
@@ -347,11 +347,8 @@ A save taken while a task is blocked, overriding or mid-step must resume identic
 3. One predicate for "at" a body or unit, shared by `check`, validation and re-entry. It has to be true after `arrived`.
 4. A module with no active operation demands no power, and a held module keeps demanding it.
 
-**B7:**
-5. [accounting.md](accounting.md) section 2 says a unit output reserves its port at job start. Section 8 here reserves it on the tick the run ends, so a long build does not shut drones out. Update that sentence. The run then waits, with inputs held, as `paused` with `no_free_port`, and its delivery stays all or nothing.
-
 **B5 and B8:**
-6. The reference scenario's cycle has to pass section 5 closure, and needs to follow the section 2 refuelling route. The station's starting propellant must be fitted in `propellant_tank_mk1` units.
+5. The reference scenario's cycle has to pass section 5 closure, and needs to follow the section 2 refuelling route. The station's starting propellant must be fitted in `propellant_tank_mk1` units.
 
 ## 13. Test list for C5
 
