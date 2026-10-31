@@ -34,7 +34,7 @@ Valid ranges are asserted at commit in test runs.
 
 **Power and energy.** Power is allocated in watts. The per-tick balance is checked exactly in watt-ticks: generated + discharged = consumed + charged + curtailed. Surplus with nowhere to go is curtailed, which is an explicit loss. Rounding to joules happens only at each store (battery, heat loop), with one remainder per store and direction. Heat flows sum across a loop before conversion.
 
-**Overflow.** GDScript wraps silently. Any product of ranged values uses `IntMath.mul_div(a, b, d)`: non-negative, floored, with a 128-bit intermediate. Distance uses `IntMath.dist(a, b)`, which is floored and exact. Never square a position difference directly.
+**Overflow.** GDScript wraps silently. Any product of ranged values uses `IntMath.mul_div(a, b, d)`: non-negative, floored, with a 128-bit intermediate. Distance uses `IntMath.dist(a, b)`, which is floored and exact. Never square a position difference directly. A diagonal at the extreme of all three axes does not fit in 64 bits, so `dist` reports an error and returns the maximum integer. This is accepted, since no real star system is near that range.
 
 **Loading.** The loader converts data units to sim units with `roundi(value * factor)`, and rejects a value if the difference exceeds 1e-9 relative. Item volume per mass rounds up, so 1 g never occupies 0 litres.
 
@@ -168,7 +168,7 @@ New command types go through the Lead. C0 may refine autonomy commands, events, 
 { "tick": 120, "type": "deposit_found", "unit": 7, "data": { "deposit": 12 } }
 ```
 
-Events are ordered by phase, then entity ID.
+Events are ordered by phase, then the event's `unit`, then emission order. Unit 0 means no unit, so those events come first in their phase.
 
 | Type | Data |
 | ---- | ---- |
@@ -198,7 +198,7 @@ Each failure emits exactly one event. Fitting failures emit `attach_failed`, and
 
 `reason` is a stable lowercase code, with display text held in the client. `detail` is an optional Dictionary of integers, such as `{ need_w, have_w }`, so the player sees numbers as well as a code.
 
-Known reason codes: `over_mass_limit`, `over_power_budget`, `over_heat_budget`, `over_heat_limit`, `over_load_limit`, `connector_type_mismatch`, `connector_size_mismatch`, `connector_occupied`, `not_whole_unit`, `no_free_port`, `no_propellant`, `cargo_full`, `deposit_exhausted`, `root_part`, `part_busy`, `float_in_command`, `unknown_unit`, `unknown_part`, `invalid_target`. Autonomy adds its own codes, job statuses and view fields in `docs/design/autonomy.md` sections 3, 8, 9 and 10.
+Known reason codes: `over_mass_limit`, `over_power_budget`, `over_heat_budget`, `over_heat_limit`, `over_load_limit`, `connector_type_mismatch`, `connector_size_mismatch`, `connector_occupied`, `not_whole_unit`, `no_free_port`, `no_propellant`, `cargo_full`, `deposit_exhausted`, `root_part`, `part_busy`, `float_in_command`, `unknown_unit`, `unknown_part`, `invalid_target`, `unknown_command`, `malformed_command`. Autonomy adds its own codes, job statuses and view fields in `docs/design/autonomy.md` sections 3, 8, 9 and 10.
 
 ## 7. State view
 
@@ -257,7 +257,9 @@ The save excludes undrained events and the command log. Replay harnesses step to
 
 ## 9. Ledgers
 
-`ledger()` is rebuilt each tick, is not saved, and is for tests only. Each check runs every tick in tests and fails on any difference.
+`ledger()` is rebuilt each tick, is not saved, and is for tests only. It returns `{ tick, matter, energy, heat, violations }`, with the matter fields of `accounting.md` section 6 under `matter`. Each check runs every tick in tests and fails on any difference.
+
+Commit-time range checks match state by key name, so state fields keep their unit suffix (`_g`, `_w`, `_j`, `_l`, `_mm`, `_tick`, `_remainder`).
 
 - **Matter:** the sum across deposits, inventories, running jobs, installed parts and sinks is unchanged.
 - **Energy:** per network, in watt-ticks, generated + discharged = consumed + charged + curtailed.
