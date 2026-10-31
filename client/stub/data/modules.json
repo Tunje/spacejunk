@@ -88,7 +88,7 @@
   {
     "id": "stub_radiator", "name": "Heat Radiator", "mass_kg": 260, "volume_m3": 3, "power_kw": 0, "heat_kw": 0,
     "priority": 9, "durability": 500, "min_ai_tier": 1, "realism": "established",
-    "capabilities": { "radiator": { "reject_kw": 160 }, "heat_capacity": { "limit_kj": 40000 } },
+    "capabilities": { "radiator": { "reject_kw": 100 }, "heat_capacity": { "limit_kj": 1200 } },
     "fabrication": { "recipe": "stub_radiator" },
     "connectors": [
       { "id": "mount", "type": "side", "size": "medium", "pos_mm": [0, 0, 0], "facing": "-z", "up": "+y", "load_limit_kg": 500 }

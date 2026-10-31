@@ -219,7 +219,7 @@ static func _build_state(module_defs: Dictionary, seed_value: int) -> Dictionary
 		state["units"][id] = {
 			"id": id, "def": entry["def"], "kind": entry["kind"], "name": entry["name"],
 			"pos_mm": entry["pos_mm"], "at_target": _unit_named(state, entry.get("at", "")), "core": 0, "core_tier": 0, "task": 0,
-			"cycle_task": 0, "last_cycle": [],
+			"cycle_task": 0, "last_cycle": [], "heat_j": 0,
 			"op": _idle_op(), "route": {}, "dock": {},
 			"parts": _build_part(state, module_defs, entry["parts"]),
 			"inventory": entry["inventory"],
@@ -307,6 +307,7 @@ func _capability_sum(unit: Dictionary, capability: String, field: String) -> int
 func _unit_view(unit: Dictionary) -> Dictionary:
 	var shown: Dictionary = unit.duplicate(true)
 	shown.erase("id")
+	shown.erase("heat_j")
 	var demand := 0
 	var waste := 0
 	var rated_power := 0
@@ -337,7 +338,7 @@ func _unit_view(unit: Dictionary) -> Dictionary:
 		"supply_w": supply, "demand_w": demand, "stored_j": 0, "capacity_j": 0, "max_discharge_w": 0,
 	}
 	shown["heat"] = {
-		"stored_j": 0, "limit_j": _capability_sum(unit, "heat_capacity", "limit_j"),
+		"stored_j": unit["heat_j"], "limit_j": _capability_sum(unit, "heat_capacity", "limit_j"),
 		"reject_w": reject, "input_w": waste,
 	}
 	return shown
@@ -609,7 +610,15 @@ func _end_task(unit: Dictionary, event_type: String, reason: String = "") -> voi
 	_emit(event_type, unit["id"], data)
 
 
+## Not the real heat model: just enough to drive radiator glow.
+func _advance_heat(unit: Dictionary) -> void:
+	var heat: Dictionary = _unit_view(unit)["heat"]
+	var change: int = (heat["input_w"] - heat["reject_w"]) / TICKS_PER_SECOND
+	unit["heat_j"] = clampi(unit["heat_j"] + change, 0, heat["limit_j"])
+
+
 func _advance_unit(unit: Dictionary) -> void:
+	_advance_heat(unit)
 	var op: Dictionary = unit["op"]
 	match op["type"]:
 		"moving":
