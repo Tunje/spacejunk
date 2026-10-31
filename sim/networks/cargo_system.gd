@@ -45,7 +45,7 @@ func run(ctx: SimContext) -> void:
 			_advance(ctx, id)
 		match unit["op"]["type"]:
 			TransferStep.OP_LOADING, TransferStep.OP_UNLOADING:
-				if unit["task"] != 0 and not unit["op"].has("reason"):
+				if TaskSystem.is_running(ctx, unit) and not unit["op"].has("reason"):
 					_transfer(ctx, id)
 			DockStep.OP_DOCKING:
 				if ctx.tick >= unit["op"]["end_tick"] and unit["op"].has("granted"):

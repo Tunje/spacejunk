@@ -39,6 +39,21 @@ func begin(ctx: SimContext, unit_id: int, args: Dictionary) -> void:
 	TaskStep.set_op(ctx, unit_id, OP_MOVING, args["target"], 0, 1)
 
 
+func references_exist(ctx: SimContext, unit_id: int, args: Dictionary) -> bool:
+	if typeof(args.get("target")) != TYPE_INT:
+		return false
+	var target: int = args["target"]
+	return ctx.state["bodies"].has(target) or (ctx.state["units"].has(target) and target != unit_id)
+
+
+func needs(_ctx: SimContext, _args: Dictionary, place: Dictionary) -> bool:
+	return place["docked"] == 0
+
+
+func leaves(_ctx: SimContext, args: Dictionary, _place: Dictionary) -> Dictionary:
+	return { "docked": 0, "at": args["target"] }
+
+
 ## A player order or `stop` holds the unit where it is, with no refund.
 func report_end(ctx: SimContext, unit_id: int, reason: String) -> void:
 	if reason != "":
