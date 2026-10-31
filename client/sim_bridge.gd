@@ -85,5 +85,9 @@ func defs() -> Dictionary:
 	return sim.defs()
 
 
+func ticks_per_second() -> int:
+	return _ticks_per_second
+
+
 func game_seconds() -> float:
 	return float(current_view.get("tick", 0)) / _ticks_per_second

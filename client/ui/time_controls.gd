@@ -2,6 +2,8 @@ class_name TimeControls extends PanelContainer
 ## Pause and speed controls with the mission clock. Space pauses; keys 1 to 4
 ## pick a speed. These are raw keys so project.godot needs no input map.
 
+signal map_pressed
+
 var bridge: SimBridge
 
 var _pause_button: Button
@@ -27,6 +29,11 @@ func _ready() -> void:
 		button.pressed.connect(func() -> void: bridge.set_speed(value))
 		row.add_child(button)
 		_speed_buttons[value] = button
+	var map_button := Button.new()
+	map_button.text = "Map"
+	map_button.focus_mode = Control.FOCUS_NONE
+	map_button.pressed.connect(func() -> void: map_pressed.emit())
+	row.add_child(map_button)
 	_clock = Label.new()
 	_clock.custom_minimum_size = Vector2(190, 0)
 	_clock.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
