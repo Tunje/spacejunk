@@ -128,7 +128,7 @@ func test_a_waiting_job_draws_nothing() -> void:
 
 func test_a_job_paused_by_a_fault_draws_nothing() -> void:
 	state["jobs"][40] = { "facility": 13, "recipe": "refine_hematite", "status": "paused", "reason": "module_fault", "held": {} }
-	state["parts"][REFINERY]["fault"] = "over_heat_limit"
+	state["parts"][REFINERY]["fault"] = "test_fault"
 	sim.step()
 	assert_eq(_flow(STATION)["consumed_w"], 7000)
 
@@ -314,7 +314,7 @@ func test_an_order_during_a_hold_is_shed_at_once() -> void:
 
 func test_a_faulted_part_gets_no_power_and_is_not_shed() -> void:
 	_run_op(LASER)
-	state["parts"][LASER]["fault"] = "over_heat_limit"
+	state["parts"][LASER]["fault"] = "test_fault"
 	sim.step()
 	assert_eq(_flow()["consumed_w"], 2000)
 	assert_eq(_part_state(LASER), "fault")
@@ -322,8 +322,8 @@ func test_a_faulted_part_gets_no_power_and_is_not_shed() -> void:
 
 
 func test_faulted_generators_and_batteries_give_nothing() -> void:
-	state["parts"][PANEL_A]["fault"] = "over_heat_limit"
-	state["parts"][BATTERY_A]["fault"] = "over_heat_limit"
+	state["parts"][PANEL_A]["fault"] = "test_fault"
+	state["parts"][BATTERY_A]["fault"] = "test_fault"
 	sim.step()
 	var flow := _flow()
 	assert_eq(flow["generated_w"], 60_000)
@@ -344,7 +344,7 @@ func test_set_priority_changes_who_sheds() -> void:
 
 
 func test_set_priority_is_allowed_on_a_faulted_part() -> void:
-	state["parts"][LASER]["fault"] = "over_heat_limit"
+	state["parts"][LASER]["fault"] = "test_fault"
 	sim.submit({ "type": "set_priority", "unit": SHIP, "args": { "module": LASER, "priority": 1 } })
 	sim.step()
 	assert_eq(state["parts"][LASER]["priority"], 1)
@@ -373,7 +373,7 @@ func test_energy_balances_every_tick_through_competing_loads() -> void:
 	state["jobs"][40] = { "facility": 13, "recipe": "refine_hematite", "status": "running", "reason": "", "held": {} }
 	for i in 300:
 		if i == 100:
-			state["parts"][PANEL_B]["fault"] = "over_heat_limit"
+			state["parts"][PANEL_B]["fault"] = "test_fault"
 		if i == 200:
 			state["parts"][PANEL_B]["fault"] = ""
 		sim.step()

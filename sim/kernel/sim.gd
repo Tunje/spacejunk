@@ -196,7 +196,9 @@ static func _data_hash(defs_value: Dictionary) -> String:
 ## The same systems in the same order for every game, so a loaded game has working handlers.
 ## The order is the phase-list order within each phase.
 static func _default_systems() -> Array[SimSystem]:
-	return [UnitSystem.new(), FittingSystem.new(), TaskSystem.new(), PowerSystem.new()]
+	return [
+		UnitSystem.new(), FittingSystem.new(), TaskSystem.new(), PowerSystem.new(), HeatSystem.new(),
+	]
 
 
 ## A saved state must hold every field with the right type before anything reads it.

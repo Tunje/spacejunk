@@ -210,6 +210,17 @@ static func capability_sum(
 	return total
 
 
+## Sums a capability's field across a unit's parts that are not faulted.
+static func healthy_sum(
+	state: Dictionary, defs: Dictionary, unit_id: int, capability: String, field: String
+) -> int:
+	var total := 0
+	for part_id in part_ids(state, unit_id):
+		if state["parts"][part_id]["fault"] == "":
+			total += module_of(state, defs, part_id)["capabilities"].get(capability, {}).get(field, 0)
+	return total
+
+
 static func connector_of(module: Dictionary, connector_id: String) -> Dictionary:
 	for connector: Dictionary in module["connectors"]:
 		if connector["id"] == connector_id:
