@@ -191,7 +191,7 @@ func test_ship_turns_nose_first_towards_its_route() -> void:
 func test_docked_ship_sits_on_the_station_port() -> void:
 	view.select("unit", station, 0)
 	assert_true(panel.press("Dock"))
-	_run_ticks(StubSim.DOCK_TICKS + 8)
+	_run_ticks(28)
 	for i in range(80):
 		view.refresh(0.016)
 	var dock: Dictionary = bridge.current_view["units"][ship]["dock"]
@@ -215,18 +215,18 @@ func test_panel_offers_orders_for_an_asteroid_and_greys_invalid_ones() -> void:
 
 func test_scan_then_mine_through_the_panel() -> void:
 	view.select("body", rock, 0)
+	assert_true(panel.button_for("Scan").disabled, "too far away to scan")
+	assert_string_contains(panel.button_for("Scan").tooltip_text, "Out of range")
+	assert_true(panel.press("Move to"))
+	_run_ticks(_sim_ship_ticks_to(rock) + 8)
 	assert_true(panel.press("Scan"))
-	_run_ticks(StubSim.SCAN_TICKS + 8)
+	_run_ticks(38)
 	view.select("body", rock, 0)
 	assert_eq(panel._detail_label.text, "Scanned")
 	var deposit: int = bridge.current_view["deposits"].keys()[0]
 	var mine := panel.button_for("Mine %d" % deposit)
 	assert_not_null(mine)
-	assert_true(mine.disabled, "too far away to mine")
-	assert_string_contains(mine.tooltip_text, "Out of range")
-	assert_true(panel.press("Move to"))
-	_run_ticks(_sim_ship_ticks_to(rock) + 8)
-	assert_false(panel.button_for("Mine %d" % deposit).disabled)
+	assert_false(mine.disabled)
 	assert_true(panel.press("Mine %d" % deposit))
 	_run_ticks(8)
 	assert_eq(bridge.current_view["units"][ship]["op"]["type"], "mining")

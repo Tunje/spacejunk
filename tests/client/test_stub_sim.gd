@@ -1,5 +1,8 @@
 extends GutTest
 
+const SCAN_TICKS := 30
+const DOCK_TICKS := 20
+
 var sim: StubSim
 var ship: int
 var station: int
@@ -60,8 +63,13 @@ func test_defs_are_in_sim_units_with_connectors_collision_and_visual() -> void:
 	assert_eq(hull["mass_g"], 2000000)
 	assert_true(hull["power_w"] is int)
 	assert_false(hull.has("mass_kg"))
-	assert_eq(hull["connectors"][0]["load_limit_g"], 2000000)
-	assert_eq(hull["connectors"][0]["pos_mm"], [0, 4000, 0])
+	var top := _connector(hull, "top")
+	assert_eq(top["load_limit_g"], 2000000)
+	assert_eq(top["pos_mm"], [0, 4000, 0])
+	var thrust: Dictionary = sim.defs()["modules"]["stub_thruster"]["capabilities"]["thruster"]
+	assert_eq(thrust["speed_mm_s"], 500000)
+	var port: Dictionary = sim.defs()["modules"]["stub_port"]["capabilities"]["port"]
+	assert_eq(port["dock_ticks"], 2 * StubSim.TICKS_PER_SECOND)
 	assert_eq(hull["collision"]["shape"], "cylinder")
 	assert_true(hull["visual"].has("model"))
 
@@ -101,8 +109,9 @@ func test_star_is_not_a_move_target() -> void:
 
 func test_scan_reveals_deposits_only_after_finishing() -> void:
 	assert_true(sim.view()["deposits"].is_empty())
+	_fly_to(rock)
 	_order("scan", { "target": rock })
-	sim.step(StubSim.SCAN_TICKS)
+	sim.step(SCAN_TICKS)
 	assert_true(sim.view()["deposits"].is_empty())
 	sim.step(1)
 	var view := sim.view()
@@ -115,9 +124,9 @@ func test_scan_reveals_deposits_only_after_finishing() -> void:
 
 func test_mining_moves_ore_and_conserves_matter() -> void:
 	var matter: int = sim.ledger()["matter_g"]
-	_order("scan", { "target": rock })
-	sim.step(StubSim.SCAN_TICKS + 1)
 	_fly_to(rock)
+	_order("scan", { "target": rock })
+	sim.step(SCAN_TICKS + 1)
 	var view := sim.view()
 	var deposit: int = view["deposits"].keys()[0]
 	var laser := _part_with_def(view["units"][ship]["parts"], "stub_laser")
@@ -129,9 +138,22 @@ func test_mining_moves_ore_and_conserves_matter() -> void:
 	assert_eq(sim.ledger()["matter_g"], matter)
 
 
+func test_scan_away_from_the_body_is_rejected_with_numbers() -> void:
+	var result := sim.check({ "type": "scan", "unit": ship, "args": { "target": rock } })
+	assert_eq(result["reason"], "out_of_range")
+	assert_true(result["detail"].has("need_mm"))
+
+
+func test_station_has_no_thruster() -> void:
+	var result := sim.check({ "type": "move_to", "unit": station, "args": { "target": rock } })
+	assert_eq(result["reason"], "module_missing")
+
+
 func test_mining_out_of_range_is_rejected_with_numbers() -> void:
+	_fly_to(rock)
 	_order("scan", { "target": rock })
-	sim.step(StubSim.SCAN_TICKS + 1)
+	sim.step(SCAN_TICKS + 1)
+	_fly_to(station)
 	var view := sim.view()
 	var laser := _part_with_def(view["units"][ship]["parts"], "stub_laser")
 	var args := { "deposit": view["deposits"].keys()[0], "module": laser }
@@ -145,12 +167,12 @@ func test_dock_and_undock_cycle() -> void:
 	var port := _part_with_def(view["units"][ship]["parts"], "stub_port")
 	var target_port := _part_with_def(view["units"][station]["parts"], "stub_station_port")
 	_order("dock", { "port": port, "target_port": target_port })
-	sim.step(StubSim.DOCK_TICKS + 1)
+	sim.step(DOCK_TICKS + 1)
 	var docked: Dictionary = sim.view()["units"][ship]["dock"]
 	assert_eq(docked, { "port": port, "target_unit": station, "target_port": target_port })
 	assert_eq(sim.check({ "type": "move_to", "unit": ship, "args": { "target": rock } })["reason"], "docked")
 	_order("undock")
-	sim.step(StubSim.DOCK_TICKS + 1)
+	sim.step(DOCK_TICKS + 1)
 	assert_true(sim.view()["units"][ship]["dock"].is_empty())
 	var types := _event_types()
 	assert_has(types, "docked")
@@ -163,15 +185,16 @@ func test_stop_cancels_the_order_with_a_reason() -> void:
 	_order("stop")
 	sim.step(1)
 	assert_eq(sim.view()["units"][ship]["op"]["type"], "idle")
-	assert_has(_event_types(), "task_cancelled")
+	var cancelled: Array = sim.take_events().filter(func(event: Dictionary) -> bool: return event["type"] == "task_cancelled")
+	assert_eq(cancelled[0]["data"]["reason"], "player_stop")
 
 
 func test_new_order_replaces_the_running_one() -> void:
-	_order("scan", { "target": rock })
-	sim.step(2)
 	_order("move_to", { "target": rock })
+	sim.step(2)
+	_order("move_to", { "target": station })
 	sim.step(1)
-	assert_eq(sim.view()["units"][ship]["op"]["type"], "moving")
+	assert_eq(sim.view()["units"][ship]["route"]["target"], station)
 	assert_eq(sim.view()["tasks"].size(), 1)
 
 
@@ -199,7 +222,6 @@ func test_set_priority_shows_in_view() -> void:
 
 func test_fixture_connectors_mate_by_contract_rule() -> void:
 	var modules: Dictionary = sim.defs()["modules"]
-	var opposite := { "+x": "-x", "-x": "+x", "+y": "-y", "-y": "+y", "+z": "-z", "-z": "+z" }
 	var view := sim.view()
 	for id: int in view["units"]:
 		var pending: Array = [view["units"][id]["parts"]]
@@ -208,8 +230,12 @@ func test_fixture_connectors_mate_by_contract_rule() -> void:
 			for child: Dictionary in parent["children"]:
 				var a := _connector(modules[parent["def"]], child["parent_connector"])
 				var b := _connector(modules[child["def"]], child["connector"])
-				assert_eq(b["facing"], opposite[a["facing"]], "%s facing" % child["def"])
-				assert_eq(b["up"], a["up"], "%s up" % child["def"])
+				assert_false(a.is_empty() or b.is_empty(), "%s has its connectors" % child["def"])
+				assert_eq(b["id"], "mount", "%s mates by its mount" % child["def"])
+				var child_frame := CraftLayout.mate(a, b) * CraftLayout.connector_transform(b)
+				var parent_frame := CraftLayout.connector_transform(a)
+				assert_almost_eq(child_frame.basis.z.distance_to(-parent_frame.basis.z), 0.0, 0.0001, child["def"])
+				assert_almost_eq(child_frame.basis.y.distance_to(parent_frame.basis.y), 0.0, 0.0001, child["def"])
 				pending.append(child)
 
 

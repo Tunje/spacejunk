@@ -4,7 +4,8 @@ extends GutTest
 
 const SIM_SCRIPT := "res://sim/kernel/sim.gd"
 const UNIT_FIELDS: Array[String] = [
-	"def", "kind", "name", "pos_mm", "core", "core_tier", "task", "op", "route", "dock",
+	"def", "kind", "name", "pos_mm", "core", "core_tier", "task", "cycle_task", "last_cycle",
+	"op", "route", "dock",
 	"parts", "inventory", "mass_g", "cargo", "fit", "power", "heat",
 ]
 const OP_FIELDS: Array[String] = ["type", "target", "part", "start_tick", "end_tick"]
@@ -17,6 +18,11 @@ const FIT_FIELDS: Array[String] = [
 ]
 const POWER_FIELDS: Array[String] = ["supply_w", "demand_w", "stored_j", "capacity_j", "max_discharge_w"]
 const HEAT_FIELDS: Array[String] = ["stored_j", "limit_j", "reject_w", "input_w"]
+const CARGO_FIELDS: Array[String] = ["used_g", "cap_g", "used_l", "cap_l", "reserved_g", "reserved_l"]
+const TASK_FIELDS: Array[String] = [
+	"id", "owner", "kind", "state", "reason", "hold", "steps", "step", "cycle", "since_tick", "command",
+]
+const DEFS_SECTIONS: Array[String] = ["modules", "items", "recipes", "templates", "sinks"]
 const BODY_FIELDS: Array[String] = ["kind", "pos_mm", "radius_mm", "visual_seed", "scanned"]
 const DEPOSIT_FIELDS: Array[String] = ["body", "item", "remaining_g", "hardness"]
 const JOB_FIELDS: Array[String] = ["unit", "facility", "recipe", "count_left", "status", "reason", "start_tick", "end_tick"]
@@ -73,6 +79,8 @@ func _assert_unit(unit: Dictionary) -> void:
 	_assert_fields(unit["fit"], FIT_FIELDS, "fit")
 	_assert_fields(unit["power"], POWER_FIELDS, "power")
 	_assert_fields(unit["heat"], HEAT_FIELDS, "heat")
+	for cargo_class: String in unit["cargo"]:
+		_assert_fields(unit["cargo"][cargo_class], CARGO_FIELDS, "cargo")
 	_assert_part(unit["parts"])
 
 
@@ -89,6 +97,8 @@ func _assert_view(view: Dictionary) -> void:
 		_assert_position(view["bodies"][id]["pos_mm"], "body pos_mm")
 	for id: int in view["deposits"]:
 		_assert_fields(view["deposits"][id], DEPOSIT_FIELDS, "deposit")
+	for id: int in view["tasks"]:
+		_assert_fields(view["tasks"][id], TASK_FIELDS, "task")
 	for id: int in view["jobs"]:
 		_assert_fields(view["jobs"][id], JOB_FIELDS, "job")
 
@@ -98,6 +108,11 @@ func test_view_matches_contract_on_every_backend() -> void:
 		_assert_view(sim.view())
 		sim.step(1)
 		_assert_view(sim.view())
+
+
+func test_defs_have_every_section_on_every_backend() -> void:
+	for sim: RefCounted in _backends():
+		_assert_fields(sim.defs(), DEFS_SECTIONS, "defs")
 
 
 func test_view_is_a_copy() -> void:

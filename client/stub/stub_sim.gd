@@ -10,11 +10,9 @@ const SAVE_HEADER := "stub-save:1\n"
 const SAVE_PREFIX := "stub-save:"
 const EVENT_LIMIT := 4096
 
-const SCAN_TICKS := 30
-const DOCK_TICKS := 20
 const STANDOFF_MM := 60000
 const DOCK_RANGE_MM := 200000
-const MINE_RANGE_MM := 150000
+const AT_BODY_MM := 150000
 
 static var _last_error := ""
 
@@ -132,7 +130,16 @@ static func _load_defs() -> Dictionary:
 		"modules": _index_by_id(_convert(_read_json("modules.json"))),
 		"items": _index_by_id(_convert(_read_json("items.json"))),
 		"recipes": {},
+		"templates": _templates(),
+		"sinks": {},
 	}
+
+
+static func _templates() -> Dictionary:
+	var templates: Dictionary = {}
+	for entry: Dictionary in _read_json("scenario.json")["units"]:
+		templates[entry["def"]] = { "id": entry["def"], "kind": entry["kind"], "name": entry["name"] }
+	return templates
 
 
 static func _read_json(file_name: String) -> Variant:
@@ -146,8 +153,8 @@ static func _index_by_id(entries: Array) -> Dictionary:
 	return indexed
 
 
-## Converts data units to sim units: JSON floats become ints, and kg, kW and m3
-## fields are renamed to g, W and l.
+## Converts data units to sim units by field name (schemas section 2). JSON
+## floats become ints.
 static func _convert(value: Variant) -> Variant:
 	if value is float:
 		return roundi(value)
@@ -166,6 +173,12 @@ static func _convert(value: Variant) -> Variant:
 			elif key.ends_with("_kg_per_s"):
 				new_key = key.trim_suffix("_kg_per_s") + "_g_per_s"
 				factor = 1000
+			elif key.ends_with("_m_s"):
+				new_key = key.trim_suffix("_m_s") + "_mm_s"
+				factor = 1000
+			elif key.ends_with("seconds"):
+				new_key = key.trim_suffix("seconds") + "ticks"
+				factor = TICKS_PER_SECOND
 			elif key.ends_with("_kg"):
 				new_key = key.trim_suffix("_kg") + "_g"
 				factor = 1000
@@ -208,6 +221,7 @@ static func _build_state(module_defs: Dictionary, seed_value: int) -> Dictionary
 		state["units"][id] = {
 			"id": id, "def": entry["def"], "kind": entry["kind"], "name": entry["name"],
 			"pos_mm": entry["pos_mm"], "core": 0, "core_tier": 0, "task": 0,
+			"cycle_task": 0, "last_cycle": [],
 			"op": _idle_op(), "route": {}, "dock": {},
 			"parts": _build_part(state, module_defs, entry["parts"]),
 			"inventory": entry["inventory"],
@@ -301,7 +315,7 @@ func _unit_view(unit: Dictionary) -> Dictionary:
 		demand += part["draw_w"]
 		waste += module["heat_w"] if active else 0
 	var supply := _capability_sum(unit, "generate", "power_w")
-	var reject := _capability_sum(unit, "radiate", "reject_w")
+	var reject := _capability_sum(unit, "radiator", "reject_w")
 	var mass := _parts_mass(unit["parts"])
 	var limit := 0
 	for part: Dictionary in _flat_parts(unit["parts"]):
@@ -318,7 +332,7 @@ func _unit_view(unit: Dictionary) -> Dictionary:
 		"supply_w": supply, "demand_w": demand, "stored_j": 0, "capacity_j": 0, "max_discharge_w": 0,
 	}
 	shown["heat"] = {
-		"stored_j": 0, "limit_j": _capability_sum(unit, "radiate", "limit_j"),
+		"stored_j": 0, "limit_j": _capability_sum(unit, "heat_capacity", "limit_j"),
 		"reject_w": reject, "input_w": waste,
 	}
 	return shown
@@ -329,7 +343,9 @@ func _cargo_view(unit: Dictionary) -> Dictionary:
 	for part: Dictionary in _flat_parts(unit["parts"]):
 		var storage: Dictionary = _module(part)["capabilities"].get("storage", {})
 		for cargo_class: String in storage:
-			var entry: Dictionary = cargo.get_or_add(cargo_class, { "used_g": 0, "cap_g": 0, "used_l": 0, "cap_l": 0 })
+			var entry: Dictionary = cargo.get_or_add(cargo_class, {
+				"used_g": 0, "cap_g": 0, "used_l": 0, "cap_l": 0, "reserved_g": 0, "reserved_l": 0,
+			})
 			entry["cap_g"] += storage[cargo_class]["mass_g"]
 			entry["cap_l"] += storage[cargo_class]["volume_l"]
 	for item: String in unit["inventory"]:
@@ -384,7 +400,7 @@ func _arrival_point(from_mm: Array, target: int) -> Array:
 
 
 func _travel_ticks(unit: Dictionary, target: int) -> int:
-	var speed: int = _module(_part_with(unit, "move"))["capabilities"]["move"]["speed_mm_per_s"]
+	var speed: int = _module(_part_with(unit, "thruster"))["capabilities"]["thruster"]["speed_mm_s"]
 	var gap: int = _distance_mm(unit["pos_mm"], _arrival_point(unit["pos_mm"], target))
 	return maxi(1, ceili(float(gap) * TICKS_PER_SECOND / speed))
 
@@ -432,8 +448,8 @@ func _validate(command: Dictionary) -> Dictionary:
 
 func _validate_move(unit: Dictionary, args: Dictionary) -> Dictionary:
 	var target: int = args.get("target", 0)
-	if _part_with(unit, "move").is_empty():
-		return _result("no_propulsion")
+	if _part_with(unit, "thruster").is_empty():
+		return _result("module_missing")
 	if not unit["dock"].is_empty():
 		return _result("docked")
 	if _target_pos(target).is_empty() or target == unit["id"]:
@@ -445,15 +461,20 @@ func _validate_move(unit: Dictionary, args: Dictionary) -> Dictionary:
 
 func _validate_scan(unit: Dictionary, args: Dictionary) -> Dictionary:
 	var target: int = args.get("target", 0)
-	var scanner := _part_with(unit, "scan")
-	if scanner.is_empty():
-		return _result("no_scanner")
+	if _part_with(unit, "scan").is_empty():
+		return _result("module_missing")
+	if not unit["dock"].is_empty():
+		return _result("docked")
 	if not _state["bodies"].has(target) or _state["bodies"][target]["kind"] != "asteroid":
 		return _result("invalid_target")
-	var range_mm: int = _module(scanner)["capabilities"]["scan"]["range_mm"]
-	var gap := _distance_mm(unit["pos_mm"], _target_pos(target))
-	if gap > range_mm:
-		return _result("out_of_range", { "need_mm": range_mm, "have_mm": gap })
+	return _at_body(unit, target)
+
+
+func _at_body(unit: Dictionary, body: int) -> Dictionary:
+	var reach := _target_radius(body) + AT_BODY_MM
+	var gap := _distance_mm(unit["pos_mm"], _target_pos(body))
+	if gap > reach:
+		return _result("out_of_range", { "need_mm": reach, "have_mm": gap })
 	return _result()
 
 
@@ -479,14 +500,14 @@ func _validate_mining(unit: Dictionary, args: Dictionary) -> Dictionary:
 	var deposit: int = args.get("deposit", 0)
 	var laser := _find_part(unit, args.get("module", 0))
 	if not _state["deposits"].has(deposit):
-		return _result("invalid_target")
+		return _result("unknown_deposit")
 	if laser.is_empty() or not _module(laser)["capabilities"].has("mine"):
-		return _result("no_mining_laser")
-	var body: int = _state["deposits"][deposit]["body"]
-	var reach := _target_radius(body) + MINE_RANGE_MM
-	var gap := _distance_mm(unit["pos_mm"], _target_pos(body))
-	if gap > reach:
-		return _result("out_of_range", { "need_mm": reach, "have_mm": gap })
+		return _result("module_missing")
+	if not unit["dock"].is_empty():
+		return _result("docked")
+	var placement := _at_body(unit, _state["deposits"][deposit]["body"])
+	if not placement["ok"]:
+		return placement
 	if _space_left_g(unit, _state["deposits"][deposit]["item"]) <= 0:
 		return _result("cargo_full")
 	return _result()
@@ -532,7 +553,7 @@ func _apply(command: Dictionary) -> void:
 	var args: Dictionary = command.get("args", {})
 	match command["type"]:
 		"stop":
-			_end_task(unit, "task_cancelled", "player_order")
+			_end_task(unit, "task_cancelled", "player_stop")
 		"set_priority":
 			_find_part(unit, args["module"])["priority"] = args["priority"]
 		"move_to":
@@ -542,11 +563,14 @@ func _apply(command: Dictionary) -> void:
 				"to_mm": _arrival_point(unit["pos_mm"], args["target"]), "eta_tick": unit["op"]["end_tick"],
 			}
 		"scan":
-			_begin(unit, command, "scanning", args["target"], _part_with(unit, "scan")["id"], SCAN_TICKS)
+			var scanner := _part_with(unit, "scan")
+			_begin(unit, command, "scanning", args["target"], scanner["id"], _module(scanner)["capabilities"]["scan"]["ticks"])
 		"dock":
-			_begin(unit, command, "docking", args["target_port"], args["port"], DOCK_TICKS)
+			var ticks: int = _module(_find_part(unit, args["port"]))["capabilities"]["port"]["dock_ticks"]
+			_begin(unit, command, "docking", args["target_port"], args["port"], ticks)
 		"undock":
-			_begin(unit, command, "undocking", unit["dock"]["target_port"], unit["dock"]["port"], DOCK_TICKS)
+			var ticks: int = _module(_find_part(unit, unit["dock"]["port"]))["capabilities"]["port"]["undock_ticks"]
+			_begin(unit, command, "undocking", unit["dock"]["target_port"], unit["dock"]["port"], ticks)
 		"start_mining":
 			_begin(unit, command, "mining", args["deposit"], args["module"], 0)
 
@@ -554,7 +578,11 @@ func _apply(command: Dictionary) -> void:
 func _begin(unit: Dictionary, command: Dictionary, op_type: String, target: int, part: int, ticks: int) -> void:
 	_end_task(unit, "task_cancelled", "player_order")
 	var task := _next_id(_state)
-	_state["tasks"][task] = { "unit": unit["id"], "type": command["type"], "state": "running" }
+	_state["tasks"][task] = {
+		"id": task, "owner": unit["id"], "kind": "order", "state": "running", "reason": "", "hold": false,
+		"steps": [{ "type": command["type"], "args": command.get("args", {}).duplicate(true) }],
+		"step": 0, "cycle": 0, "since_tick": _state["tick"], "command": command["id"],
+	}
 	unit["task"] = task
 	var now: int = _state["tick"]
 	unit["op"] = {
