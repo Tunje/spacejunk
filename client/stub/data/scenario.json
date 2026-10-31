@@ -16,7 +16,7 @@
   "units": [
     {
       "def": "stub_foothold", "kind": "station", "name": "Foothold", "pos_mm": [0, 0, 0],
-      "inventory": { "hematite": 2500000, "propellant": 400000 },
+      "inventory": { "hematite": 2500000, "propellant": 400000, "stub_laser": 400000, "stub_solar": 440000, "stub_radiator": 520000 },
       "parts": { "def": "stub_hub", "children": [
         { "def": "stub_refinery", "parent_connector": "top", "connector": "mount", "children": [] },
         { "def": "stub_storage", "parent_connector": "bottom", "connector": "mount", "children": [] },

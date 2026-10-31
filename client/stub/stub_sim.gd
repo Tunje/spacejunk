@@ -346,10 +346,7 @@ func _unit_view(unit: Dictionary) -> Dictionary:
 		mass += unit["inventory"][item]
 	shown["mass_g"] = mass
 	shown["cargo"] = _cargo_view(unit)
-	shown["fit"] = {
-		"mass_g": mass, "mass_limit_g": limit, "power_budget_w": supply, "power_rated_w": rated_power,
-		"heat_budget_w": reject, "heat_rated_w": rated_heat,
-	}
+	shown["fit"] = _fit(unit)
 	shown["power"] = {
 		"supply_w": supply, "demand_w": demand, "stored_j": 0, "capacity_j": 0, "max_discharge_w": 0,
 	}
@@ -358,6 +355,28 @@ func _unit_view(unit: Dictionary) -> Dictionary:
 		"reject_w": reject, "input_w": waste,
 	}
 	return shown
+
+
+## The view's `fit`, with `extra` modules counted as if fitted. `carried_g` is
+## mass that arrives from another unit, matching Units.fit in the kernel.
+func _fit(unit: Dictionary, extra: Array[Dictionary] = [], carried_g: int = 0) -> Dictionary:
+	var modules: Array[Dictionary] = extra.duplicate()
+	for part: Dictionary in _flat_parts(unit["parts"]):
+		modules.append(_module(part))
+	var fit: Dictionary = {
+		"mass_g": _parts_mass(unit["parts"]) + carried_g, "mass_limit_g": 0,
+		"power_budget_w": 0, "power_rated_w": 0, "heat_budget_w": 0, "heat_rated_w": 0,
+	}
+	for item: String in unit["inventory"]:
+		fit["mass_g"] += unit["inventory"][item]
+	for module: Dictionary in modules:
+		var capabilities: Dictionary = module["capabilities"]
+		fit["mass_limit_g"] += capabilities.get("max_mass_g", 0)
+		fit["power_budget_w"] += capabilities.get("generate", {}).get("power_w", 0)
+		fit["heat_budget_w"] += capabilities.get("radiator", {}).get("reject_w", 0)
+		fit["power_rated_w"] += module["power_w"]
+		fit["heat_rated_w"] += module["heat_w"]
+	return fit
 
 
 func _cargo_view(unit: Dictionary) -> Dictionary:
@@ -465,7 +484,93 @@ func _validate(command: Dictionary) -> Dictionary:
 			return _result()
 		"set_priority":
 			return _result() if not _find_part(unit, args.get("module", 0)).is_empty() else _result("unknown_part")
+		"attach_part":
+			return _validate_attach(unit, args)
+		"detach_part":
+			return _validate_detach(unit, args)
 	return _result("not_in_stub")
+
+
+func _partner_problem(unit: Dictionary, other: int) -> String:
+	if other == unit["id"]:
+		return ""
+	if not _state["units"].has(other):
+		return "unknown_unit"
+	return "" if unit["dock"].get("target_unit", 0) == other else "not_docked"
+
+
+func _validate_attach(unit: Dictionary, args: Dictionary) -> Dictionary:
+	var from: int = args.get("from", 0)
+	var problem := _partner_problem(unit, from)
+	if not problem.is_empty():
+		return _result(problem)
+	var item: String = args.get("item", "")
+	if not _defs["modules"].has(item):
+		return _result("invalid_target")
+	var module: Dictionary = _defs["modules"][item]
+	var parent := _find_part(unit, args.get("parent_part", 0))
+	if parent.is_empty():
+		return _result("unknown_part")
+	var held: int = _state["units"][from]["inventory"].get(item, 0)
+	if held < module["mass_g"]:
+		return _result("missing_inputs", { "need_g": module["mass_g"], "have_g": held })
+	var parent_end := _connector(_module(parent), args.get("parent_connector", ""))
+	var part_end := _connector(module, args.get("part_connector", ""))
+	if parent_end.is_empty() or part_end.is_empty():
+		return _result("invalid_target")
+	var carried: int = 0 if from == unit["id"] else module["mass_g"]
+	var fit := _fit(unit, [module] as Array[Dictionary], carried)
+	var failure := _fit_failure(fit, parent, parent_end, part_end, module["mass_g"])
+	if failure.is_empty():
+		return _result("", fit)
+	var detail: Dictionary = fit.duplicate()
+	detail.merge(failure["detail"])
+	return _result(failure["reason"], detail)
+
+
+## Same order as FittingSystem._fit_failure, so check 10 reads alike on both.
+func _fit_failure(fit: Dictionary, parent: Dictionary, parent_end: Dictionary, part_end: Dictionary, mass_g: int) -> Dictionary:
+	if parent_end["type"] != part_end["type"] or parent_end["type"] == "dock":
+		return { "reason": "connector_type_mismatch", "detail": {} }
+	if parent_end["size"] != part_end["size"]:
+		return { "reason": "connector_size_mismatch", "detail": {} }
+	for child: Dictionary in parent["children"]:
+		if child["parent_connector"] == parent_end["id"]:
+			return { "reason": "connector_occupied", "detail": {} }
+	if mass_g > parent_end["load_limit_g"]:
+		return { "reason": "over_load_limit", "detail": { "need_g": mass_g, "have_g": parent_end["load_limit_g"] } }
+	if fit["mass_g"] > fit["mass_limit_g"]:
+		return { "reason": "over_mass_limit", "detail": { "need_g": fit["mass_g"], "have_g": fit["mass_limit_g"] } }
+	if fit["power_rated_w"] > fit["power_budget_w"]:
+		return { "reason": "over_power_budget", "detail": { "need_w": fit["power_rated_w"], "have_w": fit["power_budget_w"] } }
+	if fit["heat_rated_w"] > fit["heat_budget_w"]:
+		return { "reason": "over_heat_budget", "detail": { "need_w": fit["heat_rated_w"], "have_w": fit["heat_budget_w"] } }
+	return {}
+
+
+func _connector(module: Dictionary, connector_id: String) -> Dictionary:
+	for connector: Dictionary in module["connectors"]:
+		if connector["id"] == connector_id:
+			return connector
+	return {}
+
+
+func _validate_detach(unit: Dictionary, args: Dictionary) -> Dictionary:
+	var to: int = args.get("to", 0)
+	var problem := _partner_problem(unit, to)
+	if not problem.is_empty():
+		return _result(problem)
+	var part := _find_part(unit, args.get("part", 0))
+	if part.is_empty():
+		return _result("unknown_part")
+	if part["id"] == unit["parts"]["id"]:
+		return _result("root_part")
+	for removed: Dictionary in _flat_parts(part):
+		if removed["id"] == unit["dock"].get("port", 0):
+			return _result("port_busy")
+		if removed["id"] == unit["op"]["part"]:
+			return _result("part_busy")
+	return _result("", _fit(unit))
 
 
 func _validate_move(unit: Dictionary, args: Dictionary) -> Dictionary:
@@ -564,9 +669,11 @@ func _run_tick() -> void:
 func _apply(command: Dictionary) -> void:
 	var result := _validate(command)
 	if not result["ok"]:
-		_emit("command_rejected", command.get("unit", 0), {
-			"command": command["id"], "reason": result["reason"], "detail": result["detail"],
-		})
+		var is_fit_failure: bool = command.get("type", "") == "attach_part" and result["detail"].has("mass_limit_g")
+		var data: Dictionary = { "command": command["id"], "reason": result["reason"], "detail": result["detail"] }
+		if is_fit_failure:
+			data["item"] = command["args"]["item"]
+		_emit("attach_failed" if is_fit_failure else "command_rejected", command.get("unit", 0), data)
 		return
 	var unit: Dictionary = _state["units"][command["unit"]]
 	var args: Dictionary = command.get("args", {})
@@ -575,6 +682,10 @@ func _apply(command: Dictionary) -> void:
 			_end_task(unit, "task_cancelled", "player_stop")
 		"set_priority":
 			_find_part(unit, args["module"])["priority"] = args["priority"]
+		"attach_part":
+			_apply_attach(unit, args)
+		"detach_part":
+			_apply_detach(unit, args)
 		"move_to":
 			_begin(unit, command, "moving", args["target"], 0, _travel_ticks(unit, args["target"]))
 			unit["at_target"] = 0
@@ -593,6 +704,29 @@ func _apply(command: Dictionary) -> void:
 			_begin(unit, command, "undocking", unit["dock"]["target_port"], unit["dock"]["port"], ticks)
 		"start_mining":
 			_begin(unit, command, "mining", args["deposit"], args["module"], 0)
+
+
+func _apply_attach(unit: Dictionary, args: Dictionary) -> void:
+	var item: String = args["item"]
+	var stock: Dictionary = _state["units"][args["from"]]["inventory"]
+	stock[item] -= _defs["modules"][item]["mass_g"]
+	if stock[item] == 0:
+		stock.erase(item)
+	var part := _build_part(_state, _defs, {
+		"def": item, "parent_connector": args["parent_connector"], "connector": args["part_connector"], "children": [],
+	})
+	_find_part(unit, args["parent_part"])["children"].append(part)
+	_emit("part_attached", unit["id"], { "part": part["id"] })
+
+
+func _apply_detach(unit: Dictionary, args: Dictionary) -> void:
+	var part := _find_part(unit, args["part"])
+	var stock: Dictionary = _state["units"][args["to"]]["inventory"]
+	for removed: Dictionary in _flat_parts(part):
+		stock[removed["def"]] = stock.get(removed["def"], 0) + _module(removed)["mass_g"]
+	for candidate: Dictionary in _flat_parts(unit["parts"]):
+		candidate["children"] = candidate["children"].filter(func(child: Dictionary) -> bool: return child["id"] != part["id"])
+	_emit("part_detached", unit["id"], { "part": args["part"] })
 
 
 func _begin(unit: Dictionary, command: Dictionary, op_type: String, target: int, part: int, ticks: int) -> void:

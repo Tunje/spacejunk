@@ -8,6 +8,7 @@ class_name ScreenshotDriver extends Node
 ##   --policy=1                      opens the standing-orders mock
 ##   --then=<order key>              pressed --then-delay frames after --order
 ##   --last=<order key>              pressed --last-delay frames after --then
+##   --fit=<item>  --fit-slot=<connector>  opens fitting after the orders and picks both
 
 var main: Node3D
 var parsed: Dictionary = {}
@@ -63,6 +64,21 @@ func _run() -> void:
 		await _press_after(parsed["then"], int(parsed.get("then-delay", "60")))
 	if parsed.has("last"):
 		await _press_after(parsed["last"], int(parsed.get("last-delay", "60")))
+	if parsed.has("fit"):
+		await _open_fitting()
+
+
+func _open_fitting() -> void:
+	for i in range(int(parsed.get("fit-delay", "40"))):
+		await get_tree().process_frame
+	main.toggle_fitting()
+	var screen: FittingScreen = main.fitting_screen
+	for entry: Dictionary in screen._stock:
+		if entry["item"] == parsed["fit"]:
+			screen.choose(entry)
+	for slot: Dictionary in FittingLogic.free_slots(screen.unit(), screen._modules):
+		if slot["connector"] == parsed.get("fit-slot", ""):
+			screen.choose_slot(slot)
 
 
 func _press_after(key: String, frames: int) -> void:

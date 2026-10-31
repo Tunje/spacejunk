@@ -12,7 +12,10 @@
       { "id": "side_nx", "type": "side", "size": "medium", "pos_mm": [-1250, 2800, 0], "facing": "-x", "up": "+y", "load_limit_kg": 1500 },
       { "id": "side_pz", "type": "side", "size": "medium", "pos_mm": [0, 1200, 1250], "facing": "+z", "up": "+y", "load_limit_kg": 1500 },
       { "id": "side_nz", "type": "side", "size": "medium", "pos_mm": [0, 1200, -1250], "facing": "-z", "up": "+y", "load_limit_kg": 1500 },
-      { "id": "sensor", "type": "side", "size": "medium", "pos_mm": [0, 3300, 1250], "facing": "+z", "up": "+y", "load_limit_kg": 500 }
+      { "id": "sensor", "type": "side", "size": "medium", "pos_mm": [0, 3300, 1250], "facing": "+z", "up": "+y", "load_limit_kg": 500 },
+      { "id": "ext_a", "type": "side", "size": "medium", "pos_mm": [0, 3300, -1250], "facing": "-z", "up": "+y", "load_limit_kg": 1500 },
+      { "id": "ext_b", "type": "side", "size": "medium", "pos_mm": [1250, 800, 0], "facing": "+x", "up": "+y", "load_limit_kg": 1500 },
+      { "id": "ext_c", "type": "side", "size": "medium", "pos_mm": [-1250, 800, 0], "facing": "-x", "up": "+y", "load_limit_kg": 1500 }
     ],
     "collision": { "shape": "cylinder", "center_mm": [0, 2000, 0], "size_mm": [2500, 4000, 2500] },
     "visual": { "model": "stub_hull", "tint": "#e8e6db" }
