@@ -25,6 +25,8 @@ const LAPS := 3
 ## How much longer than planned a step may run before the bot gives up.
 const ORDER_LIMIT_TICKS := 4000
 const LAP_LIMIT_TICKS := 6000
+## Range checks walk the whole state, so they run this often, not on every tick.
+const RANGE_CHECK_TICKS := 100
 
 static var _shared: ReferenceBot
 
@@ -167,10 +169,8 @@ func cycle_steps() -> Array:
 	]
 
 
-## Range checks walk the whole state, so a run takes them at each mark, not on every tick.
 func mark(label: String) -> void:
 	marks[label] = sim.view()
-	range_problems.append_array(Invariants.violations(sim._state))
 
 
 func first_event(type: String) -> Dictionary:
@@ -287,7 +287,31 @@ func _step() -> Array[Dictionary]:
 	sim.step()
 	var new_events := sim.take_events()
 	events.append_array(new_events)
-	var matter: Dictionary = sim.ledger()["matter"]
-	if matter["total_g"] != matter["start_g"] and ledger_problems.size() < 10:
-		ledger_problems.append("tick %d: %d of %d" % [sim.current_tick(), matter["total_g"], matter["start_g"]])
+	_check_ledgers(sim.ledger())
+	if sim.current_tick() % RANGE_CHECK_TICKS == 0:
+		range_problems.append_array(Invariants.violations(sim._state))
 	return new_events
+
+
+## Records any tick on which matter, energy or heat does not balance.
+func _check_ledgers(ledger: Dictionary) -> void:
+	var tick := sim.current_tick()
+	var matter: Dictionary = ledger["matter"]
+	if matter["total_g"] != matter["start_g"]:
+		_ledger_problem("tick %d: matter %d of %d" % [tick, matter["total_g"], matter["start_g"]])
+	var energy: Dictionary = ledger["energy"]
+	for unit: int in energy:
+		var flow: Dictionary = energy[unit]
+		if flow["generated_w"] + flow["discharged_w"] \
+				!= flow["consumed_w"] + flow["charged_w"] + flow["curtailed_w"]:
+			_ledger_problem("tick %d: unit %d energy" % [tick, unit])
+	var heat: Dictionary = ledger["heat"]
+	for unit: int in heat:
+		var loop: Dictionary = heat[unit]
+		if loop["after_j"] - loop["before_j"] != loop["added_j"] - loop["rejected_j"]:
+			_ledger_problem("tick %d: unit %d heat" % [tick, unit])
+
+
+func _ledger_problem(text: String) -> void:
+	if ledger_problems.size() < 10:
+		ledger_problems.append(text)

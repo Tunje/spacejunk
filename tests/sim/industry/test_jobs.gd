@@ -413,3 +413,33 @@ func test_a_save_mid_run_finishes_identically() -> void:
 	assert_eq(saved.view()["units"][STATION]["inventory"]["wiring"], WIRING_G * 2)
 	var matter: Dictionary = saved.ledger()["matter"]
 	assert_eq(matter["total_g"], matter["start_g"])
+
+
+## Saves now, loads it with this test's definitions, applies `change` to both games, and requires
+## both to run on identically. The state keeps the real data hash, so the load is accepted.
+func _assert_load_resumes(change: Callable, ticks: int = 8) -> void:
+	sim.take_events()
+	var loaded := Sim.from_save(sim.to_save())
+	assert_not_null(loaded)
+	loaded._ctx.defs = defs
+	assert_eq(loaded.to_save(), sim.to_save(), "round trip")
+	change.call(sim)
+	change.call(loaded)
+	sim.step(ticks)
+	loaded.step(ticks)
+	assert_eq(loaded.state_hash(), sim.state_hash())
+	assert_eq(loaded.take_events(), sim.take_events(), "the same events")
+
+
+func test_a_load_finishes_a_cancel_waiting_for_room() -> void:
+	_give("copper", COPPER_RUN_G)
+	defs["modules"]["goods_storage_mk1"]["capabilities"]["storage"]["goods"]["mass_g"] = COPPER_RUN_G
+	var job := _started()
+	_give("iron", COPPER_RUN_G)
+	sim.submit(_cancel(job))
+	sim.step()
+	assert_eq(sim.view()["jobs"][job]["status"], "cancelling")
+	_assert_load_resumes(func(game: Sim) -> void:
+		Units.remove_stock(game._state["units"][STATION]["inventory"], "iron", COPPER_RUN_G)
+		game._state["matter_start_g"] -= COPPER_RUN_G)
+	assert_eq(sim.view()["jobs"].size(), 0)
