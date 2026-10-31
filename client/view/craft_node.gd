@@ -4,6 +4,14 @@ class_name CraftNode extends Node3D
 
 const LABEL_RANGE_M := 60.0
 const FLANGE_M := 0.16
+const SELECT_ENERGY := 0.45
+const PULSE_ENERGY := 1.6
+const PULSE_RATE := 7.0
+const HEAT_ENERGY := 3.0
+const HEAT_COOL := Color(0.75, 0.12, 0.04)
+const HEAT_HOT := Color(1.0, 0.62, 0.22)
+const GROW_SECONDS := 1.4
+const PLUME_LENGTH_FACTOR := 2.6
 
 var unit_id := 0
 var signature := ""
@@ -17,6 +25,16 @@ var dock_start := Transform3D.IDENTITY
 var undock_from := Transform3D.IDENTITY
 
 var _materials: Dictionary = {}
+var _meshes: Dictionary = {}
+var _tips: Dictionary = {}
+var _plumes: Array[MeshInstance3D] = []
+var _radiators: Array[int] = []
+var _growing: Dictionary = {}
+var _known_parts: Array[int] = []
+var _selected_part := 0
+var _working_part := 0
+var _heat := 0.0
+var _time := 0.0
 
 
 static func signature_of(root: Dictionary) -> String:
@@ -38,17 +56,85 @@ func build(id: int, root: Dictionary, modules: Dictionary) -> void:
 	for child: Node in get_children():
 		child.queue_free()
 	_materials.clear()
+	_meshes.clear()
+	_tips.clear()
+	_plumes.clear()
+	_radiators.clear()
 	part_transforms = CraftLayout.part_transforms(root, modules)
 	fit_radius_m = 2.0
 	_add_part(root, modules)
+	var ids := Feedback.part_ids(root)
+	if not _known_parts.is_empty():
+		for part_id: int in ids:
+			if not _known_parts.has(part_id):
+				_growing[part_id] = 0.0
+	_known_parts = ids
+	_paint()
 
 
 func highlight(part_id: int) -> void:
+	_selected_part = part_id
+	_paint()
+
+
+## A part's tip and outward direction in the craft frame, for beams and heading.
+func tip_of(part_id: int) -> Dictionary:
+	return _tips.get(part_id, {})
+
+
+func is_thrust_shown() -> bool:
+	return not _plumes.is_empty() and _plumes[0].visible
+
+
+func is_growing() -> bool:
+	return not _growing.is_empty()
+
+
+## Updates every effect from the unit's view.
+func apply_feedback(unit: Dictionary, delta: float) -> void:
+	_time += delta
+	_working_part = Feedback.working_part(unit)
+	_heat = Feedback.heat_level(unit)
+	var thrusting := Feedback.is_thrusting(unit)
+	for plume: MeshInstance3D in _plumes:
+		plume.visible = thrusting
+		if thrusting:
+			plume.scale.y = 1.0 + 0.14 * sin(_time * 37.0 + plume.get_index())
+	_advance_growth(delta)
+	_paint()
+
+
+func _advance_growth(delta: float) -> void:
+	for id: int in _growing.keys():
+		_growing[id] += delta / GROW_SECONDS
+		var done: float = minf(_growing[id], 1.0)
+		if _meshes.has(id):
+			_meshes[id].scale = Vector3.ONE * lerpf(0.2, 1.0, ease(done, 0.4))
+		if done >= 1.0:
+			_growing.erase(id)
+
+
+## Decides each part's glow. Selection wins, then a new part, then work, then heat.
+func _paint() -> void:
+	var pulse := 0.5 + 0.5 * sin(_time * PULSE_RATE)
 	for id: int in _materials:
 		var material: StandardMaterial3D = _materials[id]
-		material.emission_enabled = id == part_id
-		material.emission = ClientTheme.ORANGE
-		material.emission_energy_multiplier = 0.45
+		var energy := 0.0
+		var colour := ClientTheme.ORANGE
+		if id == _selected_part:
+			energy = SELECT_ENERGY
+		elif _growing.has(id):
+			energy = PULSE_ENERGY * (1.0 - minf(_growing[id], 1.0))
+			colour = ClientTheme.GOLD
+		elif id == _working_part:
+			energy = PULSE_ENERGY * pulse
+			colour = ClientTheme.GOLD
+		elif _radiators.has(id) and _heat > 0.0:
+			energy = HEAT_ENERGY * _heat
+			colour = HEAT_COOL.lerp(HEAT_HOT, _heat)
+		material.emission_enabled = energy > 0.0
+		material.emission = colour
+		material.emission_energy_multiplier = energy
 
 
 func _add_part(part: Dictionary, modules: Dictionary) -> void:
@@ -76,6 +162,10 @@ func _add_part(part: Dictionary, modules: Dictionary) -> void:
 	var mesh := MeshInstance3D.new()
 	mesh.position = centre
 	mesh.material_override = material
+	_meshes[part["id"]] = mesh
+	if Feedback.has_capability(module, "radiator"):
+		_radiators.append(part["id"])
+	_record_tip(part, module, xform, centre, size)
 	if collision["shape"] == "cylinder":
 		var cylinder_shape := CylinderShape3D.new()
 		cylinder_shape.radius = size.x * 0.5
@@ -111,6 +201,43 @@ func _add_part(part: Dictionary, modules: Dictionary) -> void:
 
 	for child: Dictionary in part["children"]:
 		_add_part(child, modules)
+
+
+## The far end of a part from its mount, which is where effects start. A root
+## has no mount, so it uses its centre and faces along the nose.
+func _record_tip(part: Dictionary, module: Dictionary, xform: Transform3D, centre: Vector3, size: Vector3) -> void:
+	var mount := CraftLayout.find_connector(module, "mount")
+	var outward := Vector3.UP
+	if not mount.is_empty():
+		outward = -(CraftLayout.AXES[mount["facing"]] as Vector3)
+	var point := centre + outward * absf(outward.dot(size)) * 0.5
+	_tips[part["id"]] = { "point": xform * point, "direction": xform.basis * outward }
+	if Feedback.has_capability(module, "thruster"):
+		_add_plume(xform * point, xform.basis * outward, size.x * 0.5)
+
+
+func _add_plume(at: Vector3, direction: Vector3, radius_m: float) -> void:
+	var length := radius_m * 2.0 * PLUME_LENGTH_FACTOR
+	var cone := CylinderMesh.new()
+	cone.top_radius = radius_m * 0.8
+	cone.bottom_radius = 0.02
+	cone.height = length
+	cone.radial_segments = 12
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color.BLACK
+	material.emission_enabled = true
+	material.emission = Color(1.0, 0.72, 0.36)
+	material.emission_energy_multiplier = 5.0
+	var plume := MeshInstance3D.new()
+	plume.mesh = cone
+	plume.material_override = material
+	plume.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# The cone's wide end is its top, so it points back along the exhaust.
+	plume.basis = Basis(CraftLayout.heading_towards(-direction))
+	plume.position = at + direction * length * 0.5
+	plume.visible = false
+	add_child(plume)
+	_plumes.append(plume)
 
 
 ## Dark collars at each end of a cylinder, which give the stacked KSP-style read.
