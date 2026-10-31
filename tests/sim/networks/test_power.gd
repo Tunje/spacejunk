@@ -114,27 +114,27 @@ func test_a_held_operation_keeps_its_demand() -> void:
 
 
 func test_a_running_job_draws_the_recipe_power() -> void:
-	state["jobs"][40] = { "facility": 14, "recipe": "wiring", "status": "running", "reason": "", "held": {} }
+	state["jobs"][40] = JobFixture.record(state, 14, "wiring", "running")
 	sim.step()
 	assert_eq(_flow(STATION)["consumed_w"], 57_000)
 	assert_eq(state["parts"][14]["draw_w"], 50_000)
 
 
 func test_a_waiting_job_draws_nothing() -> void:
-	state["jobs"][40] = { "facility": 14, "recipe": "wiring", "status": "waiting", "reason": "missing_inputs", "held": {} }
+	state["jobs"][40] = JobFixture.record(state, 14, "wiring", "waiting", "missing_inputs")
 	sim.step()
 	assert_eq(_flow(STATION)["consumed_w"], 7000)
 
 
 func test_a_job_paused_by_a_fault_draws_nothing() -> void:
-	state["jobs"][40] = { "facility": 13, "recipe": "refine_hematite", "status": "paused", "reason": "module_fault", "held": {} }
+	state["jobs"][40] = JobFixture.record(state, 13, "refine_hematite", "paused", "module_fault")
 	state["parts"][REFINERY]["fault"] = "test_fault"
 	sim.step()
 	assert_eq(_flow(STATION)["consumed_w"], 7000)
 
 
 func test_a_job_paused_by_shedding_stays_a_load() -> void:
-	state["jobs"][40] = { "facility": 13, "recipe": "refine_hematite", "status": "paused", "reason": "no_power", "held": {} }
+	state["jobs"][40] = JobFixture.record(state, 13, "refine_hematite", "paused", "no_power")
 	sim.step()
 	assert_eq(_flow(STATION)["consumed_w"], 207_000)
 
@@ -276,7 +276,7 @@ func test_higher_id_sheds_first_within_a_class() -> void:
 	modules["mining_laser_mk1"]["power_w"] = 100_000
 	_set_stored(0)
 	state["units"][SHIP]["op"] = { "type": "mining", "target": 3, "part": LASER, "start_tick": 0, "end_tick": 0 }
-	state["jobs"][40] = { "facility": LIDAR, "recipe": "wiring", "status": "running", "reason": "", "held": {} }
+	state["jobs"][40] = JobFixture.record(state, LIDAR, "wiring", "running")
 	modules["lidar_mk1"]["capabilities"]["facility"] = { "type": "fabricator" }
 	sim._ctx.defs["recipes"]["wiring"] = { "power_w": 100_000 }
 	sim.step()
@@ -287,7 +287,7 @@ func test_higher_id_sheds_first_within_a_class() -> void:
 func test_a_small_load_is_readmitted_after_a_big_one_is_shed() -> void:
 	_set_stored(0)
 	_run_op(LASER)
-	state["jobs"][40] = { "facility": LIDAR, "recipe": "wiring", "status": "running", "reason": "", "held": {} }
+	state["jobs"][40] = JobFixture.record(state, LIDAR, "wiring", "running")
 	sim._ctx.defs = sim._ctx.defs.duplicate(true)
 	sim._ctx.defs["recipes"]["wiring"] = { "power_w": 10_000 }
 	sim.step()
@@ -370,7 +370,7 @@ func test_the_view_shows_shed_draw_and_supply() -> void:
 func test_energy_balances_every_tick_through_competing_loads() -> void:
 	_set_stored(4000)
 	_run_op(LASER)
-	state["jobs"][40] = { "facility": 13, "recipe": "refine_hematite", "status": "running", "reason": "", "held": {} }
+	state["jobs"][40] = JobFixture.record(state, 13, "refine_hematite", "running")
 	for i in 300:
 		if i == 100:
 			state["parts"][PANEL_B]["fault"] = "test_fault"
