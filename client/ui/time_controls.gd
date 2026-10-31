@@ -7,6 +7,8 @@ signal policy_pressed
 signal fit_pressed
 signal jobs_pressed
 signal auto_pressed
+signal save_pressed
+signal load_pressed
 
 var bridge: SimBridge
 
@@ -58,6 +60,16 @@ func _ready() -> void:
 	policy_button.focus_mode = Control.FOCUS_NONE
 	policy_button.pressed.connect(func() -> void: policy_pressed.emit())
 	row.add_child(policy_button)
+	var save_button := Button.new()
+	save_button.text = "Save"
+	save_button.focus_mode = Control.FOCUS_NONE
+	save_button.pressed.connect(func() -> void: save_pressed.emit())
+	row.add_child(save_button)
+	var load_button := Button.new()
+	load_button.text = "Load"
+	load_button.focus_mode = Control.FOCUS_NONE
+	load_button.pressed.connect(func() -> void: load_pressed.emit())
+	row.add_child(load_button)
 	_clock = Label.new()
 	_clock.custom_minimum_size = Vector2(190, 0)
 	_clock.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT

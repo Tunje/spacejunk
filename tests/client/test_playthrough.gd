@@ -1,8 +1,14 @@
 extends GutTest
 ## All ten goals on the real Sim through the real panels, from one shared run.
 
+const SAVE_PATH := "user://test_playthrough.save"
+const LAP_LIMIT := 2000
+
 var main: Node
 var player: PanelPlayer
+var hash_saved := ""
+var hash_loaded := ""
+var laps_before_load := 0
 
 
 func before_all() -> void:
@@ -14,6 +20,31 @@ func before_all() -> void:
 	print("PLAYTHROUGH ticks=%d real_ms=%d goals=%s" % [
 		player.bridge.current_view["tick"], Time.get_ticks_msec() - started, str(player.goal_order),
 	])
+	_save_and_load_mid_cycle()
+
+
+## The hardest save there is: every goal done and a real drone mid-cycle.
+func _save_and_load_mid_cycle() -> void:
+	SaveStore.path = SAVE_PATH
+	var bridge := player.bridge
+	hash_saved = bridge.sim.state_hash()
+	main.save_game()
+	bridge.set_paused(false)
+	for i in range(100):
+		bridge.advance(0.1)
+	bridge.set_paused(true)
+	main.load_game()
+	hash_loaded = bridge.sim.state_hash()
+	laps_before_load = player.laps
+	bridge.set_paused(false)
+	var count := 0
+	while player.laps == laps_before_load and count < LAP_LIMIT:
+		bridge.advance(0.1)
+		count += 1
+	bridge.set_paused(true)
+	player.view.refresh(0.016)
+	DirAccess.remove_absolute(SAVE_PATH)
+	SaveStore.path = SaveStore.DEFAULT_PATH
 
 
 func after_all() -> void:
@@ -58,6 +89,19 @@ func test_the_drone_cycle_starts_with_propellant() -> void:
 	var cycle: Array = player.unit(player.drone)["last_cycle"]
 	assert_eq(cycle[0]["type"], "load_cargo")
 	assert_eq(cycle[0]["args"]["item"], "propellant")
+
+
+func test_a_save_mid_cycle_restores_exactly() -> void:
+	assert_eq(hash_loaded, hash_saved)
+
+
+func test_the_drone_carries_on_after_a_load() -> void:
+	assert_gt(player.laps, laps_before_load, "another lap finished after the load")
+
+
+func test_all_goals_survive_that_load() -> void:
+	for goal: Dictionary in GoalTracker.GOALS:
+		assert_true(player.goals.done.has(goal["id"]), goal["id"])
 
 
 func test_the_real_parts_are_on_the_craft_in_the_scene() -> void:

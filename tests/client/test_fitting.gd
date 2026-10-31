@@ -197,11 +197,10 @@ func test_opening_swaps_the_panels_and_closing_restores_them() -> void:
 	main.toggle_fitting()
 	assert_true(screen.visible)
 	assert_true(main.fitting_markers.visible)
-	assert_false(main.order_panel.visible)
+	assert_true(main.order_panel.visible, "orders stay reachable")
 	main.toggle_fitting()
 	assert_false(screen.visible)
 	assert_false(main.fitting_markers.visible)
-	assert_true(main.order_panel.visible)
 
 
 func test_fitting_closes_the_map() -> void:

@@ -4,7 +4,7 @@ class_name GoalTracker extends RefCounted
 
 const GOALS: Array[Dictionary] = [
 	{ "id": "scan", "title": "Scan an asteroid",
-		"hint": "Undock, open the Map (M) and click a rock, choose Move to, then Scan once you arrive." },
+		"hint": "Press Undock in the Orders panel, top right. Open the Map (M), click a rock, press Move to, then Scan on arrival." },
 	{ "id": "mine", "title": "Mine ore",
 		"hint": "Click the scanned rock and choose a Mine order. Stop when you have enough." },
 	{ "id": "haul", "title": "Haul ore to the station",
@@ -28,6 +28,16 @@ const LIMIT_REASONS: Array[String] = ["over_mass_limit", "over_power_budget", "o
 
 var done: Dictionary = {}
 var _blocked_items: Dictionary = {}
+
+
+## What a save must keep: event-based goals cannot be worked out from a view.
+func save_state() -> Dictionary:
+	return { "done": done.duplicate(), "blocked_items": _blocked_items.duplicate() }
+
+
+func restore_state(state: Dictionary) -> void:
+	done = state.get("done", {}).duplicate()
+	_blocked_items = state.get("blocked_items", {}).duplicate()
 
 
 func complete(id: String) -> bool:

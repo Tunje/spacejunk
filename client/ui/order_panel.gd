@@ -56,7 +56,7 @@ func refresh() -> void:
 	var view: Dictionary = bridge.current_view
 	var commanded: int = local_view.commanded_unit
 	var unit: Dictionary = view["units"].get(commanded, {})
-	_commanded_label.text = unit.get("name", "No craft")
+	_commanded_label.text = "Orders: %s" % unit.get("name", "no craft")
 	_status_label.text = _status_of(unit)
 	_selection_label.text = _selection_title(view)
 	_detail_label.text = _selection_detail(view)
