@@ -197,7 +197,8 @@ static func _data_hash(defs_value: Dictionary) -> String:
 ## The order is the phase-list order within each phase.
 static func _default_systems() -> Array[SimSystem]:
 	return [
-		UnitSystem.new(), FittingSystem.new(), TaskSystem.new(), PowerSystem.new(), HeatSystem.new(),
+		UnitSystem.new(), FittingSystem.new(), TaskSystem.new(), CargoSystem.new(), PowerSystem.new(),
+		HeatSystem.new(),
 	]
 
 

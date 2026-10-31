@@ -30,7 +30,10 @@ var _steps := {}
 
 
 func _init() -> void:
-	for step: TaskStep in [ScanStep.new(), MiningStep.new()]:
+	for step: TaskStep in [
+		ScanStep.new(), MiningStep.new(), MoveStep.new(), DockStep.new(), UndockStep.new(),
+		LoadCargoStep.new(), UnloadCargoStep.new(),
+	]:
 		_steps[step.type()] = step
 
 
@@ -132,6 +135,8 @@ func _interruption(ctx: SimContext, unit: Dictionary) -> String:
 		return REASON_NO_CORE
 	if _core_offline(ctx, unit):
 		return REASON_CORE_OFFLINE
+	if unit["op"].has("reason"):
+		return unit["op"]["reason"]
 	var part_id: int = unit["op"]["part"]
 	if part_id == 0:
 		return ""
