@@ -9,6 +9,7 @@ const GOLD := Color(0.83, 0.65, 0.25)
 const PANEL := Color(0.07, 0.08, 0.10, 0.86)
 const BUTTON := Color(0.19, 0.21, 0.24)
 const BUTTON_HOVER := Color(0.27, 0.29, 0.33)
+const CHECK_ICON_PX := 16
 
 
 static func build() -> Theme:
@@ -26,7 +27,32 @@ static func build() -> Theme:
 	built.set_color("font_hover_pressed_color", "Button", Color.BLACK)
 	built.set_color("font_disabled_color", "Button", MID_GREY)
 	built.set_color("font_color", "Label", OFF_WHITE)
+	for state: String in ["normal", "hover", "pressed", "hover_pressed", "disabled"]:
+		built.set_stylebox(state, "CheckBox", StyleBoxEmpty.new())
+	built.set_icon("unchecked", "CheckBox", _outline_box_icon())
+	built.set_color("font_pressed_color", "CheckBox", OFF_WHITE)
+	built.set_color("font_hover_pressed_color", "CheckBox", Color.WHITE)
 	return built
+
+
+## A panel that hides the scene behind it, for full screens.
+static func solid_panel() -> StyleBoxFlat:
+	var box := _box(Color(0.11, 0.12, 0.15), 8, 16)
+	box.set_border_width_all(1)
+	box.border_color = MID_GREY.darkened(0.2)
+	return box
+
+
+## An empty box that stays visible on dark panels.
+static func _outline_box_icon() -> ImageTexture:
+	var image := Image.create(CHECK_ICON_PX, CHECK_ICON_PX, false, Image.FORMAT_RGBA8)
+	var edge := CHECK_ICON_PX - 1
+	for along in range(CHECK_ICON_PX):
+		for across: int in [1, 2, edge - 2, edge - 1]:
+			if along >= 1 and along < edge:
+				image.set_pixel(along, across, MID_GREY.lightened(0.25))
+				image.set_pixel(across, along, MID_GREY.lightened(0.25))
+	return ImageTexture.create_from_image(image)
 
 
 static func _box(colour: Color, radius: int, margin: int) -> StyleBoxFlat:
