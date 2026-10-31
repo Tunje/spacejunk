@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "id": "chalcopyrite_deposit",
+      "item": "chalcopyrite",
+      "mass_kg": 100000,
+      "hardness": 4
+    },
+    {
+      "id": "hematite_deposit",
+      "item": "hematite",
+      "mass_kg": 200000,
+      "hardness": 6
+    },
+    {
+      "id": "olivine_deposit",
+      "item": "olivine",
+      "mass_kg": 50000,
+      "hardness": 7
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "id": "propellant_exhaust",
+      "name": "Exhaust",
+      "items": [
+        "propellant"
+      ]
+    },
+    {
+      "id": "slag_vent",
+      "name": "Slag Vent",
+      "items": [
+        "slag"
+      ]
+    }
+  ]
+}

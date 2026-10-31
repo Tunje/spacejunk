@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "id": "chalcopyrite",
+      "name": "Chalcopyrite Ore",
+      "stage": 2,
+      "cargo_class": "ore",
+      "density_kg_m3": 4200
+    },
+    {
+      "id": "copper",
+      "name": "Copper",
+      "stage": 3,
+      "cargo_class": "goods",
+      "density_kg_m3": 8900
+    },
+    {
+      "id": "hematite",
+      "name": "Hematite Ore",
+      "stage": 2,
+      "cargo_class": "ore",
+      "density_kg_m3": 5000
+    },
+    {
+      "id": "iron",
+      "name": "Iron",
+      "stage": 3,
+      "cargo_class": "goods",
+      "density_kg_m3": 7800
+    },
+    {
+      "id": "olivine",
+      "name": "Olivine Ore",
+      "stage": 2,
+      "cargo_class": "ore",
+      "density_kg_m3": 3300
+    },
+    {
+      "id": "processor",
+      "name": "Processor",
+      "stage": 5,
+      "cargo_class": "goods",
+      "density_kg_m3": 2000,
+      "unit_mass_kg": 5
+    },
+    {
+      "id": "propellant",
+      "name": "Propellant",
+      "stage": 3,
+      "cargo_class": "propellant",
+      "density_kg_m3": 1000
+    },
+    {
+      "id": "silicon",
+      "name": "Silicon",
+      "stage": 3,
+      "cargo_class": "goods",
+      "density_kg_m3": 2300
+    },
+    {
+      "id": "slag",
+      "name": "Slag",
+      "stage": 3,
+      "cargo_class": "ore",
+      "density_kg_m3": 2500
+    },
+    {
+      "id": "structural_frame",
+      "name": "Structural Frame",
+      "stage": 5,
+      "cargo_class": "goods",
+      "density_kg_m3": 1000,
+      "unit_mass_kg": 50
+    },
+    {
+      "id": "wiring",
+      "name": "Wiring",
+      "stage": 5,
+      "cargo_class": "goods",
+      "density_kg_m3": 3000,
+      "unit_mass_kg": 10
+    }
+  ]
+}
