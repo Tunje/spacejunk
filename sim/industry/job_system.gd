@@ -1,9 +1,10 @@
 class_name JobSystem
 extends SimSystem
-## Refining and fabrication: start_job and cancel_job, the job states of autonomy.md section 9 and
-## the matter rules of accounting.md section 2. Jobs belong to facilities and need no core. A run
-## takes its inputs and reserves its outputs in phase 4, counts down in phase 5 and delivers in
-## phase 6, all at once.
+## Refining, fabrication and building units: start_job and cancel_job, the job states of
+## autonomy.md section 9 and the matter rules of accounting.md section 2. Jobs belong to facilities
+## and need no core. A run takes its inputs and reserves its outputs in phase 4, counts down in
+## phase 5 and delivers in phase 6, all at once. A run that builds a unit claims a port only on its
+## last tick, so a long build never shuts other craft out.
 
 const START := "start_job"
 const CANCEL := "cancel_job"
@@ -21,6 +22,7 @@ const REASON_MODULE_FAULT := "module_fault"
 const REASON_NO_POWER := "no_power"
 const REASON_MISSING_INPUTS := "missing_inputs"
 const REASON_OUTPUT_FULL := "output_full"
+const REASON_NO_FREE_PORT := "no_free_port"
 const REASON_CARGO_FULL := "cargo_full"
 const VIEW_FIELDS: Array[String] = [
 	"unit", "facility", "recipe", "count_left", "status", "reason", "start_tick", "end_tick",
@@ -63,13 +65,14 @@ func allocate(ctx: SimContext) -> void:
 	var jobs: Dictionary = ctx.state["jobs"]
 	for id: int in _sorted(jobs):
 		var job: Dictionary = jobs[id]
-		if job["status"] != STATUS_WAITING:
-			continue
-		var reason := _blocker(ctx, job)
-		if reason == "":
-			_start_run(ctx, job)
-		else:
-			_set_reason(ctx, job, STATUS_WAITING, reason)
+		if job["status"] == STATUS_WAITING:
+			var reason := _blocker(ctx, job)
+			if reason == "":
+				_start_run(ctx, job)
+			else:
+				_set_reason(ctx, job, STATUS_WAITING, reason)
+		if _needs_port(ctx, job):
+			_claim_port(ctx, job)
 
 
 ## Phase 5. Allocation has run, so a part's state is final for this tick.
@@ -87,7 +90,10 @@ func apply_delta(ctx: SimContext, payload: Dictionary) -> void:
 	_release_outputs(ctx, job)
 	var unit: Dictionary = ctx.state["units"][job["unit"]]
 	for output: Dictionary in _recipe(ctx, job)["outputs"]:
-		if output.has("sink"):
+		if output.has("unit_template"):
+			ConstructionSystem.queue(ctx, job["unit"], job["port"], output["unit_template"], job["id"])
+			_release_port(ctx, job)
+		elif output.has("sink"):
 			var sink: Dictionary = ctx.state["sinks"].get_or_add(output["sink"], {})
 			sink[output["item"]] = sink.get(output["item"], 0) + output["grams"]
 		else:
@@ -122,8 +128,7 @@ func _validate_start(ctx: SimContext, command: Dictionary) -> Dictionary:
 	if not parts.has(part_id) or parts[part_id]["unit"] != command["unit"]:
 		return SimSystem.reject(REASON_UNKNOWN_PART)
 	var recipes: Dictionary = ctx.defs["recipes"]
-	# Recipes that build a unit arrive with C4. Until then a run would have nowhere to deliver.
-	if not recipes.has(args["recipe"]) or recipes[args["recipe"]]["outputs"][0].has("unit_template"):
+	if not recipes.has(args["recipe"]):
 		return SimSystem.reject(REASON_UNKNOWN_RECIPE)
 	var facility: Dictionary = Units.module_of(ctx.state, ctx.defs, part_id)["capabilities"].get("facility", {})
 	if facility.get("type", "") != recipes[args["recipe"]]["facility"]:
@@ -144,7 +149,7 @@ func _create(ctx: SimContext, command: Dictionary) -> void:
 		"id": id, "unit": command["unit"], "facility": args["facility"], "recipe": args["recipe"],
 		"count_left": args["count"], "status": STATUS_WAITING, "reason": "",
 		"start_tick": 0, "end_tick": 0, "remaining_tick": 0, "since_tick": ctx.tick,
-		"command": command["id"], "started": false, "held": {}, "reserved": {},
+		"command": command["id"], "started": false, "held": {}, "reserved": {}, "port": 0,
 	}
 
 
@@ -160,7 +165,7 @@ func _blocker(ctx: SimContext, job: Dictionary) -> String:
 			return REASON_MISSING_INPUTS
 		change[input["item"]] = change.get(input["item"], 0) - input["grams"]
 	for output: Dictionary in recipe["outputs"]:
-		if not output.has("sink"):
+		if _is_stored(output):
 			change[output["item"]] = change.get(output["item"], 0) + output["grams"]
 	var table := Units.cargo(ctx.state, ctx.defs, job["unit"], [] as Array[int], change)
 	return REASON_OUTPUT_FULL if not Units.over_capacity(table).is_empty() else ""
@@ -189,7 +194,7 @@ func _start_run(ctx: SimContext, job: Dictionary) -> void:
 func _reserve_outputs(ctx: SimContext, job: Dictionary, recipe: Dictionary) -> void:
 	var outputs := {}
 	for output: Dictionary in recipe["outputs"]:
-		if not output.has("sink"):
+		if _is_stored(output):
 			outputs[output["item"]] = outputs.get(output["item"], 0) + output["grams"]
 	var before := Units.cargo(ctx.state, ctx.defs, job["unit"])
 	var after := Units.cargo(ctx.state, ctx.defs, job["unit"], [] as Array[int], outputs)
@@ -220,19 +225,52 @@ func _release_outputs(ctx: SimContext, job: Dictionary) -> void:
 	job["reserved"] = {}
 
 
+## True on the tick a run that builds a unit would end, if it has no port yet.
+func _needs_port(ctx: SimContext, job: Dictionary) -> bool:
+	return (job["status"] == STATUS_RUNNING or job["status"] == STATUS_PAUSED) \
+		and job["remaining_tick"] == 1 and job["port"] == 0 and _template_of(_recipe(ctx, job)) != ""
+
+
+## Takes the first free healthy port, or holds the run with its inputs until one is free.
+func _claim_port(ctx: SimContext, job: Dictionary) -> void:
+	var parts: Dictionary = ctx.state["parts"]
+	for port: int in Units.ports(ctx.state, ctx.defs, job["unit"]):
+		if parts[port]["fault"] == "" and not Units.port_in_use(ctx.state, port):
+			parts[port]["claimed_by"] = job["id"]
+			job["port"] = port
+			if job["reason"] == REASON_NO_FREE_PORT:
+				_resume(ctx, job)
+			return
+	if job["reason"] != REASON_NO_FREE_PORT:
+		job["since_tick"] = ctx.tick
+	_pause(ctx, job, REASON_NO_FREE_PORT)
+
+
+func _release_port(ctx: SimContext, job: Dictionary) -> void:
+	if job["port"] != 0:
+		ctx.state["parts"][job["port"]].erase("claimed_by")
+		job["port"] = 0
+
+
 func _count_down(ctx: SimContext, job: Dictionary) -> void:
+	if job["reason"] == REASON_NO_FREE_PORT:
+		return
 	var part: Dictionary = ctx.state["parts"][job["facility"]]
 	if not Units.can_run(part):
 		_pause(ctx, job, REASON_MODULE_FAULT if part["fault"] != "" else REASON_NO_POWER)
 		return
 	if job["status"] == STATUS_PAUSED:
-		ctx.emit_event("job_resumed", job["unit"], { "job": job["id"], "reason": job["reason"] })
-		job["status"] = STATUS_RUNNING
-		job["reason"] = ""
-		job["end_tick"] = ctx.tick + job["remaining_tick"] - 1
+		_resume(ctx, job)
 	job["remaining_tick"] -= 1
 	if job["remaining_tick"] == 0:
 		ctx.record_delta(job["id"], self, { "job": job["id"] })
+
+
+func _resume(ctx: SimContext, job: Dictionary) -> void:
+	ctx.emit_event("job_resumed", job["unit"], { "job": job["id"], "reason": job["reason"] })
+	job["status"] = STATUS_RUNNING
+	job["reason"] = ""
+	job["end_tick"] = ctx.tick + job["remaining_tick"] - 1
 
 
 func _pause(ctx: SimContext, job: Dictionary, reason: String) -> void:
@@ -253,6 +291,7 @@ func _cancel(ctx: SimContext, job: Dictionary) -> void:
 	if job["status"] == STATUS_CANCELLING:
 		return
 	_release_outputs(ctx, job)
+	_release_port(ctx, job)
 	job["end_tick"] = 0
 	_try_return(ctx, job)
 	if ctx.state["jobs"].has(job["id"]):
@@ -280,6 +319,19 @@ func _emit_ended(ctx: SimContext, job: Dictionary, type: String) -> void:
 
 func _recipe(ctx: SimContext, job: Dictionary) -> Dictionary:
 	return ctx.defs["recipes"][job["recipe"]]
+
+
+## True for an output that goes into the unit's inventory.
+func _is_stored(output: Dictionary) -> bool:
+	return output.has("item") and not output.has("sink")
+
+
+## The unit template a recipe builds, or "".
+func _template_of(recipe: Dictionary) -> String:
+	for output: Dictionary in recipe["outputs"]:
+		if output.has("unit_template"):
+			return output["unit_template"]
+	return ""
 
 
 func _sorted(table: Dictionary) -> Array:
