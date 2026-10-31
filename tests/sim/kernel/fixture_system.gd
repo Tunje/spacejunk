@@ -38,8 +38,10 @@ func apply(ctx: SimContext, command: Dictionary) -> void:
 	ctx.record_delta(command["unit"], self, { "unit": command["unit"], "grams": command["args"].get("grams", 0) })
 
 
-func update_tasks(_ctx: SimContext) -> void:
+func update_tasks(ctx: SimContext) -> void:
 	calls.append("update_tasks")
+	if ctx.state["units"].size() > 0:
+		ctx.state["last_draw"] = ctx.rng.next_u32("fixture")
 
 
 func calculate_power(_ctx: SimContext) -> void:
@@ -54,6 +56,7 @@ func run(ctx: SimContext) -> void:
 	calls.append("run")
 	for pair: Array in extra_events:
 		ctx.emit_event(pair[1], pair[0], {})
+	_run_jobs(ctx)
 	var units: Dictionary = ctx.state["units"]
 	var ids: Array = units.keys()
 	ids.sort()
@@ -63,6 +66,20 @@ func run(ctx: SimContext) -> void:
 		unit["mined_remainder"] = Rate.carry(3, unit["mined_remainder"])
 		if grams > 0:
 			ctx.record_delta(id, self, { "unit": id, "grams": 0, "vent": grams })
+
+
+## A job holds its grams until end_tick, then sends them to the sink.
+func _run_jobs(ctx: SimContext) -> void:
+	var jobs: Dictionary = ctx.state["jobs"]
+	var ids: Array = jobs.keys()
+	ids.sort()
+	for id: int in ids:
+		var job: Dictionary = jobs[id]
+		if job["end_tick"] == ctx.tick:
+			var sink: Dictionary = ctx.state["sinks"].get_or_add(SINK, {})
+			sink[ITEM] = sink.get(ITEM, 0) + job["held_g"]
+			job["held_g"] = 0
+			jobs.erase(id)
 
 
 func apply_delta(ctx: SimContext, payload: Dictionary) -> void:
@@ -93,3 +110,6 @@ func fill_ledger(ctx: SimContext, ledger: Dictionary) -> void:
 	for id: int in units:
 		total += units[id]["inventory"]["hematite"]
 	ledger["matter"]["inventories_g"] += total
+	var jobs: Dictionary = ctx.state["jobs"]
+	for id: int in jobs:
+		ledger["matter"]["jobs_g"] += jobs[id]["held_g"]
