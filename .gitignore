@@ -1,0 +1,14 @@
+# Godot
+.godot/
+*.import.tmp
+*.translation
+
+# Test and tool output
+tests/output/
+tools/output/
+screenshots/
+
+# OS and editor
+.DS_Store
+Thumbs.db
+.vscode/
