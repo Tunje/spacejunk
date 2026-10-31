@@ -57,7 +57,7 @@ func _unit_view(ctx: SimContext, id: int) -> Dictionary:
 			"to_mm": route["to_mm"].duplicate(), "eta_tick": route["eta_tick"],
 		}
 	var fit := Units.fit(state, defs, id)
-	var reject_w := Units.capability_sum(state, defs, id, "radiator", "reject_w")
+	var reject_w := Units.healthy_sum(state, defs, id, "radiator", "reject_w")
 	var result := {
 		"def": unit["def"], "kind": unit["kind"], "name": unit["name"],
 		"pos_mm": unit["pos_mm"].duplicate(), "at_target": unit["at_target"],
@@ -79,14 +79,10 @@ func _unit_view(ctx: SimContext, id: int) -> Dictionary:
 func _power_view(ctx: SimContext, id: int) -> Dictionary:
 	var state := ctx.state
 	var stored_j := 0
-	var supply_w := 0
 	for part_id in Units.part_ids(state, id):
-		var part: Dictionary = state["parts"][part_id]
-		stored_j += part.get("stored_j", 0)
-		if part["fault"] == "":
-			supply_w += Units.module_of(state, ctx.defs, part_id)["capabilities"].get("generate", {}).get("power_w", 0)
+		stored_j += state["parts"][part_id].get("stored_j", 0)
 	return {
-		"supply_w": supply_w,
+		"supply_w": Units.healthy_sum(state, ctx.defs, id, "generate", "power_w"),
 		"demand_w": state["units"][id]["demand_w"], "stored_j": stored_j,
 		"capacity_j": Units.capability_sum(state, ctx.defs, id, "battery", "capacity_j"),
 		"max_discharge_w": Units.capability_sum(state, ctx.defs, id, "battery", "max_discharge_w"),
