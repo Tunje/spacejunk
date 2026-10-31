@@ -130,7 +130,7 @@ func test_a_scan_needs_a_target_of_the_right_type() -> void:
 
 
 func test_a_scan_needs_a_healthy_scanner() -> void:
-	state["parts"][LIDAR]["fault"] = "over_heat_limit"
+	state["parts"][LIDAR]["fault"] = "test_fault"
 	_assert_refused(_scan(), "module_fault")
 
 

@@ -141,7 +141,7 @@ func test_a_module_fault_ends_an_order() -> void:
 	sim.submit(_scan())
 	sim.step()
 	sim.take_events()
-	state["parts"][LIDAR]["fault"] = "over_heat_limit"
+	state["parts"][LIDAR]["fault"] = "test_fault"
 	sim.step()
 	assert_eq(sim.take_events()[0]["data"]["reason"], "module_fault")
 	_assert_idle()
@@ -169,7 +169,7 @@ func test_an_offline_core_ends_an_order() -> void:
 	sim.submit(_scan())
 	sim.step()
 	sim.take_events()
-	state["parts"][CORE]["fault"] = "over_heat_limit"
+	state["parts"][CORE]["fault"] = "test_fault"
 	sim.step()
 	assert_eq(sim.take_events()[0]["data"]["reason"], "core_offline")
 	_assert_idle()
@@ -189,7 +189,7 @@ func test_losing_the_core_ends_an_order() -> void:
 func test_a_finished_step_stands_when_a_fault_lands_on_its_last_tick() -> void:
 	sim.submit(_scan())
 	sim.step(300)
-	state["parts"][LIDAR]["fault"] = "over_heat_limit"
+	state["parts"][LIDAR]["fault"] = "test_fault"
 	sim.take_events()
 	sim.step()
 	assert_eq(_types(sim.take_events()), ["task_finished"])
