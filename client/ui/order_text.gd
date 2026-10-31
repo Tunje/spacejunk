@@ -5,7 +5,7 @@ class_name OrderText extends RefCounted
 const REASONS: Dictionary = {
 	"cargo_full": "Cargo hold is full",
 	"bad_cycle": "That cycle is not valid",
-	"busy_docking": "Busy docking",
+	"busy_docking": "Wait for docking to finish",
 	"connector_occupied": "That connector is already in use",
 	"connector_size_mismatch": "Connector sizes do not match",
 	"connector_type_mismatch": "Connector types do not match",

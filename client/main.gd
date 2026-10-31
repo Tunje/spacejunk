@@ -16,6 +16,7 @@ const SEED_VALUE := 1
 @onready var fitting_screen: FittingScreen = %FittingScreen
 @onready var fitting_markers: FittingMarkers = %FittingMarkers
 @onready var industry_screen: IndustryScreen = %IndustryScreen
+@onready var automation_screen: AutomationScreen = %AutomationScreen
 @onready var markers: EntityMarkers = %Markers
 @onready var system_map: SystemMap = $SystemMap
 @onready var standing_orders: StandingOrdersScreen = %StandingOrders
@@ -40,11 +41,14 @@ func _ready() -> void:
 	inspection_panel.bind(bridge, local_view)
 	fitting_screen.bind(bridge, local_view, fitting_markers)
 	industry_screen.bind(bridge, local_view)
+	automation_screen.bind(bridge, local_view, order_panel)
 	system_map.bind(bridge, local_view)
 	time_controls.map_pressed.connect(toggle_map)
 	time_controls.policy_pressed.connect(standing_orders.toggle)
 	time_controls.fit_pressed.connect(toggle_fitting)
 	time_controls.jobs_pressed.connect(toggle_industry)
+	time_controls.auto_pressed.connect(toggle_automation)
+	automation_screen.closed.connect(_on_side_screen_closed)
 	industry_screen.closed.connect(_on_side_screen_closed)
 	fitting_screen.closed.connect(_on_side_screen_closed)
 	ScreenshotDriver.attach_if_requested(self, args)
@@ -64,6 +68,12 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		return
 	if key.physical_keycode == KEY_M:
 		toggle_map()
+		get_viewport().set_input_as_handled()
+	elif key.physical_keycode == KEY_K:
+		toggle_automation()
+		get_viewport().set_input_as_handled()
+	elif key.physical_keycode == KEY_ESCAPE and automation_screen.visible:
+		toggle_automation()
 		get_viewport().set_input_as_handled()
 	elif key.physical_keycode == KEY_J:
 		toggle_industry()
@@ -93,22 +103,29 @@ func _unhandled_key_input(event: InputEvent) -> void:
 func toggle_fitting() -> void:
 	if system_map.is_open():
 		toggle_map()
-	if industry_screen.visible:
-		industry_screen.toggle()
-	fitting_screen.toggle()
-	order_panel.visible = not fitting_screen.visible
+	_open_side_screen(fitting_screen)
 
 
 ## Jobs work from either view, and share the order panel's place with fitting.
 func toggle_industry() -> void:
-	if fitting_screen.visible:
-		fitting_screen.toggle()
-	industry_screen.toggle()
-	order_panel.visible = not industry_screen.visible
+	_open_side_screen(industry_screen)
+
+
+func toggle_automation() -> void:
+	_open_side_screen(automation_screen)
+
+
+## One side screen at a time, each taking the order panel's place.
+func _open_side_screen(screen: Control) -> void:
+	for other: Control in [fitting_screen, industry_screen, automation_screen]:
+		if other != screen and other.visible:
+			other.toggle()
+	screen.toggle()
+	order_panel.visible = not screen.visible
 
 
 func _on_side_screen_closed() -> void:
-	order_panel.visible = not (fitting_screen.visible or industry_screen.visible)
+	order_panel.visible = not (fitting_screen.visible or industry_screen.visible or automation_screen.visible)
 
 
 func toggle_map() -> void:
