@@ -299,7 +299,7 @@ Rules:
 
 `cancel_job` releases the job's output reservation, then returns the current run's inputs to the facility's unit, all together. If they do not fit, the matter stays on the job ([accounting.md](accounting.md) section 2) and the job becomes `cancelling`, with `reason` `cargo_full`.
 
-A `cancelling` job does no work and draws no power. It keeps the facility, so `start_job` there gives `facility_busy`. Phase 1 retries it each tick, after that tick's commands, in ascending job ID. `job_cancelled` fires when the inputs are delivered. A repeat `cancel_job` has no effect.
+A `cancelling` job does no work and draws no power. It keeps the facility, so `start_job` there gives `facility_busy`. Phase 2 retries it each tick, after that tick's commands, in ascending job ID. `job_cancelled` fires when the inputs are delivered. A repeat `cancel_job` has no effect.
 
 The player clears it by moving stock out of the class. Capacity is never exceeded.
 
@@ -327,7 +327,7 @@ Each failure emits exactly one event (contracts section 6), and the view shows t
 | `port_busy`, `busy_docking` | Ports and atomic operations |
 | `bad_cycle`, `no_safe_step` | Cycles |
 | `out_of_range`, `docked`, `not_docked`, `unknown_deposit`, `too_hard` | Step validation. `too_hard` means a deposit is harder than the laser's `hardness_max`. |
-| `facility_busy`, `missing_inputs`, `output_full` | Jobs |
+| `facility_busy`, `missing_inputs`, `output_full`, `unknown_job`, `unknown_recipe`, `wrong_facility` | Jobs |
 
 `part_busy` is defined in contracts section 5.
 
