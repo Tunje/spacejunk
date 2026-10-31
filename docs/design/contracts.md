@@ -40,7 +40,7 @@ Valid ranges are asserted at commit in test runs.
 
 ## 2. IDs
 
-- Definition IDs are lowercase strings from `data/`, such as `mining_laser_mk1`. Items and modules share one namespace.
+- Definition IDs are lowercase strings from `data/`, such as `mining_laser_mk1`. Items and modules share one namespace. Unit templates have their own, and a unit's `def` is its template ID.
 - Runtime entity IDs are positive integers from one counter in the state, starting at 1 and never reused. It covers units, parts, tasks, jobs, bodies and deposits.
 - Commands have their own saved counter.
 - Ships, stations and drones are all units, distinguished by `kind`.
@@ -272,7 +272,7 @@ Task B3 owns the schemas. These fields are fixed here because other agents depen
 - **`realism`:** `established`, `extrapolation`, `speculative` or `fictional`.
 - **Connectors:** `id` (unique within a module), `type` (`stack`, `side`, `dock`), `size`, `pos_mm`, `facing`, `up`, `load_limit_kg`. `facing` and `up` are axis values (+/-x, +/-y, +/-z). Mated connectors have opposite facings and equal ups. `load_limit_kg` is the mass carried below the connector.
 - **Collision:** `{ shape, center_mm, size_mm }`, where `shape` is `box` or `cylinder`, with the cylinder axis along the module's Y. Placeholders use the same shape. B3 may extend it.
-- **Recipes:** `id`, `facility`, `seconds`, `power_kw`, `inputs`, `outputs`, `abstract`.
+- **Recipes:** `id`, `facility`, `seconds`, `power_kw`, `inputs`, `outputs`, `abstract`. An output may route straight to a declared sink, such as `slag_vent`, instead of an inventory. B3 defines how.
 - `visual` is read by the client only. The simulation never reads it.
 
 ## 11. Client rules

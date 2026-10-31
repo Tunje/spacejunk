@@ -1,8 +1,8 @@
 # Canonical Design Spec
 
-Status: draft for Lead approval (task B1). Changes after approval go through the Lead.
+Status: approved by the Lead (task B1). Changes go through the Lead.
 
-This spec replaces [ideadock.md](../../plan/ideadock.md) and [analasysOfIdeadock.md](../../analasysOfIdeadock.md) wherever they disagree with it. Those two stay unchanged as history. It resolves every problem in section 3 of [workplan.md](../../plan/workplan.md) and fixes the slice content from section 7. [contracts.md](contracts.md) (contract version 1) remains the authority on how systems talk to each other. Section 9 lists what still needs a Lead ruling.
+This spec replaces [ideadock.md](../../plan/ideadock.md) and [analasysOfIdeadock.md](../../analasysOfIdeadock.md) wherever they disagree with it. Those two stay unchanged as history. It resolves every problem in section 3 of [workplan.md](../../plan/workplan.md) and fixes the slice content from section 7. [contracts.md](contracts.md) (contract version 1) remains the authority on how systems talk to each other. Section 9 records the Lead's rulings.
 
 Part A (sections 2 to 5) is the whole-game catalogue. It exists to make the source docs consistent, and nothing in it is scheduled. Only Part B (sections 6 and 7) goes into `data/`.
 
@@ -45,7 +45,7 @@ Process depth, counted from Stage 3: basic equipment is depth 1 to 2, advanced i
 
 ## 3. Environments
 
-Five of the original eight environments hold deposits after the corrections below. The other three lose everything, so they stop being resource environments.
+Four of the original eight environments hold deposits after the corrections below. The other four hold none, so they stop being resource environments.
 
 | Environment | Role | Holds |
 | ----------- | ---- | ----- |
@@ -333,7 +333,7 @@ The power and heat budgets sum every module's active draw, whether or not those 
 | 5 | Fabricate | `fabricator_mk1` makes a `structural_frame` or other component |
 | 6 | Install | Components become a module, attached to the docked ship. Only modules attach, so this check needs one more fabrication step than check 5. |
 | 7 | Build a drone | The `mining_drone` recipe at the fabricator, appearing at a free port |
-| 8 | Hand over | Hand-run the cycle first on the starter ship. Then fit an `assisted_core` with `attach_part`, select it with `assign_core`, and start `set_cycle`. The cycle must include a propellant load. |
+| 8 | Hand over | Hand-run the cycle first on the starter ship. Then fit an `assisted_core` to the drone with `attach_part`, select it with `assign_core`, and start `set_cycle`. The cycle must include a propellant load. |
 | 9 | Expand | Attach one more station module. B8 picks which. |
 | 10 | Fail and fix | Section 7.5 |
 
@@ -356,11 +356,11 @@ The power and heat budgets sum every module's active draw, whether or not those 
 
 Two problems not in section 3 are resolved here too. Lithium's only source was the Dust Cloud, which the analysis's reasoning rules out, so Spodumene is added. "Stage" had two numbered meanings, so Era is introduced.
 
-## 9. Open with the Lead
+## 9. Lead rulings
 
-None of these block B1. Sections 7.1 to 7.3 assume the proposed answer.
+All four proposed answers are accepted. The workplan and contracts are updated to match.
 
-| # | Issue | Proposed answer |
+| # | Issue | Ruling |
 | - | ----- | --------------- |
 | 1 | Workplan section 7 lists Basic and Assisted Core as components, but the contracts make them modules. | The contracts win. Update the workplan, or leave it, since this spec records the ruling. |
 | 2 | Workplan task A3 says fitting checks volume. Contracts section 5 checks mass, power, heat and connectors only, so a module's `volume_m3` is not a fit limit. | The contracts win: volume limits cargo stores only. Correct A3's wording. |
