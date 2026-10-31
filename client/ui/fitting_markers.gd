@@ -23,7 +23,7 @@ func _process(_delta: float) -> void:
 func update_slots() -> void:
 	_shown.clear()
 	var view := screen.local_view
-	var craft: CraftNode = view.crafts.get(view.commanded_unit)
+	var craft: CraftNode = view.crafts.get(screen.fit_unit())
 	if craft == null:
 		return
 	var unit := screen.unit()

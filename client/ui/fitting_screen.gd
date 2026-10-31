@@ -8,6 +8,7 @@ const SLOT_RADIUS_PX := 8.0
 const OVER_RATIO := 1.0
 
 signal closed
+signal fit_blocked(item: String, reason: String)
 
 var bridge: SimBridge
 var local_view: LocalView
@@ -85,14 +86,21 @@ func toggle() -> void:
 	chosen = {}
 	slot = {}
 	if visible:
-		local_view.focus_on("unit", local_view.commanded_unit)
+		local_view.focus_on("unit", fit_unit())
 		refresh()
 	else:
 		closed.emit()
 
 
+## The selected craft or station, otherwise the commanded craft.
+func fit_unit() -> int:
+	if local_view.selected_kind == "unit" and bridge.current_view["units"].has(local_view.selected_id):
+		return local_view.selected_id
+	return local_view.commanded_unit
+
+
 func unit() -> Dictionary:
-	return bridge.current_view["units"].get(local_view.commanded_unit, {})
+	return bridge.current_view["units"].get(fit_unit(), {})
 
 
 func choose(entry: Dictionary) -> void:
@@ -108,14 +116,14 @@ func choose_slot(new_slot: Dictionary) -> void:
 func pending_command() -> Dictionary:
 	if chosen.is_empty() or slot.is_empty():
 		return {}
-	return FittingLogic.attach_command(local_view.commanded_unit, chosen, slot)
+	return FittingLogic.attach_command(fit_unit(), chosen, slot)
 
 
 ## Whether a slot would take the chosen part, for the markers.
 func slot_ok(candidate: Dictionary) -> bool:
 	if chosen.is_empty():
 		return true
-	return bridge.check(FittingLogic.attach_command(local_view.commanded_unit, chosen, candidate))["ok"]
+	return bridge.check(FittingLogic.attach_command(fit_unit(), chosen, candidate))["ok"]
 
 
 func attach() -> void:
@@ -156,10 +164,10 @@ func _check_pending() -> Dictionary:
 
 func _remove_command() -> Dictionary:
 	var part: int = local_view.selected_part
-	if local_view.selected_kind != "unit" or local_view.selected_id != local_view.commanded_unit or part == 0:
+	if local_view.selected_kind != "unit" or part == 0:
 		return {}
 	var view: Dictionary = bridge.current_view
-	return FittingLogic.detach_command(local_view.commanded_unit, part, FittingLogic.detach_target(view, local_view.commanded_unit))
+	return FittingLogic.detach_command(fit_unit(), part, FittingLogic.detach_target(view, fit_unit()))
 
 
 func _show_limits(fit: Dictionary, projected: Dictionary) -> void:
@@ -182,7 +190,7 @@ func _set_bar(bar: ProgressBar, value: int, limit: int) -> void:
 
 
 func _sync_stock() -> void:
-	_stock = FittingLogic.stock(bridge.current_view, local_view.commanded_unit, _modules)
+	_stock = FittingLogic.stock(bridge.current_view, fit_unit(), _modules)
 	var key := str(_stock.map(func(entry: Dictionary) -> String: return "%s:%d:%d" % [entry["item"], entry["from"], entry["count"]]))
 	if key == _stock_key:
 		return
@@ -212,6 +220,7 @@ func _show_verdict(result: Dictionary) -> void:
 	else:
 		_verdict.text = OrderText.reason(result["reason"], result["detail"])
 		_verdict.modulate = ClientTheme.ORANGE
+		fit_blocked.emit(chosen["item"], result["reason"])
 
 
 func _add_label(parent: Control) -> Label:
