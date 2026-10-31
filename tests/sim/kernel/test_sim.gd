@@ -11,8 +11,8 @@ func before_each() -> void:
 	sim._strict = true
 	fixture = FixtureSystem.new()
 	sim._register_system(fixture)
-	FixtureSystem.add_unit(sim._state, 7, 100)
-	FixtureSystem.add_unit(sim._state, 3, 100)
+	FixtureSystem.add_unit(sim, 7, 100)
+	FixtureSystem.add_unit(sim, 3, 100)
 
 
 func _add(unit: int, grams: int) -> int:
@@ -225,8 +225,8 @@ func test_event_queue_is_bounded_and_drops_oldest() -> void:
 func test_events_do_not_affect_the_hash() -> void:
 	var other := Sim.new_game(Sim.SCENARIO_EMPTY, 12345)
 	other._register_system(FixtureSystem.new())
-	FixtureSystem.add_unit(other._state, 7, 100)
-	FixtureSystem.add_unit(other._state, 3, 100)
+	FixtureSystem.add_unit(other, 7, 100)
+	FixtureSystem.add_unit(other, 3, 100)
 	for current: Sim in [sim, other]:
 		current.submit({ "type": COMMAND, "unit": 7, "args": { "grams": 1 } })
 		current.step()
@@ -277,8 +277,10 @@ func test_view_has_the_frozen_top_level_shape() -> void:
 
 
 func test_view_and_defs_are_copies() -> void:
-	sim.view()["units"][1] = {}
-	assert_eq(sim.view()["units"], {})
+	sim.view()["units"].clear()
+	assert_eq(sim.view()["units"].size(), 2)
+	sim.view()["units"][7]["inventory"]["hematite"] = 1
+	assert_eq(sim.view()["units"][7]["inventory"]["hematite"], 100)
 	sim.defs()["modules"]["x"] = 1
 	assert_eq(sim.defs()["modules"], {})
 
