@@ -94,9 +94,8 @@ func refresh(delta: float) -> void:
 	entries.clear()
 	for id: int in after["bodies"]:
 		var body: Dictionary = after["bodies"][id]
-		var label := "Star" if body["kind"] == "star" else "Asteroid %d" % id
 		var from_mm: Array = before["bodies"].get(id, body)["pos_mm"]
-		_add_entry("body", id, label, FloatingOrigin.relative_m(from_mm, body["pos_mm"], centre_before, centre_after, alpha))
+		_add_entry("body", id, body["name"], FloatingOrigin.relative_m(from_mm, body["pos_mm"], centre_before, centre_after, alpha))
 	for id: int in after["units"]:
 		var unit: Dictionary = after["units"][id]
 		var from_mm: Array = before["units"].get(id, unit)["pos_mm"]

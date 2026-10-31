@@ -4,11 +4,13 @@ class_name AsteroidField extends Node3D
 ## them. Each variant is one MultiMesh, so large fields stay cheap.
 
 const COUNT := 1500
+const MAX_COUNT := 6000
 const HALF_WIDTH_M := 16000.0
 const HALF_HEIGHT_M := 3500.0
 const MIN_SIZE_M := 4.0
 const MAX_SIZE_M := 90.0
 const CLEARANCE_M := 500.0
+const REACH_MARGIN := 1.25
 
 var anchor_mm: Array = [0, 0, 0]
 var instance_total := 0
@@ -45,8 +47,22 @@ static func keep_clear(view: Dictionary, anchor: Array) -> Array[Dictionary]:
 	return clear
 
 
+## Half the field's width, grown so it reaches everything worth keeping clear of.
+static func half_width_for(clear: Array[Dictionary]) -> float:
+	var reach := HALF_WIDTH_M
+	for entry: Dictionary in clear:
+		reach = maxf(reach, (entry["at_m"] as Vector3).length() * REACH_MARGIN)
+	return reach
+
+
+## Rock count that keeps the default density across a wider field.
+static func count_for(half_width_m: float) -> int:
+	var scale_up := half_width_m / HALF_WIDTH_M
+	return mini(roundi(COUNT * scale_up * scale_up), MAX_COUNT)
+
+
 ## One Array of Transform3D per mesh variant. Same seed, same field.
-static func generate(seed_value: int, clear: Array[Dictionary], count: int = COUNT) -> Array:
+static func generate(seed_value: int, clear: Array[Dictionary], count: int = COUNT, half_width_m: float = HALF_WIDTH_M) -> Array:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value
 	var groups: Array = []
@@ -57,9 +73,9 @@ static func generate(seed_value: int, clear: Array[Dictionary], count: int = COU
 	while placed < count and attempts < count * 4:
 		attempts += 1
 		var at := Vector3(
-			rng.randf_range(-HALF_WIDTH_M, HALF_WIDTH_M),
+			rng.randf_range(-half_width_m, half_width_m),
 			rng.randfn(0.0, HALF_HEIGHT_M * 0.5),
-			rng.randf_range(-HALF_WIDTH_M, HALF_WIDTH_M))
+			rng.randf_range(-half_width_m, half_width_m))
 		var size := lerpf(MIN_SIZE_M, MAX_SIZE_M, pow(rng.randf(), 4.0))
 		var spin := Basis(Vector3(rng.randfn(), rng.randfn(), rng.randfn()).normalized(), rng.randf() * TAU)
 		var variant := rng.randi_range(0, RockMesh.VARIANTS - 1)
@@ -78,7 +94,9 @@ static func _is_clear(at: Vector3, size: float, clear: Array[Dictionary]) -> boo
 
 func build(view: Dictionary) -> void:
 	anchor_mm = AsteroidField.anchor_of(view)
-	var groups := AsteroidField.generate(view["seed"], AsteroidField.keep_clear(view, anchor_mm))
+	var clear := AsteroidField.keep_clear(view, anchor_mm)
+	var half_width := AsteroidField.half_width_for(clear)
+	var groups := AsteroidField.generate(view["seed"], clear, AsteroidField.count_for(half_width), half_width)
 	instance_total = 0
 	for variant in range(groups.size()):
 		var transforms: Array = groups[variant]
@@ -91,5 +109,7 @@ func build(view: Dictionary) -> void:
 		var instance := MultiMeshInstance3D.new()
 		instance.multimesh = multimesh
 		instance.material_override = RockMesh.material()
+		# Scenery must not eclipse the player's craft.
+		instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(instance)
 		instance_total += transforms.size()

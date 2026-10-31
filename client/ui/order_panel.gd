@@ -141,8 +141,7 @@ func _selection_title(view: Dictionary) -> String:
 					return "%s: %s" % [unit["name"], _modules[part["def"]]["name"]]
 			return unit.get("name", "")
 		"body":
-			var body: Dictionary = view["bodies"].get(local_view.selected_id, {})
-			return "Star" if body.get("kind", "") == "star" else "Asteroid %d" % local_view.selected_id
+			return view["bodies"].get(local_view.selected_id, {}).get("name", "")
 	return "Nothing selected"
 
 

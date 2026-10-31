@@ -15,6 +15,8 @@ const MAX_SHADOW_RANGE_M := 9000.0
 const AIM_RATE := 2.0
 ## Beams end inside the rock, so its lumpy surface hides the end.
 const BEAM_DEPTH := 0.5
+const LIT_SIDE_OFFSET := 0.6
+const LIT_PITCH_LIMIT := 0.7
 const SPREAD_RATE := 2.0
 const CROWD_MM := 20000
 const SPREAD_MIN_M := 14.0
@@ -57,7 +59,20 @@ func bind(new_bridge: SimBridge) -> void:
 	focus_on("unit", first_ship)
 	select("unit", first_ship, 0)
 	camera.distance_m = camera.target_distance_m
+	_face_the_lit_side()
 	refresh(0.0)
+
+
+## Starts the camera on the star's side, so the first view shows sunlit hulls.
+func _face_the_lit_side() -> void:
+	var view: Dictionary = bridge.current_view
+	var focus: Array = view["units"][focus_id]["pos_mm"]
+	for id: int in view["bodies"]:
+		if view["bodies"][id]["kind"] == "star":
+			var to_star := FloatingOrigin.relative_m(view["bodies"][id]["pos_mm"], view["bodies"][id]["pos_mm"], focus, focus, 0.0)
+			var direction := to_star.normalized()
+			camera.yaw = atan2(direction.x, direction.z) + LIT_SIDE_OFFSET
+			camera.pitch = -clampf(asin(direction.y), -LIT_PITCH_LIMIT, LIT_PITCH_LIMIT)
 
 
 func _process(delta: float) -> void:
