@@ -1,6 +1,6 @@
 # Reference Scenario
 
-Status: draft for review by Agents A and C (task B8). Changes after sign-off go through the Lead.
+Status: reviewed by Agents A and C (task B8), with their corrections applied. Changes go through the Lead.
 
 This is the one worked mining-to-manufacturing chain that every agent builds against. It is also the start of the slice for a person playing. The file is [data/scenarios/reference.json](../../data/scenarios/reference.json), in the format of [schemas.md](schemas.md) section 14.
 
@@ -83,7 +83,7 @@ One lap costs 18238 g.
 
 ## 3. The chain
 
-Durations are in ticks at the 10 per second rate, from the step starting to its finishing event. Each order is a separate command on the ship, unit 23, unless stated. All cargo orders omit `grams`.
+Durations are in ticks at the 10 per second rate, from the step starting to the next step starting. An operation of N ticks starting on tick S follows the timing rule in [networks.md](networks.md) section 6: `docked`, `undocked`, `arrived` and `transfer_done` fire on S + N - 1, and `mining_stopped` and `task_finished` fire on S + N. Each order is a separate command on the ship, unit 23, unless stated. All cargo orders omit `grams`.
 
 ### Part A: the ship, hand-run by a Basic Core (checks 1 to 3)
 
@@ -176,23 +176,23 @@ The expansion comes before the handover so that nothing is still being ordered w
 
 The cycle passes the closure rule in [autonomy.md](autonomy.md) section 5: it starts and ends docked, and propellant loads first, as section 2 sets out for a drone with a core.
 
-A lap is 5356 ticks on lap 1: 20 loading, 100 undocking, 1968 out, 1000 mining, 1968 back, 200 docking and 100 unloading. Later laps top up 18238 g, which takes 4 ticks, so they run 5340. Each lap adds 500 kg of hematite to the station. **Stop on the tick of the third `task_cycle_done`.** That tick ends the chain, and the drone has not yet started a fourth lap. **Check 8.**
+A lap is 5356 ticks on lap 1: 20 loading, 100 undocking, 1968 out, 1000 mining, 1968 back, 200 docking and 100 unloading. Later laps top up 18238 g, which takes 4 ticks, so they run 5340. Each lap adds 500 kg of hematite to the station. **Stop on the tick of the third `task_cycle_done`.** A step that ends in phase 2 starts the next in the same tick, so on that tick lap 4's load has already moved one tick's 5000 g of propellant. **Check 8.**
 
 ## 4. End state
 
-The figures below are the state on the tick of the third `task_cycle_done`.
+The figures below are the state on the tick of the third `task_cycle_done`. The drone's `op.type` is `loading`, and its task has `step` 0 and `cycle` 3.
 
 | Place | Contents |
 | ----- | -------- |
 | Deposits | Hematite 194500 kg, chalcopyrite 98000 kg, olivine 48000 kg |
-| Station inventory | Hematite 2900, chalcopyrite 1000, olivine 1400, iron 44, copper 6, silicon 18, propellant 3863.524 kg. No frames, wiring, processors or spare modules. |
+| Station inventory | Hematite 2900, chalcopyrite 1000, olivine 1400, iron 44, copper 6, silicon 18, propellant 3858.524 kg. No frames, wiring, processors or spare modules. |
 | Ship inventory | Propellant 542.252 kg, empty hold |
-| Drone inventory | Propellant 81.762 kg, empty hold |
+| Drone inventory | Propellant 86.762 kg, empty hold |
 | Installed parts | Station 15930 kg, ship 5180 kg, drone 580 kg |
 | `slag_vent` | 1952 kg |
 | `propellant_exhaust` | 512.462 kg: 457.748 from the ship, 54.714 from the drone |
 
-These sum to 374510 kg, matching the start.
+These sum to 374510 kg, matching the start. C6 reads the two sinks from the `matter.sinks` map of `ledger()`.
 
 ## 5. Propellant for a person playing
 
@@ -208,8 +208,7 @@ That leaves about 1900 kg spare. The stock is 4000 kg at the depot, which is the
 
 These assumptions are guesses until someone has played it, so B6 and the owner's playtest should recheck them.
 
-## 6. For review
+## 6. Review notes
 
-**A:** the start state in schemas section 14, including full batteries and `at_target` set on a unit docked at the start. The 4-tick top-up assumes a transfer's whole amount rounds up to whole ticks.
-
-**C:** the step order, and that no step of a fourth lap can run on the tick the third `task_cycle_done` fires.
+- **Top-ups.** Lap 2 and lap 3's 18238 g takes 4 ticks because of the per-tick clamp and the end test in phase 6: 5000 g a tick for three ticks, then the last 3238 g. It does not round the whole amount up.
+- **Goods space.** Job outputs reserve `goods` space when a run starts, so `tests/tools/test_reference_scenario.gd` walks goods mass and volume through Parts B to E.

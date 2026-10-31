@@ -168,6 +168,106 @@ func test_starting_matter_matches_the_document() -> void:
 	assert_eq(total, START_MATTER_G)
 
 
+func _item_table() -> Dictionary:
+	var table := {}
+	for entry: Dictionary in data["items"]["entries"]:
+		table[entry["id"]] = {
+			"class": entry["cargo_class"], "density": int(entry["density_kg_m3"]),
+			"unit_g": roundi(entry.get("unit_mass_kg", 0.0) * 1000.0),
+		}
+	for id: String in modules:
+		var mass_g := roundi(modules[id]["mass_kg"] * 1000.0)
+		var litres := roundi(modules[id]["volume_m3"] * 1000.0)
+		table[id] = { "class": "goods", "density": mass_g / litres, "unit_g": mass_g }
+	return table
+
+
+func _recipe(id: String) -> Dictionary:
+	for entry: Dictionary in data["recipes"]["entries"]:
+		if entry["id"] == id:
+			return entry
+	return {}
+
+
+func _entry_g(entry: Dictionary, table: Dictionary) -> int:
+	if entry.has("count"):
+		return table[entry["item"]]["unit_g"] * int(entry["count"])
+	return roundi(entry["kg"] * 1000.0)
+
+
+## Space a stack set takes: stacks round up separately, as in networks section 5.
+func _goods_used(stacks: Dictionary, table: Dictionary) -> Array:
+	var used_g := 0
+	var used_l := 0
+	for item: String in stacks:
+		used_g += stacks[item]
+		used_l += _ceil_div(stacks[item], table[item]["density"])
+	return [used_g, used_l]
+
+
+func _add_goods(stacks: Dictionary, item: String, grams: int, table: Dictionary) -> void:
+	if table[item]["class"] == "goods":
+		stacks[item] = stacks.get(item, 0) + grams
+
+
+func _run_job(stacks: Dictionary, recipe_id: String, count: int, table: Dictionary) -> void:
+	var recipe := _recipe(recipe_id)
+	var cap: Dictionary = modules["goods_storage_mk1"]["capabilities"]["storage"]["goods"]
+	var cap_g := roundi(cap["mass_kg"] * 1000.0)
+	var cap_l := roundi(cap["volume_m3"] * 1000.0)
+	for run: int in count:
+		for entry: Dictionary in recipe["inputs"]:
+			if table[entry["item"]]["class"] != "goods":
+				continue
+			var grams := _entry_g(entry, table)
+			assert_gte(stacks.get(entry["item"], 0), grams, "%s needs %s" % [recipe_id, entry["item"]])
+			stacks[entry["item"]] -= grams
+			if stacks[entry["item"]] == 0:
+				stacks.erase(entry["item"])
+		var reserved := stacks.duplicate()
+		for entry: Dictionary in recipe["outputs"]:
+			if entry.has("item") and not entry.has("sink"):
+				_add_goods(reserved, entry["item"], _entry_g(entry, table), table)
+		var used := _goods_used(reserved, table)
+		assert_lte(used[0], cap_g, "%s run %d over goods mass" % [recipe_id, run])
+		assert_lte(used[1], cap_l, "%s run %d over goods volume" % [recipe_id, run])
+		stacks.clear()
+		stacks.merge(reserved)
+
+
+## Walks Parts B to E, in step order, so every job's output reserves real space.
+func test_goods_fit_through_the_whole_chain() -> void:
+	var table := _item_table()
+	var stacks := {}
+	var steps := [
+		["refine_hematite", 26], ["refine_chalcopyrite", 10], ["refine_olivine", 6],
+		["structural_frame", 35], ["wiring", 21], ["processor", 24],
+		["heat_radiator_mk1", 1], ["mining_laser_mk1", 1],
+		["attach", "mining_laser_mk1"], ["attach", "heat_radiator_mk1"],
+		["ore_storage_mk1", 1], ["attach", "ore_storage_mk1"],
+		["mining_drone", 1], ["basic_core", 1], ["assisted_core", 1],
+		["attach", "assisted_core"],
+	]
+	for step: Array in steps:
+		if step[0] == "attach":
+			stacks.erase(step[1])
+		else:
+			_run_job(stacks, step[0], step[1], table)
+	assert_eq(stacks, { "iron": 44_000, "copper": 6000, "silicon": 18_000 })
+
+
+## Each place in section 4 of the document, on the third task_cycle_done.
+func test_end_state_sums_to_the_starting_matter() -> void:
+	var deposits_g := 194_500_000 + 98_000_000 + 48_000_000
+	var station_g := 2_900_000 + 1_000_000 + 1_400_000 + 44_000 + 6000 + 18_000 + 3_858_524
+	var ship_g := 542_252
+	var drone_g := 86_762
+	var installed_g := 15_930_000 + 5_180_000 + 580_000
+	var sinks_g := 1_952_000 + 512_462
+	var total := deposits_g + station_g + ship_g + drone_g + installed_g + sinks_g
+	assert_eq(total, START_MATTER_G)
+
+
 func test_ship_starts_docked_at_the_second_station_port() -> void:
 	var ship: Dictionary = scenario["units"][1]
 	assert_eq(ship["dock"], { "host": "station", "port": 0.0, "host_port": 1.0 })

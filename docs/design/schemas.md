@@ -329,4 +329,6 @@ A unit has `key`, `template`, `name`, `pos_mm`, `inventory` and `dock`. `invento
 
 **Entity IDs.** The counter starts at 1 and issues IDs in file order: each body, then that body's deposits, then each unit, then that unit's parts in template order. This makes IDs known in advance.
 
+**Validity.** A docked unit's `pos_mm` equals its host's, and starting inventory fits the unit's capacity, by mass and volume per cargo class. The validator checks both.
+
 **Start state.** Batteries start full and heat loops start at 0. Every deposit starts unfound. A template with a core has it assigned (section 10). A docked unit starts with `at_target` set to its host, as after arrival.
