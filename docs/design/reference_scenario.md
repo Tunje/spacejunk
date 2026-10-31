@@ -16,7 +16,7 @@ Seed: **12345**. No step in this chain draws a random number.
 
 | ID | What | Position (mm) | Radius (mm) |
 | -- | ---- | ------------- | ----------- |
-| 1 | Star | [149597870700000, 0, 0] | 696000000000 |
+| 1 | Star | [99731913800000, 99731913800000, 49865956900000] | 696000000000 |
 | 2 | Red Rock | [50000000, 0, 0] | 500000 |
 | 3 | Deposit on 2: 200000 kg hematite, hardness 6 | | |
 | 4 | Brass Rock | [30000000, 0, 40000000] | 400000 |

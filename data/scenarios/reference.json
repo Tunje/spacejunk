@@ -4,7 +4,7 @@
   "name": "Reference Scenario",
   "seed": 12345,
   "bodies": [
-    { "key": "star", "name": "Star", "kind": "star", "pos_mm": [149597870700000, 0, 0],
+    { "key": "star", "name": "Star", "kind": "star", "pos_mm": [99731913800000, 99731913800000, 49865956900000],
       "radius_mm": 696000000000, "visual_seed": 1, "deposits": [] },
     { "key": "rock_hematite", "name": "Red Rock", "kind": "asteroid", "pos_mm": [50000000, 0, 0],
       "radius_mm": 500000, "visual_seed": 2, "deposits": ["hematite_deposit"] },

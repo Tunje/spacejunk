@@ -159,6 +159,7 @@ func test_lost_power_ends_an_order() -> void:
 
 func test_a_part_still_held_shed_ends_a_new_order() -> void:
 	state["parts"][LIDAR]["shed"] = true
+	state["parts"][LIDAR]["shed_until_tick"] = 1000
 	var events := _run(_scan(), 2)
 	assert_eq(_types(events), ["task_started", "task_cancelled"])
 	assert_eq(events[1]["data"]["reason"], "no_power")
