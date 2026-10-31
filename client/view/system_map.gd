@@ -9,6 +9,7 @@ const FAR_DECADE_FACTOR := 0.35
 const KM_IN_M := 1000.0
 const RINGS_KM: Array[float] = [1.0, 10.0, 100.0, 10000.0, 100000000.0]
 const RING_SEGMENTS := 96
+const RING_COLOUR := Color(0.2, 0.22, 0.27)
 const ROUTE_SEGMENTS := 24
 const CLICK_SLOP_PX := 5.0
 
@@ -53,8 +54,8 @@ func bind(new_bridge: SimBridge, view: LocalView) -> void:
 	overlay.map = self
 	camera.current = false
 	camera.pitch = -0.75
-	camera.distance_m = 38.0
-	camera.target_distance_m = 38.0
+	camera.distance_m = 46.0
+	camera.target_distance_m = 46.0
 	rings.mesh = _build_rings()
 	rings.material_override = _line_material()
 	routes.mesh = ImmediateMesh.new()
@@ -134,8 +135,8 @@ func _draw_routes(view: Dictionary, centre: Array) -> void:
 
 func _add_line(mesh: ImmediateMesh, from: Vector3, to: Vector3, colour: Color) -> void:
 	mesh.surface_begin(Mesh.PRIMITIVE_LINE_STRIP)
-	mesh.surface_set_color(colour)
 	for index in range(ROUTE_SEGMENTS + 1):
+		mesh.surface_set_color(colour)
 		mesh.surface_add_vertex(SystemMap.project(from.lerp(to, float(index) / ROUTE_SEGMENTS)))
 	mesh.surface_end()
 
@@ -205,13 +206,12 @@ func click_at(screen: Vector2) -> void:
 
 func _build_rings() -> ImmediateMesh:
 	var mesh := ImmediateMesh.new()
-	var colour := ClientTheme.MID_GREY.darkened(0.35)
 	for km: float in RINGS_KM:
 		var radius := SystemMap.map_radius(km * KM_IN_M)
 		mesh.surface_begin(Mesh.PRIMITIVE_LINE_STRIP)
-		mesh.surface_set_color(colour)
 		for index in range(RING_SEGMENTS + 1):
 			var angle := TAU * index / RING_SEGMENTS
+			mesh.surface_set_color(RING_COLOUR)
 			mesh.surface_add_vertex(Vector3(cos(angle), 0.0, sin(angle)) * radius)
 		mesh.surface_end()
 	return mesh
@@ -221,4 +221,5 @@ func _line_material() -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material.vertex_color_use_as_albedo = true
+	material.vertex_color_is_srgb = true
 	return material
