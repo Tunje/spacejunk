@@ -4,6 +4,8 @@ class_name OrderPanel extends PanelContainer
 
 const WIDTH_PX := 300
 
+signal order_issued(command: Dictionary)
+
 var bridge: SimBridge
 var local_view: LocalView
 var _modules: Dictionary = {}
@@ -107,6 +109,7 @@ func _issue(key: String) -> void:
 	for order: Dictionary in _orders:
 		if order["key"] == key:
 			bridge.submit(order["command"])
+			order_issued.emit(order["command"])
 			return
 
 

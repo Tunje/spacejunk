@@ -6,6 +6,7 @@ signal map_pressed
 signal policy_pressed
 signal fit_pressed
 signal jobs_pressed
+signal auto_pressed
 
 var bridge: SimBridge
 
@@ -47,6 +48,11 @@ func _ready() -> void:
 	jobs_button.focus_mode = Control.FOCUS_NONE
 	jobs_button.pressed.connect(func() -> void: jobs_pressed.emit())
 	row.add_child(jobs_button)
+	var auto_button := Button.new()
+	auto_button.text = "Auto"
+	auto_button.focus_mode = Control.FOCUS_NONE
+	auto_button.pressed.connect(func() -> void: auto_pressed.emit())
+	row.add_child(auto_button)
 	var policy_button := Button.new()
 	policy_button.text = "Policy"
 	policy_button.focus_mode = Control.FOCUS_NONE

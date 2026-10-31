@@ -8,6 +8,7 @@ class_name ScreenshotDriver extends Node
 ##   --policy=1                      opens the standing-orders mock
 ##   --then=<order key>              pressed --then-delay frames after --order
 ##   --last=<order key>              pressed --last-delay frames after --then
+##   --cycle=1                       fits a tier 2 core and starts a short cycle at once
 ##   --jobs=<recipe id>              opens the jobs screen and starts that recipe
 ##   --fit=<item>  --fit-slot=<connector>  opens fitting after the orders and picks both
 
@@ -69,6 +70,40 @@ func _run() -> void:
 		await _open_fitting()
 	if parsed.has("jobs"):
 		await _open_jobs()
+	if parsed.has("cycle"):
+		await _start_demo_cycle()
+
+
+## A stand-in for a hand-flown trip, which takes minutes to reach on the real Sim.
+func _start_demo_cycle() -> void:
+	var bridge: SimBridge = main.bridge
+	var view: Dictionary = bridge.current_view
+	var ship: int = main.local_view.commanded_unit
+	var unit: Dictionary = view["units"][ship]
+	var host: int = unit["dock"]["target_unit"]
+	var mass: int = bridge.defs()["modules"]["assisted_core"]["mass_g"]
+	bridge.sim._state["units"][host]["inventory"]["assisted_core"] = mass
+	bridge.submit(FittingLogic.detach_command(ship, unit["core"], host))
+	bridge.submit(FittingLogic.attach_command(ship, { "item": "assisted_core", "from": host }, {
+		"part": unit["parts"]["id"], "connector": "core",
+	}))
+	for i in range(30):
+		await get_tree().process_frame
+	var screen: AutomationScreen = main.automation_screen
+	main.toggle_automation()
+	screen.assign(CyclePlan.cores(screen.unit(), screen._defs["modules"])[0]["part"])
+	for i in range(30):
+		await get_tree().process_frame
+	var rock := 0
+	for id: int in view["bodies"]:
+		if view["bodies"][id]["kind"] == "asteroid":
+			rock = id
+	screen.note_order({ "type": "undock", "unit": ship, "args": {} })
+	screen.note_order({ "type": "move_to", "unit": ship, "args": { "target": rock } })
+	var home := { "type": "move_to", "unit": ship, "args": { "target": host } }
+	screen.trip.append({ "type": home["type"], "args": home["args"] })
+	screen.trip.append({ "type": "dock", "args": { "port": unit["dock"]["port"], "target_port": unit["dock"]["target_port"] } })
+	screen.repeat_route()
 
 
 func _open_jobs() -> void:
