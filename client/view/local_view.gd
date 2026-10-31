@@ -15,6 +15,10 @@ const MAX_SHADOW_RANGE_M := 9000.0
 const AIM_RATE := 2.0
 ## Beams end inside the rock, so its lumpy surface hides the end.
 const BEAM_DEPTH := 0.5
+const SPREAD_RATE := 2.0
+const CROWD_MM := 20000
+const SPREAD_MIN_M := 14.0
+const SPREAD_STEP_M := 5.0
 
 var bridge: SimBridge
 var selected_kind := ""
@@ -215,7 +219,11 @@ func _place_craft(craft: CraftNode, id: int, before: Dictionary, after: Dictiona
 		var aim := CraftLayout.to_metres(unit["route"]["to_mm"]) - CraftLayout.to_metres(unit["route"]["from_mm"])
 		if aim.length_squared() > 0.0:
 			craft.heading = craft.heading.slerp(CraftLayout.heading_towards(aim), 1.0 - exp(-HEADING_RATE * delta))
-	var free := Transform3D(Basis(craft.heading), relative)
+	var wanted := Vector3.ZERO
+	if _is_crowded(unit, id, after):
+		wanted = LocalView.spread_offset(id)
+	craft.display_offset = craft.display_offset.lerp(wanted, 1.0 - exp(-SPREAD_RATE * delta))
+	var free := Transform3D(Basis(craft.heading), relative + craft.display_offset)
 	var docked := _docked_transform(craft, unit)
 	var is_docked: bool = not unit["dock"].is_empty()
 	if is_docked and craft.dock_blend == 0.0:
@@ -231,6 +239,27 @@ func _place_craft(craft: CraftNode, id: int, before: Dictionary, after: Dictiona
 		craft.transform = free.interpolate_with(craft.undock_from, smoothstep(0.0, 1.0, craft.dock_blend))
 	else:
 		craft.transform = free
+
+
+## Craft arriving at one target stop almost on top of each other. Stations stay
+## put, and docked craft are placed by their ports instead.
+func _is_crowded(unit: Dictionary, id: int, view: Dictionary) -> bool:
+	if unit["kind"] == "station" or not unit["dock"].is_empty():
+		return false
+	for other: int in view["units"]:
+		var neighbour: Dictionary = view["units"][other]
+		if other != id and neighbour["kind"] != "station" and neighbour["dock"].is_empty():
+			if IntMath.dist(unit["pos_mm"], neighbour["pos_mm"]) < CROWD_MM:
+				return true
+	return false
+
+
+## A display-only nudge unique to each craft. The golden angle keeps any group
+## evenly spread without knowing how many craft are in it. The sim never sees it.
+static func spread_offset(id: int) -> Vector3:
+	var angle := id * 2.39996
+	var radius := SPREAD_MIN_M + SPREAD_STEP_M * (id % 7)
+	return Vector3(cos(angle), 0.0, sin(angle)) * radius
 
 
 func _update_effects(craft: CraftNode, id: int, view: Dictionary, delta: float) -> void:

@@ -19,6 +19,7 @@ var part_transforms: Dictionary = {}
 var fit_radius_m := 10.0
 var heading := Quaternion.IDENTITY
 var dock_blend := 0.0
+var display_offset := Vector3.ZERO
 ## Where a docking approach began, in the host's frame.
 var dock_start := Transform3D.IDENTITY
 ## The last docked transform, which an undock eases away from.

@@ -3,7 +3,7 @@ class_name ScreenshotDriver extends Node
 ## after `--` is optional:
 ##   --select=ship|station|asteroid  --focus=ship|station|asteroid
 ##   --order=<order key>             pressed after --delay frames
-##   --speed=1|2|4|8  --zoom=<metres>  --yaw=<radians>  --pitch=<radians>
+##   --scenario=<id>  (read by main)  --speed=1|2|4|8  --zoom=<metres>  --yaw=<radians>  --pitch=<radians>
 ##   --map=1                         opens the system map
 ##   --policy=1                      opens the standing-orders mock
 ##   --then=<order key>              pressed --then-delay frames after --order
