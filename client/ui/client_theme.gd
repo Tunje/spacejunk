@@ -29,6 +29,8 @@ static func build() -> Theme:
 	built.set_color("font_color", "Label", OFF_WHITE)
 	for state: String in ["normal", "hover", "pressed", "hover_pressed", "disabled"]:
 		built.set_stylebox(state, "CheckBox", StyleBoxEmpty.new())
+	built.set_stylebox("background", "ProgressBar", _box(Color(0.2, 0.22, 0.26), 3, 0))
+	built.set_stylebox("fill", "ProgressBar", _box(OFF_WHITE, 3, 0))
 	built.set_icon("unchecked", "CheckBox", _outline_box_icon())
 	built.set_color("font_pressed_color", "CheckBox", OFF_WHITE)
 	built.set_color("font_hover_pressed_color", "CheckBox", Color.WHITE)

@@ -40,6 +40,7 @@ const REASONS: Dictionary = {
 	"root_part": "The root part cannot be removed",
 	"tier_too_low": "AI core tier is too low",
 	"unknown_deposit": "Deposit not found",
+	"unknown_command": "Not available yet",
 	"unknown_part": "Part no longer exists",
 	"unknown_unit": "Craft no longer exists",
 }

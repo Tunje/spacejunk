@@ -20,8 +20,7 @@ func update_entities() -> void:
 	var view := local_view.bridge.current_view
 	for id: int in local_view.bodies:
 		var body: BodyNode = local_view.bodies[id]
-		var label := "Star" if body.kind == "star" else "Asteroid %d" % id
-		_add_entry("body", id, body, body.scale.x, label)
+		_add_entry("body", id, body, body.scale.x, view["bodies"][id]["name"])
 	for id: int in local_view.crafts:
 		var craft: CraftNode = local_view.crafts[id]
 		_add_entry("unit", id, craft, craft.fit_radius_m, view["units"][id]["name"])
