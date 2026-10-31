@@ -257,3 +257,30 @@ func test_a_fabricated_module_installs_on_a_docked_ship() -> void:
 	assert_eq(_types(sim.take_events()), ["part_attached"])
 	assert_eq(sim.view()["units"][SHIP]["heat"]["reject_w"], before + 200000)
 	assert_false(state["units"][STATION]["inventory"].has("heat_radiator_mk1"))
+
+
+## Saves now, loads it with this test's definitions, applies `change` to both games, and requires
+## both to run on identically. The state keeps the real data hash, so the load is accepted.
+func _assert_load_resumes(change: Callable, ticks: int = 8) -> void:
+	sim.take_events()
+	var loaded := Sim.from_save(sim.to_save())
+	assert_not_null(loaded)
+	loaded._ctx.defs = defs
+	assert_eq(loaded.to_save(), sim.to_save(), "round trip")
+	change.call(sim)
+	change.call(loaded)
+	sim.step(ticks)
+	loaded.step(ticks)
+	assert_eq(loaded.state_hash(), sim.state_hash())
+	assert_eq(loaded.take_events(), sim.take_events(), "the same events")
+
+
+func test_a_load_finishes_a_build_waiting_for_a_port() -> void:
+	var blocker := _fill_free_port()
+	_give_inputs("mining_drone")
+	sim.submit(_start("mining_drone"))
+	sim.step(RUN_TICKS + 1)
+	assert_eq(sim.view()["jobs"].values()[0]["reason"], "no_free_port")
+	_assert_load_resumes(func(game: Sim) -> void: game._state["units"][blocker]["dock"] = {})
+	assert_eq(sim.view()["jobs"].size(), 0, "the unit was built")
+
