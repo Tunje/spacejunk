@@ -21,7 +21,7 @@ func detect(ctx: SimContext) -> void:
 	var flows: Dictionary = ctx.flows[FLOW_KEY]
 	for id: int in _sorted(ctx.state["units"]):
 		var unit: Dictionary = ctx.state["units"][id]
-		var limit_j := Units.capability_sum(ctx.state, ctx.defs, id, "heat_capacity", "limit_j")
+		var limit_j: int = UnitIndex.of(ctx, id)["limit_j"]
 		if unit["heat_stored_j"] > limit_j:
 			_fault_parts(ctx, id, flows[id])
 		elif unit["heat_stored_j"] <= IntMath.mul_div(limit_j, HEAT_CLEAR_PPM, PPM):
@@ -36,10 +36,12 @@ func fill_ledger(ctx: SimContext, ledger: Dictionary) -> void:
 ## so radiators build no credit while the loop is cold.
 func _settle_loop(ctx: SimContext, id: int, ran: Array) -> Dictionary:
 	var unit: Dictionary = ctx.state["units"][id]
+	var index := UnitIndex.of(ctx, id)
+	var heat_w: Dictionary = index["heat_w"]
 	var input_w := 0
 	for part_id: int in ran:
-		input_w += Units.module_of(ctx.state, ctx.defs, part_id)["heat_w"]
-	var reject_w := Units.healthy_sum(ctx.state, ctx.defs, id, "radiator", "reject_w")
+		input_w += heat_w[part_id]
+	var reject_w := UnitIndex.healthy_total(ctx, index["radiators"])
 	var before_j: int = unit["heat_stored_j"]
 	var in_rem: int = unit["heat_in_remainder"]
 	var out_rem: int = unit["heat_out_remainder"]
@@ -68,7 +70,7 @@ func _fault_parts(ctx: SimContext, id: int, flow: Dictionary) -> void:
 	for part_id: int in producers:
 		if input_w <= flow["reject_w"]:
 			return
-		var heat_w: int = Units.module_of(ctx.state, ctx.defs, part_id)["heat_w"]
+		var heat_w: int = UnitIndex.of(ctx, id)["heat_w"][part_id]
 		if heat_w > 0:
 			parts[part_id]["fault"] = REASON_OVER_LIMIT
 			input_w -= heat_w
@@ -76,7 +78,7 @@ func _fault_parts(ctx: SimContext, id: int, flow: Dictionary) -> void:
 
 
 func _clear_faults(ctx: SimContext, id: int) -> void:
-	for part_id in Units.sorted_part_ids(ctx.state, id):
+	for part_id: int in UnitIndex.of(ctx, id)["ids"]:
 		var part: Dictionary = ctx.state["parts"][part_id]
 		if part["fault"] == REASON_OVER_LIMIT:
 			part["fault"] = ""

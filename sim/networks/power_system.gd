@@ -49,9 +49,10 @@ func calculate_power(ctx: SimContext) -> void:
 
 func allocate(ctx: SimContext) -> void:
 	var flows: Dictionary = ctx.flows[FLOW_KEY]
+	var jobs := _jobs_by_unit(ctx)
 	for id: int in _sorted(ctx.state["units"]):
 		var flow: Dictionary = flows[id]
-		var loads := _loads(ctx, id)
+		var loads := _loads(ctx, id, jobs.get(id, []))
 		_choose(ctx, id, loads, flow["budget_w"])
 		_settle_flows(flow, loads)
 
@@ -70,27 +71,25 @@ func fill_ledger(ctx: SimContext, ledger: Dictionary) -> void:
 
 ## Phase 3: healthy supply and what each healthy battery can give this tick.
 func _available(ctx: SimContext, unit: int) -> Dictionary:
-	var supply_w := 0
+	var index := UnitIndex.of(ctx, unit)
+	var supply_w := UnitIndex.healthy_total(ctx, index["generators"])
 	var budget_w := 0
 	var batteries := {}
-	for part_id in Units.sorted_part_ids(ctx.state, unit):
-		var part: Dictionary = ctx.state["parts"][part_id]
+	for entry: Array in index["batteries"]:
+		var part: Dictionary = ctx.state["parts"][entry[0]]
 		if part["fault"] != "":
 			continue
-		var capabilities: Dictionary = Units.module_of(ctx.state, ctx.defs, part_id)["capabilities"]
-		supply_w += capabilities.get("generate", {}).get("power_w", 0)
-		if capabilities.has("battery"):
-			var limits: Dictionary = capabilities["battery"]
-			var cap_w := maxi(0, mini(limits["max_discharge_w"],
-				part["stored_j"] * Sim.TICKS_PER_SECOND - part["discharge_remainder"]))
-			batteries[part_id] = {
-				"discharge_cap_w": cap_w, "max_charge_w": limits["max_charge_w"],
-				"free_w": maxi(0, (limits["capacity_j"] - part["stored_j"]) * Sim.TICKS_PER_SECOND
-					- part["charge_remainder"]),
-				"efficiency_ppm": limits["charge_efficiency_ppm"],
-				"discharged_w": 0, "charged_w": 0, "stored_w": 0, "conversion_loss_w": 0,
-			}
-			budget_w += cap_w
+		var limits: Dictionary = entry[1]
+		var cap_w := maxi(0, mini(limits["max_discharge_w"],
+			part["stored_j"] * Sim.TICKS_PER_SECOND - part["discharge_remainder"]))
+		batteries[entry[0]] = {
+			"discharge_cap_w": cap_w, "max_charge_w": limits["max_charge_w"],
+			"free_w": maxi(0, (limits["capacity_j"] - part["stored_j"]) * Sim.TICKS_PER_SECOND
+				- part["charge_remainder"]),
+			"efficiency_ppm": limits["charge_efficiency_ppm"],
+			"discharged_w": 0, "charged_w": 0, "stored_w": 0, "conversion_loss_w": 0,
+		}
+		budget_w += cap_w
 	return {
 		"generated_w": supply_w, "budget_w": budget_w + supply_w, "consumed_w": 0, "discharged_w": 0,
 		"charged_w": 0, "curtailed_w": 0, "batteries": batteries, "ran": [],
@@ -98,8 +97,8 @@ func _available(ctx: SimContext, unit: int) -> Dictionary:
 
 
 ## Every load on a unit in keep order: priority descending, then part ID ascending.
-func _loads(ctx: SimContext, unit: int) -> Array[Dictionary]:
-	var wanted := _wanted_draws(ctx, unit)
+func _loads(ctx: SimContext, unit: int, jobs: Array) -> Array[Dictionary]:
+	var wanted := _wanted_draws(ctx, unit, jobs)
 	var result: Array[Dictionary] = []
 	var parts: Dictionary = ctx.state["parts"]
 	for part_id: int in _sorted(wanted):
@@ -115,27 +114,39 @@ func _loads(ctx: SimContext, unit: int) -> Array[Dictionary]:
 
 
 ## Draw by part ID, for each part that wants power (networks.md section 2).
-func _wanted_draws(ctx: SimContext, unit_id: int) -> Dictionary:
+func _wanted_draws(ctx: SimContext, unit_id: int, jobs: Array) -> Dictionary:
 	var state := ctx.state
 	var unit: Dictionary = state["units"][unit_id]
+	var index := UnitIndex.of(ctx, unit_id)
+	var powers: Dictionary = index["power_w"]
 	var parts: Dictionary = state["parts"]
 	var wanted := {}
-	for part_id in Units.part_ids(state, unit_id):
-		var module: Dictionary = Units.module_of(state, ctx.defs, part_id)
-		if module["capabilities"].get("always_on", false) or part_id == unit["core"]:
-			wanted[part_id] = module["power_w"]
+	for part_id: int in index["always_on"]:
+		wanted[part_id] = powers[part_id]
+	var core: int = unit["core"]
+	if core != 0:
+		wanted[core] = powers[core]
 	var op: Dictionary = unit["op"]
-	if op["part"] != 0 and op["type"] != OP_IDLE and op["type"] != OP_MOVING and parts.has(op["part"]):
-		wanted[op["part"]] = Units.module_of(state, ctx.defs, op["part"])["power_w"]
-	var jobs: Dictionary = state["jobs"]
-	for job_id: int in _sorted(jobs):
-		var job: Dictionary = jobs[job_id]
-		if parts.get(job["facility"], {}).get("unit", 0) == unit_id and _job_is_load(job):
-			wanted[job["facility"]] = ctx.defs["recipes"][job["recipe"]]["power_w"]
+	if op["part"] != 0 and op["type"] != OP_IDLE and op["type"] != OP_MOVING and powers.has(op["part"]):
+		wanted[op["part"]] = powers[op["part"]]
+	for job: Dictionary in jobs:
+		wanted[job["facility"]] = ctx.defs["recipes"][job["recipe"]]["power_w"]
 	for part_id: int in wanted.keys():
 		if parts[part_id]["fault"] != "":
 			wanted.erase(part_id)
 	return wanted
+
+
+## Load-making jobs by the unit their facility is on, in ascending job ID.
+func _jobs_by_unit(ctx: SimContext) -> Dictionary:
+	var result := {}
+	var jobs: Dictionary = ctx.state["jobs"]
+	var parts: Dictionary = ctx.state["parts"]
+	for job_id: int in _sorted(jobs):
+		var job: Dictionary = jobs[job_id]
+		if parts.has(job["facility"]) and _job_is_load(job):
+			result.get_or_add(parts[job["facility"]]["unit"], []).append(job)
+	return result
 
 
 func _job_is_load(job: Dictionary) -> bool:
@@ -179,7 +190,7 @@ func _apply_choice(ctx: SimContext, unit: int, loads: Array[Dictionary]) -> void
 				part["shed_until_tick"] = ctx.tick + SHED_HOLD_SECONDS * Sim.TICKS_PER_SECOND
 			ctx.emit_event("power_shed", unit, { "module": entry["part"], "reason": REASON_NO_POWER })
 	ctx.state["units"][unit]["demand_w"] = demand_w
-	for part_id in Units.part_ids(ctx.state, unit):
+	for part_id: int in UnitIndex.of(ctx, unit)["ids"]:
 		if not is_load.has(part_id):
 			parts[part_id]["shed"] = false
 			parts[part_id]["draw_w"] = 0
