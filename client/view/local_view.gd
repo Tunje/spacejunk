@@ -49,6 +49,17 @@ var _hover_at := Vector2(-1, -1)
 @onready var markers: EntityMarkers = %Markers
 
 
+## Rebuilds the scene from the bridge's current view, after a load.
+func rebuild() -> void:
+	for group: Dictionary in [crafts, bodies, beams]:
+		for id: int in group:
+			group[id].free()
+		group.clear()
+	field.free()
+	_hovered_craft = 0
+	bind(bridge)
+
+
 func bind(new_bridge: SimBridge) -> void:
 	bridge = new_bridge
 	_modules = bridge.defs()["modules"]

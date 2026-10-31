@@ -634,3 +634,144 @@ func test_a_save_while_blocked_resumes_identically() -> void:
 	sim.step(5)
 	loaded.step(5)
 	assert_eq(loaded.state_hash(), sim.state_hash())
+
+
+## Saves now, loads it with the same small-world definitions, applies `change` to both games, and
+## requires both to run on identically. The state keeps the real data hash, so the load is accepted.
+func _assert_load_resumes(change: Callable = func(_game: Sim) -> void: pass, ticks: int = 40) -> void:
+	sim.take_events()
+	var loaded := Sim.from_save(sim.to_save())
+	assert_not_null(loaded)
+	loaded._ctx.defs = defs
+	assert_eq(loaded.to_save(), sim.to_save(), "round trip")
+	change.call(sim)
+	change.call(loaded)
+	sim.step(ticks)
+	loaded.step(ticks)
+	assert_eq(loaded.state_hash(), sim.state_hash())
+	assert_eq(loaded.take_events(), sim.take_events(), "the same events")
+
+
+func _set_fault(game: Sim, part: int, fault: String) -> void:
+	game._state["parts"][part]["fault"] = fault
+
+
+## The unit docked at the free port.
+func _occupant(game: Sim) -> int:
+	var units: Dictionary = game._state["units"]
+	for id: int in units:
+		if units[id]["dock"].get("target_port", 0) == FREE_PORT:
+			return id
+	return 0
+
+
+func test_a_load_resumes_a_step_held_by_a_module_fault() -> void:
+	_add_panel()
+	sim.submit(_set_cycle())
+	_run_to_step("start_mining")
+	sim.step(2)
+	_set_fault(sim, body, "test_fault")
+	sim.step(2)
+	assert_true(_task()["hold"])
+	_assert_load_resumes(func(game: Sim) -> void: _set_fault(game, body, ""))
+
+
+func test_a_load_resumes_a_step_held_by_lost_power() -> void:
+	sim.submit(_set_cycle())
+	_run_to_step("start_mining")
+	state["parts"][body]["shed"] = true
+	state["parts"][body]["shed_until_tick"] = sim.current_tick() + 5
+	sim.step()
+	assert_eq(_task()["reason"], "no_power")
+	_assert_load_resumes()
+
+
+func test_a_load_resumes_a_step_held_by_an_offline_core() -> void:
+	sim.submit(_set_cycle())
+	_run_to_step("start_mining")
+	_set_fault(sim, core, "test_fault")
+	sim.step()
+	assert_eq(_task()["reason"], "core_offline")
+	_assert_load_resumes(func(game: Sim) -> void: _set_fault(game, core, ""))
+
+
+func test_a_load_resumes_an_unload_blocked_by_a_full_destination() -> void:
+	sim.submit(_set_cycle())
+	_run_to_step("unload_cargo")
+	var storage: Dictionary = defs["modules"]["ore_storage_mk1"]["capabilities"]["storage"]["ore"]
+	storage["mass_g"] = 1000
+	sim._ctx.index.clear()
+	_run_to_blocked()
+	assert_eq(_task()["reason"], "cargo_full")
+	storage["mass_g"] = 50000000
+	_assert_load_resumes(func(game: Sim) -> void: game._ctx.index.clear())
+
+
+func test_a_load_resumes_a_cycle_waiting_for_a_port() -> void:
+	var second := _make_drone(FREE_PORT)
+	state["units"][second]["dock"] = {}
+	Units.add_stock(state["units"][second]["inventory"], "propellant", 50000)
+	state["matter_start_g"] = sim.ledger()["matter"]["total_g"]
+	drone = second
+	sim.submit(_set_cycle(_steps(state["units"][second]["root"]), second))
+	sim.step()
+	assert_eq(_task()["reason"], "port_busy")
+	_assert_load_resumes(func(game: Sim) -> void: game._state["units"][_occupant(game)]["dock"] = {})
+
+
+func test_a_load_resumes_a_cycle_out_of_propellant() -> void:
+	var steps := _steps()
+	steps.remove_at(0)
+	sim.submit(_set_cycle(steps))
+	sim.step(3)
+	assert_eq(_task()["reason"], "no_propellant")
+	_assert_load_resumes(func(game: Sim) -> void:
+		Units.add_stock(game._state["units"][drone]["inventory"], "propellant", 50000)
+		game._state["matter_start_g"] += 50000)
+
+
+func test_a_load_keeps_a_cycle_with_a_missing_part_blocked() -> void:
+	var laser := Units.add_part(sim._ctx, drone, "mining_laser_mk1", body, "spare", "mount")
+	state["parts"][body]["children"].append(laser)
+	state["matter_start_g"] = sim.ledger()["matter"]["total_g"]
+	var steps := _steps()
+	steps[3]["args"]["module"] = laser
+	sim.submit(_set_cycle(steps))
+	sim.step()
+	sim.submit(_order("detach_part", { "part": laser, "to": STATION }))
+	_run_to_blocked()
+	assert_eq(_task()["reason"], "module_missing")
+	_assert_load_resumes()
+
+
+func test_a_load_resumes_a_cycle_with_no_safe_step() -> void:
+	var steps := [
+		{ "type": "move_to", "args": { "target": ROCK } },
+		{ "type": "start_mining", "args": { "deposit": DEPOSIT, "module": body } },
+	]
+	sim.submit(_set_cycle(steps))
+	sim.step()
+	assert_eq(_task()["reason"], "no_safe_step")
+	_assert_load_resumes(func(game: Sim) -> void:
+		game._state["units"][drone]["dock"] = {}
+		Units.add_stock(game._state["units"][drone]["inventory"], "propellant", 50000)
+		game._state["matter_start_g"] += 50000)
+
+
+func test_a_load_resumes_a_cycle_suspended_by_an_order() -> void:
+	sim.submit(_set_cycle())
+	_run_to_step("start_mining")
+	sim.submit(_order("move_to", { "target": STATION }))
+	sim.step(3)
+	assert_ne(sim.view()["units"][drone]["cycle_task"], 0)
+	_assert_load_resumes(func(_game: Sim) -> void: pass, 120)
+
+
+func test_a_load_finishes_an_atomic_operation_left_by_stop() -> void:
+	sim.submit(_set_cycle())
+	_run_to_step("undock")
+	sim.submit(_order("stop"))
+	sim.step()
+	assert_eq(sim.view()["units"][drone]["op"]["type"], "undocking")
+	_assert_load_resumes()
+	assert_eq(sim.view()["units"][drone]["op"]["type"], "idle")

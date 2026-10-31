@@ -158,8 +158,8 @@ func test_panel_orders_build_the_trip_with_readable_steps() -> void:
 func test_adapting_adds_the_propellant_load() -> void:
 	_fly_trip_by_hand()
 	var steps := screen.planned_steps()
-	assert_eq(steps[steps.size() - 1]["type"], "load_cargo")
-	assert_eq(steps[steps.size() - 1]["args"]["item"], "propellant")
+	assert_eq(steps[0]["type"], "load_cargo", "first, so an empty drone can leave")
+	assert_eq(steps[0]["args"]["item"], "propellant")
 
 
 func test_a_trip_for_another_craft_uses_its_own_laser_and_port() -> void:
@@ -263,6 +263,5 @@ func test_only_one_side_screen_shows_at_a_time() -> void:
 	assert_false(main.fitting_screen.visible)
 	main.toggle_automation()
 	assert_false(main.industry_screen.visible)
-	assert_false(panel.visible)
-	main.toggle_automation()
-	assert_true(panel.visible)
+	assert_true(panel.visible, "orders stay reachable")
+	assert_true(panel.button_for("Undock") != null)

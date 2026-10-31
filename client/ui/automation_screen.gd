@@ -91,6 +91,17 @@ func note_order(command: Dictionary) -> void:
 	CyclePlan.record(trip, command)
 
 
+func save_state() -> Dictionary:
+	return { "trip": trip.duplicate(true), "trip_unit": trip_unit }
+
+
+func restore_state(state: Dictionary) -> void:
+	trip.assign(state.get("trip", []))
+	trip_unit = state.get("trip_unit", 0)
+	_trip_key = ""
+	_core_key = ""
+
+
 func unit() -> Dictionary:
 	return bridge.current_view["units"].get(local_view.commanded_unit, {})
 
