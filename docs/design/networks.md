@@ -107,9 +107,19 @@ The fault takes effect from the next tick, as the contracts require.
 
 **Bodies and stations do not move in the slice**, so a route is fixed when it starts.
 
-**Stand-off.** A unit never flies to a target's centre, which would put it inside an asteroid. It stops short by `STANDOFF_MM`, a kernel constant of 150000 (150 m), measured from the surface of a body (`radius_mm + STANDOFF_MM` from its centre) or from the position of a unit. `to_mm` is that stop point on the straight line from `from_mm` to the target, calculated with `IntMath`. If the unit is already inside that distance, the route has zero length, costs nothing, and arrives on the next tick.
+**Stand-off.** A unit never flies to a target's centre, which would put it inside an asteroid. It stops short by `STANDOFF_MM`, a kernel constant of 150000 (150 m), measured from the surface of a body (`radius_mm + STANDOFF_MM` from its centre) or from the position of a unit. `to_mm` is that stop point on the straight line from `from_mm` to the target, calculated with `IntMath`:
 
-**At.** Each unit stores `at_target`, the entity ID it has arrived at, or 0. `arrived` sets it. Starting a route or a halt clears it. `undock` sets it to the host and places the unit `STANDOFF_MM` from the host along +X. `at(unit, target)` is true when `at_target` equals the target, and is never derived from geometry. A docked unit takes its host's position and keeps `at_target` set to the host. A halted unit is at nothing. The function lives in the kernel, and `check`, validation and re-entry all share it.
+```text
+total_mm = IntMath.dist(from_mm, target_mm)
+stop_mm  = radius_mm + STANDOFF_MM, or STANDOFF_MM for a unit
+to_mm    = from + sign * mul_div(abs(target - from), total_mm - stop_mm, total_mm), per axis
+```
+
+Each axis floors, so a unit can stop a millimetre or two outside `stop_mm`. Hand calculations must use these floored values, not rounded distances.
+
+**Zero-length routes.** The route has zero length if `at(unit, target)` is already true, or if `total_mm <= stop_mm`. The `at` test comes first and ignores geometry, so repeating an order never pays for the rounding above. `to_mm` equals `from_mm`, and the unit stays where it is.
+
+**At.** Each unit stores `at_target`, the entity ID it has arrived at, or 0. `arrived` sets it. Starting a route or a halt clears it, and also clears it on every undocked unit whose `at_target` is the unit that moved, so nothing stays at a target that has left. `undock` sets it to the host and places the unit `STANDOFF_MM` from the host along +X. `at(unit, target)` is true when `at_target` equals the target, and is never derived from geometry. A docked unit follows its host's position each tick and keeps `at_target` set to the host. A halted unit is at nothing. The function lives in the kernel, and `check`, validation and re-entry all share it.
 
 **Thruster.** The fastest healthy thruster on the unit at departure, with the lowest part ID on a tie. Only that one is priced. Its speed is stored on the route, so nothing that happens to it later matters.
 
@@ -123,12 +133,14 @@ cost_g  = mul_div_ceil(base_g, mass_g, rated_mass_g)
 
 `IntMath.mul_div_ceil` is the rounded-up form of `mul_div`, added with A6. One function computes this, and `check` reports its `ticks` and `cost_g`, so the number shown is the number paid. A full hold costs more to fly. Speed does not depend on mass.
 
+A zero-length route skips these formulas: `ticks` is 1 and `cost_g` is 0, and `check` reports those. It still goes through normal `move_to` validation, including the need for a healthy thruster, so there is one path and a unit with no thruster cannot arrive by order.
+
 **Departure, on tick T.** Phase 1 validation and `check` compare `cost_g` with the unit's propellant. Phase 4 prices the trip again from current state and reserves `cost_g` on the stack. If the stack cannot pay in full, the trip does not start, and the task follows [autonomy.md](autonomy.md) section 7 for `no_propellant`. In phase 6 the whole `cost_g` moves to `propellant_exhaust` in one tick, and the route is set.
 
 **Route.** The route stores `from_mm`, `to_mm`, `length_mm`, `speed_mm_s`, `progress_mm`, a remainder and `eta_tick = T + ticks`. From tick T + 1, each tick:
 - Add `Rate.amount(speed_mm_s, remainder)` to `progress_mm`, clamped to `length_mm`.
-- Each axis of `pos_mm` is `from + sign * mul_div(abs(to - from), progress_mm, length_mm)`.
-- On reaching `length_mm`, `pos_mm` is exactly `to_mm`, and `arrived` fires.
+- Each axis of `pos_mm` is `from + sign * mul_div(abs(to - from), progress_mm, length_mm)`. A zero-length route skips this step, because `length_mm` is 0.
+- On reaching `length_mm`, `pos_mm` is exactly `to_mm`, and `arrived` fires. A zero-length route therefore arrives on tick T + 1.
 
 The remainder carries, so the route takes exactly `ticks`. Position always derives from progress, so rounding never accumulates and arrival is exact. Once paid, a route runs to arrival, unaffected by faults or power, and a trip under way cannot run out.
 
