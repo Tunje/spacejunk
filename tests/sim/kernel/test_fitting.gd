@@ -283,7 +283,7 @@ func test_detach_of_a_subtree_with_a_part_in_use_is_refused() -> void:
 
 
 func test_detach_of_a_facility_with_a_job_is_refused() -> void:
-	state["jobs"][40] = { "facility": 13, "recipe": "refine_hematite", "status": "waiting", "reason": "", "held": {} }
+	state["jobs"][40] = JobFixture.record(state, 13, "refine_hematite", "waiting", "missing_inputs")
 	_assert_refused(_detach(STATION, 13), "part_busy")
 
 

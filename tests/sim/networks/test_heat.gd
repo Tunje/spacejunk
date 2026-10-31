@@ -60,7 +60,7 @@ func test_waste_heat_comes_from_parts_that_ran() -> void:
 
 
 func test_a_job_heats_with_the_module_figure_not_the_recipe() -> void:
-	state["jobs"][40] = { "facility": 14, "recipe": "wiring", "status": "running", "reason": "", "held": {} }
+	state["jobs"][40] = JobFixture.record(state, 14, "wiring", "running")
 	sim.step()
 	assert_eq(sim.ledger()["heat"][STATION]["input_w"], 87_000, "80 kW fabricator, 5 hub, 2 core")
 
@@ -152,7 +152,7 @@ func test_faults_take_lowest_priority_and_highest_id_first() -> void:
 	_set_reject(5000)
 	_set_heat(LIMIT_J)
 	_run_op(LASER)
-	state["jobs"][40] = { "facility": LIDAR, "recipe": "wiring", "status": "running", "reason": "", "held": {} }
+	state["jobs"][40] = JobFixture.record(state, LIDAR, "wiring", "running")
 	sim.step()
 	var faulted: Array = _events_of("fault").map(func(event: Dictionary) -> int:
 		return event["data"]["module"])
