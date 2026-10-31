@@ -8,9 +8,9 @@ const SAVE_TICK := 17
 func _game(seed_value: int = 12345) -> Sim:
 	var sim := Sim.new_game(Sim.SCENARIO_EMPTY, seed_value)
 	sim._register_system(FixtureSystem.new())
-	FixtureSystem.add_unit(sim._state, 7, 1000)
-	FixtureSystem.add_unit(sim._state, 3, 1000)
-	sim._state["jobs"][5] = { "held_g": 500, "end_tick": 30 }
+	FixtureSystem.add_unit(sim, 7, 1000)
+	FixtureSystem.add_unit(sim, 3, 1000)
+	sim._state["jobs"][5] = { "held": { "slag": 500 }, "end_tick": 30 }
 	sim._state["matter_start_g"] = 2500
 	return sim
 
@@ -202,9 +202,11 @@ func test_data_mismatch() -> void:
 	assert_eq(Sim.last_error(), "data_mismatch")
 
 
-func test_unknown_scenario_in_a_save() -> void:
-	assert_null(Sim.from_save(_altered_save(_game(), "scenario", "gone")))
-	assert_eq(Sim.last_error(), "unknown_scenario")
+func test_a_saved_game_does_not_need_its_scenario_file() -> void:
+	var sim := Sim.new_game("reference", 1)
+	var loaded := Sim.from_save(_altered_save(sim, "scenario", "removed_since"))
+	assert_not_null(loaded)
+	assert_eq(loaded.view()["units"].size(), 2)
 
 
 func test_a_good_load_clears_the_last_error() -> void:

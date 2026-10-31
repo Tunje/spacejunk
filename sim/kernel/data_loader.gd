@@ -1,0 +1,201 @@
+class_name DataLoader
+extends RefCounted
+## Reads data/ and converts it to sim units by field name (schemas.md section 2). Definitions are
+## cached, since they never change in a run. Callers must not change what these functions return.
+
+const DATA_DIR := "res://data/"
+const SCENARIO_DIR := "res://data/scenarios/"
+const SCHEMA_VERSION := 1
+const EXACT_TOLERANCE := 1e-9
+const GRAMS_PER_KG := 1000
+const UNITS_PER_KILO := 1000
+## Fields the simulation never reads after load. They stay in defs() for the client, but do not
+## count toward the data hash, so changing them does not invalidate a save.
+const UNREAD_FIELDS: Array[String] = ["visual", "collision", "fabrication", "name", "realism"]
+## Suffix rules, longest first, as [data suffix, sim suffix, factor].
+const SUFFIX_RULES := [
+	["_kg_per_s", "_g_per_s", UNITS_PER_KILO],
+	["_m_s", "_mm_s", UNITS_PER_KILO],
+	["_seconds", "_ticks", Sim.TICKS_PER_SECOND],
+	["_kg", "_g", UNITS_PER_KILO],
+	["_kw", "_w", UNITS_PER_KILO],
+	["_kj", "_j", UNITS_PER_KILO],
+	["_m3", "_l", UNITS_PER_KILO],
+]
+
+## Why the last call failed. Empty after a success.
+static var error := ""
+
+static var _defs_cache := {}
+static var _deposits_cache := {}
+
+
+## All definitions in sim units as { modules, items, recipes, templates, sinks }, or {} with error.
+static func load_defs() -> Dictionary:
+	error = ""
+	if not _defs_cache.is_empty():
+		return _defs_cache
+	var modules := _load_table("modules")
+	var items := _load_table("items")
+	var recipes := _load_table("recipes")
+	var templates := _load_table("templates")
+	var sinks := _load_table("sinks")
+	if error != "":
+		return {}
+	_derive_module_items(modules, items)
+	_add_recipe_grams(recipes, items)
+	if error != "":
+		return {}
+	_defs_cache = {
+		"modules": modules, "items": items, "recipes": recipes,
+		"templates": templates, "sinks": sinks,
+	}
+	return _defs_cache
+
+
+## Deposit definitions, which clients must learn through scanning, so they are not in defs().
+static func load_deposits() -> Dictionary:
+	error = ""
+	if _deposits_cache.is_empty():
+		_deposits_cache = _load_table("deposits")
+	return _deposits_cache
+
+
+static func has_scenario(scenario_id: String) -> bool:
+	return scenario_id.is_valid_ascii_identifier() \
+		and FileAccess.file_exists("%s%s.json" % [SCENARIO_DIR, scenario_id])
+
+
+## One scenario in sim units, or {} with error.
+static func load_scenario(scenario_id: String, items: Dictionary) -> Dictionary:
+	error = ""
+	var parsed: Variant = _read_json("%s%s.json" % [SCENARIO_DIR, scenario_id])
+	if error != "":
+		return {}
+	var scenario: Dictionary = _convert(parsed, "", 1, scenario_id)
+	for unit: Dictionary in scenario.get("units", []):
+		_add_amount_grams(unit["inventory"], items, unit["key"])
+	return {} if error != "" else scenario
+
+
+## A copy of the definitions holding only what the simulation reads after load.
+static func read_after_load(defs: Dictionary) -> Dictionary:
+	var result: Dictionary = defs.duplicate(true)
+	for section: String in result:
+		var entries: Dictionary = result[section]
+		for id: String in entries:
+			var entry: Dictionary = entries[id]
+			for field: String in UNREAD_FIELDS:
+				entry.erase(field)
+	return result
+
+
+## Clears the caches, so a test can load changed files.
+static func reset_cache() -> void:
+	_defs_cache = {}
+	_deposits_cache = {}
+
+
+static func _load_table(table: String) -> Dictionary:
+	var parsed: Variant = _read_json("%s%s.json" % [DATA_DIR, table])
+	if error != "":
+		return {}
+	var result := {}
+	for entry: Variant in parsed["entries"]:
+		var converted: Dictionary = _convert(entry, "", 1, table)
+		result[converted["id"]] = converted
+	return result
+
+
+static func _read_json(path: String) -> Variant:
+	if not FileAccess.file_exists(path):
+		_fail("missing %s" % path)
+		return null
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+	if typeof(parsed) != TYPE_DICTIONARY or roundi(parsed.get("schema_version", 0)) != SCHEMA_VERSION:
+		_fail("%s is not a version %d data file" % [path, SCHEMA_VERSION])
+		return null
+	return parsed
+
+
+## Copies a parsed value, converting numbers by the field they sit under and renaming fields.
+static func _convert(value: Variant, key: String, factor: int, path: String) -> Variant:
+	match typeof(value):
+		TYPE_FLOAT:
+			return _exact(value, factor, "%s.%s" % [path, key])
+		TYPE_ARRAY:
+			var result: Array = []
+			var values: Array = value
+			for item: Variant in values:
+				result.append(_convert(item, key, factor, path))
+			return result
+		TYPE_DICTIONARY:
+			return _convert_map(value, path)
+	return value
+
+
+static func _convert_map(map: Dictionary, path: String) -> Dictionary:
+	var result := {}
+	for key: String in map:
+		if key == "visual":
+			result[key] = map[key].duplicate(true)
+			continue
+		var rule := _rule(key)
+		result[rule[0]] = _convert(map[key], key, rule[1], "%s.%s" % [path, key])
+	return result
+
+
+## The sim field name and factor for a data field, as [name, factor].
+static func _rule(key: String) -> Array:
+	match key:
+		"density_kg_m3":
+			return ["density_g_l", 1]
+		"kg":
+			return ["grams", GRAMS_PER_KG]
+		"seconds":
+			return ["ticks", Sim.TICKS_PER_SECOND]
+	for rule: Array in SUFFIX_RULES:
+		if key.ends_with(rule[0]):
+			return [key.trim_suffix(rule[0]) + rule[1], rule[2]]
+	return [key, 1]
+
+
+static func _exact(value: float, factor: int, where: String) -> int:
+	var scaled := value * factor
+	var rounded := roundi(scaled)
+	if absf(scaled - rounded) > EXACT_TOLERANCE * maxf(1.0, absf(scaled)):
+		_fail("%s = %s does not convert exactly" % [where, value])
+	return rounded
+
+
+## One item per module, with the same ID, as schemas.md section 3 sets out.
+static func _derive_module_items(modules: Dictionary, items: Dictionary) -> void:
+	for id: String in modules:
+		var module: Dictionary = modules[id]
+		items[id] = {
+			"id": id, "name": module["name"], "stage": 5, "cargo_class": "goods",
+			"density_g_l": module["mass_g"] / module["volume_l"], "unit_mass_g": module["mass_g"],
+		}
+
+
+static func _add_recipe_grams(recipes: Dictionary, items: Dictionary) -> void:
+	for id: String in recipes:
+		_add_amount_grams(recipes[id]["inputs"], items, id)
+		_add_amount_grams(recipes[id]["outputs"], items, id)
+
+
+## Gives every entry authored with `count` its `grams`, so all amounts read the same way.
+static func _add_amount_grams(entries: Array, items: Dictionary, where: String) -> void:
+	for entry: Dictionary in entries:
+		if not entry.has("count"):
+			continue
+		var item: Dictionary = items.get(entry["item"], {})
+		if not item.has("unit_mass_g"):
+			_fail("%s counts %s, which is not discrete" % [where, entry["item"]])
+			return
+		entry["grams"] = IntMath.mul_div(entry["count"], item["unit_mass_g"], 1)
+
+
+static func _fail(message: String) -> void:
+	if error == "":
+		error = message

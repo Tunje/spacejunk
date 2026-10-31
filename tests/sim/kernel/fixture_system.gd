@@ -16,8 +16,13 @@ var injected_g := 0
 var extra_events: Array = []
 
 
-static func add_unit(state: Dictionary, id: int, grams: int) -> void:
-	state["units"][id] = { "inventory": { "hematite": grams }, "mined_remainder": 0, "pos_mm": [0, 0, 0] }
+## Adds a unit with no parts, and the one item definition kernel tests need.
+static func add_unit(sim: Sim, id: int, grams: int) -> void:
+	sim._ctx.defs["items"]["hematite"] = { "cargo_class": "ore", "density_g_l": 5000 }
+	var unit := Units.new_record(id, "", "ship", "", [0, 0, 0])
+	unit["inventory"]["hematite"] = grams
+	unit["mined_remainder"] = 0
+	sim._state["units"][id] = unit
 
 
 func commands() -> PackedStringArray:
@@ -77,8 +82,7 @@ func _run_jobs(ctx: SimContext) -> void:
 		var job: Dictionary = jobs[id]
 		if job["end_tick"] == ctx.tick:
 			var sink: Dictionary = ctx.state["sinks"].get_or_add(SINK, {})
-			sink[ITEM] = sink.get(ITEM, 0) + job["held_g"]
-			job["held_g"] = 0
+			sink[ITEM] = sink.get(ITEM, 0) + job["held"][ITEM]
 			jobs.erase(id)
 
 
@@ -104,12 +108,5 @@ func detect(_ctx: SimContext) -> void:
 	calls.append("detect")
 
 
-func fill_ledger(ctx: SimContext, ledger: Dictionary) -> void:
-	var total := injected_g
-	var units: Dictionary = ctx.state["units"]
-	for id: int in units:
-		total += units[id]["inventory"]["hematite"]
-	ledger["matter"]["inventories_g"] += total
-	var jobs: Dictionary = ctx.state["jobs"]
-	for id: int in jobs:
-		ledger["matter"]["jobs_g"] += jobs[id]["held_g"]
+func fill_ledger(_ctx: SimContext, ledger: Dictionary) -> void:
+	ledger["matter"]["inventories_g"] += injected_g
