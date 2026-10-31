@@ -1,4 +1,4 @@
-[gd_scene load_steps=20 format=3]
+[gd_scene load_steps=21 format=3]
 
 [ext_resource type="Script" path="res://client/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://client/sim_bridge.gd" id="2_bridge"]
@@ -17,6 +17,7 @@
 [ext_resource type="Script" path="res://client/ui/fitting_screen.gd" id="14_fitting"]
 [ext_resource type="Script" path="res://client/ui/fitting_markers.gd" id="15_slots"]
 [ext_resource type="Script" path="res://client/ui/industry_screen.gd" id="16_industry"]
+[ext_resource type="Script" path="res://client/ui/automation_screen.gd" id="17_auto"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_sky"]
 shader = ExtResource("9_sky")
@@ -159,6 +160,17 @@ offset_top = 12.0
 offset_right = -12.0
 grow_horizontal = 0
 script = ExtResource("16_industry")
+
+[node name="AutomationScreen" type="PanelContainer" parent="Overlay"]
+unique_name_in_owner = true
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -412.0
+offset_top = 12.0
+offset_right = -12.0
+grow_horizontal = 0
+script = ExtResource("17_auto")
 
 [node name="EventLog" type="PanelContainer" parent="Overlay"]
 unique_name_in_owner = true

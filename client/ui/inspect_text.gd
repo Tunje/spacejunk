@@ -58,6 +58,10 @@ static func status(unit: Dictionary, view: Dictionary) -> String:
 	var task: Dictionary = view["tasks"].get(unit["task"], {})
 	if task.get("state", "") == "blocked":
 		text += ". Blocked: %s" % OrderText.reason(task["reason"])
+		if task["reason"] == "core_offline":
+			var fault := CyclePlan.first_fault(unit)
+			if not fault.is_empty():
+				text += " (%s)" % OrderText.reason(fault["fault"])
 	return text
 
 
