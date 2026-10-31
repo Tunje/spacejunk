@@ -82,6 +82,7 @@ func test_a_unit_with_no_core_refuses_orders() -> void:
 
 func test_an_offline_core_refuses_orders() -> void:
 	state["parts"][CORE]["shed"] = true
+	state["parts"][CORE]["shed_until_tick"] = 1000
 	var events := _run(_scan())
 	assert_eq(events[0]["data"]["reason"], "core_offline")
 
@@ -152,6 +153,7 @@ func test_lost_power_ends_an_order() -> void:
 	sim.step()
 	sim.take_events()
 	state["parts"][LIDAR]["shed"] = true
+	state["parts"][LIDAR]["shed_until_tick"] = 1000
 	sim.step()
 	assert_eq(sim.take_events()[0]["data"]["reason"], "no_power")
 	_assert_idle()
