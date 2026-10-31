@@ -5,6 +5,10 @@ class_name StubSim extends RefCounted
 
 const TICKS_PER_SECOND := 10
 const SCENARIO_ID := "stub"
+## The stub scenario with extra ships, well above the slice's real craft count.
+const SCENARIO_LOAD := "stub_load"
+const LOAD_EXTRA_SHIPS := 11
+const LOAD_SHIP_SPACING_MM := 40000
 const DATA_DIR := "res://client/stub/data/"
 const SAVE_HEADER := "stub-save:1\n"
 const SAVE_PREFIX := "stub-save:"
@@ -21,12 +25,13 @@ var _events: Array[Dictionary] = []
 
 static func new_game(scenario_id: String, seed_value: int) -> StubSim:
 	_last_error = ""
-	if scenario_id != SCENARIO_ID:
+	if scenario_id != SCENARIO_ID and scenario_id != SCENARIO_LOAD:
 		_last_error = "unknown_scenario"
 		return null
 	var sim := StubSim.new()
 	sim._defs = _load_defs()
-	sim._state = _build_state(sim._defs, seed_value)
+	var extra_ships := LOAD_EXTRA_SHIPS if scenario_id == SCENARIO_LOAD else 0
+	sim._state = _build_state(sim._defs, seed_value, extra_ships)
 	return sim
 
 
@@ -195,12 +200,13 @@ static func _convert(value: Variant) -> Variant:
 	return value
 
 
-static func _build_state(module_defs: Dictionary, seed_value: int) -> Dictionary:
+static func _build_state(module_defs: Dictionary, seed_value: int, extra_ships: int) -> Dictionary:
 	var scenario: Dictionary = _convert(_read_json("scenario.json"))
 	var state: Dictionary = {
 		"tick": 0, "seed": seed_value, "next_id": 1, "next_command": 1, "queue": [],
 		"units": {}, "bodies": {}, "deposits": {}, "hidden_deposits": {}, "tasks": {},
 	}
+	_add_extra_ships(scenario["units"], extra_ships)
 	var body_ids: Dictionary = {}
 	for entry: Dictionary in scenario["bodies"]:
 		var id := _next_id(state)
@@ -225,6 +231,15 @@ static func _build_state(module_defs: Dictionary, seed_value: int) -> Dictionary
 			"inventory": entry["inventory"],
 		}
 	return state
+
+
+static func _add_extra_ships(units: Array, count: int) -> void:
+	var template: Dictionary = units[units.size() - 1]
+	for index in range(count):
+		var ship: Dictionary = template.duplicate(true)
+		ship["name"] = "Probe %d" % (index + 2)
+		ship["pos_mm"][2] += LOAD_SHIP_SPACING_MM * (index + 1)
+		units.append(ship)
 
 
 static func _unit_named(state: Dictionary, unit_name: String) -> int:

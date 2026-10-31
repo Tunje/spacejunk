@@ -15,7 +15,9 @@ const SEED_VALUE := 1
 
 
 func _ready() -> void:
-	bridge.start(StubSim.new_game(SCENARIO, SEED_VALUE))
+	var args := OS.get_cmdline_user_args()
+	var scenario: String = ScreenshotRunner.parse_args(args).get("scenario", SCENARIO)
+	bridge.start(StubSim.new_game(scenario, SEED_VALUE))
 	time_controls.bind(bridge)
 	markers.local_view = local_view
 	local_view.bind(bridge)
@@ -24,9 +26,9 @@ func _ready() -> void:
 	system_map.bind(bridge, local_view)
 	time_controls.map_pressed.connect(toggle_map)
 	time_controls.policy_pressed.connect(standing_orders.toggle)
-	var args := OS.get_cmdline_user_args()
 	ScreenshotDriver.attach_if_requested(self, args)
 	ScreenshotRunner.attach_if_requested(self, args)
+	FrameProbe.attach_if_requested(self, args)
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
