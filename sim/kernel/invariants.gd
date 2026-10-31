@@ -15,11 +15,43 @@ const MAX_POSITION_MM := 4_000_000_000_000_000_000
 const INVENTORY_KEY := "inventory"
 
 
-## Every out-of-range or non-plain value in a state tree.
+## Every out-of-range or non-plain value in a state tree. A clean state skips the slower walk that
+## names each path, since test runs do this every tick.
 static func violations(state: Dictionary) -> PackedStringArray:
 	var found := PackedStringArray()
-	_walk(state, "", "$", found)
+	if not _is_clean(state, ""):
+		_walk(state, "", "$", found)
 	return found
+
+
+static func _is_clean(value: Variant, key: String) -> bool:
+	match typeof(value):
+		TYPE_INT:
+			return _in_range(value, key)
+		TYPE_ARRAY:
+			var values: Array = value
+			for item: Variant in values:
+				if not _is_clean(item, key):
+					return false
+			return true
+		TYPE_DICTIONARY:
+			var map: Dictionary = value
+			for child_key: Variant in map:
+				if not _is_clean(map[child_key], _child_key(child_key, key)):
+					return false
+			return true
+		TYPE_BOOL, TYPE_STRING:
+			return true
+	return false
+
+
+## The key a child's value is ranged by.
+static func _child_key(child_key: Variant, parent_key: String) -> String:
+	if parent_key == INVENTORY_KEY:
+		return "stack_g"
+	if parent_key == SINKS_KEY:
+		return WORLD_TOTAL_KEY
+	return child_key if typeof(child_key) == TYPE_STRING else ""
 
 
 static func _walk(value: Variant, key: String, path: String, found: PackedStringArray) -> void:
@@ -33,27 +65,28 @@ static func _walk(value: Variant, key: String, path: String, found: PackedString
 		TYPE_DICTIONARY:
 			var map: Dictionary = value
 			for child_key: Variant in map:
-				_walk_child(map[child_key], child_key, key, "%s.%s" % [path, child_key], found)
+				_walk(map[child_key], _child_key(child_key, key), "%s.%s" % [path, child_key], found)
 		TYPE_BOOL, TYPE_STRING:
 			pass
 		_:
 			found.append("%s has type %s" % [path, type_string(typeof(value))])
 
 
-static func _walk_child(
-	value: Variant, child_key: Variant, parent_key: String, path: String, found: PackedStringArray
-) -> void:
-	if parent_key == INVENTORY_KEY:
-		_walk(value, "stack_g", path, found)
-	elif parent_key == SINKS_KEY:
-		_walk(value, WORLD_TOTAL_KEY, path, found)
-	elif typeof(child_key) == TYPE_STRING:
-		_walk(value, child_key, path, found)
-	else:
-		_walk(value, "", path, found)
-
-
 static func _check_int(value: int, key: String, path: String, found: PackedStringArray) -> void:
+	if not _in_range(value, key):
+		var limits := _limits(key)
+		found.append("%s = %d is outside %d to %d" % [path, value, limits[0], limits[1]])
+
+
+static func _in_range(value: int, key: String) -> bool:
+	var limits := _limits(key)
+	return limits.is_empty() or (value >= limits[0] and value <= limits[1])
+
+
+## The range for a key, as [low, high], or [] if the key has none.
+static func _limits(key: String) -> Array:
+	if key.is_empty():
+		return []
 	var low := 0
 	var high := 0
 	if key.ends_with("_remainder"):
@@ -74,6 +107,5 @@ static func _check_int(value: int, key: String, path: String, found: PackedStrin
 	elif key == "tick" or key.ends_with("_tick"):
 		high = MAX_TICK
 	else:
-		return
-	if value < low or value > high:
-		found.append("%s = %d is outside %d to %d" % [path, value, low, high])
+		return []
+	return [low, high]
