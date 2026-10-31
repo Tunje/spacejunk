@@ -144,6 +144,9 @@ Every command has this envelope. `submit` fills in `id` and `tick`.
 - `from` is this unit or a unit docked to it. Attaching is instant in phase 1 in the slice.
 - `detach_part` sends the part and everything below it to the `to` inventory, and is rejected if it does not fit.
 - Detaching a port with something docked to it is rejected.
+- Detaching a root part is rejected with `root_part`.
+- Detaching a subtree containing a part with a job or active operation is rejected with `part_busy`.
+- A detach that would leave a unit over its cargo capacity, counting reserved space, is rejected with `cargo_full`.
 
 **Fitting.** `attach_part` checks against declared ratings, and `check` reports the same results.
 - Mass: total against the root's `max_mass_kg`.
@@ -195,7 +198,7 @@ Each failure emits exactly one event. Fitting failures emit `attach_failed`, and
 
 `reason` is a stable lowercase code, with display text held in the client. `detail` is an optional Dictionary of integers, such as `{ need_w, have_w }`, so the player sees numbers as well as a code.
 
-Known reason codes: `over_mass_limit`, `over_power_budget`, `over_heat_budget`, `over_heat_limit`, `over_load_limit`, `connector_type_mismatch`, `connector_size_mismatch`, `connector_occupied`, `not_whole_unit`, `no_free_port`, `no_propellant`, `cargo_full`, `deposit_exhausted`.
+Known reason codes: `over_mass_limit`, `over_power_budget`, `over_heat_budget`, `over_heat_limit`, `over_load_limit`, `connector_type_mismatch`, `connector_size_mismatch`, `connector_occupied`, `not_whole_unit`, `no_free_port`, `no_propellant`, `cargo_full`, `deposit_exhausted`, `root_part`, `part_busy`.
 
 ## 7. State view
 
@@ -246,7 +249,7 @@ Save text comes from one kernel codec. `JSON.stringify` is not used for output.
 - Derived caches are not saved. `to_save(from_save(x)) == x`, byte for byte.
 - `state_hash` is the SHA-256 of that text. It is the only accepted way to compare states.
 
-The save includes the contract version, `TICKS_PER_SECOND`, a hash of the loaded data, all RNG streams, all remainders, both ID counters and the pending command queue.
+The save includes the contract version, `TICKS_PER_SECOND`, a hash of the loaded data, all RNG streams, all remainders, both ID counters, the pending command queue, `matter_start_g` and the running totals in `sinks`. The view may omit the last two.
 
 The save excludes undrained events and the command log. Replay harnesses step to the tick before, then submit. A version or data mismatch makes `from_save` return null with a reason code.
 

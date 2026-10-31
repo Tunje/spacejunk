@@ -1,6 +1,6 @@
 # Resource Accounting
 
-Status: draft for Lead approval (task B7). Changes after approval go through the Lead.
+Status: approved by the Lead (task B7). Changes go through the Lead.
 
 This expands "Resource accounting" in section 5 of [workplan.md](../../plan/workplan.md) and the matter ledger in section 9 of [contracts.md](contracts.md). It covers matter only. Energy and heat accounting belong to A0. Slice items, modules and sinks are defined in [spec.md](spec.md).
 
@@ -58,7 +58,7 @@ Rules for these movements:
 
 **Attach.** The stack loses exactly one `unit_mass_kg` and the part gains exactly its `mass_kg`. Section 3 makes these equal.
 
-**Detach.** The part and everything below it become one unit of their items each in the `to` inventory, in one phase. The whole detach is rejected if any of it does not fit, so a subtree is never split. Two further limits apply: see section 7, items 2 and 3.
+**Detach.** The part and everything below it become one unit of their items each in the `to` inventory, in one phase. The whole detach is rejected if any of it does not fit, so a subtree is never split. Further limits apply: see section 7, items 2 to 4.
 
 **Destruction.** No slice operation destroys a unit or part. When that arrives, it needs its own sink.
 
@@ -120,12 +120,13 @@ Required tests, each owned by the agent building that operation:
 | Save and load midway through a running job, with sinks non-zero | A |
 | Discrete stacks stay whole multiples at every commit | A |
 
-## 7. Open with the Lead
+## 7. Lead rulings
 
-None of these block B3. This spec assumes the proposed answer.
+All are accepted, and the contracts are updated to match.
 
-| # | Issue | Proposed answer |
-| - | ----- | --------------- |
+| # | Issue | Ruling |
+| - | ----- | ------ |
 | 1 | The ledger is not saved, but the check needs the starting total after a load, and sink totals must persist. Neither is named in contracts section 8 or the state view. | Add `matter_start_g` and `sinks` to the state and save. Both are additions. The view may omit them. |
 | 2 | Inventory capacity is summed across a unit's storage modules. Detaching a storage module could leave a unit holding more than its capacity. | Reject the detach with `cargo_full`. |
 | 3 | Nothing stops `detach_part` on a root part, which would leave a unit with no parts and nowhere for its inventory to be. | Reject it, with a new reason code `root_part`. |
+| 4 | Detaching a facility with a job, or a laser in use, would leave held matter or an operation with no part. | Reject the detach with a new reason code `part_busy` if the subtree contains a part with a job or active operation. Cancel or stop first. This also counts cargo space reserved by jobs for rule 2. |
