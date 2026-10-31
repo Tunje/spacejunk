@@ -117,7 +117,7 @@ Fault timing: a fault is detected and set in step 7, and reported in step 8 of t
 **Attachment contract.** One set of rules covers ship fitting and station expansion, and it is defined in `data/` and enforced by the simulation.
 - **Connector:** each one states its type (stack, side or dock), size, position and orientation, whether it is occupied, and the load it can carry.
 - **Compatibility:** two parts join only if their connector types and sizes match and the load limit holds. A failed join gives a stated reason, which feeds acceptance check 10.
-- **Hierarchy:** each craft is a tree of parts rooted at its core. Removing a part removes or detaches everything below it.
+- **Hierarchy:** each craft is a tree of parts rooted at its root part. Removing a part removes or detaches everything below it.
 
 **Data over code.** The analysis's key recommendation is one module schema. New components should be data, not scripts. JSON is chosen over `.tres` because it is safe for agents to generate, easy to diff and easy to validate.
 
@@ -202,7 +202,8 @@ Everything else in the catalog waits.
 | -------- | ------------ |
 | Deposits | Hematite, Chalcopyrite, one silica-bearing mineral (B1 picks it) |
 | Materials | Iron, Copper, Silicon, plus slag so that matter is conserved |
-| Components | Structural frame, wiring, processor, Basic Core, Assisted Core |
+| Components | Structural frame, wiring, processor |
+| Cores | Basic Core and Assisted Core, as modules |
 | Ship modules | Hull, chemical thruster, propellant tank, solar panel, battery bank, heat radiator, LIDAR, mining laser, ore container, docking port |
 | Station modules | Command hub, solar farm, ore refinery, fabricator, ore and goods storage, docking port |
 | Drone | One mining drone, built from the above |
@@ -264,7 +265,7 @@ Exit: the bot passes the reference scenario and all ten checks in a headless run
 | -- | ----- | ---- | ---------- |
 | A1 | A | Tick loop in the section 5 order, state, commands, events, seeded RNG, canonical state hash | L7 |
 | A2 | A | Canonical save/load with a round-trip test | A1 |
-| A3 | A | Data loader, entities, attachment tree, fitting checks for connectors, mass and volume, matter ledger test | A1, M1 exit |
+| A3 | A | Data loader, entities, attachment tree, fitting checks for connectors, mass, power and heat, matter ledger test | A1, M1 exit |
 | A4 | A | Power network: output, storage, priorities, load shedding, energy ledger test | A3 |
 | A5 | A | Heat network: waste heat, radiators, fault shutdown, heat ledger test | A4 |
 | A6 | A | Cargo operations: inventories, travel, docking, transfer, throughput limits | A3 |

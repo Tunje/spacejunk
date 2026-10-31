@@ -1,0 +1,43 @@
+{
+  "bodies": [
+    { "ref": "star", "kind": "star", "pos_mm": [149600000000000, 40000000000000, -30000000000000], "radius_mm": 696000000000 },
+    { "ref": "rock_a", "kind": "asteroid", "pos_mm": [1800000, 200000, -2400000], "radius_mm": 140000 },
+    { "ref": "rock_b", "kind": "asteroid", "pos_mm": [-2600000, -500000, -1500000], "radius_mm": 220000 },
+    { "ref": "rock_c", "kind": "asteroid", "pos_mm": [3900000, -900000, 1200000], "radius_mm": 90000 },
+    { "ref": "rock_d", "kind": "asteroid", "pos_mm": [-1200000, 1100000, 3300000], "radius_mm": 320000 },
+    { "ref": "rock_e", "kind": "asteroid", "pos_mm": [6500000, 1500000, -5200000], "radius_mm": 180000 }
+  ],
+  "deposits": [
+    { "body": "rock_a", "item": "hematite", "grams": 1800000000, "hardness": 4 },
+    { "body": "rock_a", "item": "silica_sand", "grams": 600000000, "hardness": 2 },
+    { "body": "rock_b", "item": "chalcopyrite", "grams": 2400000000, "hardness": 5 },
+    { "body": "rock_c", "item": "hematite", "grams": 90000000, "hardness": 3 }
+  ],
+  "units": [
+    {
+      "def": "stub_hub", "kind": "station", "name": "Foothold", "pos_mm": [0, 0, 0],
+      "inventory": { "hematite": 2500000, "propellant": 400000 },
+      "parts": { "def": "stub_hub", "children": [
+        { "def": "stub_refinery", "parent_connector": "top", "connector": "base", "children": [] },
+        { "def": "stub_storage", "parent_connector": "bottom", "connector": "base", "children": [] },
+        { "def": "stub_solar_farm", "parent_connector": "side_nx", "connector": "base", "children": [] },
+        { "def": "stub_station_port", "parent_connector": "side_px", "connector": "base", "children": [] }
+      ] }
+    },
+    {
+      "def": "stub_hull", "kind": "ship", "name": "First Probe", "pos_mm": [120000, 16000, -60000],
+      "inventory": { "propellant": 1800000 },
+      "parts": { "def": "stub_hull", "children": [
+        { "def": "stub_port", "parent_connector": "top", "connector": "base", "children": [] },
+        { "def": "stub_tank", "parent_connector": "bottom", "connector": "top", "children": [
+          { "def": "stub_thruster", "parent_connector": "bottom", "connector": "top", "children": [] }
+        ] },
+        { "def": "stub_laser", "parent_connector": "side_px", "connector": "base", "children": [] },
+        { "def": "stub_container", "parent_connector": "side_nx", "connector": "base", "children": [] },
+        { "def": "stub_solar", "parent_connector": "side_pz", "connector": "base", "children": [] },
+        { "def": "stub_radiator", "parent_connector": "side_nz", "connector": "base", "children": [] },
+        { "def": "stub_lidar", "parent_connector": "sensor", "connector": "base", "children": [] }
+      ] }
+    }
+  ]
+}
