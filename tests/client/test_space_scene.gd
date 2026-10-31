@@ -46,6 +46,18 @@ func test_anchor_is_the_middle_of_the_asteroids() -> void:
 	assert_eq(AsteroidField.anchor_of(fake), [200, 20, 0])
 
 
+func test_a_wider_field_keeps_its_density_up_to_a_cap() -> void:
+	assert_eq(AsteroidField.count_for(AsteroidField.HALF_WIDTH_M), AsteroidField.COUNT)
+	assert_eq(AsteroidField.count_for(AsteroidField.HALF_WIDTH_M * 1.5), roundi(AsteroidField.COUNT * 2.25))
+	assert_eq(AsteroidField.count_for(AsteroidField.HALF_WIDTH_M * 100.0), AsteroidField.MAX_COUNT)
+
+
+func test_field_width_follows_the_furthest_entry() -> void:
+	var clear: Array[Dictionary] = [{ "at_m": Vector3(40000, 0, 0), "radius_m": 1.0 }]
+	assert_almost_eq(AsteroidField.half_width_for(clear), 50000.0, 0.01)
+	assert_eq(AsteroidField.half_width_for([] as Array[Dictionary]), AsteroidField.HALF_WIDTH_M)
+
+
 func test_field_is_multimesh_with_no_collision() -> void:
 	var field := AsteroidField.new()
 	add_child_autofree(field)
@@ -53,6 +65,7 @@ func test_field_is_multimesh_with_no_collision() -> void:
 	assert_eq(field.instance_total, AsteroidField.COUNT)
 	for child: Node in field.get_children():
 		assert_true(child is MultiMeshInstance3D)
+		assert_eq(child.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "scenery casts no shadow")
 
 
 func test_rock_meshes_are_shared_and_lumpy() -> void:

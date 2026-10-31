@@ -23,17 +23,18 @@ const TASK_FIELDS: Array[String] = [
 	"id", "owner", "kind", "state", "reason", "hold", "steps", "step", "cycle", "since_tick", "command",
 ]
 const DEFS_SECTIONS: Array[String] = ["modules", "items", "recipes", "templates", "sinks"]
-const BODY_FIELDS: Array[String] = ["kind", "pos_mm", "radius_mm", "visual_seed", "scanned"]
+const BODY_FIELDS: Array[String] = ["kind", "name", "pos_mm", "radius_mm", "visual_seed", "scanned"]
 const DEPOSIT_FIELDS: Array[String] = ["body", "item", "remaining_g", "hardness"]
 const JOB_FIELDS: Array[String] = ["unit", "facility", "recipe", "count_left", "status", "reason", "start_tick", "end_tick"]
 
 
-## A new game from each backend present. The kernel's built-in `empty` scenario
-## has no entities, so the entity checks below only bite once scenarios exist.
+## A new game from each backend present. `reference` runs the entity checks
+## against the real Sim; `empty` covers a world with nothing in it.
 func _backends() -> Array[RefCounted]:
 	var backends: Array[RefCounted] = [StubSim.new_game("stub", 7)]
 	if ResourceLoader.exists(SIM_SCRIPT):
 		backends.append(load(SIM_SCRIPT).new_game("empty", 7))
+		backends.append(load(SIM_SCRIPT).new_game("reference", 7))
 	return backends
 
 

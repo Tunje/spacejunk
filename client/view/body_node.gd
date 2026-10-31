@@ -23,6 +23,8 @@ func build(id: int, body: Dictionary) -> void:
 	else:
 		mesh.mesh = RockMesh.get_mesh(RockMesh.variant_of(body["visual_seed"]), RockMesh.DETAILED)
 		mesh.material_override = RockMesh.material()
+		# A rock on the line to the star would otherwise eclipse a whole base.
+		mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		var rng := RandomNumberGenerator.new()
 		rng.seed = body["visual_seed"]
 		mesh.rotation = Vector3(rng.randf(), rng.randf(), rng.randf()) * TAU

@@ -212,7 +212,8 @@ static func _build_state(module_defs: Dictionary, seed_value: int, extra_ships: 
 		var id := _next_id(state)
 		body_ids[entry["ref"]] = id
 		state["bodies"][id] = {
-			"kind": entry["kind"], "pos_mm": entry["pos_mm"], "radius_mm": entry["radius_mm"],
+			"kind": entry["kind"], "name": "Star" if entry["kind"] == "star" else "Asteroid %d" % id,
+			"pos_mm": entry["pos_mm"], "radius_mm": entry["radius_mm"],
 			"visual_seed": absi(seed_value * 31 + id * 2654435761) % 2147483647, "scanned": false,
 		}
 	for entry: Dictionary in scenario["deposits"]:
