@@ -329,7 +329,7 @@ Each failure emits exactly one event (contracts section 6), and the view shows t
 | `out_of_range`, `docked`, `not_docked`, `unknown_deposit` | Step validation |
 | `facility_busy`, `missing_inputs`, `output_full` | Jobs |
 
-`part_busy` comes from [accounting.md](accounting.md).
+`part_busy` is defined in contracts section 5.
 
 ## 11. Save and determinism
 
