@@ -1,6 +1,8 @@
 # Network and Cargo Spec
 
-Task A0. Expands section 5 of `plan/workplan.md` and settles the A0 items in section 12 of `contracts.md`. The contracts win if the two disagree. A4, A5 and A6 build from this page.
+Task A0. Expands section 5 of `plan/workplan.md` and settles the A0 items in section 12 of [contracts.md](contracts.md). The contracts win if the two disagree. A3 to A6 build from this page.
+
+Field names below are sim units, as `defs()` gives them. Capability fields are defined in [schemas.md](schemas.md) section 5. Task behaviour is in [autonomy.md](autonomy.md), and matter movements are in [accounting.md](accounting.md).
 
 ## 1. Fixed constants
 
@@ -14,41 +16,43 @@ All are kernel constants, so tuning them touches no content.
 
 Every ratio in the simulation is an integer in parts per million, applied with `IntMath.mul_div(value, ratio_ppm, PPM)`.
 
-## 2. Capabilities this spec reads
+## 2. Loads
 
-Section 10 of the contracts lists `scan`, `mine`, `ai_core.tier`, `storage` and `max_mass_kg`. These are requests to B3 to add alongside them.
+A load is a part that wants power this tick. A faulted part is never a load.
 
-| Capability | Fields | Notes |
-| ---------- | ------ | ----- |
-| `generate` | `power_kw` | Fixed output while healthy |
-| `battery` | `capacity_kj`, `max_charge_kw`, `max_discharge_kw`, `charge_efficiency_ppm` | Efficiency may be 1000000 |
-| `radiator` | `reject_kw` | Fixed rejection while healthy |
-| `heat_capacity` | `limit_kj` | Summed across a unit to give the loop limit |
-| `port` | `transfer_kg_per_s`, `dock_seconds`, `undock_seconds` | On every `dock` connector's module |
-| `thruster` | `speed_m_s`, `propellant_kg_per_s` | Constant speed in the slice |
+| Part | Is a load when | Draws |
+| ---- | -------------- | ----- |
+| Facility | It has a run in progress, including a shed run | The recipe's `power_w` |
+| Part with an operation | Its operation is active or held | The module's `power_w` |
+| AI core | It is the unit's assigned core | The module's `power_w` |
+| `always_on` module | It is healthy | The module's `power_w` |
+| Thruster | Never, including during a trip | Nothing |
+| Anything else | Never. Idle modules demand no power. | Nothing |
 
-A module without a `generate`, `battery` or `radiator` capability is only a load. `power_kw` and `heat_kw` apply while the module is running. A passive module declares 0 for both.
+A fitted but unassigned core demands nothing. The module's `power_w` is also its fit rating, which the fit check sums whether or not it ever runs. So a thruster's `power_w` and `heat_w` count only toward fitting budgets in the slice.
+
+Each load has the part's current `priority`, which `set_priority` may have changed from the data default.
+
+A part runs when it is a load and is not shed. Waste heat always comes from the module's `heat_w`, for every running part, including a facility on a recipe that draws less than the rating.
 
 ## 3. Power
 
 One network per unit. Docking does not join networks.
 
-**A load** is a part with `power_kw` above 0 that wants to run this tick: an active operation, a running job, or a module marked always-on by its capability. Each load has the part's current `priority`, which `set_priority` may have changed from the data default.
-
-**Phase 3, available power.** Parts faulted before this tick contribute nothing.
-- `supply_w` is the sum of `generate` output.
+**Phase 3, available power.** Parts already faulted contribute nothing.
+- `supply_w` is the sum of `generate.power_w`.
 - For each battery, `discharge_cap_w = min(max_discharge_w, stored_j * TICKS_PER_SECOND - discharge_remainder)`, floored at 0. This keeps the phase 6 subtraction from ever needing a clamp.
 - `budget_w = supply_w + ` the sum of `discharge_cap_w`.
 
-**Phase 4, allocation.** Faulted parts are not loads.
+**Phase 4, allocation.**
 1. Order loads by `priority` descending, then part ID ascending. This is the keep order.
 2. Mark as held any load with `shed_until_tick` above the current tick.
 3. Keep every load not held. Walk the keep order from the end, shedding until the kept total is at or below `budget_w`. Within a class, the highest part ID sheds first.
 4. Walk the keep order from the start and re-admit any shed load that now fits, as long as it is not held. This stops one large load from blacking out smaller ones that would have fitted.
 
-A load that stops running through this process sets `shed_until_tick = tick + SHED_HOLD_SECONDS * TICKS_PER_SECOND` and emits `power_shed` with reason `power_shortfall`. A load that was shed and runs again emits `power_restored`. Events fire on those transitions only, never once per tick. The hold is what stops flapping at the edge of a battery running out.
+A load that stops running through this process sets `shed_until_tick = tick + SHED_HOLD_SECONDS * TICKS_PER_SECOND` and emits `power_shed` with reason `no_power`. A load that was shed and runs again emits `power_restored`. Events fire on those transitions only, never once per tick. The hold is what stops flapping at the edge of a battery running out.
 
-A part's `state` is `shed` while it is wanted but not running. A job on it pauses and keeps its inputs and progress.
+A part's `state` is `shed` while it is a load but not running. A job on it pauses and keeps its inputs and progress. A part that stops being a load returns to `on`, and keeps any `shed_until_tick` it has, so an order given during the hold is shed again at once.
 
 **Flows.** `consumed_w` is the sum of running loads, and from there:
 - `discharged_w = max(0, consumed_w - supply_w)`, drawn from batteries in ascending part ID, each up to its `discharge_cap_w`.
@@ -68,16 +72,15 @@ Batteries fill and empty in part order rather than sharing evenly. This is deter
 One loop per unit. Docking does not join loops.
 
 **Phase 6.** Faulted parts contribute nothing.
-- `input_w` is the sum of `heat_kw` across parts that ran this tick.
-- `reject_w` is the sum of `radiator.reject_kw`.
+- `input_w` is the sum of `heat_w` across parts that ran this tick.
+- `reject_w` is the sum of `radiator.reject_w`.
 - `added_j = Rate.amount(input_w, heat_in_remainder)`, and heat rises by that first.
 - `rejected_j = min(stored_j, Rate.amount(reject_w, heat_out_remainder))`. A clamped amount is dropped, so radiators build no credit while the loop is cold.
 
-**Phase 7, faults.** `limit_j` is the sum of `heat_capacity.limit_kj`. A unit with no `heat_capacity` has a limit of 0, so B4 should require one on every unit that makes heat.
-- If `stored_j > limit_j`, walk the parts running this tick with `heat_kw` above 0, in the shed order of section 3. Fault each with `over_heat_limit` until the remaining `input_w` is at or below `reject_w`. This repeats on each tick the loop stays over its limit.
+**Phase 7, faults.** `limit_j` is the sum of `heat_capacity.limit_j`, which B4 requires on every unit that makes heat.
+- If `stored_j > limit_j`, walk the parts that ran this tick with `heat_w` above 0, in reverse keep order. Fault each with `over_heat_limit` until the remaining `input_w` is at or below `reject_w`. This repeats on each tick the loop stays over its limit.
 - If `reject_w` is 0, every heat-producing part faults, which is the correct failure for a unit with no radiator.
-- Generators and radiators fault only if they declare `heat_kw`.
-- When `stored_j <= mul_div(limit_j, HEAT_CLEAR_PPM, PPM)`, all of the unit's `over_heat_limit` faults clear together in phase 7. Clear level 80% stops flapping. The player can also recover by detaching or by leaving the loop to cool, with no repair command.
+- When `stored_j <= mul_div(limit_j, HEAT_CLEAR_PPM, PPM)`, all of the unit's `over_heat_limit` faults clear together in phase 7. The gap down to 80% stops flapping. No repair command exists or is needed: the loop cools and the unit recovers.
 
 The fault takes effect from the next tick, as the contracts require.
 
@@ -85,33 +88,60 @@ The fault takes effect from the next tick, as the contracts require.
 
 ## 5. Cargo
 
-**Capacity.** Each class's `cap_g` and `cap_l` sum across the unit's storage modules. `used_g` sums stacks of that class. `used_l` sums `ceil(grams / density_kg_m3)` per stack, recalculated from the stack's grams each time, never accumulated. A density in kg/m3 is the same number as g/L, so no other factor applies.
+**Classes.** Each unit has one inventory, keyed by item, with capacity by the three classes in [spec.md](spec.md) section 7.4. `ore` and `propellant` come from storage on ships and drones, and `goods` only from `goods_storage_mk1`, so ships and drones never carry goods.
 
-**Grams that fit.** For an item already holding `g` grams, the limit is the smaller of `cap_g - used_g` and `(cap_l - used_l + litres(g)) * density - g`, floored at 0. Discrete items round down to a multiple of `unit_mass_kg`.
+**Capacity.** Each class's `cap_g` and `cap_l` sum `storage` across the unit's fitted parts, faulted ones included. `used_g` sums stacks of that class. `used_l` sums `litres(g) = ceil(g / density_g_l)` per stack, recalculated from the stack's grams each time, never accumulated. Volume limits cargo stores only, never fitting.
 
-**Reservation.** Phase 4 keeps one per-tick reservation table per unit and class, and the mining and transfer steps in phase 5 take space from it in ascending unit ID. Nothing can overfill even with several sources writing to one unit in one tick. The table is rebuilt each tick and is not saved. Longer reservations belong to C0.
+**Grams that fit.** For an item holding `g` grams, the limit is the smaller of `cap_g - used_g` and `mul_div(cap_l - used_l + litres(g), density_g_l, 1) - g`, floored at 0. Discrete items round down to a multiple of `unit_mass_g`.
 
-**Transfers.** Requires a docked pair. The rate is the smaller of the two ports' `transfer_kg_per_s`. Each tick moves `Rate.amount`, clamped to what the source holds, the space left, and any requested `grams` still owed.
-- Omitted `grams` means transfer until the source is empty or the destination is full.
-- A discrete item keeps a `credit_g` on the task. Matter moves only when the credit reaches `unit_mass_kg`, so inventories never hold part of a unit. Credit is a rate accumulator, not matter, and is outside the ledger.
-- The transfer ends when nothing more can move, with `transfer_done` giving the real amount. A destination that was already full at the start is `cargo_full`, and what happens next is C0's.
+**Reservations.** Phase 4 holds one per-tick table per unit, rebuilt each tick and not saved. It holds destination space by class and source grams by item. Mining and transfer steps take from it in ascending unit ID in phase 5, so nothing can overfill, and nothing can spend grams a departure has already claimed. Space reserved across ticks for job outputs is C's ([autonomy.md](autonomy.md)), and counts as used here.
+
+**Transfers.** Requires a docked pair. The rate is the smaller of the two ports' `transfer_g_per_s`. Each tick moves `Rate.amount`, clamped to what the source holds, the space left, and any requested `grams` still owed. The step's end conditions are in [autonomy.md](autonomy.md) section 4:
+- **Loading never blocks.** It ends when `grams` have moved, the class is full, or the source runs out, with `transfer_done` giving the real amount. A shortage shows up later, such as `no_propellant` at the next `move_to`.
+- **Unloading blocks with `cargo_full`** if the destination has no room and this unit still holds the item. It ends when `grams` have moved or this unit is out of the item.
+- Omitted `grams` means all that fits.
+- A discrete item accrues `credit_g` on the task, and matter moves only when the credit reaches `unit_mass_g`, so a stack never holds part of a unit. Credit is a rate accumulator, not matter, and is outside the ledger.
 - A transfer needs no power in the slice.
 
 ## 6. Travel and docking
 
 **Bodies and stations do not move in the slice**, so a route is fixed when it starts.
 
-**Route.** `move_to` stores `from_mm`, `to_mm`, `length_mm = IntMath.dist(from_mm, to_mm)`, `progress_mm` and a remainder. Rejected while docked. Each running tick:
+**At.** `at(unit, target)` is true when the unit has no route and its `pos_mm` equals the target's exactly. It lives in the kernel, and `check`, validation and re-entry all share it. A docked unit takes its host's position. A halted unit is at nothing.
+
+**Thruster.** The fastest healthy thruster on the unit at departure, with the lowest part ID on a tie. Only that one is priced. Its speed is stored on the route, so nothing that happens to it later matters.
+
+**Price.** With `length_mm = IntMath.dist(from_mm, to_mm)`, and `mass_g` the unit's whole mass at departure, including the propellant being paid:
+
+```text
+ticks   = mul_div_ceil(length_mm, TICKS_PER_SECOND, speed_mm_s)
+base_g  = mul_div_ceil(ticks, propellant_g_per_s, TICKS_PER_SECOND)
+cost_g  = mul_div_ceil(base_g, mass_g, rated_mass_g)
+```
+
+`IntMath.mul_div_ceil` is the rounded-up form of `mul_div`, added with A6. One function computes this, and `check` reports its `ticks` and `cost_g`, so the number shown is the number paid. A full hold costs more to fly. Speed does not depend on mass.
+
+**Departure, on tick T.** Phase 1 validation and `check` compare `cost_g` with the unit's propellant. Phase 4 prices the trip again from current state and reserves `cost_g` on the stack. If the stack cannot pay in full, the trip does not start, and the task follows [autonomy.md](autonomy.md) section 7 for `no_propellant`. In phase 6 the whole `cost_g` moves to `propellant_exhaust` in one tick, and the route is set.
+
+**Route.** The route stores `from_mm`, `to_mm`, `length_mm`, `speed_mm_s`, `progress_mm`, a remainder and `eta_tick = T + ticks`. From tick T + 1, each tick:
 - Add `Rate.amount(speed_mm_s, remainder)` to `progress_mm`, clamped to `length_mm`.
 - Each axis of `pos_mm` is `from + sign * mul_div(abs(to - from), progress_mm, length_mm)`.
 - On reaching `length_mm`, `pos_mm` is exactly `to_mm`, and `arrived` fires.
 
-Position always derives from progress, so rounding never accumulates and arrival is exact.
+The remainder carries, so the route takes exactly `ticks`. Position always derives from progress, so rounding never accumulates and arrival is exact. Once paid, a route runs to arrival, unaffected by faults or power, and a trip under way cannot run out.
 
-**Speed and burn.** `speed_mm_s` comes from the unit's fastest healthy thruster. That thruster is a load for the whole trip, and burns `Rate.amount(propellant_g_per_s, remainder)` from the unit's `propellant` stacks each tick into the `exhaust` sink, clamped to what is left. With no propellant, the thruster stops, the task blocks with `no_propellant` and the unit holds position. The same happens if the thruster is shed or faulted. Resuming continues the same route.
+**Halt.** A player order or `stop` holds the unit at its current `pos_mm`, clears the route, and refunds nothing. A later `move_to` prices a new route from there.
 
-`check` reports `ticks = ceil(length_mm * TICKS_PER_SECOND / speed_mm_s)`, using `mul_div` and an add of `speed_mm_s - 1` for the ceiling, and propellant as `ticks` times the burn per tick, rounded up. Mass does not change speed or burn in the slice.
+**Docking.** Requires `at` the target unit, and both ports free. Docking runs for the `dock_ticks` of the port on the moving unit, and undocking for its `undock_ticks`. Both are atomic ([autonomy.md](autonomy.md) section 4). Port grants and contention are C's. While docked, a unit keeps its own networks.
 
-**Docking.** Requires both units at the same position, and both ports free. Docking runs for `dock_seconds` of the port on the moving unit, and undocking for its `undock_seconds`. Port reservations and contention are C0's. While docked, a unit keeps its own networks and takes the host's position.
+**Matter.** Propellant leaves through `propellant_exhaust`. A transfer never holds matter in transit, because each tick's delta moves between two inventories in phase 6.
 
-**Matter.** Propellant leaves through `exhaust`, which is the only sink this spec adds. A transfer never holds matter in transit, because each tick's delta moves between two inventories in phase 6.
+## 7. Connector geometry
+
+A part's pose is derived from the part tree and is never saved. Facings and ups are axis values in the module's own frame, and a child turns as it mates, so one module fits any matching connector on a hull. The maths uses only signed-axis rotations, so it stays in integers.
+
+- The root part has the identity rotation and sits at the unit's origin.
+- A child's rotation `R` is the one rotation that maps its connector's `facing` to the opposite of the parent connector's `facing` in the craft's frame, and its `up` to that connector's `up`. It is found by mapping the three axes `facing`, `up` and `facing x up`. It always exists, because B4 requires `up` at right angles to `facing`.
+- A child's origin is `parent_origin + R_parent * parent_connector.pos_mm - R * connector.pos_mm`.
+
+Every non-root module has one `mount` connector at its origin, and mates through it. Further connectors on a module carry parts above it, or a dock. Whether two connectors may join depends only on type, size, occupancy and load, never on rotation. The client uses the same rules to place parts and docked craft.
