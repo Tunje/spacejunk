@@ -30,7 +30,7 @@ var _steps := {}
 
 
 func _init() -> void:
-	for step: TaskStep in [ScanStep.new()]:
+	for step: TaskStep in [ScanStep.new(), MiningStep.new()]:
 		_steps[step.type()] = step
 
 
@@ -96,17 +96,25 @@ func update_tasks(ctx: SimContext) -> void:
 			step.begin(ctx, unit_id, current["args"])
 
 
+## Phase 5. Each active operation does its tick of work, as deltas.
+func run(ctx: SimContext) -> void:
+	var units: Dictionary = ctx.state["units"]
+	for unit_id: int in _sorted(units):
+		if _has_active_op(units[unit_id]):
+			_current_step(ctx, units[unit_id]).run(ctx, unit_id, self)
+
+
+func apply_delta(ctx: SimContext, payload: Dictionary) -> void:
+	var step: TaskStep = _steps[payload["step"]]
+	step.apply_delta(ctx, payload)
+
+
 ## Phase 6, after deltas. Each operation tests its own end.
 func update_stores(ctx: SimContext) -> void:
 	var units: Dictionary = ctx.state["units"]
 	for unit_id: int in _sorted(units):
-		var unit: Dictionary = units[unit_id]
-		if unit["task"] == 0 or unit["op"]["type"] == Units.IDLE_OP:
-			continue
-		var task: Dictionary = ctx.state["tasks"][unit["task"]]
-		var step: TaskStep = _steps[task["steps"][task["step"]]["type"]]
-		if step.end_test(ctx, unit_id):
-			task["op_ended"] = true
+		if _has_active_op(units[unit_id]) and _current_step(ctx, units[unit_id]).end_test(ctx, unit_id):
+			ctx.state["tasks"][units[unit_id]["task"]]["op_ended"] = true
 
 
 func fill_view(ctx: SimContext, view: Dictionary) -> void:
@@ -138,14 +146,26 @@ func _core_offline(ctx: SimContext, unit: Dictionary) -> bool:
 	return core["fault"] != "" or core["shed"]
 
 
+func _has_active_op(unit: Dictionary) -> bool:
+	return unit["task"] != 0 and unit["op"]["type"] != Units.IDLE_OP
+
+
+func _current_step(ctx: SimContext, unit: Dictionary) -> TaskStep:
+	var task: Dictionary = ctx.state["tasks"][unit["task"]]
+	return _steps[task["steps"][task["step"]]["type"]]
+
+
 func _finish(ctx: SimContext, unit: Dictionary) -> void:
 	var id: int = unit["task"]
+	_current_step(ctx, unit).report_end(ctx, unit["id"], "")
 	_end(ctx, unit)
 	ctx.emit_event("task_finished", unit["id"], { "task": id })
 
 
 func _cancel(ctx: SimContext, unit: Dictionary, reason: String) -> void:
 	var id: int = unit["task"]
+	if _has_active_op(unit):
+		_current_step(ctx, unit).report_end(ctx, unit["id"], reason)
 	_end(ctx, unit)
 	ctx.emit_event("task_cancelled", unit["id"], { "task": id, "reason": reason })
 

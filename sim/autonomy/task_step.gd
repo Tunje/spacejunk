@@ -19,16 +19,33 @@ func begin(_ctx: SimContext, _unit_id: int, _args: Dictionary) -> void:
 	pass
 
 
+## Phase 5. One tick of work, recorded as deltas against `system`.
+func run(_ctx: SimContext, _unit_id: int, _system: SimSystem) -> void:
+	pass
+
+
+## Phase 6. Applies a delta this step recorded. The payload names the step in `step`.
+func apply_delta(_ctx: SimContext, _payload: Dictionary) -> void:
+	pass
+
+
 ## Phase 6, after deltas. True on the tick the operation ends.
 func end_test(_ctx: SimContext, _unit_id: int) -> bool:
 	return false
 
 
-## Sets a unit's operation to run for `ticks`, from this tick (networks.md section 6).
+## Reports the end of an operation that started, before it is cleared. `reason` is "" when the step
+## completed, otherwise why it was cancelled.
+func report_end(_ctx: SimContext, _unit_id: int, _reason: String) -> void:
+	pass
+
+
+## Sets a unit's operation to run for `ticks`, from this tick (networks.md section 6). An operation
+## with no fixed length passes 0 and ends through end_test.
 static func set_op(ctx: SimContext, unit_id: int, op_type: String, target: int, part: int, ticks: int) -> void:
 	ctx.state["units"][unit_id]["op"] = {
 		"type": op_type, "target": target, "part": part,
-		"start_tick": ctx.tick, "end_tick": ctx.tick + ticks - 1,
+		"start_tick": ctx.tick, "end_tick": ctx.tick + ticks - 1 if ticks > 0 else 0,
 	}
 
 

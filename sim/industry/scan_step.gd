@@ -43,7 +43,7 @@ func begin(ctx: SimContext, unit_id: int, args: Dictionary) -> void:
 ## A part shed on the last tick did no work, so the scan does not finish, and phase 2 cancels it.
 func end_test(ctx: SimContext, unit_id: int) -> bool:
 	var op: Dictionary = ctx.state["units"][unit_id]["op"]
-	if ctx.tick < op["end_tick"] or ctx.state["parts"][op["part"]]["shed"]:
+	if ctx.tick < op["end_tick"] or not Units.can_run(ctx.state["parts"][op["part"]]):
 		return false
 	_reveal(ctx, unit_id, op["target"])
 	return true
