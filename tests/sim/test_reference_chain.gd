@@ -28,6 +28,9 @@ func test_the_chain_runs_to_the_end_with_nothing_failing() -> void:
 
 func test_matter_energy_and_heat_balance_on_every_tick() -> void:
 	assert_eq(bot.ledger_problems, PackedStringArray())
+	var ledger := bot.sim.ledger()
+	assert_eq(ledger["energy"].size(), 3, "every unit is in the energy ledger")
+	assert_eq(ledger["heat"].size(), 3, "every unit is in the heat ledger")
 
 
 func test_the_state_stays_in_range() -> void:
