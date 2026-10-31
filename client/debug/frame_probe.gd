@@ -73,6 +73,8 @@ static func next_order(view: Dictionary, unit_id: int, laser: int, rocks: Array)
 	var unit: Dictionary = view["units"][unit_id]
 	if unit["op"]["type"] != "idle":
 		return {}
+	if not unit["dock"].is_empty():
+		return { "type": "undock", "unit": unit_id, "args": {} }
 	var here: int = unit["at_target"]
 	if view["bodies"].has(here):
 		var ids: Array = view["deposits"].keys()

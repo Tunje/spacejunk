@@ -3,6 +3,7 @@ class_name OrderList extends RefCounted
 ## Whether each one is currently valid is left to Sim.check.
 
 const SHOWN_KIND_ASTEROID := "asteroid"
+const PROPELLANT_CLASS := "propellant"
 
 
 static func build(view: Dictionary, modules: Dictionary, items: Dictionary, commanded: int,
@@ -16,15 +17,34 @@ static func build(view: Dictionary, modules: Dictionary, items: Dictionary, comm
 			_add_asteroid_orders(orders, view, modules, items, commanded, selected_id)
 	elif selected_kind == "unit" and selected_id != commanded and view["units"].has(selected_id):
 		_add(orders, "Move to", commanded, "move_to", { "target": selected_id })
-		var port := _part_with_dock(unit["parts"], modules)
-		var target_port := _part_with_dock(view["units"][selected_id]["parts"], modules)
+		var used := OrderList.ports_in_use(view)
+		var port := OrderList.free_port(unit["parts"], modules, used)
+		var target_port := OrderList.free_port(view["units"][selected_id]["parts"], modules, used)
 		if port != 0 and target_port != 0:
 			_add(orders, "Dock", commanded, "dock", { "port": port, "target_port": target_port })
 	if not unit["dock"].is_empty():
 		_add(orders, "Undock", commanded, "undock", {})
+		_add_transfer_orders(orders, view, items, commanded)
 	if unit["op"]["type"] != "idle":
 		_add(orders, "Stop", commanded, "stop", {})
 	return orders
+
+
+## Unload everything aboard except propellant, and refill from the host what
+## this unit has room for. Amounts are left out, which moves all that fits.
+static func _add_transfer_orders(orders: Array[Dictionary], view: Dictionary, items: Dictionary, commanded: int) -> void:
+	var unit: Dictionary = view["units"][commanded]
+	var host_id: int = unit["dock"]["target_unit"]
+	var held: Array = unit["inventory"].keys()
+	held.sort()
+	for item: String in held:
+		if unit["inventory"][item] > 0 and items[item]["cargo_class"] != PROPELLANT_CLASS:
+			_add(orders, "Unload %s" % items[item]["name"], commanded, "unload_cargo", { "to": host_id, "item": item })
+	var stock: Array = view["units"][host_id]["inventory"].keys()
+	stock.sort()
+	for item: String in stock:
+		if items.has(item) and items[item]["cargo_class"] == PROPELLANT_CLASS:
+			_add(orders, "Load %s" % items[item]["name"], commanded, "load_cargo", { "from": host_id, "item": item })
 
 
 static func _add_asteroid_orders(orders: Array[Dictionary], view: Dictionary, modules: Dictionary,
@@ -59,11 +79,22 @@ static func _part_with_capability(part: Dictionary, modules: Dictionary, capabil
 	return 0
 
 
-static func _part_with_dock(part: Dictionary, modules: Dictionary) -> int:
-	if not CraftLayout.dock_connector(modules[part["def"]]).is_empty():
+static func ports_in_use(view: Dictionary) -> Array[int]:
+	var used: Array[int] = []
+	for id: int in view["units"]:
+		var dock: Dictionary = view["units"][id]["dock"]
+		if not dock.is_empty():
+			used.append(dock["port"])
+			used.append(dock["target_port"])
+	return used
+
+
+## The first docking part in a tree that nothing is using.
+static func free_port(part: Dictionary, modules: Dictionary, used: Array[int]) -> int:
+	if not CraftLayout.dock_connector(modules[part["def"]]).is_empty() and not used.has(part["id"]):
 		return part["id"]
 	for child: Dictionary in part["children"]:
-		var found := _part_with_dock(child, modules)
+		var found := OrderList.free_port(child, modules, used)
 		if found != 0:
 			return found
 	return 0

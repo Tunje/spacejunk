@@ -26,7 +26,12 @@ static func beam_of(unit: Dictionary, view: Dictionary) -> Dictionary:
 
 ## The part an operation is using, which pulses while it runs. 0 means none.
 static func working_part(unit: Dictionary) -> int:
-	return unit["op"]["part"] if PULSING_OPS.has(unit["op"]["type"]) else 0
+	var op: Dictionary = unit["op"]
+	if not PULSING_OPS.has(op["type"]):
+		return 0
+	if op["part"] != 0:
+		return op["part"]
+	return op.get("port", unit.get("dock", {}).get("port", 0))
 
 
 ## Loop heat from 0 to 1, for radiator glow.

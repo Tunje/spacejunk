@@ -10,7 +10,7 @@ var rock: int
 
 
 func before_each() -> void:
-	main = add_child_autofree(load("res://client/main.tscn").instantiate())
+	main = add_child_autofree(StubScene.build())
 	bridge = main.get_node("Bridge")
 	bridge.set_paused(true)
 	view = main.get_node("LocalView")
