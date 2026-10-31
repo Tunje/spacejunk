@@ -1,4 +1,4 @@
-[gd_scene load_steps=13 format=3]
+[gd_scene load_steps=15 format=3]
 
 [ext_resource type="Script" path="res://client/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://client/sim_bridge.gd" id="2_bridge"]
@@ -10,6 +10,8 @@
 [ext_resource type="Script" path="res://client/ui/entity_markers.gd" id="8_markers"]
 
 [ext_resource type="Shader" path="res://client/view/shaders/space_sky.gdshader" id="9_sky"]
+[ext_resource type="Script" path="res://client/view/system_map.gd" id="10_map"]
+[ext_resource type="Script" path="res://client/ui/map_overlay.gd" id="11_overlay"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_sky"]
 shader = ExtResource("9_sky")
@@ -55,6 +57,16 @@ directional_shadow_max_distance = 600.0
 light_energy = 0.22
 light_color = Color(0.62, 0.72, 0.95, 1)
 
+[node name="SystemMap" type="Node3D" parent="."]
+script = ExtResource("10_map")
+
+[node name="Camera" type="Camera3D" parent="SystemMap"]
+script = ExtResource("5_camera")
+
+[node name="Rings" type="MeshInstance3D" parent="SystemMap"]
+
+[node name="Routes" type="MeshInstance3D" parent="SystemMap"]
+
 [node name="Overlay" type="CanvasLayer" parent="."]
 
 [node name="Markers" type="Control" parent="Overlay"]
@@ -66,6 +78,16 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("8_markers")
+
+[node name="MapOverlay" type="Control" parent="Overlay"]
+unique_name_in_owner = true
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("11_overlay")
 
 [node name="TimeControls" type="PanelContainer" parent="Overlay"]
 unique_name_in_owner = true

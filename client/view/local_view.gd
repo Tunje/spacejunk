@@ -66,6 +66,8 @@ func _physics_process(_delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if not visible:
+		return
 	var button := event as InputEventMouseButton
 	if button != null:
 		_handle_button(button)

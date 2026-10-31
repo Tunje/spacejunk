@@ -72,6 +72,15 @@ static func metres(mm: int) -> String:
 	return "%d m" % (mm / 1000)
 
 
+static func duration(seconds: float) -> String:
+	var whole := ceili(seconds)
+	if whole < 60:
+		return "%d s" % whole
+	if whole < 3600:
+		return "%d min %d s" % [whole / 60, whole % 60]
+	return "%d h %d min" % [whole / 3600, whole / 60 % 60]
+
+
 static func tonnes(grams: int) -> String:
 	if grams >= 1000000:
 		return "%s t" % String.num(grams / 1000000.0, 1)

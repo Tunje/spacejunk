@@ -29,9 +29,13 @@ func update_entities() -> void:
 
 
 func pick(screen: Vector2) -> Dictionary:
+	return EntityMarkers.pick_entry(_entries, screen)
+
+
+static func pick_entry(entries: Array[Dictionary], screen: Vector2) -> Dictionary:
 	var best: Dictionary = {}
 	var best_gap := PICK_RADIUS_PX
-	for entry: Dictionary in _entries:
+	for entry: Dictionary in entries:
 		var gap: float = entry["at"].distance_to(screen)
 		if gap <= best_gap:
 			best_gap = gap
@@ -54,25 +58,29 @@ func _add_entry(kind: String, id: int, node: Node3D, radius_m: float, label: Str
 
 
 func _draw() -> void:
+	EntityMarkers.draw_entries(self, _entries)
+
+
+static func draw_entries(canvas: CanvasItem, entries: Array[Dictionary]) -> void:
 	var font := ThemeDB.fallback_font
 	var used: Array[Rect2] = []
-	for entry: Dictionary in _ordered_for_labels():
+	for entry: Dictionary in EntityMarkers.ordered_for_labels(entries):
 		var at: Vector2 = entry["at"]
 		var colour: Color = ClientTheme.ORANGE if entry["selected"] else ClientTheme.OFF_WHITE
 		var diamond := PackedVector2Array([
 			at + Vector2(0, -DIAMOND_PX), at + Vector2(DIAMOND_PX, 0),
 			at + Vector2(0, DIAMOND_PX), at + Vector2(-DIAMOND_PX, 0), at + Vector2(0, -DIAMOND_PX),
 		])
-		draw_polyline(diamond, colour, 1.5, true)
+		canvas.draw_polyline(diamond, colour, 1.5, true)
 		var size := font.get_string_size(entry["label"], HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE)
 		var area := Rect2(at + Vector2(DIAMOND_PX + 5, -FONT_SIZE), size)
 		if not used.any(func(other: Rect2) -> bool: return other.intersects(area)):
 			used.append(area)
-			draw_string(font, at + Vector2(DIAMOND_PX + 5, 5), entry["label"], HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, colour)
+			canvas.draw_string(font, at + Vector2(DIAMOND_PX + 5, 5), entry["label"], HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, colour)
 
 
 ## Selected entities first, so their names win when labels would overlap.
-func _ordered_for_labels() -> Array[Dictionary]:
-	var ordered: Array[Dictionary] = _entries.duplicate()
+static func ordered_for_labels(entries: Array[Dictionary]) -> Array[Dictionary]:
+	var ordered: Array[Dictionary] = entries.duplicate()
 	ordered.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["selected"] and not b["selected"])
 	return ordered
