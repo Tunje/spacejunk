@@ -10,7 +10,7 @@ Read `plan/workplan.md` before starting a task. `docs/design/contracts.md` is th
 - One branch per task, named `<role>/<task-id>`. Only the Lead merges to `main` and pushes.
 - Edit only the folders your role owns (workplan section 5). Ask the owner for changes elsewhere. Only the Lead edits `project.godot`.
 - Contracts change only through the Lead.
-- A task is done when `tools/test.ps1` passes on its branch, its acceptance check holds, and new behaviour has tests.
+- `tools/test.ps1 -Quick` skips `tests/slow` for use while working. A task is done when the full `tools/test.ps1` passes on its branch with `main` merged in, its acceptance check holds, and new behaviour has tests.
 - Client work also needs a screenshot read back by the agent.
 - If blocked for more than a short attempt, report to the Lead (session `newmanprobe-14`) rather than work around it.
 
