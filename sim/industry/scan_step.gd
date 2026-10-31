@@ -20,8 +20,7 @@ func validate(ctx: SimContext, unit_id: int, args: Dictionary) -> Dictionary:
 		return SimSystem.reject(found["reason"])
 	var module := Units.module_of(ctx.state, ctx.defs, found["part"])
 	var unit: Dictionary = ctx.state["units"][unit_id]
-	var tier: int = Units.module_of(ctx.state, ctx.defs, unit["core"])["capabilities"]["ai_core"]["tier"]
-	if module["min_ai_tier"] > tier:
+	if module["min_ai_tier"] > TaskSystem.tier_of(ctx, unit):
 		return SimSystem.reject(TaskSystem.REASON_TIER_TOO_LOW)
 	if not unit["dock"].is_empty():
 		return SimSystem.reject(TaskSystem.REASON_DOCKED)

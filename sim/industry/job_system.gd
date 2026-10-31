@@ -234,8 +234,10 @@ func _needs_port(ctx: SimContext, job: Dictionary) -> bool:
 ## Takes the first free healthy port, or holds the run with its inputs until one is free.
 func _claim_port(ctx: SimContext, job: Dictionary) -> void:
 	var parts: Dictionary = ctx.state["parts"]
+	var since: int = job["since_tick"] if job["reason"] == REASON_NO_FREE_PORT else ctx.tick
 	for port: int in Units.ports(ctx.state, ctx.defs, job["unit"]):
-		if parts[port]["fault"] == "" and not Units.port_in_use(ctx.state, port):
+		if parts[port]["fault"] == "" and not Units.port_in_use(ctx.state, port) \
+				and PortQueue.is_free_for_job(ctx, port, since, job["id"]):
 			parts[port]["claimed_by"] = job["id"]
 			job["port"] = port
 			if job["reason"] == REASON_NO_FREE_PORT:

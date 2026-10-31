@@ -357,14 +357,31 @@ func test_a_space_claim_reduces_what_fits_this_tick() -> void:
 	assert_eq(Reservations.free_space(sim._ctx, SHIP, "hematite"), 1000)
 
 
-func test_a_cancelled_dock_gives_its_ports_back() -> void:
+func test_a_cancelled_dock_finishes_alone_and_goes_idle() -> void:
 	_undock()
 	sim.submit(_order("dock", { "port": SHIP_PORT, "target_port": SPARE_PORT }))
 	sim.step(5)
 	assert_true(Units.port_in_use(state, SPARE_PORT))
 	sim.submit(_order("stop"))
 	sim.step()
-	assert_false(Units.port_in_use(state, SPARE_PORT))
+	assert_true(Units.port_in_use(state, SPARE_PORT), "a granted dock keeps its ports")
+	assert_eq(_unit()["task"], 0)
+	assert_eq(_unit()["op"]["type"], "docking")
+	sim.step(200)
+	assert_false(_unit()["dock"].is_empty())
+	assert_eq(_unit()["op"]["type"], "idle")
+
+
+func test_a_cancelled_undock_finishes_alone_and_goes_idle() -> void:
+	sim.submit(_order("undock"))
+	sim.step(5)
+	sim.submit(_order("stop"))
+	sim.step()
+	assert_eq(_unit()["task"], 0)
+	assert_eq(_unit()["op"]["type"], "undocking")
+	sim.step(100)
+	assert_true(_unit()["dock"].is_empty(), "not left docked")
+	assert_eq(_unit()["op"]["type"], "idle")
 
 
 func test_new_orders_during_undocking_are_rejected() -> void:

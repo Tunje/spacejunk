@@ -40,6 +40,37 @@ func report_end(_ctx: SimContext, _unit_id: int, _reason: String) -> void:
 	pass
 
 
+## True once the operation must run to its end, even if its task is cancelled.
+func is_atomic(_ctx: SimContext, _unit_id: int) -> bool:
+	return false
+
+
+## Phase 2, on a blocked cycle. Clears a held operation's own block if it no longer applies.
+func retry(_ctx: SimContext, _unit_id: int) -> void:
+	pass
+
+
+## Why the step must wait its turn, or "". Only a cycle step waits.
+func queue_reason(_ctx: SimContext, _args: Dictionary, _task_id: int) -> String:
+	return ""
+
+
+## True if a step's arguments name things that exist. Placement is not tested here, so this holds
+## wherever the unit is. `set_cycle` tests it for every step.
+func references_exist(_ctx: SimContext, _unit_id: int, _args: Dictionary) -> bool:
+	return true
+
+
+## True if the step can run from a placement, given as { docked, at } with 0 for neither.
+func needs(_ctx: SimContext, _args: Dictionary, _place: Dictionary) -> bool:
+	return true
+
+
+## The placement the step leaves behind.
+func leaves(_ctx: SimContext, _args: Dictionary, place: Dictionary) -> Dictionary:
+	return place
+
+
 ## Sets a unit's operation to run for `ticks`, from this tick (networks.md section 6). An operation
 ## with no fixed length passes 0 and ends through end_test.
 static func set_op(ctx: SimContext, unit_id: int, op_type: String, target: int, part: int, ticks: int) -> void:

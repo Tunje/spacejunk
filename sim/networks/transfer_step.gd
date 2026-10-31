@@ -55,6 +55,24 @@ func begin(ctx: SimContext, unit_id: int, args: Dictionary) -> void:
 	unit[OPEN_KEY] = { "from": from, "to": to, "item": args["item"], "grams": 0 }
 
 
+func references_exist(ctx: SimContext, _unit_id: int, args: Dictionary) -> bool:
+	var field := partner_field()
+	return typeof(args.get(field)) == TYPE_INT and typeof(args.get("item")) == TYPE_STRING \
+		and ctx.state["units"].has(args[field]) and ctx.defs["items"].has(args["item"])
+
+
+func needs(_ctx: SimContext, args: Dictionary, place: Dictionary) -> bool:
+	return place["docked"] == args[partner_field()]
+
+
+## A blocked unload goes on when its destination has room again.
+func retry(ctx: SimContext, unit_id: int) -> void:
+	var op: Dictionary = ctx.state["units"][unit_id]["op"]
+	if op.get("reason", "") == REASON_CARGO_FULL \
+			and Units.grams_that_fit(ctx.state, ctx.defs, op["to"], op["item"]) > 0:
+		op.erase("reason")
+
+
 ## An interrupted transfer still reports what it moved.
 func report_end(ctx: SimContext, unit_id: int, _reason: String) -> void:
 	CargoSystem.close_transfer(ctx, unit_id)

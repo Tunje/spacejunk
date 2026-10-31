@@ -23,5 +23,17 @@ func begin(ctx: SimContext, unit_id: int, _args: Dictionary) -> void:
 		module["capabilities"][DockStep.CAPABILITY]["undock_ticks"])
 
 
+func is_atomic(_ctx: SimContext, _unit_id: int) -> bool:
+	return true
+
+
+func needs(_ctx: SimContext, _args: Dictionary, place: Dictionary) -> bool:
+	return place["docked"] != 0
+
+
+func leaves(_ctx: SimContext, _args: Dictionary, place: Dictionary) -> Dictionary:
+	return { "docked": 0, "at": place["docked"] }
+
+
 func end_test(ctx: SimContext, unit_id: int) -> bool:
 	return ctx.state["units"][unit_id]["dock"].is_empty()

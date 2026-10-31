@@ -28,8 +28,7 @@ func validate(ctx: SimContext, unit_id: int, args: Dictionary) -> Dictionary:
 		return SimSystem.reject(TaskSystem.REASON_MODULE_FAULT)
 	var module := Units.module_of(state, ctx.defs, part_id)
 	var unit: Dictionary = state["units"][unit_id]
-	var tier: int = Units.module_of(state, ctx.defs, unit["core"])["capabilities"]["ai_core"]["tier"]
-	if module["min_ai_tier"] > tier:
+	if module["min_ai_tier"] > TaskSystem.tier_of(ctx, unit):
 		return SimSystem.reject(TaskSystem.REASON_TIER_TOO_LOW)
 	if not unit["dock"].is_empty():
 		return SimSystem.reject(TaskSystem.REASON_DOCKED)
@@ -98,6 +97,18 @@ func end_test(ctx: SimContext, unit_id: int) -> bool:
 	elif Units.grams_that_fit(ctx.state, ctx.defs, unit_id, deposit["item"]) == 0:
 		op["end_reason"] = REASON_CARGO_FULL
 	return op["end_reason"] != ""
+
+
+func references_exist(ctx: SimContext, unit_id: int, args: Dictionary) -> bool:
+	if typeof(args.get("deposit")) != TYPE_INT or typeof(args.get("module")) != TYPE_INT:
+		return false
+	var deposits: Dictionary = ctx.state["deposits"]
+	return _is_laser_on(ctx, unit_id, args["module"]) and deposits.has(args["deposit"]) \
+		and deposits[args["deposit"]]["found"]
+
+
+func needs(ctx: SimContext, args: Dictionary, place: Dictionary) -> bool:
+	return place["docked"] == 0 and place["at"] == ctx.state["deposits"][args["deposit"]]["body"]
 
 
 func report_end(ctx: SimContext, unit_id: int, reason: String) -> void:
