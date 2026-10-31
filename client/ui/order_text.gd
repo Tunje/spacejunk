@@ -43,6 +43,9 @@ const REASONS: Dictionary = {
 	"unknown_deposit": "Deposit not found",
 	"malformed_command": "Invalid order",
 	"unknown_command": "Not available yet",
+	"unknown_job": "Job no longer exists",
+	"unknown_recipe": "Recipe not found",
+	"wrong_facility": "Wrong facility for this recipe",
 	"unknown_part": "Part no longer exists",
 	"unknown_unit": "Craft no longer exists",
 }
@@ -104,6 +107,12 @@ static func event(entry: Dictionary, unit_name: String, items: Dictionary) -> St
 			return "%s: %s" % [unit_name, reason(data["reason"], data.get("detail", {}))]
 		"mining_stopped":
 			return "%s: mining stopped. %s" % [unit_name, reason(data["reason"])]
+		"job_finished":
+			return "%s: finished %s" % [unit_name, data["recipe"].replace("_", " ").capitalize()]
+		"job_cancelled":
+			return "%s: cancelled %s" % [unit_name, data["recipe"].replace("_", " ").capitalize()]
+		"job_paused":
+			return "%s: job held. %s" % [unit_name, reason(data["reason"])]
 		"transfer_done":
 			var moved: String = items.get(data["item"], {}).get("name", data["item"])
 			return "%s: moved %s of %s" % [unit_name, tonnes(data["grams"]), moved]
