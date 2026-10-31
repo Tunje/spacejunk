@@ -1,10 +1,14 @@
 class_name PanelPlayer extends RefCounted
 ## Plays the reference scenario through the real panels, pressing only what a
-## player can press: no stock is poked and no command is built by hand. Records
-## what happened, so tests assert on one shared run, as ReferenceBot does.
+## player can press: no stock is poked and no command is built by hand. It works
+## through the goals in order, doing what each hint says, so a hint that cannot
+## be followed fails here. Records one shared run, as ReferenceBot does.
 
 const MAX_ADVANCES := 4000
 const FRAME_SECONDS := 0.1
+## What the Install hint tells the player to fit first.
+const INSTALL_ITEM := "ore_container_mk1"
+const INSTALL_SLOT := "side_c_pz"
 
 var main: Node
 var bridge: SimBridge
@@ -48,26 +52,55 @@ func _init(new_main: Node) -> void:
 
 
 func run() -> void:
+	_expect_goal("scan")
+	_fly_out("Red Rock")
+	_order("Scan")
+	_expect_goal("mine")
+	_mine_on(rocks["Red Rock"])
+	_expect_goal("haul")
+	_fly_home("Hematite Ore")
+	_expect_goal("refine")
+	_job("refinery", "refine_hematite", 20)
+	_expect_goal("fabricate")
+	_job("fabricator", "structural_frame", 6)
+	_expect_goal("install")
+	_job("fabricator", INSTALL_ITEM, 1)
+	_install(INSTALL_ITEM, INSTALL_SLOT)
+	_expect_goal("drone")
+	_stock_up_for_the_rest()
+	_job("fabricator", "mining_drone", 1)
+	_find_the_drone()
+	_expect_goal("handover")
+	_job("fabricator", "basic_core", 1)
+	_job("fabricator", "assisted_core", 1)
+	_hand_over_to_the_drone()
+	_expect_goal("expand")
+	_job("fabricator", "ore_storage_mk1", 1)
+	_expand_the_station()
+	_expect_goal("fix")
+	_job("fabricator", "mining_laser_mk1", 1)
+	_job("fabricator", "heat_radiator_mk1", 1)
+	_fail_then_fix_the_fit()
+
+
+## Goals 7 to 10 need copper and silicon as well as more iron.
+func _stock_up_for_the_rest() -> void:
 	_trip("Brass Rock", "Chalcopyrite Ore")
 	_trip("Green Rock", "Olivine Ore")
 	_trip("Red Rock", "Hematite Ore")
-	_trip("Red Rock", "Hematite Ore")
-	_job("refinery", "refine_hematite", 26)
+	_job("refinery", "refine_hematite", 20)
 	_job("refinery", "refine_chalcopyrite", 10)
 	_job("refinery", "refine_olivine", 6)
 	_job("fabricator", "structural_frame", 35)
 	_job("fabricator", "wiring", 21)
 	_job("fabricator", "processor", 24)
-	_job("fabricator", "heat_radiator_mk1", 1)
-	_job("fabricator", "mining_laser_mk1", 1)
-	_fail_then_fix_the_fit()
-	_job("fabricator", "ore_storage_mk1", 1)
-	_expand_the_station()
-	_job("fabricator", "mining_drone", 1)
-	_find_the_drone()
-	_job("fabricator", "basic_core", 1)
-	_job("fabricator", "assisted_core", 1)
-	_hand_over_to_the_drone()
+
+
+## Fails the run if the goal panel is not on the goal this stage plays.
+func _expect_goal(id: String) -> void:
+	var current: String = goals.current().get("id", "")
+	if current != id:
+		_problem("expected to be on goal %s, the panel is on %s" % [id, current])
 
 
 func unit(id: int) -> Dictionary:
@@ -126,23 +159,32 @@ func _order(key: String) -> void:
 
 
 func _trip(rock_name: String, ore_name: String) -> void:
-	view.select("unit", ship, 0)
-	_order("Undock")
+	_fly_out(rock_name)
 	var rock: int = rocks[rock_name]
-	view.select("body", rock, 0)
-	_order("Move to")
 	if not bridge.current_view["bodies"][rock]["scanned"]:
 		_order("Scan")
-	view.select("body", rock, 0)
 	_mine_on(rock)
+	_fly_home(ore_name)
+
+
+func _fly_out(rock_name: String) -> void:
+	view.select("unit", ship, 0)
+	_order("Undock")
+	view.select("body", rocks[rock_name], 0)
+	_order("Move to")
+
+
+func _fly_home(ore_name: String) -> void:
 	view.select("unit", station, 0)
 	_order("Move to")
 	_order("Dock")
 	view.select("unit", ship, 0)
 	_order("Unload %s" % ore_name)
+	_order("Load Propellant")
 
 
 func _mine_on(rock: int) -> void:
+	view.select("body", rock, 0)
 	var state: Dictionary = bridge.current_view
 	for id: int in state["deposits"]:
 		if state["deposits"][id]["body"] == rock:
@@ -208,6 +250,14 @@ func _attach() -> void:
 	bridge.advance(FRAME_SECONDS)
 	bridge.set_paused(true)
 	fitting.refresh()
+
+
+func _install(item: String, connector: String) -> void:
+	_open_fitting(ship)
+	_pick_part(item)
+	_pick_slot(connector)
+	_attach()
+	main.toggle_fitting()
 
 
 ## Check 10: the second laser is refused on heat, and one radiator fixes it.

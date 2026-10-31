@@ -61,6 +61,18 @@ func test_every_goal_ticked() -> void:
 	assert_true(player.goals.current().is_empty())
 
 
+func test_goals_finished_in_the_order_the_hints_give() -> void:
+	var ids: Array = GoalTracker.GOALS.map(func(goal: Dictionary) -> String: return goal["id"])
+	assert_eq(player.goal_order, ids as Array[String])
+
+
+func test_the_install_hint_names_what_the_run_fits() -> void:
+	var name_text: String = player.bridge.defs()["modules"][PanelPlayer.INSTALL_ITEM]["name"]
+	for goal: Dictionary in GoalTracker.GOALS:
+		if goal["id"] == "install":
+			assert_string_contains(goal["hint"], name_text)
+
+
 func test_the_panel_says_all_goals_are_done() -> void:
 	assert_eq(main.goal_panel._title.text, "All ten goals done")
 
