@@ -26,8 +26,11 @@ func test_the_chain_runs_to_the_end_with_nothing_failing() -> void:
 	assert_true(bot.marks.has("end"))
 
 
-func test_matter_balances_on_every_tick() -> void:
+func test_matter_energy_and_heat_balance_on_every_tick() -> void:
 	assert_eq(bot.ledger_problems, PackedStringArray())
+
+
+func test_the_state_stays_in_range() -> void:
 	assert_eq(bot.range_problems, PackedStringArray())
 
 
