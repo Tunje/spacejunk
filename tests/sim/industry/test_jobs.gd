@@ -388,10 +388,6 @@ func test_cancel_job_needs_a_job_on_this_unit() -> void:
 	_assert_refused({ "type": "cancel_job", "unit": STATION, "args": {} }, "malformed_command")
 
 
-func test_unit_recipes_wait_for_construction() -> void:
-	_assert_refused(_start("mining_drone"), "unknown_recipe")
-
-
 func test_a_facility_cannot_be_detached_from_its_job() -> void:
 	_give("copper", COPPER_RUN_G)
 	_started()

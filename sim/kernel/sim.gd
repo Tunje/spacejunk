@@ -198,7 +198,7 @@ static func _data_hash(defs_value: Dictionary) -> String:
 static func _default_systems() -> Array[SimSystem]:
 	return [
 		UnitSystem.new(), FittingSystem.new(), TaskSystem.new(), JobSystem.new(), CargoSystem.new(),
-		PowerSystem.new(), HeatSystem.new(),
+		PowerSystem.new(), HeatSystem.new(), ConstructionSystem.new(),
 	]
 
 
