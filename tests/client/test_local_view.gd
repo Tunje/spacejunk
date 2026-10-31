@@ -254,7 +254,7 @@ func test_panel_offers_orders_for_an_asteroid_and_greys_invalid_ones() -> void:
 func test_scan_then_mine_through_the_panel() -> void:
 	view.select("body", rock, 0)
 	assert_true(panel.button_for("Scan").disabled, "too far away to scan")
-	assert_string_contains(panel.button_for("Scan").tooltip_text, "Out of range")
+	assert_string_contains(panel.button_for("Scan").tooltip_text, "Move there first")
 	assert_true(panel.press("Move to"))
 	_run_ticks(_sim_ship_ticks_to(rock) + 8)
 	assert_true(panel.press("Scan"))
@@ -290,4 +290,4 @@ func test_unknown_reason_codes_still_read_cleanly() -> void:
 
 
 func test_range_details_show_numbers() -> void:
-	assert_eq(OrderText.reason("out_of_range", { "need_mm": 500000, "have_mm": 3200000 }), "Out of range (3.2 km, needs 500 m)")
+	assert_eq(OrderText.reason("out_of_range", { "need_mm": 500000, "have_mm": 3200000 }), "Move there first (3.2 km, needs 500 m)")

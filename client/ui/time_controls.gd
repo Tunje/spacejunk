@@ -3,6 +3,7 @@ class_name TimeControls extends PanelContainer
 ## pick a speed. These are raw keys so project.godot needs no input map.
 
 signal map_pressed
+signal policy_pressed
 
 var bridge: SimBridge
 
@@ -34,6 +35,11 @@ func _ready() -> void:
 	map_button.focus_mode = Control.FOCUS_NONE
 	map_button.pressed.connect(func() -> void: map_pressed.emit())
 	row.add_child(map_button)
+	var policy_button := Button.new()
+	policy_button.text = "Policy"
+	policy_button.focus_mode = Control.FOCUS_NONE
+	policy_button.pressed.connect(func() -> void: policy_pressed.emit())
+	row.add_child(policy_button)
 	_clock = Label.new()
 	_clock.custom_minimum_size = Vector2(190, 0)
 	_clock.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT

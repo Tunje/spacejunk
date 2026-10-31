@@ -96,7 +96,7 @@ Units run in ascending ID. For each unit with a task:
 3. If blocked, re-test the reason. Clear it if it no longer holds.
 4. If running with no operation in progress, start the current step.
 
-A unit advances at most one step per tick. A step that ends at phase 2 starts the next one in the same tick. A step with nothing to do ends at the next tick's phase 2, so a lap cannot spin within a tick.
+Operation timing is in [networks.md](networks.md) section 6: an operation of N ticks from tick S ends in phase 6 of S+N-1, and phase 2 of S+N completes the step. A unit advances at most one step per tick. A step that ends at phase 2 starts the next one in the same tick. A step with nothing to do ends at the next tick's phase 2, so a lap cannot spin within a tick.
 
 ## 4. Steps
 
