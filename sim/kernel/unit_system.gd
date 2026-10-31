@@ -56,8 +56,8 @@ func _unit_view(ctx: SimContext, id: int) -> Dictionary:
 			"target": route["target"], "from_mm": route["from_mm"].duplicate(),
 			"to_mm": route["to_mm"].duplicate(), "eta_tick": route["eta_tick"],
 		}
-	var fit := Units.fit(state, defs, id)
-	var reject_w := Units.healthy_sum(state, defs, id, "radiator", "reject_w")
+	var fit := UnitIndex.fit(ctx, id)
+	var index := UnitIndex.of(ctx, id)
 	var result := {
 		"def": unit["def"], "kind": unit["kind"], "name": unit["name"],
 		"pos_mm": unit["pos_mm"].duplicate(), "at_target": unit["at_target"],
@@ -65,27 +65,26 @@ func _unit_view(ctx: SimContext, id: int) -> Dictionary:
 		"last_cycle": unit["last_cycle"].duplicate(true),
 		"op": unit["op"].duplicate(), "route": shown_route, "dock": unit["dock"].duplicate(),
 		"parts": _part_view(ctx, unit["root"]), "inventory": unit["inventory"].duplicate(),
-		"mass_g": fit["mass_g"], "cargo": Units.cargo(state, defs, id), "fit": fit,
+		"mass_g": fit["mass_g"], "cargo": UnitIndex.cargo(ctx, id), "fit": fit,
 		"power": _power_view(ctx, id),
 		"heat": {
 			"stored_j": unit["heat_stored_j"],
-			"limit_j": Units.capability_sum(state, defs, id, "heat_capacity", "limit_j"),
-			"reject_w": reject_w, "input_w": unit["heat_input_w"],
+			"limit_j": index["limit_j"],
+			"reject_w": UnitIndex.healthy_total(ctx, index["radiators"]), "input_w": unit["heat_input_w"],
 		},
 	}
 	return result
 
 
 func _power_view(ctx: SimContext, id: int) -> Dictionary:
-	var state := ctx.state
+	var index := UnitIndex.of(ctx, id)
 	var stored_j := 0
-	for part_id in Units.part_ids(state, id):
-		stored_j += state["parts"][part_id].get("stored_j", 0)
+	for battery: Array in index["batteries"]:
+		stored_j += ctx.state["parts"][battery[0]]["stored_j"]
 	return {
-		"supply_w": Units.healthy_sum(state, ctx.defs, id, "generate", "power_w"),
-		"demand_w": state["units"][id]["demand_w"], "stored_j": stored_j,
-		"capacity_j": Units.capability_sum(state, ctx.defs, id, "battery", "capacity_j"),
-		"max_discharge_w": Units.capability_sum(state, ctx.defs, id, "battery", "max_discharge_w"),
+		"supply_w": UnitIndex.healthy_total(ctx, index["generators"]),
+		"demand_w": ctx.state["units"][id]["demand_w"], "stored_j": stored_j,
+		"capacity_j": index["capacity_j"], "max_discharge_w": index["max_discharge_w"],
 	}
 
 

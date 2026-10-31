@@ -51,6 +51,7 @@ static func add_part(
 	ctx: SimContext, unit: int, def: String, parent: int, parent_connector: String, connector: String
 ) -> int:
 	var id := ctx.new_id()
+	ctx.index.erase(unit)
 	var module: Dictionary = ctx.defs["modules"][def]
 	var part := {
 		"id": id, "unit": unit, "def": def, "parent": parent,
@@ -137,27 +138,36 @@ static func cargo(
 			continue
 		var storage: Dictionary = module_of(state, defs, part_id)["capabilities"].get("storage", {})
 		for cargo_class: String in storage:
-			var entry := _class_entry(result, cargo_class)
+			var entry := class_entry(result, cargo_class)
 			entry["cap_g"] += storage[cargo_class]["mass_g"]
 			entry["cap_l"] += storage[cargo_class]["volume_l"]
+	add_cargo_use(result, state, defs, unit_id, extra)
+	return result
+
+
+## Adds a unit's stock and reserved space to a table of cargo classes.
+static func add_cargo_use(
+	table: Dictionary, state: Dictionary, defs: Dictionary, unit_id: int, extra: Dictionary
+) -> void:
 	var unit: Dictionary = state["units"][unit_id]
-	var inventory: Dictionary = unit["inventory"].duplicate()
-	for item: String in extra:
-		inventory[item] = inventory.get(item, 0) + extra[item]
+	var inventory: Dictionary = unit["inventory"]
+	if not extra.is_empty():
+		inventory = inventory.duplicate()
+		for item: String in extra:
+			inventory[item] = inventory.get(item, 0) + extra[item]
 	for item: String in inventory:
 		var item_def: Dictionary = defs["items"][item]
-		var entry := _class_entry(result, item_def["cargo_class"])
+		var entry := class_entry(table, item_def["cargo_class"])
 		entry["used_g"] += inventory[item]
 		entry["used_l"] += litres(inventory[item], item_def["density_g_l"])
 	var reserved: Dictionary = unit["reserved"]
 	for cargo_class: String in reserved:
-		var entry := _class_entry(result, cargo_class)
+		var entry := class_entry(table, cargo_class)
 		entry["reserved_g"] = reserved[cargo_class]["g"]
 		entry["reserved_l"] = reserved[cargo_class]["l"]
-	return result
 
 
-static func _class_entry(table: Dictionary, cargo_class: String) -> Dictionary:
+static func class_entry(table: Dictionary, cargo_class: String) -> Dictionary:
 	return table.get_or_add(cargo_class, {
 		"used_g": 0, "cap_g": 0, "used_l": 0, "cap_l": 0, "reserved_g": 0, "reserved_l": 0,
 	})
@@ -198,27 +208,6 @@ static func fit(
 			+ capabilities.get("battery", {}).get("max_discharge_w", 0)
 		result["heat_budget_w"] += capabilities.get("radiator", {}).get("reject_w", 0)
 	return result
-
-
-## Sums a capability's field across a unit's parts.
-static func capability_sum(
-	state: Dictionary, defs: Dictionary, unit_id: int, capability: String, field: String
-) -> int:
-	var total := 0
-	for part_id in part_ids(state, unit_id):
-		total += module_of(state, defs, part_id)["capabilities"].get(capability, {}).get(field, 0)
-	return total
-
-
-## Sums a capability's field across a unit's parts that are not faulted.
-static func healthy_sum(
-	state: Dictionary, defs: Dictionary, unit_id: int, capability: String, field: String
-) -> int:
-	var total := 0
-	for part_id in part_ids(state, unit_id):
-		if state["parts"][part_id]["fault"] == "":
-			total += module_of(state, defs, part_id)["capabilities"].get(capability, {}).get(field, 0)
-	return total
 
 
 static func connector_of(module: Dictionary, connector_id: String) -> Dictionary:

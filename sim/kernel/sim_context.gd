@@ -11,6 +11,8 @@ var tick := 0
 var phase := 0
 ## Per-tick figures for the ledgers. Rebuilt each tick and never saved.
 var flows := {}
+## UnitIndex entries by unit ID. Derived, so never saved.
+var index := {}
 
 var _events: Array[Dictionary] = []
 var _deltas: Array[Dictionary] = []

@@ -183,6 +183,7 @@ func _apply_detach(ctx: SimContext, command: Dictionary) -> void:
 	var unit: Dictionary = state["units"][command["unit"]]
 	var part_id: int = args["part"]
 	var parts: Dictionary = state["parts"]
+	ctx.index.erase(command["unit"])
 	var parent: Dictionary = parts[parts[part_id]["parent"]]
 	parent["children"].erase(part_id)
 	var inventory: Dictionary = state["units"][args["to"]]["inventory"]
