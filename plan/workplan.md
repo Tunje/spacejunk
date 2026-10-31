@@ -1,6 +1,6 @@
 # Newman Probe: Workplan
 
-Status: approved by the owner on 2026-10-31. M0 is in progress.
+Status: approved by the owner on 2026-10-31. M0 and M1 are complete, and M2 is in progress.
 Sources: [ideadock.md](ideadock.md) and [analasysOfIdeadock.md](../analasysOfIdeadock.md). This plan assumes you have read both.
 Engine: Godot 4 (owner's choice).
 
