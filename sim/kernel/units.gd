@@ -46,7 +46,7 @@ static func _create_part(
 	return id
 
 
-## Issues a part ID and adds the part's record. Batteries start full.
+## Issues a part ID and adds the part's record. A new battery is empty.
 static func add_part(
 	ctx: SimContext, unit: int, def: String, parent: int, parent_connector: String, connector: String
 ) -> int:
@@ -57,13 +57,24 @@ static func add_part(
 		"parent_connector": parent_connector, "connector": connector, "children": [],
 		"fault": "", "priority": module["priority"], "shed": false, "shed_until_tick": 0, "draw_w": 0,
 	}
-	var battery: Dictionary = module["capabilities"].get("battery", {})
-	if not battery.is_empty():
-		part["stored_j"] = battery["capacity_j"]
+	if module["capabilities"].has("battery"):
+		part["stored_j"] = 0
 		part["charge_remainder"] = 0
 		part["discharge_remainder"] = 0
 	ctx.state["parts"][id] = part
 	return id
+
+
+## True if a part is allowed to work this tick. Read this from phase 5 on, after allocation.
+static func can_run(part: Dictionary) -> bool:
+	return part["fault"] == "" and not part["shed"]
+
+
+## A unit's part IDs in ascending ID order.
+static func sorted_part_ids(state: Dictionary, unit_id: int) -> Array[int]:
+	var ids := part_ids(state, unit_id)
+	ids.sort()
+	return ids
 
 
 static func module_of(state: Dictionary, defs: Dictionary, part_id: int) -> Dictionary:
