@@ -14,15 +14,15 @@ const GOALS: Array[Dictionary] = [
 	{ "id": "fabricate", "title": "Fabricate a component",
 		"hint": "Open Jobs (J), pick the Fabricator and Start a component." },
 	{ "id": "install", "title": "Install a part on your ship",
-		"hint": "Fabricate a module, dock, then open Fit (G), pick it and pick a connector." },
+		"hint": "Fabricate a Heat Radiator, dock, open Fit (G), pick it and pick a connector on the hull." },
 	{ "id": "drone", "title": "Build a mining drone",
 		"hint": "Fabricate a Mining Drone. It appears at a free station port." },
 	{ "id": "handover", "title": "Hand the job to an AI core",
 		"hint": "Fit an Assisted Core to the drone, then in Auto (K) use it and press Repeat this route." },
 	{ "id": "expand", "title": "Expand the station",
-		"hint": "Select the Station, open Fit (G) and attach another module." },
+		"hint": "Fabricate Ore Storage, select the Station, open Fit (G) and attach it to a free connector." },
 	{ "id": "fix", "title": "Hit a fitting limit and fix it",
-		"hint": "Try a part the craft cannot support, read why, fix that, then fit it." },
+		"hint": "Try a second Mining Laser on the ship: it fails on heat, 280 of 200 kW. Fit a Heat Radiator, then the laser." },
 ]
 const LIMIT_REASONS: Array[String] = ["over_mass_limit", "over_power_budget", "over_heat_budget"]
 
