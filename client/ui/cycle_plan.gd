@@ -23,7 +23,8 @@ static func record(trip: Array[Dictionary], command: Dictionary) -> void:
 
 
 ## Rebuilds a trip for `unit_id`: its own laser and port replace the ones the
-## trip was flown with, and a propellant load is added if the trip left it out.
+## trip was flown with, and a propellant load goes first, because a new drone
+## starts with an empty tank and could not leave otherwise.
 static func adapt(trip: Array[Dictionary], unit_id: int, view: Dictionary, defs: Dictionary) -> Array[Dictionary]:
 	var unit: Dictionary = view["units"][unit_id]
 	var modules: Dictionary = defs["modules"]
@@ -50,8 +51,11 @@ static func adapt(trip: Array[Dictionary], unit_id: int, view: Dictionary, defs:
 
 static func _add_propellant_load(steps: Array[Dictionary], view: Dictionary, defs: Dictionary) -> void:
 	var host := 0
-	for step: Dictionary in steps:
+	for index in range(steps.size()):
+		var step: Dictionary = steps[index]
 		if step["type"] == "load_cargo" and defs["items"][step["args"]["item"]]["cargo_class"] == PROPELLANT_CLASS:
+			steps.remove_at(index)
+			steps.push_front(step)
 			return
 		if step["type"] == "dock":
 			host = CyclePlan.unit_of_part(view, step["args"]["target_port"])
@@ -59,7 +63,7 @@ static func _add_propellant_load(steps: Array[Dictionary], view: Dictionary, def
 		return
 	for item: String in view["units"][host]["inventory"]:
 		if defs["items"].has(item) and defs["items"][item]["cargo_class"] == PROPELLANT_CLASS:
-			steps.append({ "type": "load_cargo", "args": { "from": host, "item": item } })
+			steps.push_front({ "type": "load_cargo", "args": { "from": host, "item": item } })
 			return
 
 
