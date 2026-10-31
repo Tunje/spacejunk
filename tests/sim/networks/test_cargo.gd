@@ -54,10 +54,11 @@ func _run_order(command: Dictionary, limit: int = 3000) -> int:
 	return taken
 
 
+## Runs every tick, so it reports only on a failure. GUT's asserts are slow at this volume.
 func _assert_clean() -> void:
 	var ledger := sim.ledger()
-	assert_eq(ledger["matter"]["total_g"], ledger["matter"]["start_g"], "matter balances")
-	assert_eq(ledger["violations"], PackedStringArray())
+	if ledger["matter"]["total_g"] != ledger["matter"]["start_g"] or not ledger["violations"].is_empty():
+		fail_test("ledger at tick %d: %s" % [sim.current_tick(), ledger])
 
 
 func _unit() -> Dictionary:
