@@ -9,6 +9,7 @@ const SEED_VALUE := 1
 @onready var time_controls: TimeControls = %TimeControls
 @onready var order_panel: OrderPanel = %OrderPanel
 @onready var event_log: EventLog = %EventLog
+@onready var inspection_panel: InspectionPanel = %InspectionPanel
 @onready var markers: EntityMarkers = %Markers
 @onready var system_map: SystemMap = $SystemMap
 @onready var standing_orders: StandingOrdersScreen = %StandingOrders
@@ -23,6 +24,7 @@ func _ready() -> void:
 	local_view.bind(bridge)
 	order_panel.bind(bridge, local_view)
 	event_log.bind(bridge)
+	inspection_panel.bind(bridge, local_view)
 	system_map.bind(bridge, local_view)
 	time_controls.map_pressed.connect(toggle_map)
 	time_controls.policy_pressed.connect(standing_orders.toggle)
