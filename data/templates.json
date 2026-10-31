@@ -1,0 +1,185 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "id": "mining_drone",
+      "name": "Mining Drone",
+      "kind": "drone",
+      "root": {
+        "part": "mining_drone_body",
+        "children": []
+      }
+    },
+    {
+      "id": "starter_ship",
+      "name": "Starter Ship",
+      "kind": "ship",
+      "root": {
+        "part": "starter_hull",
+        "children": [
+          {
+            "part": "basic_core",
+            "parent_connector": "core",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "propellant_tank_mk1",
+            "parent_connector": "stack_bottom",
+            "connector": "mount",
+            "children": [
+              {
+                "part": "chemical_thruster_mk1",
+                "parent_connector": "stack_bottom",
+                "connector": "mount",
+                "children": []
+              }
+            ]
+          },
+          {
+            "part": "docking_port_mk1",
+            "parent_connector": "stack_top",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "solar_panel_mk1",
+            "parent_connector": "side_a_px",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "solar_panel_mk1",
+            "parent_connector": "side_a_nx",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "battery_bank_mk1",
+            "parent_connector": "side_a_pz",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "battery_bank_mk1",
+            "parent_connector": "side_a_nz",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "ore_container_mk1",
+            "parent_connector": "side_b_px",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "heat_radiator_mk1",
+            "parent_connector": "side_b_nx",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "mining_laser_mk1",
+            "parent_connector": "side_b_pz",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "lidar_mk1",
+            "parent_connector": "side_c_px",
+            "connector": "mount",
+            "children": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "starter_station",
+      "name": "Starter Station",
+      "kind": "station",
+      "root": {
+        "part": "command_hub",
+        "children": [
+          {
+            "part": "basic_core",
+            "parent_connector": "core",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "docking_port_mk1",
+            "parent_connector": "stack_top",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "docking_port_mk1",
+            "parent_connector": "stack_px",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "ore_refinery_mk1",
+            "parent_connector": "side_a_px",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "fabricator_mk1",
+            "parent_connector": "side_a_nx",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "ore_storage_mk1",
+            "parent_connector": "side_a_pz",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "goods_storage_mk1",
+            "parent_connector": "side_a_nz",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "solar_farm_mk1",
+            "parent_connector": "side_b_px",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "battery_bank_mk1",
+            "parent_connector": "side_b_nx",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "heat_radiator_mk1",
+            "parent_connector": "side_b_pz",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "heat_radiator_mk1",
+            "parent_connector": "side_b_nz",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "propellant_tank_mk1",
+            "parent_connector": "stack_bottom",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "propellant_tank_mk1",
+            "parent_connector": "stack_nx",
+            "connector": "mount",
+            "children": []
+          }
+        ]
+      }
+    }
+  ]
+}

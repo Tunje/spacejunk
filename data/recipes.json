@@ -1,0 +1,548 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "id": "assisted_core",
+      "facility": "fabricator",
+      "seconds": 300,
+      "power_kw": 100,
+      "inputs": [
+        {
+          "item": "basic_core",
+          "count": 1
+        },
+        {
+          "item": "processor",
+          "count": 6
+        }
+      ],
+      "outputs": [
+        {
+          "item": "assisted_core",
+          "count": 1
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "basic_core",
+      "facility": "fabricator",
+      "seconds": 120,
+      "power_kw": 50,
+      "inputs": [
+        {
+          "item": "processor",
+          "count": 4
+        },
+        {
+          "item": "wiring",
+          "count": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item": "basic_core",
+          "count": 1
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "battery_bank_mk1",
+      "facility": "fabricator",
+      "seconds": 120,
+      "power_kw": 80,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 2
+        },
+        {
+          "item": "wiring",
+          "count": 5
+        },
+        {
+          "item": "copper",
+          "kg": 150
+        }
+      ],
+      "outputs": [
+        {
+          "item": "battery_bank_mk1",
+          "count": 1
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "chemical_thruster_mk1",
+      "facility": "fabricator",
+      "seconds": 120,
+      "power_kw": 80,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 4
+        },
+        {
+          "item": "iron",
+          "kg": 100
+        }
+      ],
+      "outputs": [
+        {
+          "item": "chemical_thruster_mk1",
+          "count": 1
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "docking_port_mk1",
+      "facility": "fabricator",
+      "seconds": 90,
+      "power_kw": 60,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 2
+        },
+        {
+          "item": "wiring",
+          "count": 5
+        }
+      ],
+      "outputs": [
+        {
+          "item": "docking_port_mk1",
+          "count": 1
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "fabricator_mk1",
+      "facility": "fabricator",
+      "seconds": 600,
+      "power_kw": 100,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 30
+        },
+        {
+          "item": "wiring",
+          "count": 40
+        },
+        {
+          "item": "processor",
+          "count": 20
+        }
+      ],
+      "outputs": [
+        {
+          "item": "fabricator_mk1",
+          "count": 1
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "goods_storage_mk1",
+      "facility": "fabricator",
+      "seconds": 300,
+      "power_kw": 60,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 20
+        }
+      ],
+      "outputs": [
+        {
+          "item": "goods_storage_mk1",
+          "count": 1
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "heat_radiator_mk1",
+      "facility": "fabricator",
+      "seconds": 90,
+      "power_kw": 60,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 2
+        },
+        {
+          "item": "copper",
+          "kg": 100
+        }
+      ],
+      "outputs": [
+        {
+          "item": "heat_radiator_mk1",
+          "count": 1
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "lidar_mk1",
+      "facility": "fabricator",
+      "seconds": 120,
+      "power_kw": 80,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 1
+        },
+        {
+          "item": "wiring",
+          "count": 3
+        },
+        {
+          "item": "processor",
+          "count": 4
+        }
+      ],
+      "outputs": [
+        {
+          "item": "lidar_mk1",
+          "count": 1
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "mining_drone",
+      "facility": "fabricator",
+      "seconds": 300,
+      "power_kw": 100,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 8
+        },
+        {
+          "item": "wiring",
+          "count": 10
+        },
+        {
+          "item": "processor",
+          "count": 4
+        }
+      ],
+      "outputs": [
+        {
+          "unit_template": "mining_drone"
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "mining_laser_mk1",
+      "facility": "fabricator",
+      "seconds": 180,
+      "power_kw": 100,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 5
+        },
+        {
+          "item": "wiring",
+          "count": 10
+        },
+        {
+          "item": "processor",
+          "count": 10
+        }
+      ],
+      "outputs": [
+        {
+          "item": "mining_laser_mk1",
+          "count": 1
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "ore_container_mk1",
+      "facility": "fabricator",
+      "seconds": 120,
+      "power_kw": 60,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 6
+        }
+      ],
+      "outputs": [
+        {
+          "item": "ore_container_mk1",
+          "count": 1
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "ore_refinery_mk1",
+      "facility": "fabricator",
+      "seconds": 900,
+      "power_kw": 100,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 50
+        },
+        {
+          "item": "wiring",
+          "count": 40
+        },
+        {
+          "item": "processor",
+          "count": 20
+        }
+      ],
+      "outputs": [
+        {
+          "item": "ore_refinery_mk1",
+          "count": 1
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "ore_storage_mk1",
+      "facility": "fabricator",
+      "seconds": 300,
+      "power_kw": 60,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 20
+        }
+      ],
+      "outputs": [
+        {
+          "item": "ore_storage_mk1",
+          "count": 1
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "processor",
+      "facility": "fabricator",
+      "seconds": 60,
+      "power_kw": 80,
+      "inputs": [
+        {
+          "item": "copper",
+          "kg": 1
+        },
+        {
+          "item": "silicon",
+          "kg": 4
+        }
+      ],
+      "outputs": [
+        {
+          "item": "processor",
+          "count": 1
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "propellant_tank_mk1",
+      "facility": "fabricator",
+      "seconds": 90,
+      "power_kw": 60,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 2
+        },
+        {
+          "item": "iron",
+          "kg": 100
+        }
+      ],
+      "outputs": [
+        {
+          "item": "propellant_tank_mk1",
+          "count": 1
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "refine_chalcopyrite",
+      "facility": "refinery",
+      "seconds": 60,
+      "power_kw": 200,
+      "inputs": [
+        {
+          "item": "chalcopyrite",
+          "kg": 100
+        }
+      ],
+      "outputs": [
+        {
+          "item": "copper",
+          "kg": 34
+        },
+        {
+          "item": "slag",
+          "kg": 66,
+          "sink": "slag_vent"
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "refine_hematite",
+      "facility": "refinery",
+      "seconds": 60,
+      "power_kw": 200,
+      "inputs": [
+        {
+          "item": "hematite",
+          "kg": 100
+        }
+      ],
+      "outputs": [
+        {
+          "item": "iron",
+          "kg": 69
+        },
+        {
+          "item": "slag",
+          "kg": 31,
+          "sink": "slag_vent"
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "refine_olivine",
+      "facility": "refinery",
+      "seconds": 90,
+      "power_kw": 200,
+      "inputs": [
+        {
+          "item": "olivine",
+          "kg": 100
+        }
+      ],
+      "outputs": [
+        {
+          "item": "silicon",
+          "kg": 19
+        },
+        {
+          "item": "slag",
+          "kg": 81,
+          "sink": "slag_vent"
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "solar_farm_mk1",
+      "facility": "fabricator",
+      "seconds": 600,
+      "power_kw": 80,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 20
+        },
+        {
+          "item": "wiring",
+          "count": 20
+        },
+        {
+          "item": "silicon",
+          "kg": 300
+        }
+      ],
+      "outputs": [
+        {
+          "item": "solar_farm_mk1",
+          "count": 1
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "solar_panel_mk1",
+      "facility": "fabricator",
+      "seconds": 120,
+      "power_kw": 60,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 2
+        },
+        {
+          "item": "wiring",
+          "count": 2
+        },
+        {
+          "item": "silicon",
+          "kg": 30
+        }
+      ],
+      "outputs": [
+        {
+          "item": "solar_panel_mk1",
+          "count": 1
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "structural_frame",
+      "facility": "fabricator",
+      "seconds": 30,
+      "power_kw": 50,
+      "inputs": [
+        {
+          "item": "iron",
+          "kg": 50
+        }
+      ],
+      "outputs": [
+        {
+          "item": "structural_frame",
+          "count": 1
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "wiring",
+      "facility": "fabricator",
+      "seconds": 20,
+      "power_kw": 50,
+      "inputs": [
+        {
+          "item": "copper",
+          "kg": 10
+        }
+      ],
+      "outputs": [
+        {
+          "item": "wiring",
+          "count": 1
+        }
+      ],
+      "abstract": true
+    }
+  ]
+}
