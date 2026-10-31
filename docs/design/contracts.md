@@ -40,7 +40,7 @@ Valid ranges are asserted at commit in test runs.
 
 ## 2. IDs
 
-- Definition IDs are lowercase strings from `data/`, such as `mining_laser_mk1`. Items and modules share one namespace.
+- Definition IDs are lowercase strings from `data/`, such as `mining_laser_mk1`. Items and modules share one namespace. Unit templates have their own, and a unit's `def` is its template ID.
 - Runtime entity IDs are positive integers from one counter in the state, starting at 1 and never reused. It covers units, parts, tasks, jobs, bodies and deposits.
 - Commands have their own saved counter.
 - Ships, stations and drones are all units, distinguished by `kind`.
@@ -75,7 +75,7 @@ Rules:
 - `current_tick()` is the number of completed ticks and is 0 in a new game. `step` runs tick `current_tick() + 1`. `step` with `tick_count < 1` does nothing.
 - `submit` deep-copies its argument and stamps `current_tick() + 1`. A float in a command is rejected in phase 1.
 - `check` runs phase 1 validation without effects and returns `{ ok, reason, detail }`. For `attach_part` and `detach_part`, `detail` gives projected mass, power and heat against limits. For `move_to`, it gives ticks and propellant. It is advisory: `submit` can still be rejected if the state changes.
-- `defs()` returns all definitions, including connectors, collision and visual, so clients never parse data units.
+- `defs()` returns `{ modules, items, recipes, templates, sinks }`, each keyed by definition ID, including connectors, collision and visual, so clients never parse data units. Fields are renamed to their sim unit: `mass_kg` to `mass_g`, `power_kw` to `power_w`, `heat_kw` to `heat_w`, `volume_m3` to `volume_l`, `load_limit_kg` to `load_limit_g`, `density_kg_m3` to `density_g_l`, `seconds` to `ticks`, and likewise for any other unit-suffixed field (`docs/design/schemas.md` section 2).
 - Scenario `"empty"` is built into the kernel for tests that precede `data/`.
 - The event queue is bounded (A1 sets the bound) and starts empty on load.
 - The client drains events before calling `to_save`, because undrained events are not saved.
@@ -144,6 +144,9 @@ Every command has this envelope. `submit` fills in `id` and `tick`.
 - `from` is this unit or a unit docked to it. Attaching is instant in phase 1 in the slice.
 - `detach_part` sends the part and everything below it to the `to` inventory, and is rejected if it does not fit.
 - Detaching a port with something docked to it is rejected.
+- Detaching a root part is rejected with `root_part`.
+- Detaching a subtree containing a part with a job or active operation is rejected with `part_busy`.
+- A detach that would leave a unit over its cargo capacity, counting reserved space, is rejected with `cargo_full`.
 
 **Fitting.** `attach_part` checks against declared ratings, and `check` reports the same results.
 - Mass: total against the root's `max_mass_kg`.
@@ -195,7 +198,7 @@ Each failure emits exactly one event. Fitting failures emit `attach_failed`, and
 
 `reason` is a stable lowercase code, with display text held in the client. `detail` is an optional Dictionary of integers, such as `{ need_w, have_w }`, so the player sees numbers as well as a code.
 
-Known reason codes: `over_mass_limit`, `over_power_budget`, `over_heat_budget`, `over_heat_limit`, `over_load_limit`, `connector_type_mismatch`, `connector_size_mismatch`, `connector_occupied`, `not_whole_unit`, `no_free_port`, `no_propellant`, `cargo_full`, `deposit_exhausted`.
+Known reason codes: `over_mass_limit`, `over_power_budget`, `over_heat_budget`, `over_heat_limit`, `over_load_limit`, `connector_type_mismatch`, `connector_size_mismatch`, `connector_occupied`, `not_whole_unit`, `no_free_port`, `no_propellant`, `cargo_full`, `deposit_exhausted`, `root_part`, `part_busy`, `float_in_command`, `unknown_unit`, `unknown_part`, `invalid_target`. Autonomy adds its own codes, job statuses and view fields in `docs/design/autonomy.md` sections 3, 8, 9 and 10.
 
 ## 7. State view
 
@@ -246,7 +249,7 @@ Save text comes from one kernel codec. `JSON.stringify` is not used for output.
 - Derived caches are not saved. `to_save(from_save(x)) == x`, byte for byte.
 - `state_hash` is the SHA-256 of that text. It is the only accepted way to compare states.
 
-The save includes the contract version, `TICKS_PER_SECOND`, a hash of the loaded data, all RNG streams, all remainders, both ID counters and the pending command queue.
+The save includes the contract version, `TICKS_PER_SECOND`, a hash of the loaded data, all RNG streams, all remainders, both ID counters, the pending command queue, `matter_start_g` and the running totals in `sinks`. The view may omit the last two.
 
 The save excludes undrained events and the command log. Replay harnesses step to the tick before, then submit. A version or data mismatch makes `from_save` return null with a reason code.
 
@@ -268,11 +271,11 @@ Task B3 owns the schemas. These fields are fixed here because other agents depen
 - **Items:** `id`, `name`, `cargo_class`, `density_kg_m3`, and `unit_mass_kg` for discrete items.
 - **Deposits:** item, grams, `hardness`.
 - **Cargo classes:** `ore`, `goods`, `propellant`.
-- **Capabilities:** `scan`, `mine`, `ai_core.tier`, `storage` (capacity by class), `max_mass_kg`.
+- **Capabilities:** the closed list in `docs/design/schemas.md` section 5.
 - **`realism`:** `established`, `extrapolation`, `speculative` or `fictional`.
-- **Connectors:** `id` (unique within a module), `type` (`stack`, `side`, `dock`), `size`, `pos_mm`, `facing`, `up`, `load_limit_kg`. `facing` and `up` are axis values (+/-x, +/-y, +/-z). Mated connectors have opposite facings and equal ups. `load_limit_kg` is the mass carried below the connector.
-- **Collision:** `{ shape, center_mm, size_mm }`, where `shape` is `box` or `cylinder`, with the cylinder axis along the module's Y. Placeholders use the same shape. B3 may extend it.
-- **Recipes:** `id`, `facility`, `seconds`, `power_kw`, `inputs`, `outputs`, `abstract`.
+- **Connectors:** `id` (unique within a module), `type` (`stack`, `side`, `dock`), `size`, `pos_mm`, `facing`, `up`, `load_limit_kg`. `facing` and `up` are axis values (+/-x, +/-y, +/-z), written in the module's own frame. A child part is turned as it mates, so that in the craft's frame the connectors have opposite facings and equal ups. `load_limit_kg` is the mass carried below the connector.
+- **Collision:** `{ shape, center_mm, size_mm }`, where `shape` is `box` or `cylinder`, with the cylinder axis along the module's Y. `size_mm` is full extents `[x, y, z]`; a cylinder's diameter is `x` and its height is `y`. Placeholders use the same shape. B3 may extend it.
+- **Recipes:** `id`, `facility`, `seconds`, `power_kw`, `inputs`, `outputs`, `abstract`. An output may route straight to a declared sink, such as `slag_vent`, instead of an inventory. B3 defines how.
 - `visual` is read by the client only. The simulation never reads it.
 
 ## 11. Client rules
