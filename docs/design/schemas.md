@@ -1,6 +1,6 @@
 # Data Schemas
 
-Status: draft for Lead approval (task B3). Changes after approval go through the Lead.
+Status: approved by the Lead (task B3). Changes go through the Lead.
 
 This defines every file in `data/`. It expands section 10 of [contracts.md](contracts.md), which stays the authority. A3 builds the loader from this page, B4 builds the validator, and B5 authors the data. The rules for what balances are in section 3 of [accounting.md](accounting.md), and slice IDs are in section 7 of [spec.md](spec.md).
 
@@ -135,7 +135,7 @@ The loader applies these by field name, and `defs()` returns the converted names
 | `radiator` | `reject_kw` | Radiators |
 | `heat_capacity` | `limit_kj` | Summed to give the unit's heat limit |
 | `port` | `transfer_kg_per_s`, `dock_seconds` (whole), `undock_seconds` (whole) | Docking ports, drone |
-| `thruster` | `speed_m_s`, `propellant_kg_per_s` | Thrusters, drone |
+| `thruster` | `speed_m_s`, `propellant_kg_per_s`, `rated_mass_kg` | Thrusters, drone |
 | `facility` | `type`: `refinery` or `fabricator` | Station facilities |
 | `always_on` | `true` | A load that runs whenever healthy, such as a command hub |
 
@@ -149,7 +149,7 @@ The loader applies these by field name, and `defs()` returns the converted names
 
 A multi-role part such as `mining_drone_body` has one `power_kw` and one `heat_kw`, which apply whenever it runs anything. B5 sets them to its peak.
 
-`propellant_kg_per_s` sets a trip's cost: the trip's travel time at this rate, paid in one lump at departure ([autonomy.md](autonomy.md) section 4).
+A trip's cost is its travel time at `propellant_kg_per_s`, scaled by the unit's mass at departure over `rated_mass_kg`, and paid in one lump at departure ([autonomy.md](autonomy.md) section 4). The network spec holds the exact formula. A thruster is not a power or heat load during a trip, so in the slice its `power_kw` and `heat_kw` count only toward fitting budgets.
 
 ## 6. Connectors
 
@@ -282,7 +282,7 @@ B4 enforces these on top of section 3 of the accounting spec.
 
 **Parts**
 - A root part declares `max_mass_kg`, has null `fabrication`, and has a `core` connector. Other modules have none of these, except cores, which carry one `side` connector of size `core`.
-- A non-root module has one connector at `[0, 0, 0]`, because its origin sits on its mount face.
+- A non-root module has exactly one connector with ID `mount`, at `[0, 0, 0]`, because its origin sits on its mount face. It may have further connectors, such as a dock connector or a stack connector for parts above it.
 - A module with a `dock` connector has exactly one, and declares `port`.
 - `up` is at right angles to `facing`.
 - `min_ai_tier` is the tier of the lowest core that can use the part, so slice parts declare 1.
@@ -299,14 +299,12 @@ B4 enforces these on top of section 3 of the accounting spec.
 **Coverage**
 - A source is a deposit, a recipe or scenario stock. A use is a recipe input, a fitted part, propellant burn or a sink (spec section 10).
 
-## 13. Open with the Lead
+## 13. Lead rulings
 
-None of these block B2, B4 or B5. This page assumes the proposed answer.
-
-| # | Issue | Proposed answer |
-| - | ----- | --------------- |
-| 1 | The A0 draft on `kernel/A0` names the sink `exhaust` and still burns per tick. The approved spec and accounting pages say `propellant_exhaust`, paid at departure. | Keep `propellant_exhaust`, and correct A0 before it merges. |
-| 2 | Autonomy section 12 asks for a trip priced from current mass. The A0 draft says mass does not change burn. | Keep mass out of the price in the slice, so these fields stand. Pricing from mass would add a `rated_mass_kg` field to `thruster`. |
+| # | Issue | Ruling |
+| - | ----- | ------ |
+| 1 | The A0 draft on `kernel/A0` names the sink `exhaust` and still burns per tick. The approved spec and accounting pages say `propellant_exhaust`, paid at departure. Keep `propellant_exhaust`. A corrects A0 before it merges. |
+| 2 | Autonomy section 12 asks for a trip priced from current mass. The A0 draft says mass does not change burn. Mass is in the price, so a full hold costs more to fly. `thruster` gains `rated_mass_kg`, and A0 defines the formula. |
 | 3 | A module and a recipe both state `power_kw`, and A0 does not say which a running job draws. | A running job draws the recipe's `power_kw`. The module's is its rating, which the fit check sums. Waste heat always comes from the module's `heat_kw`. |
 | 4 | Contracts section 10 says mated connectors have opposite facings and equal ups, without saying in which frame. In the module's own frame, a part with one mount could fit only one side of a hull. | Read it as the craft's frame, as section 6 says. |
-| 5 | The capability list in contracts section 10 stops at `max_mass_kg`, and `defs()` lists only some renames. | Point contracts section 10 at section 5 of this page once it is approved. |
+| 5 | The capability list in contracts section 10 stops at `max_mass_kg`, and `defs()` lists only some renames. Contracts section 10 now points at section 5 of this page. |
