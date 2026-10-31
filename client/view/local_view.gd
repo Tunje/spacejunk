@@ -9,6 +9,9 @@ const RAY_LENGTH_M := 400000.0
 const FOCUS_SETTLE_RATE := 6.0
 const HEADING_RATE := 3.0
 const DOCK_BLEND_SECONDS := 1.0
+const SHADOW_RANGE_FACTOR := 6.0
+const MIN_SHADOW_RANGE_M := 120.0
+const MAX_SHADOW_RANGE_M := 9000.0
 
 var bridge: SimBridge
 var selected_kind := ""
@@ -19,6 +22,7 @@ var focus_kind := "unit"
 var focus_id := 0
 var crafts: Dictionary = {}
 var bodies: Dictionary = {}
+var field: AsteroidField
 
 var _modules: Dictionary = {}
 var _pivot_offset := Vector3.ZERO
@@ -29,6 +33,7 @@ var _pending_click: Variant = null
 
 @onready var camera: OrbitCamera = $Camera
 @onready var sun: DirectionalLight3D = $Sun
+@onready var fill: DirectionalLight3D = $Fill
 @onready var markers: EntityMarkers = %Markers
 
 
@@ -36,6 +41,9 @@ func bind(new_bridge: SimBridge) -> void:
 	bridge = new_bridge
 	_modules = bridge.defs()["modules"]
 	_sync_entities()
+	field = AsteroidField.new()
+	add_child(field)
+	field.build(bridge.current_view)
 	var first_ship := _first_unit("ship")
 	commanded_unit = first_ship
 	focus_on("unit", first_ship)
@@ -176,6 +184,8 @@ func refresh(delta: float) -> void:
 		bodies[id].place(relative)
 		if bodies[id].kind == "star":
 			sun.look_at_from_position(relative.normalized(), Vector3.ZERO)
+			fill.look_at_from_position(-relative.normalized(), Vector3.ZERO)
+	field.position = FloatingOrigin.relative_m(field.anchor_mm, field.anchor_mm, focus_before, focus_after, alpha)
 	for docked_pass: bool in [false, true]:
 		for id: int in crafts:
 			if after["units"][id]["dock"].is_empty() != docked_pass:
@@ -183,6 +193,8 @@ func refresh(delta: float) -> void:
 	_pivot_offset *= exp(-FOCUS_SETTLE_RATE * delta)
 	camera.pivot = _node_of(focus_kind, focus_id).position + _pivot_offset
 	camera.update_view(delta)
+	sun.directional_shadow_max_distance = clampf(
+		camera.distance_m * SHADOW_RANGE_FACTOR, MIN_SHADOW_RANGE_M, MAX_SHADOW_RANGE_M)
 	markers.update_entities()
 
 
