@@ -116,6 +116,13 @@ func test_screen_never_touches_the_simulation() -> void:
 	assert_eq(bridge.sim.state_hash(), before)
 
 
+func test_unchecked_boxes_have_a_visible_outline() -> void:
+	var icon := ClientTheme.build().get_icon("unchecked", "CheckBox")
+	assert_eq(icon.get_width(), ClientTheme.CHECK_ICON_PX)
+	assert_gt(icon.get_image().get_pixel(2, 8).a, 0.9)
+	assert_eq(icon.get_image().get_pixel(8, 8).a, 0.0)
+
+
 func test_changes_update_the_projection_and_reordering_keeps_rules() -> void:
 	var screen := StandingOrdersScreen.new()
 	add_child_autofree(screen)
