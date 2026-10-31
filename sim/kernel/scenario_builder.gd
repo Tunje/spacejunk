@@ -44,9 +44,18 @@ static func _add_body(ctx: SimContext, entry: Dictionary, deposits: Dictionary, 
 static func _add_unit(ctx: SimContext, entry: Dictionary, keys: Dictionary) -> void:
 	var id := Units.create(ctx, entry["template"], entry["name"], entry["pos_mm"])
 	keys[entry["key"]] = id
+	_fill_batteries(ctx, id)
 	var inventory: Dictionary = ctx.state["units"][id]["inventory"]
 	for stock: Dictionary in entry["inventory"]:
 		Units.add_stock(inventory, stock["item"], stock["grams"])
+
+
+## Batteries start full in a scenario, and empty anywhere else.
+static func _fill_batteries(ctx: SimContext, unit: int) -> void:
+	for part_id in Units.part_ids(ctx.state, unit):
+		var battery: Dictionary = Units.module_of(ctx.state, ctx.defs, part_id)["capabilities"].get("battery", {})
+		if not battery.is_empty():
+			ctx.state["parts"][part_id]["stored_j"] = battery["capacity_j"]
 
 
 ## Docks a unit at the start, in the state it would have after arrival and docking.

@@ -10,7 +10,7 @@ func _game(seed_value: int = 12345) -> Sim:
 	sim._register_system(FixtureSystem.new())
 	FixtureSystem.add_unit(sim, 7, 1000)
 	FixtureSystem.add_unit(sim, 3, 1000)
-	sim._state["jobs"][5] = { "held": { "slag": 500 }, "end_tick": 30 }
+	sim._state["jobs"][5] = { "held": { "slag": 500 }, "end_tick": 30, "facility": 0, "status": "fixture", "reason": "" }
 	sim._state["matter_start_g"] = 2500
 	return sim
 
