@@ -1,10 +1,11 @@
 [
   {
     "id": "stub_hull", "name": "Spine Hull", "mass_kg": 2000, "volume_m3": 18, "power_kw": 2, "heat_kw": 1,
-    "priority": 9, "durability": 1000, "min_ai_tier": 0, "realism": "extrapolation",
+    "priority": 9, "durability": 1000, "min_ai_tier": 1, "realism": "extrapolation",
     "capabilities": { "max_mass_kg": 16000, "storage": { "goods": { "mass_kg": 500, "volume_m3": 2 } } },
-    "fabrication": {},
+    "fabrication": null,
     "connectors": [
+      { "id": "core", "type": "side", "size": "core", "pos_mm": [0, 0, 0], "facing": "+y", "up": "+z", "load_limit_kg": 500 },
       { "id": "top", "type": "stack", "size": "medium", "pos_mm": [0, 4000, 0], "facing": "+y", "up": "+z", "load_limit_kg": 2000 },
       { "id": "bottom", "type": "stack", "size": "medium", "pos_mm": [0, 0, 0], "facing": "-y", "up": "+z", "load_limit_kg": 6000 },
       { "id": "side_px", "type": "side", "size": "medium", "pos_mm": [1250, 2800, 0], "facing": "+x", "up": "+y", "load_limit_kg": 1500 },
@@ -18,11 +19,11 @@
   },
   {
     "id": "stub_tank", "name": "Propellant Tank", "mass_kg": 600, "volume_m3": 12, "power_kw": 0, "heat_kw": 0,
-    "priority": 1, "durability": 800, "min_ai_tier": 0, "realism": "established",
+    "priority": 1, "durability": 800, "min_ai_tier": 1, "realism": "established",
     "capabilities": { "storage": { "propellant": { "mass_kg": 3000, "volume_m3": 10 } } },
-    "fabrication": {},
+    "fabrication": { "recipe": "stub_tank" },
     "connectors": [
-      { "id": "top", "type": "stack", "size": "medium", "pos_mm": [0, 0, 0], "facing": "+y", "up": "+z", "load_limit_kg": 6000 },
+      { "id": "mount", "type": "stack", "size": "medium", "pos_mm": [0, 0, 0], "facing": "+y", "up": "+z", "load_limit_kg": 6000 },
       { "id": "bottom", "type": "stack", "size": "medium", "pos_mm": [0, -2600, 0], "facing": "-y", "up": "+z", "load_limit_kg": 3000 }
     ],
     "collision": { "shape": "cylinder", "center_mm": [0, -1300, 0], "size_mm": [2500, 2600, 2500] },
@@ -30,22 +31,22 @@
   },
   {
     "id": "stub_thruster", "name": "Chemical Thruster", "mass_kg": 500, "volume_m3": 3, "power_kw": 5, "heat_kw": 4,
-    "priority": 8, "durability": 900, "min_ai_tier": 0, "realism": "established",
-    "capabilities": { "move": { "speed_mm_per_s": 500000 } },
-    "fabrication": {},
+    "priority": 8, "durability": 900, "min_ai_tier": 1, "realism": "established",
+    "capabilities": { "thruster": { "speed_m_s": 500, "propellant_kg_per_s": 1, "rated_mass_kg": 5000 } },
+    "fabrication": { "recipe": "stub_thruster" },
     "connectors": [
-      { "id": "top", "type": "stack", "size": "medium", "pos_mm": [0, 0, 0], "facing": "+y", "up": "+z", "load_limit_kg": 3000 }
+      { "id": "mount", "type": "stack", "size": "medium", "pos_mm": [0, 0, 0], "facing": "+y", "up": "+z", "load_limit_kg": 3000 }
     ],
     "collision": { "shape": "cylinder", "center_mm": [0, -900, 0], "size_mm": [1800, 1800, 1800] },
     "visual": { "model": "stub_thruster", "tint": "grey" }
   },
   {
     "id": "stub_port", "name": "Docking Port", "mass_kg": 150, "volume_m3": 1, "power_kw": 1, "heat_kw": 0,
-    "priority": 7, "durability": 700, "min_ai_tier": 0, "realism": "established",
-    "capabilities": {},
-    "fabrication": {},
+    "priority": 7, "durability": 700, "min_ai_tier": 1, "realism": "established",
+    "capabilities": { "port": { "transfer_kg_per_s": 50, "dock_seconds": 2, "undock_seconds": 2 } },
+    "fabrication": { "recipe": "stub_port" },
     "connectors": [
-      { "id": "base", "type": "stack", "size": "medium", "pos_mm": [0, 0, 0], "facing": "-y", "up": "+z", "load_limit_kg": 2000 },
+      { "id": "mount", "type": "stack", "size": "medium", "pos_mm": [0, 0, 0], "facing": "-y", "up": "+z", "load_limit_kg": 2000 },
       { "id": "dock", "type": "dock", "size": "small", "pos_mm": [0, 700, 0], "facing": "+y", "up": "+z", "load_limit_kg": 2000 }
     ],
     "collision": { "shape": "cylinder", "center_mm": [0, 350, 0], "size_mm": [1500, 700, 1500] },
@@ -55,63 +56,64 @@
     "id": "stub_laser", "name": "Mining Laser", "mass_kg": 400, "volume_m3": 2, "power_kw": 150, "heat_kw": 120,
     "priority": 3, "durability": 1000, "min_ai_tier": 1, "realism": "extrapolation",
     "capabilities": { "mine": { "rate_kg_per_s": 20, "hardness_max": 6 } },
-    "fabrication": {},
+    "fabrication": { "recipe": "stub_laser" },
     "connectors": [
-      { "id": "base", "type": "side", "size": "medium", "pos_mm": [0, 0, 0], "facing": "-x", "up": "+y", "load_limit_kg": 1000 }
+      { "id": "mount", "type": "side", "size": "medium", "pos_mm": [0, 0, 0], "facing": "-x", "up": "+y", "load_limit_kg": 1000 }
     ],
     "collision": { "shape": "box", "center_mm": [1100, 0, 0], "size_mm": [2200, 900, 900] },
     "visual": { "model": "stub_laser", "tint": "orange" }
   },
   {
     "id": "stub_lidar", "name": "LIDAR Scanner", "mass_kg": 80, "volume_m3": 1, "power_kw": 10, "heat_kw": 6,
-    "priority": 4, "durability": 600, "min_ai_tier": 0, "realism": "established",
-    "capabilities": { "scan": { "range_mm": 50000000 } },
-    "fabrication": {},
+    "priority": 4, "durability": 600, "min_ai_tier": 1, "realism": "established",
+    "capabilities": { "scan": { "seconds": 3 } },
+    "fabrication": { "recipe": "stub_lidar" },
     "connectors": [
-      { "id": "base", "type": "side", "size": "medium", "pos_mm": [0, 0, 0], "facing": "-z", "up": "+y", "load_limit_kg": 500 }
+      { "id": "mount", "type": "side", "size": "medium", "pos_mm": [0, 0, 0], "facing": "-z", "up": "+y", "load_limit_kg": 500 }
     ],
     "collision": { "shape": "box", "center_mm": [0, 0, 500], "size_mm": [1000, 1000, 1000] },
     "visual": { "model": "stub_lidar", "tint": "gold" }
   },
   {
     "id": "stub_solar", "name": "Solar Slab", "mass_kg": 220, "volume_m3": 4, "power_kw": 0, "heat_kw": 0,
-    "priority": 9, "durability": 500, "min_ai_tier": 0, "realism": "established",
+    "priority": 9, "durability": 500, "min_ai_tier": 1, "realism": "established",
     "capabilities": { "generate": { "power_kw": 200 } },
-    "fabrication": {},
+    "fabrication": { "recipe": "stub_solar" },
     "connectors": [
-      { "id": "base", "type": "side", "size": "medium", "pos_mm": [0, 0, 0], "facing": "-z", "up": "+y", "load_limit_kg": 500 }
+      { "id": "mount", "type": "side", "size": "medium", "pos_mm": [0, 0, 0], "facing": "-z", "up": "+y", "load_limit_kg": 500 }
     ],
     "collision": { "shape": "box", "center_mm": [0, 0, 2400], "size_mm": [2400, 240, 4800] },
     "visual": { "model": "stub_solar", "tint": "gold" }
   },
   {
     "id": "stub_radiator", "name": "Heat Radiator", "mass_kg": 260, "volume_m3": 3, "power_kw": 0, "heat_kw": 0,
-    "priority": 9, "durability": 500, "min_ai_tier": 0, "realism": "established",
-    "capabilities": { "radiate": { "reject_kw": 160, "limit_kj": 40000 } },
-    "fabrication": {},
+    "priority": 9, "durability": 500, "min_ai_tier": 1, "realism": "established",
+    "capabilities": { "radiator": { "reject_kw": 160 }, "heat_capacity": { "limit_kj": 40000 } },
+    "fabrication": { "recipe": "stub_radiator" },
     "connectors": [
-      { "id": "base", "type": "side", "size": "medium", "pos_mm": [0, 0, 0], "facing": "+z", "up": "+y", "load_limit_kg": 500 }
+      { "id": "mount", "type": "side", "size": "medium", "pos_mm": [0, 0, 0], "facing": "-z", "up": "+y", "load_limit_kg": 500 }
     ],
-    "collision": { "shape": "box", "center_mm": [0, 0, -1800], "size_mm": [2000, 200, 3600] },
+    "collision": { "shape": "box", "center_mm": [0, 0, 1800], "size_mm": [2000, 200, 3600] },
     "visual": { "model": "stub_radiator", "tint": "white" }
   },
   {
     "id": "stub_container", "name": "Ore Container", "mass_kg": 700, "volume_m3": 14, "power_kw": 0, "heat_kw": 0,
-    "priority": 2, "durability": 900, "min_ai_tier": 0, "realism": "established",
+    "priority": 2, "durability": 900, "min_ai_tier": 1, "realism": "established",
     "capabilities": { "storage": { "ore": { "mass_kg": 8000, "volume_m3": 12 } } },
-    "fabrication": {},
+    "fabrication": { "recipe": "stub_container" },
     "connectors": [
-      { "id": "base", "type": "side", "size": "medium", "pos_mm": [0, 0, 0], "facing": "+x", "up": "+y", "load_limit_kg": 9000 }
+      { "id": "mount", "type": "side", "size": "medium", "pos_mm": [0, 0, 0], "facing": "+x", "up": "+y", "load_limit_kg": 9000 }
     ],
     "collision": { "shape": "box", "center_mm": [-1300, 0, 0], "size_mm": [2600, 2200, 2200] },
     "visual": { "model": "stub_container", "tint": "grey" }
   },
   {
     "id": "stub_hub", "name": "Command Hub", "mass_kg": 12000, "volume_m3": 180, "power_kw": 20, "heat_kw": 8,
-    "priority": 9, "durability": 3000, "min_ai_tier": 0, "realism": "extrapolation",
+    "priority": 9, "durability": 3000, "min_ai_tier": 1, "realism": "extrapolation",
     "capabilities": { "max_mass_kg": 400000, "storage": { "goods": { "mass_kg": 20000, "volume_m3": 60 } } },
-    "fabrication": {},
+    "fabrication": null,
     "connectors": [
+      { "id": "core", "type": "side", "size": "core", "pos_mm": [0, 0, 0], "facing": "+y", "up": "+z", "load_limit_kg": 500 },
       { "id": "top", "type": "stack", "size": "large", "pos_mm": [0, 3000, 0], "facing": "+y", "up": "+z", "load_limit_kg": 90000 },
       { "id": "bottom", "type": "stack", "size": "large", "pos_mm": [0, -3000, 0], "facing": "-y", "up": "+z", "load_limit_kg": 90000 },
       { "id": "side_px", "type": "side", "size": "large", "pos_mm": [3500, 0, 0], "facing": "+x", "up": "+y", "load_limit_kg": 90000 },
@@ -122,11 +124,11 @@
   },
   {
     "id": "stub_refinery", "name": "Ore Refinery", "mass_kg": 9000, "volume_m3": 120, "power_kw": 400, "heat_kw": 300,
-    "priority": 3, "durability": 2000, "min_ai_tier": 0, "realism": "extrapolation",
+    "priority": 3, "durability": 2000, "min_ai_tier": 1, "realism": "extrapolation",
     "capabilities": {},
-    "fabrication": {},
+    "fabrication": { "recipe": "stub_refinery" },
     "connectors": [
-      { "id": "base", "type": "stack", "size": "large", "pos_mm": [0, 0, 0], "facing": "-y", "up": "+z", "load_limit_kg": 90000 },
+      { "id": "mount", "type": "stack", "size": "large", "pos_mm": [0, 0, 0], "facing": "-y", "up": "+z", "load_limit_kg": 90000 },
       { "id": "end", "type": "stack", "size": "large", "pos_mm": [0, 8000, 0], "facing": "+y", "up": "+z", "load_limit_kg": 60000 }
     ],
     "collision": { "shape": "cylinder", "center_mm": [0, 4000, 0], "size_mm": [6000, 8000, 6000] },
@@ -134,11 +136,11 @@
   },
   {
     "id": "stub_storage", "name": "Ore Storage", "mass_kg": 6000, "volume_m3": 300, "power_kw": 5, "heat_kw": 1,
-    "priority": 5, "durability": 2000, "min_ai_tier": 0, "realism": "established",
+    "priority": 5, "durability": 2000, "min_ai_tier": 1, "realism": "established",
     "capabilities": { "storage": { "ore": { "mass_kg": 200000, "volume_m3": 280 } } },
-    "fabrication": {},
+    "fabrication": { "recipe": "stub_storage" },
     "connectors": [
-      { "id": "base", "type": "stack", "size": "large", "pos_mm": [0, 0, 0], "facing": "+y", "up": "+z", "load_limit_kg": 90000 },
+      { "id": "mount", "type": "stack", "size": "large", "pos_mm": [0, 0, 0], "facing": "+y", "up": "+z", "load_limit_kg": 90000 },
       { "id": "end", "type": "stack", "size": "medium", "pos_mm": [0, -9000, 0], "facing": "-y", "up": "+z", "load_limit_kg": 8000 }
     ],
     "collision": { "shape": "cylinder", "center_mm": [0, -4500, 0], "size_mm": [6000, 9000, 6000] },
@@ -146,22 +148,22 @@
   },
   {
     "id": "stub_solar_farm", "name": "Solar Farm", "mass_kg": 4000, "volume_m3": 60, "power_kw": 0, "heat_kw": 0,
-    "priority": 9, "durability": 1500, "min_ai_tier": 0, "realism": "established",
-    "capabilities": { "generate": { "power_kw": 1200 }, "radiate": { "reject_kw": 900, "limit_kj": 300000 } },
-    "fabrication": {},
+    "priority": 9, "durability": 1500, "min_ai_tier": 1, "realism": "established",
+    "capabilities": { "generate": { "power_kw": 1200 }, "radiator": { "reject_kw": 900 }, "heat_capacity": { "limit_kj": 300000 } },
+    "fabrication": { "recipe": "stub_solar_farm" },
     "connectors": [
-      { "id": "base", "type": "side", "size": "large", "pos_mm": [0, 0, 0], "facing": "+x", "up": "+y", "load_limit_kg": 90000 }
+      { "id": "mount", "type": "side", "size": "large", "pos_mm": [0, 0, 0], "facing": "+x", "up": "+y", "load_limit_kg": 90000 }
     ],
     "collision": { "shape": "box", "center_mm": [-7000, 0, 0], "size_mm": [14000, 400, 9000] },
     "visual": { "model": "stub_solar_farm", "tint": "gold" }
   },
   {
     "id": "stub_station_port", "name": "Station Dock", "mass_kg": 800, "volume_m3": 8, "power_kw": 2, "heat_kw": 0,
-    "priority": 7, "durability": 1500, "min_ai_tier": 0, "realism": "established",
-    "capabilities": {},
-    "fabrication": {},
+    "priority": 7, "durability": 1500, "min_ai_tier": 1, "realism": "established",
+    "capabilities": { "port": { "transfer_kg_per_s": 50, "dock_seconds": 2, "undock_seconds": 2 } },
+    "fabrication": { "recipe": "stub_station_port" },
     "connectors": [
-      { "id": "base", "type": "side", "size": "large", "pos_mm": [0, 0, 0], "facing": "-x", "up": "+y", "load_limit_kg": 90000 },
+      { "id": "mount", "type": "side", "size": "large", "pos_mm": [0, 0, 0], "facing": "-x", "up": "+y", "load_limit_kg": 90000 },
       { "id": "dock", "type": "dock", "size": "small", "pos_mm": [2400, 0, 0], "facing": "+x", "up": "+y", "load_limit_kg": 40000 }
     ],
     "collision": { "shape": "box", "center_mm": [1200, 0, 0], "size_mm": [2400, 3000, 3000] },
