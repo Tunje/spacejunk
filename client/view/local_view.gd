@@ -12,6 +12,9 @@ const DOCK_BLEND_SECONDS := 1.0
 const SHADOW_RANGE_FACTOR := 6.0
 const MIN_SHADOW_RANGE_M := 120.0
 const MAX_SHADOW_RANGE_M := 9000.0
+const AIM_RATE := 2.0
+## Beams end inside the rock, so its lumpy surface hides the end.
+const BEAM_DEPTH := 0.5
 
 var bridge: SimBridge
 var selected_kind := ""
@@ -23,6 +26,7 @@ var focus_id := 0
 var crafts: Dictionary = {}
 var bodies: Dictionary = {}
 var field: AsteroidField
+var beams: Dictionary = {}
 
 var _modules: Dictionary = {}
 var _pivot_offset := Vector3.ZERO
@@ -194,6 +198,8 @@ func refresh(delta: float) -> void:
 				_place_craft(crafts[id], id, before, after, focus_before, focus_after, alpha, delta)
 	_pivot_offset *= exp(-FOCUS_SETTLE_RATE * delta)
 	camera.pivot = _node_of(focus_kind, focus_id).position + _pivot_offset
+	for id: int in crafts:
+		_update_effects(crafts[id], id, after, delta)
 	camera.update_view(delta)
 	sun.directional_shadow_max_distance = clampf(
 		camera.distance_m * SHADOW_RANGE_FACTOR, MIN_SHADOW_RANGE_M, MAX_SHADOW_RANGE_M)
@@ -225,6 +231,29 @@ func _place_craft(craft: CraftNode, id: int, before: Dictionary, after: Dictiona
 		craft.transform = free.interpolate_with(craft.undock_from, smoothstep(0.0, 1.0, craft.dock_blend))
 	else:
 		craft.transform = free
+
+
+func _update_effects(craft: CraftNode, id: int, view: Dictionary, delta: float) -> void:
+	var unit: Dictionary = view["units"][id]
+	craft.apply_feedback(unit, delta)
+	var beam := Feedback.beam_of(unit, view)
+	if beam.is_empty() or not bodies.has(beam["body"]):
+		if beams.has(id):
+			beams[id].visible = false
+		return
+	if not beams.has(id):
+		beams[id] = BeamNode.new()
+		add_child(beams[id])
+	var tip: Dictionary = craft.tip_of(beam["part"])
+	if tip.is_empty():
+		return
+	var body: BodyNode = bodies[beam["body"]]
+	var from: Vector3 = craft.transform * (tip["point"] as Vector3)
+	var to_centre: Vector3 = body.position - from
+	var to: Vector3 = body.position - to_centre.normalized() * body.scale.x * BEAM_DEPTH
+	beams[id].aim(from, to, beam["kind"], Time.get_ticks_msec() * 0.001)
+	var aim := Quaternion(tip["direction"] as Vector3, to_centre.normalized())
+	craft.heading = craft.heading.slerp(aim, 1.0 - exp(-AIM_RATE * delta))
 
 
 func _docked_transform(craft: CraftNode, unit: Dictionary) -> Transform3D:
@@ -275,6 +304,9 @@ func _sync_entities() -> void:
 		if not view["units"].has(id):
 			crafts[id].queue_free()
 			crafts.erase(id)
+			if beams.has(id):
+				beams[id].queue_free()
+				beams.erase(id)
 
 
 func _position_in(view: Dictionary, fallback: Dictionary, kind: String, id: int) -> Array:

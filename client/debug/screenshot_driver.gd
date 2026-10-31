@@ -6,6 +6,8 @@ class_name ScreenshotDriver extends Node
 ##   --speed=1|2|4|8  --zoom=<metres>  --yaw=<radians>  --pitch=<radians>
 ##   --map=1                         opens the system map
 ##   --policy=1                      opens the standing-orders mock
+##   --then=<order key>              pressed --then-delay frames after --order
+##   --last=<order key>              pressed --last-delay frames after --then
 
 var main: Node3D
 var parsed: Dictionary = {}
@@ -56,11 +58,19 @@ func _run() -> void:
 	if parsed.has("policy"):
 		main.standing_orders.toggle()
 	if parsed.has("order"):
-		for i in range(int(parsed.get("delay", "5"))):
-			await get_tree().process_frame
-		main.order_panel.refresh()
-		if not main.order_panel.press(parsed["order"]):
-			push_error("Order not available: %s" % parsed["order"])
+		await _press_after(parsed["order"], int(parsed.get("delay", "5")))
+	if parsed.has("then"):
+		await _press_after(parsed["then"], int(parsed.get("then-delay", "60")))
+	if parsed.has("last"):
+		await _press_after(parsed["last"], int(parsed.get("last-delay", "60")))
+
+
+func _press_after(key: String, frames: int) -> void:
+	for i in range(frames):
+		await get_tree().process_frame
+	main.order_panel.refresh()
+	if not main.order_panel.press(key):
+		push_error("Order not available: %s" % key)
 
 
 func _entity(name_value: String) -> Array:
