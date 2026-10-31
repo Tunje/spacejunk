@@ -24,12 +24,21 @@ func bind(new_bridge: SimBridge) -> void:
 	bridge.events_received.connect(_on_events)
 
 
+func add_line(line: String) -> void:
+	lines.append(line)
+	_show()
+
+
 func _on_events(events: Array[Dictionary]) -> void:
 	for entry: Dictionary in events:
 		var unit: Dictionary = bridge.current_view["units"].get(entry["unit"], {})
 		var line := OrderText.event(entry, unit.get("name", "Order"), _items)
 		if not line.is_empty():
 			lines.append(line)
+	_show()
+
+
+func _show() -> void:
 	if lines.size() > MAX_LINES:
 		lines = lines.slice(lines.size() - MAX_LINES)
 	_label.text = "\n".join(lines)

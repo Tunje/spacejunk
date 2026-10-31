@@ -17,6 +17,7 @@ const SEED_VALUE := 1
 @onready var fitting_markers: FittingMarkers = %FittingMarkers
 @onready var industry_screen: IndustryScreen = %IndustryScreen
 @onready var automation_screen: AutomationScreen = %AutomationScreen
+@onready var goal_panel: GoalPanel = %GoalPanel
 @onready var markers: EntityMarkers = %Markers
 @onready var system_map: SystemMap = $SystemMap
 @onready var standing_orders: StandingOrdersScreen = %StandingOrders
@@ -42,6 +43,7 @@ func _ready() -> void:
 	fitting_screen.bind(bridge, local_view, fitting_markers)
 	industry_screen.bind(bridge, local_view)
 	automation_screen.bind(bridge, local_view, order_panel)
+	goal_panel.bind(bridge, event_log, fitting_screen)
 	system_map.bind(bridge, local_view)
 	time_controls.map_pressed.connect(toggle_map)
 	time_controls.policy_pressed.connect(standing_orders.toggle)
@@ -68,6 +70,9 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		return
 	if key.physical_keycode == KEY_M:
 		toggle_map()
+		get_viewport().set_input_as_handled()
+	elif key.physical_keycode == KEY_H:
+		goal_panel.visible = not goal_panel.visible
 		get_viewport().set_input_as_handled()
 	elif key.physical_keycode == KEY_K:
 		toggle_automation()
