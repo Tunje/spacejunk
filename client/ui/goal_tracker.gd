@@ -14,17 +14,19 @@ const GOALS: Array[Dictionary] = [
 	{ "id": "fabricate", "title": "Fabricate a component",
 		"hint": "Open Jobs (J), pick the Fabricator and Start Structural Frame." },
 	{ "id": "install", "title": "Install a part on your ship",
-		"hint": "Fabricate an Ore Container, dock, open Fit (G), pick it and pick a free connector on the hull." },
+		"hint": "Fabricate an Ore Container, dock your ship, open Fit (G), pick it and pick a free connector on the ship's hull." },
 	{ "id": "drone", "title": "Build a mining drone",
-		"hint": "Fabricate a Mining Drone. It appears at a free station port." },
+		"hint": "Fabricate a Small Craft: it appears bare at a free station port. Fabricate a Small Solar Panel, Small Heat Radiator, Small Propellant Tank, Small Thruster, Small Ore Container and Small Mining Laser. Select the craft, open Fit (G) and fit them in that order. Solar and radiator go on first, because a bare craft refuses the laser and thruster. The thruster goes under the tank." },
 	{ "id": "handover", "title": "Hand the job to an AI core",
-		"hint": "Fit an Assisted Core to the drone, then in Auto (K) use it and press Repeat this route." },
+		"hint": "Fabricate an Assisted Core, which takes a Basic Core. Fit it to the Small Craft: it fits only once the solar panel and radiator are on. Then in Auto (K) use it and press Repeat this route." },
 	{ "id": "expand", "title": "Expand the station",
 		"hint": "Fabricate Ore Storage, select the Station, open Fit (G) and attach it to a free connector." },
 	{ "id": "fix", "title": "Hit a fitting limit and fix it",
 		"hint": "Try a second Mining Laser on the ship: it fails on heat, 280 of 200 kW. Fit a Heat Radiator, then the laser." },
 ]
 const LIMIT_REASONS: Array[String] = ["over_mass_limit", "over_power_budget", "over_heat_budget"]
+## What makes a drone a working drone. By capability, so any part that gives one counts.
+const DRONE_NEEDS: Array[String] = ["mine", "thruster", "ore", "propellant"]
 
 var done: Dictionary = {}
 var _blocked_items: Dictionary = {}
@@ -60,13 +62,13 @@ func current() -> Dictionary:
 
 
 ## Goals finished by the view alone, for state that may predate this client run.
-func observe_view(view: Dictionary, items: Dictionary) -> Array[String]:
+func observe_view(view: Dictionary, items: Dictionary, modules: Dictionary) -> Array[String]:
 	var finished: Array[String] = []
 	if not view["deposits"].is_empty():
 		_finish(finished, "scan")
 	for id: int in view["units"]:
 		var unit: Dictionary = view["units"][id]
-		if unit["kind"] == "drone":
+		if unit["kind"] == "drone" and GoalTracker._is_working_drone(unit, modules):
 			_finish(finished, "drone")
 		if unit["kind"] != "station" and GoalTracker._holds_ore(unit, items):
 			_finish(finished, "mine")
@@ -86,8 +88,6 @@ func observe_event(event: Dictionary, view: Dictionary, defs: Dictionary) -> Arr
 					_finish(finished, "refine")
 				"fabricator":
 					_finish(finished, "fabricate")
-		"unit_created":
-			_finish(finished, "drone")
 		"task_cycle_done":
 			_finish(finished, "handover")
 		"part_attached":
@@ -105,7 +105,10 @@ func _on_part_attached(finished: Array[String], unit_id: int, part_id: int, view
 	var unit: Dictionary = view["units"].get(unit_id, {})
 	if unit.is_empty():
 		return
-	_finish(finished, "expand" if unit["kind"] == "station" else "install")
+	if unit["kind"] == "station":
+		_finish(finished, "expand")
+	elif unit["kind"] == "ship":
+		_finish(finished, "install")
 	for part: Dictionary in InspectText.flatten(unit["parts"]):
 		if part["id"] == part_id and _blocked_items.has(part["def"]):
 			_finish(finished, "fix")
@@ -121,6 +124,15 @@ static func _holds_ore(unit: Dictionary, items: Dictionary) -> bool:
 		if unit["inventory"][item] > 0 and items.get(item, {}).get("cargo_class", "") == "ore":
 			return true
 	return false
+
+
+static func _is_working_drone(unit: Dictionary, modules: Dictionary) -> bool:
+	var found: Dictionary = {}
+	for part: Dictionary in InspectText.flatten(unit["parts"]):
+		var capabilities: Dictionary = modules[part["def"]]["capabilities"]
+		found.merge(capabilities)
+		found.merge(capabilities.get("storage", {}))
+	return found.has_all(DRONE_NEEDS)
 
 
 static func title_of(id: String) -> String:

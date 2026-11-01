@@ -12,7 +12,7 @@ const REASONS: Dictionary = {
 	"bad_cycle": "That cycle is not valid",
 	"busy_docking": "Wait for the craft to finish at the port",
 	"connector_occupied": "That connector is already in use",
-	"connector_size_mismatch": "Connector sizes do not match",
+	"connector_size_mismatch": "Only a core fits a core connector",
 	"connector_type_mismatch": "Connector types do not match",
 	"core_offline": "AI core is offline",
 	"deposit_exhausted": "Deposit is exhausted",

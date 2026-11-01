@@ -76,7 +76,7 @@ func refresh() -> void:
 
 
 func _on_view() -> void:
-	_announce(tracker.observe_view(bridge.current_view, _items))
+	_announce(tracker.observe_view(bridge.current_view, _items, _defs["modules"]))
 	refresh()
 
 
