@@ -252,15 +252,21 @@ func test_a_bare_craft_refuses_a_laser_or_thruster_until_it_has_a_budget() -> vo
 	sim.step(RUN_TICKS)
 	var id: int = _first(sim.take_events(), "unit_created")["data"]["unit"]
 	var hull: int = state["units"][id]["root"]
-	_give_parts(["small_solar_panel_mk1", "small_heat_radiator_mk1", "small_mining_laser_mk1"])
+	_give_parts([
+		"small_solar_panel_mk1", "small_heat_radiator_mk1", "small_mining_laser_mk1", "small_chemical_thruster_mk1",
+	])
 	var laser := _attach(id, "small_mining_laser_mk1", hull, "side_a_nz")
+	var thruster := _attach(id, "small_chemical_thruster_mk1", hull, "stack_bottom")
 	assert_eq(sim.check(laser)["reason"], "over_power_budget")
+	assert_eq(sim.check(thruster)["reason"], "over_power_budget")
 	sim.submit(_attach(id, "small_solar_panel_mk1", hull, "side_a_px"))
 	_step_balanced(1)
 	assert_eq(sim.check(laser)["reason"], "over_heat_budget")
+	assert_eq(sim.check(thruster)["reason"], "over_heat_budget")
 	sim.submit(_attach(id, "small_heat_radiator_mk1", hull, "side_a_nx"))
 	_step_balanced(1)
 	assert_true(sim.check(laser)["ok"])
+	assert_true(sim.check(thruster)["ok"])
 
 
 ## Check 9: output from the industry chain becomes a larger station.
