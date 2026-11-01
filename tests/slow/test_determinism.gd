@@ -11,11 +11,11 @@ func before_all() -> void:
 	bot = ReferenceBot.shared()
 
 
-## Ticks to save on: the middle of a trip, a refinery run, a fabrication run and the drone's build,
+## Ticks to save on: the middle of a trip, a refinery run, a fabrication run and the craft's build,
 ## then each lap's outbound trip, mining, and homeward docking.
 func _save_ticks() -> Array[int]:
 	var ticks: Array[int] = []
-	for label: String in ["move_to", "refine_hematite", "mining_laser_mk1", "mining_drone"]:
+	for label: String in ["move_to", "refine_hematite", "mining_laser_mk1", "small_craft"]:
 		for step in bot.steps:
 			if step["label"] == label:
 				ticks.append(step["start_tick"] + step["ticks"] / 2 + 3)
