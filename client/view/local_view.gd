@@ -33,6 +33,8 @@ var crafts: Dictionary = {}
 var bodies: Dictionary = {}
 var field: AsteroidField
 var beams: Dictionary = {}
+## Asked with each click's hit, which may be {}. A false answer ignores the click.
+var click_filter: Callable
 
 var _modules: Dictionary = {}
 var _pivot_offset := Vector3.ZERO
@@ -192,6 +194,8 @@ func click_at(screen: Vector2) -> void:
 	var hit := pick_ray(from, camera.project_ray_normal(screen))
 	if hit.is_empty():
 		hit = markers.pick(screen)
+	if click_filter.is_valid() and not click_filter.call(hit):
+		return
 	if hit.is_empty():
 		clear_selection()
 	else:
