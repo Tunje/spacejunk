@@ -1,15 +1,13 @@
 # Balance Report
 
-Status: task B6, report stage. `data/` is unchanged. The owner chooses a pacing option, then B6 applies it. All figures are from the slice's first-pass data, measured on `main` at 9c74767. `data/` and `sim/` have not changed since.
-
-**Since this report,** the drone is built from parts ([drone_from_parts.md](drone_from_parts.md)). Its mass, cost, build time and lap are unchanged, so every figure here holds except the time to a working drone, which was measured with the old one-part drone. Section 6 of that page gives the new times: 1 to 5 minutes more to check 7 and to all ten checks. Where the tables below say "Drone", read the seven `small_` recipes, 300 s in all, which Options B and C halve.
+Status: task B6, report stage. The owner chooses a pacing option, then B6 applies it. All figures are from the slice's first-pass data with the drone built from parts ([drone_from_parts.md](drone_from_parts.md)), measured on `main` at d5ad250.
 
 ## 1. Summary
 
-- **A first full run takes 86 to 100 minutes at 1x and 13 to 23 minutes at 8x.** That is from a fresh start to all ten checks, for a person who makes no mistakes.
+- **A first full run takes 87 to 105 minutes at 1x and 14 to 28 minutes at 8x.** That is from a fresh start to all ten checks, for a person who makes no mistakes.
 - **The first module arrives in 15 to 34 minutes at 1x, and 2.4 to 6 at 8x.** The low end is the iron-only Ore Container. A player following the goal order builds a Heat Radiator instead, which needs copper, so it takes over twice as long.
-- **The fabricator sets the pace, not the rocks.** It runs for 65 of the 86 minutes, and one block of 24 processors takes 24 minutes. Halving rock distance saves only 5 minutes. Taking processors from 60 s to 20 s saves 16.
-- **At 8x the limit is the person.** A first-timer spends about 14 of their 23 minutes giving orders, so no data change helps much there. A Basic Core takes one order at a time, and a trip is six orders.
+- **The fabricator sets the pace, not the rocks.** It runs for 65 of the 87 minutes, and one block of 24 processors takes 24 minutes. Halving rock distance saves only 5 minutes. Taking processors from 60 s to 20 s saves 16.
+- **At 8x the limit is the person.** A first-timer spends about 19 of their 28 minutes giving orders, so no data change helps much there. A Basic Core takes one order at a time, and a trip is six orders.
 - **Propellant is not a problem.** A run to all ten checks burns 354 to 476 kg of the 5000 kg. One drone can then run for about 32 game hours, or 4 real hours at 8x.
 - **Recommendation: Option A,** faster refining and materials only. It takes about a third off the 1x time and cuts the longest wait from 7.5 minutes to 5. It leaves hauling, the drone lap and propellant as they are, and it is the smallest change to the reference chain.
 
@@ -37,33 +35,34 @@ Minutes of real time from a fresh start. The bot has no think time and runs one 
 | 3 | Haul | 6.4 | 1.2 | 7.7 | 2.5 | 6.6 | 0.8 |
 | 4 | Refine | 8.2 | 1.5 | 9.6 | 3.0 | 25.8 | 3.2 |
 | 5 | Fabricate | 8.7 | 1.6 | 10.4 | 3.1 | 70.3 | 8.8 |
-| 6 | Install | 20.0 | 4.2 | 61.7 | 16.2 | 122.8 | 15.4 |
+| 6 | Install | 20.0 | 4.3 | 61.0 | 21.2 | 122.8 | 15.4 |
 | 9 | Expand | 14.8 | 2.4 | 34.6 | 6.3 | 127.8 | 16.0 |
-| 10 | Fitting limit fixed | 46.3 | 7.5 | 62.0 | 16.4 | 122.8 | 15.4 |
-| 7 | Drone built | 59.5 | 8.8 | 71.5 | 18.0 | 132.8 | 16.6 |
-| 8 | Handover, first lap done | **85.9** | **12.6** | **99.8** | **23.0** | 148.8 | 18.6 |
+| 10 | Fitting limit fixed | 46.3 | 7.4 | 61.2 | 21.4 | 122.8 | 15.4 |
+| 7 | Drone working | 60.7 | 10.2 | 76.8 | 22.8 | 132.9 | 16.6 |
+| 8 | Handover, first lap done | **87.1** | **14.0** | **105.0** | **27.8** | 148.8 | 18.6 |
 
 Checks 9 and 10 are listed where a person reaches them. Check 8 is always last, and includes the drone's first lap of 8.9 minutes at 1x.
 
-The first-time player's Install is late because the radiator is held back until the laser has failed its fit. The bot beats the First-time 8x column because it needs no time to give orders, even though it waits for each step.
+Check 7 finishes when the last part a drone needs is fitted. The first-time player's Install is late because the radiator is held back until the laser has failed its fit. The Install hint now names the Ore Container, so a player who follows it should reach Install sooner than this column, though that is not measured. The bot beats the First-time 8x column because it needs no time to give orders, even though it waits for each step.
 
 ### First milestones
 
 | Milestone | Practised 1x | Practised 8x | First-time 1x | First-time 8x |
 | --------- | ------------ | ------------ | ------------- | ------------- |
 | First module built | 14.7 | 2.4 | 34.3 | 6.1 |
-| First drone | 59.5 | 8.8 | 71.5 | 18.0 |
+| First small craft docked | 48.5 | 5.4 | 45.7 | 13.7 |
+| First drone working | 60.7 | 10.2 | 76.8 | 22.8 |
 | First expansion | 14.8 | 2.4 | 34.6 | 6.3 |
 
 ### Where the time goes
 
 | Measure | Practised 1x | First-time 1x | Practised 8x | First-time 8x |
 | ------- | ------------ | ------------- | ------------ | ------------- |
-| Commands given | 52 | 55 | 52 | 55 |
-| Time giving commands | 3.5 min | 13.8 min | 3.5 min | 13.8 min |
+| Commands given | 73 | 76 | 73 | 76 |
+| Time giving commands | 4.9 min | 19.0 min | 4.9 min | 19.0 min |
 | Longest wait between commands | 7.5 min | 10.3 min | 1.3 min | 1.5 min |
-| Ship's last unload | 20.2 min | 32.1 min | 4.3 min | 13.1 min |
-| Fabricator running | 64.9 min | 69.9 min | 8.1 min | 8.7 min |
+| Ship's last unload | 20.2 min | 32.1 min | 4.5 min | 18.1 min |
+| Fabricator running | 64.9 min | 69.8 min | 8.1 min | 8.7 min |
 | Refinery running | 38.9 min | 44.9 min | 4.9 min | 5.6 min |
 
 The station's 300 kW of solar and its battery carry the refinery and fabricator together. No load was shed and no job ran out of goods space in any run.
@@ -120,13 +119,13 @@ Minutes to all ten checks, each lever changed alone.
 
 | Lever | Practised 1x | First-time 1x | Practised 8x | First-time 8x |
 | ----- | ------------ | ------------- | ------------ | ------------- |
-| No change | 85.9 | 99.8 | 12.6 | 23.0 |
-| Scan 30 s to 10 s | 85.6 | 99.7 | 12.5 | 22.9 |
-| Refining at half time | 83.3 | 94.0 | 12.3 | 22.8 |
-| Rocks at half distance | 80.9 | 95.1 | 12.1 | 21.9 |
-| Drone and cores at half time | 79.9 | 93.8 | 11.8 | 22.3 |
-| Processor 60 s to 20 s | 70.0 | 83.8 | 10.6 | 21.0 |
-| Processor 20 s, frame 15 s, wiring 10 s | 66.3 | 82.3 | 10.4 | 21.0 |
+| No change | 87.1 | 105.0 | 14.0 | 27.8 |
+| Scan 30 s to 10 s | 86.8 | 105.0 | 13.9 | 27.7 |
+| Refining at half time | 84.7 | 99.2 | 13.8 | 27.6 |
+| Rocks at half distance | 82.1 | 100.3 | 13.6 | 26.6 |
+| Drone parts and cores at half time | 81.1 | 99.3 | 13.0 | 27.3 |
+| Processor 60 s to 20 s | 71.2 | 89.0 | 12.0 | 25.8 |
+| Processor 20 s, frame 15 s, wiring 10 s | 67.5 | 83.4 | 10.8 | 25.8 |
 
 Scan time barely matters. Refining alone achieves little because the fabricator is still the limit, but it adds up once the fabricator is faster: Option A beats the sum of its parts.
 
@@ -136,21 +135,21 @@ Scan time barely matters. Refining alone achieves little because the fabricator 
 | ------ | --------- | ------------ | ------------------------ | ---------------------- |
 | Refining: hematite, chalcopyrite, olivine | 60, 60, 90 s | **30, 30, 45 s** | 30, 30, 45 s | 30, 30, 45 s |
 | Frame, wiring, processor | 30, 20, 60 s | **15, 10, 20 s** | 15, 10, 20 s | 15, 10, 20 s |
-| Drone, Basic Core, Assisted Core | 300, 120, 300 s | same | **150, 60, 150 s** | 150, 60, 150 s |
+| Drone parts in all, Basic Core, Assisted Core | 300, 120, 300 s | same | **150, 60, 150 s** | 150, 60, 150 s |
 | Ore Storage, laser, radiator, Ore Container | 300, 180, 90, 120 s | same | **150, 90, 45, 60 s** | 150, 90, 45, 60 s |
 | Scan | 30 s | same | **10 s** | 10 s |
 | Red, Brass and Green Rock distance | 50, 50, 32 km | same | same | **25, 25, 16 km** |
 
 | Result, in minutes | No change | A | B | C |
 | ------------------ | --------- | - | - | - |
-| All ten checks, practised, 1x | 85.9 | **57.7** | 48.3 | 42.4 |
-| All ten checks, practised, 8x | 12.6 | **9.8** | 8.6 | 7.9 |
-| All ten checks, first-time, 1x | 99.8 | **68.6** | 60.5 | 52.2 |
-| All ten checks, first-time, 8x | 23.0 | **20.8** | 19.6 | 18.6 |
+| All ten checks, practised, 1x | 87.1 | **59.1** | 48.7 | 43.7 |
+| All ten checks, practised, 8x | 14.0 | **10.5** | 9.8 | 9.0 |
+| All ten checks, first-time, 1x | 105.0 | **72.6** | 63.4 | 56.9 |
+| All ten checks, first-time, 8x | 27.8 | **25.6** | 24.6 | 23.6 |
 | First module, practised, 1x | 14.7 | **12.0** | 10.6 | 9.0 |
 | First module, first-time, 1x | 34.3 | **24.1** | 21.3 | 19.6 |
-| First drone, practised, 1x | 59.5 | **37.7** | 31.9 | 29.5 |
-| First drone, first-time, 1x | 71.5 | **47.5** | 43.0 | 37.6 |
+| First drone working, practised, 1x | 60.7 | **39.2** | 32.3 | 30.8 |
+| First drone working, first-time, 1x | 76.8 | **51.2** | 45.5 | 42.3 |
 | First expansion, first-time, 1x | 34.6 | **24.4** | 21.4 | 19.9 |
 | Longest wait, practised, 1x | 7.5 | **5.1** | 3.4 | 3.4 |
 | Longest wait, first-time, 1x | 10.3 | **5.3** | 3.6 | 3.6 |
@@ -169,7 +168,7 @@ Scan time barely matters. Refining alone achieves little because the fabricator 
 
 Option A goes after the actual bottleneck, and is enough to bring the longest wait down to about 5 minutes at 1x. It keeps the laser, the drone and the cores as long builds that feel like milestones, and it does not touch the hauling that M4 asks about.
 
-Option B goes further but makes the big builds trivial: at 8x a practised player sees all ten checks in under 9 minutes. Option C changes the most and saves the least for what it costs. It shortens the hauling the owner needs to judge, halves a propellant burn that is not a problem, and rewrites the trip table and end state. Rock distance should wait until the owner has judged hauling.
+Option B goes further but makes the big builds trivial: at 8x a practised player sees all ten checks in under 10 minutes. Option C changes the most and saves the least for what it costs. It shortens the hauling the owner needs to judge, halves a propellant burn that is not a problem, and rewrites the trip table and end state. Rock distance should wait until the owner has judged hauling.
 
 Leaving the data alone is a fair choice too, if the owner expects to play mostly at 4x and 8x, where a first run is already short.
 
@@ -180,14 +179,12 @@ Every option changes the data hash, so existing saves fail to load with `data_mi
 | Option | `data/` | `reference_scenario.md` | Tests |
 | ------ | ------- | ----------------------- | ----- |
 | A | 6 recipes | Parts B and C run ticks and totals. End state unchanged. | `test_job_durations_match_the_page` |
-| B | 13 recipes, LIDAR | As A, plus Parts C to E and the scan steps. End state unchanged. | As A, plus `test_order_durations_match_the_page` |
+| B | 19 recipes, LIDAR | As A, plus Parts C to E and the scan steps. End state unchanged. | As A, plus `test_order_durations_match_the_page` |
 | C | As B, plus `reference.json` | As B, plus the trip tables, stop points, lap ticks, end state and section 5 | As B, plus the checks on laps, propellant and end state, `test_reference_scenario.gd`, and the trip figures pinned in `tests/sim/networks/test_cargo.gd` |
 
 ## 8. Not fixed by any option
 
 These are for the owner and the Lead. None of them is a data change.
 
-- **The drone arrives after the hauling is over.** The ship's last unload is at 20 to 32 minutes of a run of 86 to 100, and from then on nothing flies. At handover the station already holds spare ore, up to 1900 kg of hematite, 1000 kg of chalcopyrite and 1400 kg of olivine. So the drone takes over a job the player stopped doing an hour earlier, and its ore is not yet needed. Option A shortens that gap but does not close it. This bears on M4's question of whether the handover is satisfying.
-- **The Install hint blocks check 10 for a player who follows it.** It says to fit a Heat Radiator. With one fitted, the ship rejects 400 kW, so the second laser's 280 kW fits and the failure the Fix hint describes (280 of 200 kW) never happens. A third laser would then fail on power instead, at 472 kW of 420 kW, and fixing that needs a new power part. This run's first-time player holds the radiator back, so the table above does not show the problem.
-- **The Install hint also points away from the cheap first module.** The Ore Container needs only iron, so it can be built from the first haul, while the radiator needs a copper trip. Naming it in the hint would fix the block above too, and should bring a new player's first module down from 34 minutes towards the practised 15, for no data change. That figure is an estimate, since the first-time run was not measured with this plan. The hint text is Agent D's.
-- **Giving orders is the main cost at 8x.** Each trip needs six orders. Data cannot change that, but pausing to think would, as would an order queue or letting a Basic Core repeat a route. Those are design changes for after M4.
+- **The drone arrives after the hauling is over.** The ship's last unload is at 20 to 32 minutes of a run of 87 to 105, and from then on nothing flies. At handover the station already holds spare ore, up to 1900 kg of hematite, 1000 kg of chalcopyrite and 1400 kg of olivine. So the drone takes over a job the player stopped doing an hour earlier, and its ore is not yet needed. Option A shortens that gap but does not close it. This bears on M4's question of whether the handover is satisfying.
+- **Giving orders is the main cost at 8x.** Each trip needs six orders, and each drone at least 12 for its jobs and fits, with no way to repeat them. Data cannot change that, but pausing to think would, as would an order queue or letting a Basic Core repeat a route. Those are design changes for after M4.
