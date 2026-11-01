@@ -167,14 +167,17 @@ func test_a_trip_for_another_craft_uses_its_own_laser_and_port() -> void:
 	var state: Dictionary = bridge.current_view.duplicate(true)
 	var drone: Dictionary = state["units"][ship].duplicate(true)
 	drone["dock"] = {}
-	drone["parts"] = { "id": 900, "def": "mining_drone_body", "parent_connector": "", "connector": "", "children": [] }
-	state["units"][901] = drone
-	var steps := CyclePlan.adapt(screen.trip, 901, state, defs)
+	drone["parts"] = { "id": 900, "def": "small_hull", "parent_connector": "", "connector": "", "children": [
+		{ "id": 901, "def": "small_docking_port_mk1", "parent_connector": "stack_top", "connector": "mount", "children": [] },
+		{ "id": 902, "def": "small_mining_laser_mk1", "parent_connector": "side_a_nz", "connector": "mount", "children": [] },
+	] }
+	state["units"][910] = drone
+	var steps := CyclePlan.adapt(screen.trip, 910, state, defs)
 	for step: Dictionary in steps:
 		if step["type"] == "start_mining":
-			assert_eq(step["args"]["module"], 900)
+			assert_eq(step["args"]["module"], 902)
 		if step["type"] == "dock":
-			assert_eq(step["args"]["port"], 900)
+			assert_eq(step["args"]["port"], 901)
 
 
 func test_a_tier_1_core_is_refused_with_the_reason() -> void:
@@ -240,7 +243,7 @@ func test_a_blocked_step_shows_its_reason() -> void:
 
 
 func test_core_offline_names_the_fault_behind_it() -> void:
-	var unit := { "parts": { "id": 1, "def": "mining_drone_body", "fault": "over_heat_limit", "children": [] } }
+	var unit := { "parts": { "id": 1, "def": "small_hull", "fault": "over_heat_limit", "children": [] } }
 	var text := CyclePlan.block_text({ "state": "blocked", "reason": "core_offline" }, unit, defs["modules"])
 	assert_string_contains(text, "AI core is offline")
 	assert_string_contains(text, "Heat limit exceeded")

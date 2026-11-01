@@ -186,7 +186,7 @@ func _step() -> void:
 	if not events.is_empty():
 		view = sim.view()
 		_dirty = true
-		_observe(tracker.observe_view(view, _items))
+		_observe(tracker.observe_view(view, _items, _defs["modules"]))
 	for event in events:
 		_on_event(event, view)
 	for job: Dictionary in sim._state["jobs"].values():

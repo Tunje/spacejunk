@@ -3,6 +3,7 @@ extends GutTest
 var tracker: GoalTracker
 var defs: Dictionary
 var items: Dictionary
+var modules: Dictionary
 
 
 func before_each() -> void:
@@ -11,6 +12,14 @@ func before_each() -> void:
 		"recipes": { "refine_iron": { "facility": "refinery" }, "frame": { "facility": "fabricator" } },
 	}
 	items = { "hematite": { "cargo_class": "ore" }, "iron": { "cargo_class": "goods" } }
+	modules = {
+		"hull": { "capabilities": {} },
+		"laser": { "capabilities": { "mine": {} } },
+		"thruster": { "capabilities": { "thruster": {} } },
+		"ore_box": { "capabilities": { "storage": { "ore": {} } } },
+		"tank": { "capabilities": { "storage": { "propellant": {} } } },
+		"both_stores": { "capabilities": { "storage": { "ore": {}, "propellant": {} } } },
+	}
 
 
 func _view(units: Dictionary = {}, deposits: Dictionary = {}) -> Dictionary:
@@ -20,6 +29,20 @@ func _view(units: Dictionary = {}, deposits: Dictionary = {}) -> Dictionary:
 func _unit(kind: String, inventory: Dictionary = {}, parts: Dictionary = {}) -> Dictionary:
 	var tree := parts if not parts.is_empty() else { "id": 1, "def": "hull", "children": [] }
 	return { "kind": kind, "inventory": inventory, "parts": tree }
+
+
+## A hull carrying one part of each named definition.
+func _tree(fitted: Array[String], root: String = "hull") -> Dictionary:
+	var hull := { "id": 1, "def": root, "children": [] }
+	for index in range(fitted.size()):
+		hull["children"].append({ "id": index + 2, "def": fitted[index], "children": [] })
+	return hull
+
+
+func _real_modules() -> Dictionary:
+	var main: Node = add_child_autofree(load("res://client/main.tscn").instantiate())
+	main.get_node("Bridge").set_paused(true)
+	return main.get_node("Bridge").defs()["modules"]
 
 
 func _event(type: String, unit: int, data: Dictionary) -> Dictionary:
@@ -53,16 +76,16 @@ func test_a_goal_finishes_only_once() -> void:
 
 
 func test_a_found_deposit_finishes_scan() -> void:
-	assert_eq(tracker.observe_view(_view({}, { 5: {} }), items), ["scan"] as Array[String])
+	assert_eq(tracker.observe_view(_view({}, { 5: {} }), items, modules), ["scan"] as Array[String])
 
 
 func test_ore_aboard_finishes_mine_and_ore_at_a_station_finishes_haul() -> void:
-	assert_eq(tracker.observe_view(_view({ 1: _unit("ship", { "hematite": 10 }) }), items), ["mine"] as Array[String])
-	assert_eq(tracker.observe_view(_view({ 2: _unit("station", { "hematite": 10 }) }), items), ["haul"] as Array[String])
+	assert_eq(tracker.observe_view(_view({ 1: _unit("ship", { "hematite": 10 }) }), items, modules), ["mine"] as Array[String])
+	assert_eq(tracker.observe_view(_view({ 2: _unit("station", { "hematite": 10 }) }), items, modules), ["haul"] as Array[String])
 
 
 func test_goods_do_not_count_as_ore() -> void:
-	assert_true(tracker.observe_view(_view({ 1: _unit("ship", { "iron": 10 }) }), items).is_empty())
+	assert_true(tracker.observe_view(_view({ 1: _unit("ship", { "iron": 10 }) }), items, modules).is_empty())
 
 
 func test_finished_jobs_split_by_facility() -> void:
@@ -74,16 +97,72 @@ func test_a_lap_finishes_the_handover() -> void:
 	assert_eq(tracker.observe_event(_event("task_cycle_done", 1, { "task": 4, "cycle": 1 }), _view(), defs), ["handover"] as Array[String])
 
 
-func test_a_drone_finishes_from_either_the_event_or_the_view() -> void:
-	assert_eq(tracker.observe_event(_event("unit_created", 2, { "unit": 3 }), _view(), defs), ["drone"] as Array[String])
-	var other := GoalTracker.new()
-	assert_eq(other.observe_view(_view({ 3: _unit("drone") }), items), ["drone"] as Array[String])
+func test_a_new_craft_is_not_yet_a_drone() -> void:
+	assert_true(tracker.observe_event(_event("unit_created", 2, { "unit": 3 }), _view(), defs).is_empty())
+	assert_true(tracker.observe_view(_view({ 3: _unit("drone") }), items, modules).is_empty())
+
+
+func test_a_drone_finishes_once_every_capability_is_fitted() -> void:
+	var parts: Array[String] = ["laser", "thruster", "ore_box"]
+	assert_true(tracker.observe_view(_view({ 3: _unit("drone", {}, _tree(parts)) }), items, modules).is_empty())
+	parts.append("tank")
+	assert_eq(tracker.observe_view(_view({ 3: _unit("drone", {}, _tree(parts)) }), items, modules), ["drone"] as Array[String])
+
+
+func test_a_drone_counts_by_capability_not_part_id() -> void:
+	var parts: Array[String] = ["laser", "thruster", "both_stores"]
+	assert_eq(tracker.observe_view(_view({ 3: _unit("drone", {}, _tree(parts)) }), items, modules), ["drone"] as Array[String])
+
+
+func test_a_ship_with_all_of_those_is_not_a_drone() -> void:
+	var parts: Array[String] = ["laser", "thruster", "ore_box", "tank"]
+	assert_true(tracker.observe_view(_view({ 3: _unit("ship", {}, _tree(parts)) }), items, modules).is_empty())
+
+
+func test_medium_parts_on_the_real_small_hull_count() -> void:
+	var parts: Array[String] = ["mining_laser_mk1", "chemical_thruster_mk1", "ore_container_mk1", "propellant_tank_mk1"]
+	var state := _view({ 3: _unit("drone", {}, _tree(parts, "small_hull")) })
+	assert_eq(tracker.observe_view(state, items, _real_modules()), ["drone"] as Array[String])
 
 
 func test_attaching_to_a_ship_installs_and_to_a_station_expands() -> void:
 	var state := _view({ 1: _unit("ship"), 2: _unit("station") })
 	assert_eq(tracker.observe_event(_event("part_attached", 1, { "part": 1 }), state, defs), ["install"] as Array[String])
 	assert_eq(tracker.observe_event(_event("part_attached", 2, { "part": 1 }), state, defs), ["expand"] as Array[String])
+
+
+func test_attaching_to_a_drone_is_not_the_install_goal() -> void:
+	var state := _view({ 3: _unit("drone") })
+	assert_true(tracker.observe_event(_event("part_attached", 3, { "part": 1 }), state, defs).is_empty())
+
+
+func test_the_drone_hint_names_the_parts_in_the_order_they_fit() -> void:
+	var real := _real_modules()
+	var hint: String = GoalTracker.GOALS[6]["hint"]
+	var last := hint.find("Small Craft")
+	assert_gte(last, 0)
+	for fit: Dictionary in PanelPlayer.DRONE_FITS:
+		var at := hint.find(real[fit["item"]]["name"])
+		assert_gt(at, last, fit["item"])
+		last = at
+
+
+func test_the_core_hint_holds_on_the_real_sim() -> void:
+	assert_string_contains(GoalTracker.GOALS[7]["hint"], "solar panel and radiator")
+	for fitted: int in [0, 2]:
+		var main: Node = add_child_autofree(load("res://client/main.tscn").instantiate())
+		var bridge: SimBridge = main.get_node("Bridge")
+		bridge.set_paused(true)
+		var drone := ScreenshotDriver.build_drone(bridge, fitted)
+		ScreenshotDriver.stock_part(bridge, "assisted_core")
+		var unit: Dictionary = bridge.current_view["units"][drone]
+		var core_slot := { "part": unit["parts"]["id"], "connector": "core" }
+		var from := { "item": "assisted_core", "from": unit["dock"]["target_unit"] }
+		var result: Dictionary = bridge.check(FittingLogic.attach_command(drone, from, core_slot))
+		if fitted == 0:
+			assert_eq(result["reason"], "over_power_budget")
+		else:
+			assert_true(result["ok"], "fits with the solar panel and radiator on")
 
 
 func test_fix_needs_a_limit_failure_then_that_part_fitted() -> void:
