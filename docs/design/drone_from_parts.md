@@ -1,6 +1,6 @@
 # Drones From Parts
 
-Status: approved by the Lead, with all five rulings in section 10 decided. The data, validator and design pages are done on `design/drone-from-parts`. The rest merges to main as one set.
+Status: approved by the Lead, with all five rulings in section 10 decided, and done: on `main` at d5ad250.
 
 This replaced `mining_drone_body` with a small hull and small modules fitted through `attach_part`, under the owner's rule that no part stands alone and every part can go on any ship.
 
