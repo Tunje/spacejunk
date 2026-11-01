@@ -22,6 +22,18 @@ const HEMATITE_TRIP := { "rock": ReferenceBot.RED_ROCK, "deposit": ReferenceBot.
 const COPPER_TRIP := { "rock": ReferenceBot.BRASS_ROCK, "deposit": ReferenceBot.CHALCOPYRITE, "item": "chalcopyrite" }
 const SILICON_TRIP := { "rock": ReferenceBot.GREEN_ROCK, "deposit": ReferenceBot.OLIVINE, "item": "olivine" }
 
+## What a drone needs fitted, in an order the power and heat budgets allow. `on` names the part to
+## fit to, if it is not the hull.
+const DRONE_FITS: Array[Dictionary] = [
+	{ "item": "small_solar_panel_mk1", "at": "side_a_px" },
+	{ "item": "small_heat_radiator_mk1", "at": "side_a_nx" },
+	{ "item": "small_propellant_tank_mk1", "at": "stack_bottom" },
+	{ "item": "small_chemical_thruster_mk1", "at": "stack_bottom", "on": "small_propellant_tank_mk1" },
+	{ "item": "small_ore_container_mk1", "at": "side_a_pz" },
+	{ "item": "small_mining_laser_mk1", "at": "side_a_nz" },
+	{ "item": "assisted_core", "at": "core" },
+]
+
 ## Reads the recipes ahead: one hematite trip, the cheapest module first, a small expansion.
 const PLAN_DIRECT := {
 	"trips": [HEMATITE_TRIP, COPPER_TRIP, SILICON_TRIP],
@@ -33,7 +45,9 @@ const PLAN_DIRECT := {
 	],
 	"make": [
 		"ore_container_mk1", "ore_container_mk1", "heat_radiator_mk1", "mining_laser_mk1",
-		"mining_drone", "basic_core", "assisted_core",
+		"small_craft", "small_solar_panel_mk1", "small_heat_radiator_mk1",
+		"small_propellant_tank_mk1", "small_chemical_thruster_mk1", "small_ore_container_mk1",
+		"small_mining_laser_mk1", "basic_core", "assisted_core",
 	],
 	"fits": [
 		{ "unit": SHIP, "item": "ore_container_mk1", "parent": HULL, "at": "side_c_pz", "after": [] },
@@ -52,8 +66,10 @@ const PLAN_CHAIN := {
 		{ "recipe": "refine_olivine", "item": "olivine", "runs": 6 },
 	],
 	"make": [
-		"heat_radiator_mk1", "mining_laser_mk1", "ore_storage_mk1", "mining_drone", "basic_core",
-		"assisted_core",
+		"heat_radiator_mk1", "mining_laser_mk1", "ore_storage_mk1",
+		"small_craft", "small_solar_panel_mk1", "small_heat_radiator_mk1",
+		"small_propellant_tank_mk1", "small_chemical_thruster_mk1", "small_ore_container_mk1",
+		"small_mining_laser_mk1", "basic_core", "assisted_core",
 	],
 	"fits": [
 		{ "unit": SHIP, "item": "mining_laser_mk1", "parent": HULL, "at": "side_b_nz", "after": [] },
@@ -69,7 +85,7 @@ var think_ticks: int
 var tracker := GoalTracker.new()
 ## Tick each check finished, by goal ID.
 var goal_ticks := {}
-## Ticks of module_built, module_fitted, drone_built, expanded and hauling_done.
+## Ticks of module_built, module_fitted, drone_built, drone_fitted, expanded and hauling_done.
 var marks := {}
 ## Tick of every command given.
 var command_ticks: Array[int] = []
@@ -93,7 +109,6 @@ var _fit_done := {}
 var _drone := 0
 var _drone_body := 0
 var _drone_stage := 0
-var _core_part := 0
 var _armed_at := -1
 var _dirty := true
 var _scanned := {}
@@ -171,7 +186,7 @@ func _step() -> void:
 	if not events.is_empty():
 		view = sim.view()
 		_dirty = true
-		_observe(tracker.observe_view(view, _items))
+		_observe(tracker.observe_view(view, _items, _defs["modules"]))
 	for event in events:
 		_on_event(event, view)
 	for job: Dictionary in sim._state["jobs"].values():
@@ -217,8 +232,8 @@ func _on_event(event: Dictionary, view: Dictionary) -> void:
 				marks["module_fitted"] = event["tick"]
 			if event["unit"] == STATION and not marks.has("expanded"):
 				marks["expanded"] = event["tick"]
-			if event["unit"] == _drone:
-				_core_part = data["part"]
+			if event["unit"] == _drone and data["part"] == _drone_part("small_mining_laser_mk1", view):
+				marks["drone_fitted"] = event["tick"]
 		"unit_created":
 			_drone = data["unit"]
 			_drone_body = view["units"][_drone]["parts"]["id"]
@@ -270,32 +285,44 @@ func _fits_ready(fit: Dictionary) -> bool:
 func _drone_action() -> Dictionary:
 	if _drone == 0:
 		return {}
-	match _drone_stage:
-		0:
-			var command := { "type": "attach_part", "unit": _drone, "args": {
-				"item": "assisted_core", "from": STATION, "parent_part": _drone_body,
-				"parent_connector": "core", "part_connector": "mount",
-			} }
-			if sim.check(command)["ok"]:
-				return { "command": command, "done": func() -> void: _drone_stage = 1 }
-		1:
-			if _core_part != 0:
-				return { "command": { "type": "assign_core", "unit": _drone, "args": { "core": _core_part } },
-					"done": func() -> void: _drone_stage = 2 }
-		2:
-			return { "command": { "type": "set_cycle", "unit": _drone, "args": { "steps": _cycle_steps() } },
-				"done": func() -> void: _drone_stage = 3 }
+	var view := sim.view()
+	if _drone_stage < DRONE_FITS.size():
+		var fit: Dictionary = DRONE_FITS[_drone_stage]
+		var command := { "type": "attach_part", "unit": _drone, "args": {
+			"item": fit["item"], "from": STATION,
+			"parent_part": _drone_part(fit["on"], view) if fit.has("on") else _drone_body,
+			"parent_connector": fit["at"], "part_connector": "mount",
+		} }
+		if sim.check(command)["ok"]:
+			return { "command": command, "done": func() -> void: _drone_stage += 1 }
+		return {}
+	if _drone_stage == DRONE_FITS.size():
+		var core := _drone_part("assisted_core", view)
+		if core != 0:
+			return { "command": { "type": "assign_core", "unit": _drone, "args": { "core": core } },
+				"done": func() -> void: _drone_stage += 1 }
+	elif _drone_stage == DRONE_FITS.size() + 1:
+		return { "command": { "type": "set_cycle", "unit": _drone, "args": { "steps": _cycle_steps(view) } },
+			"done": func() -> void: _drone_stage += 1 }
 	return {}
 
 
-func _cycle_steps() -> Array:
+## The drone's part of a definition, or 0.
+func _drone_part(def: String, view: Dictionary) -> int:
+	for part: Dictionary in InspectText.flatten(view["units"][_drone]["parts"]):
+		if part["def"] == def:
+			return part["id"]
+	return 0
+
+
+func _cycle_steps(view: Dictionary) -> Array:
 	return [
 		{ "type": "load_cargo", "args": { "from": STATION, "item": "propellant" } },
 		{ "type": "undock", "args": {} },
 		{ "type": "move_to", "args": { "target": ReferenceBot.RED_ROCK } },
-		{ "type": "start_mining", "args": { "deposit": ReferenceBot.HEMATITE, "module": _drone_body } },
+		{ "type": "start_mining", "args": { "deposit": ReferenceBot.HEMATITE, "module": _drone_part("small_mining_laser_mk1", view) } },
 		{ "type": "move_to", "args": { "target": STATION } },
-		{ "type": "dock", "args": { "port": _drone_body, "target_port": FREE_PORT } },
+		{ "type": "dock", "args": { "port": _drone_part("small_docking_port_mk1", view), "target_port": FREE_PORT } },
 		{ "type": "unload_cargo", "args": { "to": STATION, "item": "hematite" } },
 	]
 

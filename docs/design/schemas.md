@@ -94,7 +94,7 @@ The loader applies these by field name, and `defs()` returns the converted names
 | `min_ai_tier` | whole, 1 to 6 | |
 | `realism` | `established`, `extrapolation`, `speculative`, `fictional` | |
 | `capabilities` | object | Section 5 |
-| `fabrication` | object or null | `{ "recipe": id }`, or null for root parts |
+| `fabrication` | object or null | `{ "recipe": id }`, or null for root parts, which are never items that get made |
 | `connectors` | array | Section 6 |
 | `collision` | object | Section 7 |
 | `visual` | object | `{ "model": id or null, "tint": "#rrggbb" }`. Null `model` shows the labelled placeholder. `tint` is a lowercase hex string from the slice palette, so placeholders keep their colour blocks. Read by the client only, and it may add fields, but never numbers. |
@@ -125,16 +125,16 @@ The loader applies these by field name, and `defs()` returns the converted names
 | Key | Fields | Used by |
 | --- | ------ | ------- |
 | `scan` | `seconds` (whole) | LIDAR |
-| `mine` | `rate_kg_per_s`, `hardness_max` (whole) | Lasers, drone |
+| `mine` | `rate_kg_per_s`, `hardness_max` (whole) | Lasers |
 | `ai_core` | `tier` (whole, 1 to 6) | Cores |
-| `storage` | Per cargo class: `{ "mass_kg", "volume_m3" }` | Containers, tanks, drone |
+| `storage` | Per cargo class: `{ "mass_kg", "volume_m3" }` | Containers, tanks |
 | `max_mass_kg` | number | Root parts only |
 | `generate` | `power_kw` | Solar |
 | `battery` | `capacity_kj`, `max_charge_kw`, `max_discharge_kw`, `charge_efficiency_ppm` (whole, up to 1000000) | Batteries |
 | `radiator` | `reject_kw` | Radiators |
 | `heat_capacity` | `limit_kj` | Summed to give the unit's heat limit |
-| `port` | `transfer_kg_per_s`, `dock_seconds` (whole), `undock_seconds` (whole) | Docking ports, drone |
-| `thruster` | `speed_m_s`, `propellant_kg_per_s`, `rated_mass_kg` | Thrusters, drone |
+| `port` | `transfer_kg_per_s`, `dock_seconds` (whole), `undock_seconds` (whole) | Docking ports |
+| `thruster` | `speed_m_s`, `propellant_kg_per_s`, `rated_mass_kg` | Thrusters |
 | `facility` | `type`: `refinery` or `fabricator` | Station facilities |
 | `always_on` | `true` | A load that runs whenever healthy, such as a command hub |
 
@@ -146,7 +146,7 @@ The loader applies these by field name, and `defs()` returns the converted names
 }
 ```
 
-A multi-role part such as `mining_drone_body` has one `power_kw` and one `heat_kw`, which apply whenever it runs anything. B5 sets them to its peak.
+A multi-role part has one `power_kw` and one `heat_kw`, which apply whenever it runs anything. The slice has none, since a drone is built from single-role parts like a ship.
 
 A trip's cost is its travel time at `propellant_kg_per_s`, scaled by the unit's mass at departure over `rated_mass_kg`, and paid in one lump at departure ([autonomy.md](autonomy.md) section 4). The network spec holds the exact formula. A thruster is not a power or heat load during a trip, so in the slice its `power_kw` and `heat_kw` count only toward fitting budgets.
 
@@ -162,9 +162,9 @@ A trip's cost is its travel time at `propellant_kg_per_s`, scaled by the unit's 
 | `up` | Same values | At right angles to `facing` |
 | `load_limit_kg` | number | Mass carried below this connector |
 
-Two connectors join only if type and size match. `facing` and `up` are written in the module's own frame. A child part is turned as it mates, so that in the craft's frame the facings are opposite and the ups equal.
+Two connectors join only if their types match and either both or neither are size `core`. `small`, `medium` and `large` do not decide a join, so any part fits any craft that can carry it, limited by load, mass, power and heat. `facing` and `up` are written in the module's own frame. A child part is turned as it mates, so that in the craft's frame the facings are opposite and the ups equal.
 
-The `core` size is used only by cores and the core connector on root parts, which is what keeps other small parts off it.
+The `core` size is used only by cores and the core connector on root parts, which is what keeps other parts off it. Dock connectors take no part in a join, so a small port docks at a medium port.
 
 ## 7. Collision
 
@@ -194,7 +194,7 @@ An output is one of three forms:
 | ---- | ------- | ------- |
 | Item | `{ "item": "iron", "kg": 69 }` | Facility unit's inventory |
 | Sink route | `{ "item": "slag", "kg": 31, "sink": "slag_vent" }` | The named sink, with no cargo space reserved |
-| Unit | `{ "unit_template": "mining_drone" }` | A new unit, whose mass comes from its template |
+| Unit | `{ "unit_template": "small_craft" }` | A new unit, whose mass comes from its template. The template must hold a port. |
 
 A unit output must be the recipe's only output. An item appears at most once on each side of a recipe.
 
@@ -204,9 +204,9 @@ A unit output must be the recipe's only output. An item appears at most once on 
     "inputs": [{ "item": "hematite", "kg": 100 }],
     "outputs": [{ "item": "iron", "kg": 69 }, { "item": "slag", "kg": 31, "sink": "slag_vent" }],
     "abstract": true },
-  { "id": "mining_drone", "facility": "fabricator", "seconds": 300, "power_kw": 100,
-    "inputs": [{ "item": "structural_frame", "count": 4 }, { "item": "wiring", "count": 6 }, { "item": "processor", "count": 2 }],
-    "outputs": [{ "unit_template": "mining_drone" }],
+  { "id": "small_craft", "facility": "fabricator", "seconds": 60, "power_kw": 100,
+    "inputs": [{ "item": "structural_frame", "count": 2 }, { "item": "wiring", "count": 2 }],
+    "outputs": [{ "unit_template": "small_craft" }],
     "abstract": true }
 ]
 ```
@@ -252,7 +252,7 @@ A node is `{ "part": module_id, "children": [] }`. A child node adds `parent_con
 
 - Part IDs are issued walking the tree parent first, with children in listed order, so creation is deterministic.
 - If a template contains a core, it is assigned at creation. A template holds at most one.
-- A template holds parts only. Starting inventory comes from the scenario, so a built drone arrives with an empty tank.
+- A template holds parts only. Starting inventory comes from the scenario, so a built unit arrives with an empty inventory.
 
 ## 11. Sinks
 
@@ -276,6 +276,7 @@ B4 enforces these on top of section 3 of the accounting spec.
 **References**
 - Every item, module, recipe, sink, facility type and template reference resolves.
 - A module's `fabrication.recipe` outputs that module.
+- A template named by a unit output holds at least one part with `port`, so the unit can appear docked.
 - A sink route's item is in that sink's `items`.
 - An `item` input or output is authored with `kg` if continuous and `count` if discrete.
 

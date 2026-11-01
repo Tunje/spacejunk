@@ -15,6 +15,10 @@ func test_a_person_reaches_all_ten_checks() -> void:
 	assert_eq(person.tracker.done_count(), GoalTracker.GOALS.size())
 
 
+func test_a_person_fits_every_drone_part_after_the_hull_appears() -> void:
+	assert_gt(person.marks["drone_fitted"], person.marks["drone_built"])
+
+
 func test_running_the_refinery_and_fabricator_together_sheds_nothing() -> void:
 	assert_eq(person.shed_events, 0)
 	assert_false(person.paused_reasons.has(JobSystem.REASON_NO_POWER))

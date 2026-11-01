@@ -9,6 +9,15 @@ const FRAME_SECONDS := 0.1
 ## What the Install hint tells the player to fit first.
 const INSTALL_ITEM := "ore_container_mk1"
 const INSTALL_SLOT := "side_c_pz"
+## What the drone hint tells the player to fit, in its order.
+const DRONE_FITS: Array[Dictionary] = [
+	{ "item": "small_solar_panel_mk1", "at": "side_a_px" },
+	{ "item": "small_heat_radiator_mk1", "at": "side_a_nx" },
+	{ "item": "small_propellant_tank_mk1", "at": "stack_bottom" },
+	{ "item": "small_chemical_thruster_mk1", "at": "stack_bottom" },
+	{ "item": "small_ore_container_mk1", "at": "side_a_pz" },
+	{ "item": "small_mining_laser_mk1", "at": "side_a_nz" },
+]
 
 var main: Node
 var bridge: SimBridge
@@ -68,8 +77,7 @@ func run() -> void:
 	_install(INSTALL_ITEM, INSTALL_SLOT)
 	_expect_goal("drone")
 	_stock_up_for_the_rest()
-	_job("fabricator", "mining_drone", 1)
-	_find_the_drone()
+	_build_the_drone()
 	_expect_goal("handover")
 	_job("fabricator", "basic_core", 1)
 	_job("fabricator", "assisted_core", 1)
@@ -253,7 +261,11 @@ func _attach() -> void:
 
 
 func _install(item: String, connector: String) -> void:
-	_open_fitting(ship)
+	_install_on(ship, item, connector)
+
+
+func _install_on(target: int, item: String, connector: String) -> void:
+	_open_fitting(target)
 	_pick_part(item)
 	_pick_slot(connector)
 	_attach()
@@ -283,6 +295,20 @@ func _expand_the_station() -> void:
 	_pick_slot("side_c_px")
 	_attach()
 	main.toggle_fitting()
+
+
+## Check 7: the bare craft, then six parts made and fitted as the hint says.
+func _build_the_drone() -> void:
+	_job("fabricator", "small_craft", 1)
+	_find_the_drone()
+	if drone == 0:
+		return
+	_expect_goal("drone")
+	for fit: Dictionary in DRONE_FITS:
+		_job("fabricator", fit["item"], 1)
+	for fit: Dictionary in DRONE_FITS:
+		_expect_goal("drone")
+		_install_on(drone, fit["item"], fit["at"])
 
 
 func _find_the_drone() -> void:

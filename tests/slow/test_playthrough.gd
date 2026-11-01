@@ -73,6 +73,12 @@ func test_the_install_hint_names_what_the_run_fits() -> void:
 			assert_string_contains(goal["hint"], name_text)
 
 
+func test_the_drone_is_eight_parts_and_a_core() -> void:
+	var parts := InspectText.flatten(player.unit(player.drone)["parts"])
+	assert_eq(parts.size(), 9)
+	assert_eq(player.view.crafts[player.drone].part_transforms.size(), 9)
+
+
 func test_the_panel_says_all_goals_are_done() -> void:
 	assert_eq(main.goal_panel._title.text, "All ten goals done")
 

@@ -690,7 +690,15 @@ func _cross_unit_output(where: String, recipe: Dictionary, entry: Dictionary) ->
 	if not _templates.has(id):
 		_err("unknown_template", where, str(id))
 		return 0
+	if not _node_has_port(_templates[id]["root"]):
+		_err("built_unit_without_port", where, "%s cannot appear docked" % str(id))
 	return _node_mass(_templates[id]["root"])
+
+
+func _node_has_port(node: Dictionary) -> bool:
+	if _modules.has(node["part"]) and _modules[node["part"]]["capabilities"].has("port"):
+		return true
+	return node["children"].any(_node_has_port)
 
 
 func _node_mass(node: Dictionary) -> int:
@@ -800,12 +808,17 @@ func _connector(module: Dictionary, id: Variant) -> Dictionary:
 func _check_join(where: String, parent: Dictionary, child: Dictionary, below_g: int) -> void:
 	if parent["type"] != child["type"]:
 		_err("connector_type_mismatch", where, parent["id"])
-	if parent["size"] != child["size"]:
+	if not _sizes_join(parent, child):
 		_err("connector_size_mismatch", where, parent["id"])
 	if parent["type"] == "dock":
 		_err("dock_connector_in_tree", where, parent["id"])
 	if below_g > _to_sim(parent["load_limit_kg"], 1000):
 		_err("over_load_limit", where, parent["id"])
+
+
+## Size decides a join only for cores (schemas section 6).
+func _sizes_join(a: Dictionary, b: Dictionary) -> bool:
+	return (a["size"] == "core") == (b["size"] == "core")
 
 
 ## The fitting rules of contracts section 5, applied to a whole template.
@@ -1053,6 +1066,6 @@ func _fits_somewhere(module: Dictionary) -> bool:
 		for connector: Dictionary in _modules[id]["connectors"]:
 			if connector["id"] == "mount":
 				continue
-			if connector["type"] == mount["type"] and connector["size"] == mount["size"]:
+			if connector["type"] == mount["type"] and _sizes_join(connector, mount):
 				return true
 	return false

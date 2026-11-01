@@ -155,21 +155,35 @@ The expansion comes before the handover so that nothing is still being ordered w
 
 | # | Step | Ticks | Expected result |
 | - | ---- | ----- | --------------- |
-| 41 | `start_job` facility 14, `mining_drone` x 1 | 3000 | `unit_created`. The drone is docked at port 11, with no core, an empty tank and an empty hold. Used up: 8 frames, 10 wiring, 4 processors. **Check 7.** |
-| 42 | `start_job` facility 14, `basic_core` x 1 | 1200 | Used up: 4 processors, 1 wiring |
-| 43 | `start_job` facility 14, `assisted_core` x 1 | 3000 | Used up: the Basic Core, 6 processors |
-| 44 | On the drone, `attach_part` `assisted_core`, `from` 8, at its `core` connector | Instant | `part_attached` |
-| 45 | On the drone, `assign_core` with the part ID from step 44 | Instant | `core_tier` 2 |
-| 46 | On the drone, `set_cycle` with the steps below | | Accepted. No further commands are submitted. |
+| 41 | `start_job` facility 14, `small_craft` x 1 | 600 | `unit_created`. A `small_hull` with a `small_docking_port_mk1`, docked at port 11, with no core, no tank and an empty inventory. Used up: 2 frames, 2 wiring. |
+| 42 | `start_job` facility 14, `small_solar_panel_mk1` x 1 | 400 | Used up: 1 frame, 3 wiring |
+| 43 | `start_job` facility 14, `small_heat_radiator_mk1` x 1 | 400 | Used up: 1 frame |
+| 44 | `start_job` facility 14, `small_propellant_tank_mk1` x 1 | 300 | Used up: 1 frame |
+| 45 | `start_job` facility 14, `small_chemical_thruster_mk1` x 1 | 400 | Used up: 1 frame |
+| 46 | `start_job` facility 14, `small_ore_container_mk1` x 1 | 300 | Used up: 1 frame, 3 wiring |
+| 47 | `start_job` facility 14, `small_mining_laser_mk1` x 1 | 600 | Used up: 1 frame, 2 wiring, 4 processors |
+| 48 | On the drone, `attach_part` `small_solar_panel_mk1`, `from` 8, on the hull at `side_a_px` | Instant | `part_attached` |
+| 49 | Likewise `small_heat_radiator_mk1` at `side_a_nx` | Instant | `part_attached` |
+| 50 | Likewise `small_propellant_tank_mk1` at `stack_bottom` | Instant | `part_attached` |
+| 51 | Likewise `small_chemical_thruster_mk1`, on the tank at its `stack_bottom` | Instant | `part_attached` |
+| 52 | Likewise `small_ore_container_mk1`, on the hull at `side_a_pz` | Instant | `part_attached` |
+| 53 | Likewise `small_mining_laser_mk1` at `side_a_nz` | Instant | `part_attached`. **Check 7.** |
+| 54 | `start_job` facility 14, `basic_core` x 1 | 1200 | Used up: 4 processors, 1 wiring |
+| 55 | `start_job` facility 14, `assisted_core` x 1 | 3000 | Used up: the Basic Core, 6 processors |
+| 56 | On the drone, `attach_part` `assisted_core`, `from` 8, at the hull's `core` connector | Instant | `part_attached` |
+| 57 | On the drone, `assign_core` with the part ID from step 56 | Instant | `core_tier` 2 |
+| 58 | On the drone, `set_cycle` with the steps below | | Accepted. No further commands are submitted. |
+
+Steps 41 to 47 take 3000 ticks in all. Solar and the radiator must go on first, because the laser, the thruster and the core are all refused until there is a power and heat budget. The core goes on last in any case.
 
 ```gdscript
 [
   { type = "load_cargo",   args = { from = 8, item = "propellant" } },
   { type = "undock",       args = {} },
   { type = "move_to",      args = { target = 2 } },
-  { type = "start_mining", args = { deposit = 3, module = <drone body> } },
+  { type = "start_mining", args = { deposit = 3, module = <small laser> } },
   { type = "move_to",      args = { target = 8 } },
-  { type = "dock",         args = { port = <drone body>, target_port = 11 } },
+  { type = "dock",         args = { port = <small port>, target_port = 11 } },
   { type = "unload_cargo", args = { to = 8, item = "hematite" } },
 ]
 ```

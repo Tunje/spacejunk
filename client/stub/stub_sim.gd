@@ -532,7 +532,7 @@ func _validate_attach(unit: Dictionary, args: Dictionary) -> Dictionary:
 func _fit_failure(fit: Dictionary, parent: Dictionary, parent_end: Dictionary, part_end: Dictionary, mass_g: int) -> Dictionary:
 	if parent_end["type"] != part_end["type"] or parent_end["type"] == "dock":
 		return { "reason": "connector_type_mismatch", "detail": {} }
-	if parent_end["size"] != part_end["size"]:
+	if (parent_end["size"] == "core") != (part_end["size"] == "core"):
 		return { "reason": "connector_size_mismatch", "detail": {} }
 	for child: Dictionary in parent["children"]:
 		if child["parent_connector"] == parent_end["id"]:

@@ -206,10 +206,10 @@ Everything else in the catalog waits.
 | Cores | Basic Core and Assisted Core, as modules |
 | Ship modules | Hull, chemical thruster, propellant tank, solar panel, battery bank, heat radiator, LIDAR, mining laser, ore container, docking port |
 | Station modules | Command hub, solar farm, ore refinery, fabricator, ore and goods storage, docking port |
-| Drone | One mining drone, built from the above |
+| Drone | One mining drone: a small hull and small versions of the ship's modules, fitted like a ship |
 | AI tiers | Tier 1 Basic and tier 2 Assisted only |
 | Propellant | A finite depot stock, so every trip has a cost. Water-to-propellant is the first post-slice chain. |
-| 3D visuals | One hull and one station frame with hardpoints, a model for each module above and the drone (from the pipeline), plus procedural asteroids, the star and a space backdrop (from the client) |
+| 3D visuals | One hull and one station frame with hardpoints, a model for each module above and each small drone part (from the pipeline, with placeholders until then), plus procedural asteroids, the star and a space backdrop (from the client) |
 
 **Slice acceptance checks**, run by the scripted bot and later by a person:
 1. Scan an asteroid and identify deposits.

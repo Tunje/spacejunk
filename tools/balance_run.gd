@@ -15,7 +15,12 @@ const OPTIONS: Array[Dictionary] = [
 	{ "name": "refining at half time", "recipes": { "refine_hematite": 300, "refine_chalcopyrite": 300, "refine_olivine": 450 } },
 	{ "name": "processor 20 s", "recipes": { "processor": 200 } },
 	{ "name": "processor 20 s, frame 15 s, wiring 10 s", "recipes": { "processor": 200, "structural_frame": 150, "wiring": 100 } },
-	{ "name": "cores and drone at half time", "recipes": { "mining_drone": 1500, "basic_core": 600, "assisted_core": 1500 } },
+	{ "name": "cores and drone at half time", "recipes": {
+		"small_craft": 300, "small_solar_panel_mk1": 200, "small_heat_radiator_mk1": 200,
+		"small_propellant_tank_mk1": 150, "small_chemical_thruster_mk1": 200, "small_ore_container_mk1": 150,
+		"small_mining_laser_mk1": 300,
+		"basic_core": 600, "assisted_core": 1500,
+	} },
 	{ "name": "A: materials", "recipes": {
 		"processor": 200, "structural_frame": 150, "wiring": 100,
 		"refine_hematite": 300, "refine_chalcopyrite": 300, "refine_olivine": 450,
@@ -23,13 +28,19 @@ const OPTIONS: Array[Dictionary] = [
 	{ "name": "B: materials and modules", "scan": 100, "recipes": {
 		"processor": 200, "structural_frame": 150, "wiring": 100,
 		"refine_hematite": 300, "refine_chalcopyrite": 300, "refine_olivine": 450,
-		"mining_drone": 1500, "basic_core": 600, "assisted_core": 1500,
+		"small_craft": 300, "small_solar_panel_mk1": 200, "small_heat_radiator_mk1": 200,
+		"small_propellant_tank_mk1": 150, "small_chemical_thruster_mk1": 200, "small_ore_container_mk1": 150,
+		"small_mining_laser_mk1": 300,
+		"basic_core": 600, "assisted_core": 1500,
 		"ore_storage_mk1": 1500, "mining_laser_mk1": 900, "heat_radiator_mk1": 450, "ore_container_mk1": 600,
 	} },
 	{ "name": "C: B and rocks at half", "scan": 100, "rocks": { "num": 1, "den": 2 }, "recipes": {
 		"processor": 200, "structural_frame": 150, "wiring": 100,
 		"refine_hematite": 300, "refine_chalcopyrite": 300, "refine_olivine": 450,
-		"mining_drone": 1500, "basic_core": 600, "assisted_core": 1500,
+		"small_craft": 300, "small_solar_panel_mk1": 200, "small_heat_radiator_mk1": 200,
+		"small_propellant_tank_mk1": 150, "small_chemical_thruster_mk1": 200, "small_ore_container_mk1": 150,
+		"small_mining_laser_mk1": 300,
+		"basic_core": 600, "assisted_core": 1500,
 		"ore_storage_mk1": 1500, "mining_laser_mk1": 900, "heat_radiator_mk1": 450, "ore_container_mk1": 600,
 	} },
 ]

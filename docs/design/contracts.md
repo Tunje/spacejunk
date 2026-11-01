@@ -152,11 +152,11 @@ Every command has this envelope. `submit` fills in `id` and `tick`.
 - Mass: total against the root's `max_mass_kg`.
 - Power: summed `power_kw` against generation plus battery maximum discharge.
 - Heat: summed `heat_kw` against radiator rejection.
-- Connectors: type, size, occupancy, and mass carried below the connector against `load_limit_kg`.
+- Connectors: type, a `core` connector joining only another `core` connector, occupancy, and mass carried below the connector against `load_limit_kg`. Other sizes do not decide a join.
 
 Running shortfalls are still handled by shedding and faults.
 
-**Building units.** A recipe output may name a unit template. When the job finishes, the unit appears docked at a free port of the facility's station. The port is reserved in phase 4, and the job blocks with `no_free_port` if none is free. B4 checks that template part mass equals recipe input mass.
+**Building units.** A recipe output may name a unit template. When the job finishes, the unit appears docked at a free port of the facility's station. The port is reserved in phase 4, and the job blocks with `no_free_port` if none is free. B4 checks that template part mass equals recipe input mass, and that the template holds a port.
 
 **Jobs.** With `count` above 1, inputs are taken at the start of each run and `job_finished` fires per run.
 
@@ -198,7 +198,7 @@ Each failure emits exactly one event. Fitting failures emit `attach_failed`, and
 
 `reason` is a stable lowercase code, with display text held in the client. `detail` is an optional Dictionary of integers, such as `{ need_w, have_w }`, so the player sees numbers as well as a code.
 
-Known reason codes: `over_mass_limit`, `over_power_budget`, `over_heat_budget`, `over_heat_limit`, `over_load_limit`, `connector_type_mismatch`, `connector_size_mismatch`, `connector_occupied`, `not_whole_unit`, `no_free_port`, `no_propellant`, `cargo_full`, `deposit_exhausted`, `root_part`, `part_busy`, `float_in_command`, `unknown_unit`, `unknown_part`, `invalid_target`, `unknown_command`, `malformed_command`. Autonomy adds its own codes, job statuses and view fields in `docs/design/autonomy.md` sections 3, 8, 9 and 10.
+Known reason codes: `over_mass_limit`, `over_power_budget`, `over_heat_budget`, `over_heat_limit`, `over_load_limit`, `connector_type_mismatch`, `connector_size_mismatch`, `connector_occupied`, `not_whole_unit`, `no_free_port`, `no_propellant`, `cargo_full`, `deposit_exhausted`, `root_part`, `part_busy`, `float_in_command`, `unknown_unit`, `unknown_part`, `invalid_target`, `unknown_command`, `malformed_command`. Autonomy adds its own codes, job statuses and view fields in `docs/design/autonomy.md` sections 3, 8, 9 and 10. `connector_size_mismatch` means a `core` connector met a non-core one.
 
 ## 7. State view
 

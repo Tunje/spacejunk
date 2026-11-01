@@ -2,12 +2,19 @@
   "schema_version": 1,
   "entries": [
     {
-      "id": "mining_drone",
-      "name": "Mining Drone",
+      "id": "small_craft",
+      "name": "Small Craft",
       "kind": "drone",
       "root": {
-        "part": "mining_drone_body",
-        "children": []
+        "part": "small_hull",
+        "children": [
+          {
+            "part": "small_docking_port_mk1",
+            "parent_connector": "stack_top",
+            "connector": "mount",
+            "children": []
+          }
+        ]
       }
     },
     {

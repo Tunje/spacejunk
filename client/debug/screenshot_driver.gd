@@ -11,6 +11,20 @@ class_name ScreenshotDriver extends Node
 ##   --cycle=1                       fits a tier 2 core and starts a short cycle at once
 ##   --jobs=<recipe id>              opens the jobs screen and starts that recipe
 ##   --fit=<item>  --fit-slot=<connector>  opens fitting after the orders and picks both
+##   --drone=<0 to 6>                builds a small craft with that many parts fitted, and selects it
+##   --drone-fly=1                   then gives it a core and propellant, and sends it to a rock
+##   --drone-fit=<item>              then opens fitting on it with that part chosen and in stock
+##   --goals-done=<count>            marks the first goals done, to show a later hint
+
+const DRONE_FITS: Array[Dictionary] = [
+	{ "item": "small_solar_panel_mk1", "at": "side_a_px" },
+	{ "item": "small_heat_radiator_mk1", "at": "side_a_nx" },
+	{ "item": "small_propellant_tank_mk1", "at": "stack_bottom" },
+	{ "item": "small_chemical_thruster_mk1", "at": "stack_bottom" },
+	{ "item": "small_ore_container_mk1", "at": "side_a_pz" },
+	{ "item": "small_mining_laser_mk1", "at": "side_a_nz" },
+]
+const RUN_STEP_S := 0.1
 
 var main: Node3D
 var parsed: Dictionary = {}
@@ -72,6 +86,119 @@ func _run() -> void:
 		await _open_jobs()
 	if parsed.has("cycle"):
 		await _start_demo_cycle()
+	if parsed.has("drone"):
+		_show_demo_drone()
+	if parsed.has("goals-done"):
+		for index in range(int(parsed["goals-done"])):
+			main.goal_panel.tracker.complete(GoalTracker.GOALS[index]["id"])
+		main.goal_panel.refresh()
+
+
+func _show_demo_drone() -> void:
+	var bridge: SimBridge = main.bridge
+	var view: LocalView = main.local_view
+	var drone := ScreenshotDriver.build_drone(bridge, int(parsed["drone"]))
+	view.refresh(0.0)
+	view.select("unit", drone, 0)
+	view.focus_on("unit", drone)
+	view.camera.distance_m = view.camera.target_distance_m
+	if parsed.has("drone-fit"):
+		ScreenshotDriver.stock_part(bridge, parsed["drone-fit"])
+		ScreenshotDriver._step(bridge)
+		main.toggle_fitting()
+		var screen: FittingScreen = main.fitting_screen
+		for entry: Dictionary in FittingLogic.stock(bridge.current_view, drone, screen._modules):
+			if entry["item"] == parsed["drone-fit"]:
+				screen.choose(entry)
+	if parsed.has("drone-fly"):
+		ScreenshotDriver.send_drone_out(bridge, drone)
+
+
+## A stand-in for hours of play: stock is written in, then the real job and attaches run.
+static func build_drone(bridge: SimBridge, fitted: int) -> int:
+	var view: Dictionary = bridge.current_view
+	var station := ScreenshotDriver._unit_of_kind(view, "station")
+	var defs: Dictionary = bridge.defs()
+	var stock: Dictionary = bridge.sim._state["units"][station]["inventory"]
+	stock["structural_frame"] = stock.get("structural_frame", 0) + 2 * defs["items"]["structural_frame"]["unit_mass_g"]
+	stock["wiring"] = stock.get("wiring", 0) + 2 * defs["items"]["wiring"]["unit_mass_g"]
+	var fabricator := 0
+	for entry: Dictionary in IndustryLogic.facilities(view["units"][station], defs["modules"]):
+		if entry["type"] == "fabricator":
+			fabricator = entry["part"]
+	bridge.submit(IndustryLogic.start_command(station, fabricator, defs["recipes"]["small_craft"], 1))
+	var drone := 0
+	while drone == 0:
+		ScreenshotDriver._step(bridge)
+		drone = ScreenshotDriver._unit_of_kind(bridge.current_view, "drone")
+	for index in range(fitted):
+		ScreenshotDriver._fit_part(bridge, drone, DRONE_FITS[index]["item"], DRONE_FITS[index]["at"])
+	return drone
+
+
+static func stock_part(bridge: SimBridge, item: String) -> void:
+	var station := ScreenshotDriver._unit_of_kind(bridge.current_view, "station")
+	bridge.sim._state["units"][station]["inventory"][item] = bridge.defs()["modules"][item]["mass_g"]
+
+
+## Fits a Basic Core, fills the tank, undocks and starts for the first asteroid.
+static func send_drone_out(bridge: SimBridge, drone: int) -> void:
+	ScreenshotDriver._fit_part(bridge, drone, "basic_core", "core")
+	var unit: Dictionary = bridge.current_view["units"][drone]
+	var core := 0
+	for part: Dictionary in InspectText.flatten(unit["parts"]):
+		if part["def"] == "basic_core":
+			core = part["id"]
+	bridge.submit({ "type": "assign_core", "unit": drone, "args": { "core": core } })
+	ScreenshotDriver._step(bridge)
+	var host: int = unit["dock"]["target_unit"]
+	bridge.submit({ "type": "load_cargo", "unit": drone, "args": { "from": host, "item": "propellant" } })
+	ScreenshotDriver._run_until_idle(bridge, drone)
+	bridge.submit({ "type": "undock", "unit": drone, "args": {} })
+	ScreenshotDriver._run_until_idle(bridge, drone)
+	var view: Dictionary = bridge.current_view
+	var ids: Array = view["bodies"].keys()
+	ids.sort()
+	for id: int in ids:
+		if view["bodies"][id]["kind"] == "asteroid":
+			bridge.submit({ "type": "move_to", "unit": drone, "args": { "target": id } })
+			break
+	for i in range(8):
+		ScreenshotDriver._step(bridge)
+
+
+static func _fit_part(bridge: SimBridge, drone: int, item: String, connector: String) -> void:
+	ScreenshotDriver.stock_part(bridge, item)
+	var station := ScreenshotDriver._unit_of_kind(bridge.current_view, "station")
+	var unit: Dictionary = bridge.current_view["units"][drone]
+	for slot: Dictionary in FittingLogic.free_slots(unit, bridge.defs()["modules"]):
+		if slot["connector"] == connector:
+			bridge.submit(FittingLogic.attach_command(drone, { "item": item, "from": station }, slot))
+			break
+	ScreenshotDriver._step(bridge)
+
+
+static func _step(bridge: SimBridge) -> void:
+	var was_paused := bridge.paused
+	bridge.set_paused(false)
+	bridge.set_speed(SimBridge.SPEEDS[-1])
+	bridge.advance(RUN_STEP_S)
+	bridge.set_paused(was_paused)
+
+
+static func _run_until_idle(bridge: SimBridge, unit_id: int) -> void:
+	ScreenshotDriver._step(bridge)
+	while bridge.current_view["units"][unit_id]["op"]["type"] != "idle":
+		ScreenshotDriver._step(bridge)
+
+
+static func _unit_of_kind(view: Dictionary, kind: String) -> int:
+	var ids: Array = view["units"].keys()
+	ids.sort()
+	for id: int in ids:
+		if view["units"][id]["kind"] == kind:
+			return id
+	return 0
 
 
 ## A stand-in for a hand-flown trip, which takes minutes to reach on the real Sim.

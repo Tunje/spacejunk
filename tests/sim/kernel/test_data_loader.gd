@@ -47,13 +47,14 @@ func test_capability_units_convert() -> void:
 	assert_eq(port["transfer_g_per_s"], 50_000)
 	assert_eq(port["dock_ticks"], 20 * Sim.TICKS_PER_SECOND)
 	assert_eq(port["undock_ticks"], 10 * Sim.TICKS_PER_SECOND)
-	var drone: Dictionary = defs["modules"]["mining_drone_body"]["capabilities"]
-	assert_eq(drone["thruster"]["speed_mm_s"], 250_000)
-	assert_eq(drone["thruster"]["propellant_g_per_s"], 50)
-	assert_eq(drone["thruster"]["rated_mass_g"], 1_000_000)
-	assert_eq(drone["storage"]["ore"]["mass_g"], 500_000)
-	assert_eq(drone["storage"]["ore"]["volume_l"], 200)
-	assert_eq(drone["max_mass_g"], 1_500_000)
+	var thruster: Dictionary = defs["modules"]["small_chemical_thruster_mk1"]["capabilities"]["thruster"]
+	assert_eq(thruster["speed_mm_s"], 250_000)
+	assert_eq(thruster["propellant_g_per_s"], 50)
+	assert_eq(thruster["rated_mass_g"], 1_000_000)
+	var ore: Dictionary = defs["modules"]["small_ore_container_mk1"]["capabilities"]["storage"]["ore"]
+	assert_eq(ore["mass_g"], 500_000)
+	assert_eq(ore["volume_l"], 200)
+	assert_eq(defs["modules"]["small_hull"]["capabilities"]["max_mass_g"], 1_500_000)
 	assert_eq(defs["modules"]["lidar_mk1"]["capabilities"]["scan"]["ticks"], 30 * Sim.TICKS_PER_SECOND)
 
 
