@@ -1,5 +1,5 @@
 extends GutTest
-## Construction: building the drone (check 7), and fabricated parts going onto a station (check 9)
+## Construction: building a drone's craft (check 7), and fabricated parts going onto a station (check 9)
 ## and a ship (check 6). Recipes run in a few ticks here to keep the suite fast.
 
 const STATION := 8
@@ -10,7 +10,7 @@ const FABRICATOR := 14
 const SHIP := 23
 const HULL := 24
 const RUN_TICKS := 3
-const DRONE_G := 520000
+const CRAFT_G := 120000
 const STATION_ORE_G := 50000000
 
 var sim: Sim
@@ -24,7 +24,7 @@ func before_each() -> void:
 	state = sim._state
 	sim._ctx.defs = sim._ctx.defs.duplicate(true)
 	defs = sim._ctx.defs
-	for recipe: String in ["mining_drone", "ore_storage_mk1", "heat_radiator_mk1", "assisted_core"]:
+	for recipe: String in ["small_craft", "ore_storage_mk1", "heat_radiator_mk1", "assisted_core"]:
 		defs["recipes"][recipe]["ticks"] = RUN_TICKS
 
 
@@ -33,6 +33,13 @@ func _give_inputs(recipe: String, runs: int = 1) -> void:
 	for input: Dictionary in defs["recipes"][recipe]["inputs"]:
 		Units.add_stock(state["units"][STATION]["inventory"], input["item"], input["grams"] * runs)
 		state["matter_start_g"] += input["grams"] * runs
+
+
+## Puts one of each part in the station, counted as starting matter.
+func _give_parts(items: Array[String]) -> void:
+	for item: String in items:
+		Units.add_stock(state["units"][STATION]["inventory"], item, defs["modules"][item]["mass_g"])
+		state["matter_start_g"] += defs["modules"][item]["mass_g"]
 
 
 func _start(recipe: String, count: int = 1) -> Dictionary:
@@ -49,8 +56,8 @@ func _attach(unit: int, item: String, parent: int, connector: String) -> Diction
 
 ## Docks something at the free port, so the station has none left.
 func _fill_free_port() -> int:
-	var id := Units.create(sim._ctx, "mining_drone", "Blocker", [0, 0, 0])
-	state["units"][id]["dock"] = { "port": state["units"][id]["root"], "target_unit": STATION, "target_port": FREE_PORT }
+	var id := Units.create(sim._ctx, "small_craft", "Blocker", [0, 0, 0])
+	state["units"][id]["dock"] = { "port": Units.ports(state, defs, id)[0], "target_unit": STATION, "target_port": FREE_PORT }
 	state["matter_start_g"] = sim.ledger()["matter"]["total_g"]
 	return id
 
@@ -75,54 +82,58 @@ func _step_balanced(ticks: int) -> void:
 	assert_eq(sim.ledger()["violations"], PackedStringArray())
 
 
-func test_a_built_drone_appears_docked_with_no_core_and_an_empty_tank() -> void:
-	_give_inputs("mining_drone")
-	sim.submit(_start("mining_drone"))
+func test_a_built_craft_appears_docked_with_no_core_and_no_tank() -> void:
+	_give_inputs("small_craft")
+	sim.submit(_start("small_craft"))
 	_step_balanced(RUN_TICKS)
 	var events := sim.take_events()
 	var created := _first(events, "unit_created")
 	var id: int = created["data"]["unit"]
 	assert_eq(created["unit"], STATION)
-	assert_eq(created["data"]["def"], "mining_drone")
+	assert_eq(created["data"]["def"], "small_craft")
 	assert_true(_types(events).has("job_finished"))
 
 	var view := sim.view()
 	var drone: Dictionary = view["units"][id]
 	assert_eq(drone["kind"], "drone")
-	assert_eq(drone["def"], "mining_drone")
+	assert_eq(drone["def"], "small_craft")
 	assert_eq(drone["core"], 0)
 	assert_eq(drone["core_tier"], 0)
 	assert_eq(drone["inventory"], {})
-	assert_eq(drone["mass_g"], DRONE_G)
+	assert_eq(drone["mass_g"], CRAFT_G)
 	assert_eq(drone["at_target"], STATION)
 	assert_eq(drone["pos_mm"], view["units"][STATION]["pos_mm"])
-	assert_eq(drone["dock"], { "port": drone["parts"]["id"], "target_unit": STATION, "target_port": FREE_PORT })
+	var port: int = drone["parts"]["children"][0]["id"]
+	assert_eq(drone["parts"]["children"].size(), 1, "a hull and a port")
+	assert_eq(state["parts"][port]["def"], "small_docking_port_mk1")
+	assert_eq(drone["dock"], { "port": port, "target_unit": STATION, "target_port": FREE_PORT })
+	assert_eq(drone["cargo"].get("propellant", {}).get("cap_g", 0), 0)
 	assert_eq(view["jobs"].size(), 0)
 
 
 func test_building_moves_the_inputs_into_installed_parts() -> void:
-	_give_inputs("mining_drone")
+	_give_inputs("small_craft")
 	var installed: int = sim.ledger()["matter"]["installed_g"]
-	sim.submit(_start("mining_drone"))
+	sim.submit(_start("small_craft"))
 	_step_balanced(1)
-	assert_eq(sim.ledger()["matter"]["jobs_g"], DRONE_G)
+	assert_eq(sim.ledger()["matter"]["jobs_g"], CRAFT_G)
 	_step_balanced(RUN_TICKS - 1)
 	assert_eq(sim.ledger()["matter"]["jobs_g"], 0)
-	assert_eq(sim.ledger()["matter"]["installed_g"], installed + DRONE_G)
+	assert_eq(sim.ledger()["matter"]["installed_g"], installed + CRAFT_G)
 
 
 func test_a_built_unit_runs_on_the_next_ticks() -> void:
-	_give_inputs("mining_drone")
-	sim.submit(_start("mining_drone"))
+	_give_inputs("small_craft")
+	sim.submit(_start("small_craft"))
 	sim.step(RUN_TICKS)
 	var id: int = _first(sim.take_events(), "unit_created")["data"]["unit"]
 	_step_balanced(2)
-	assert_eq(sim.view()["units"][id]["power"]["supply_w"], 30000, "the index sees the new unit")
+	assert_eq(sim.view()["units"][id]["heat"]["limit_j"], 5000000, "the index sees the new unit")
 
 
 func test_the_port_is_claimed_only_on_the_tick_the_run_ends() -> void:
-	_give_inputs("mining_drone")
-	sim.submit(_start("mining_drone"))
+	_give_inputs("small_craft")
+	sim.submit(_start("small_craft"))
 	sim.step(RUN_TICKS - 1)
 	assert_false(state["parts"][FREE_PORT].has("claimed_by"), "free for the whole build")
 	sim.step()
@@ -132,8 +143,8 @@ func test_the_port_is_claimed_only_on_the_tick_the_run_ends() -> void:
 
 func test_with_no_free_port_the_run_waits_with_its_inputs_held() -> void:
 	var blocker := _fill_free_port()
-	_give_inputs("mining_drone")
-	sim.submit(_start("mining_drone"))
+	_give_inputs("small_craft")
+	sim.submit(_start("small_craft"))
 	sim.step(RUN_TICKS - 1)
 	var job: int = sim.view()["jobs"].keys()[0]
 	assert_eq(sim.view()["jobs"][job]["status"], "running")
@@ -142,7 +153,7 @@ func test_with_no_free_port_the_run_waits_with_its_inputs_held() -> void:
 	assert_eq(shown["status"], "paused")
 	assert_eq(shown["reason"], "no_free_port")
 	assert_eq(shown["end_tick"], 0)
-	assert_eq(sim.ledger()["matter"]["jobs_g"], DRONE_G)
+	assert_eq(sim.ledger()["matter"]["jobs_g"], CRAFT_G)
 	assert_eq(state["jobs"][job]["since_tick"], RUN_TICKS)
 	var events := sim.take_events()
 	assert_eq(_types(events).count("job_paused"), 1, "reported once")
@@ -159,8 +170,8 @@ func test_with_no_free_port_the_run_waits_with_its_inputs_held() -> void:
 
 func test_a_faulted_port_is_not_free() -> void:
 	state["parts"][FREE_PORT]["fault"] = "test_fault"
-	_give_inputs("mining_drone")
-	sim.submit(_start("mining_drone"))
+	_give_inputs("small_craft")
+	sim.submit(_start("small_craft"))
 	sim.step(RUN_TICKS)
 	var job: int = sim.view()["jobs"].keys()[0]
 	assert_eq(sim.view()["jobs"][job]["reason"], "no_free_port")
@@ -168,19 +179,19 @@ func test_a_faulted_port_is_not_free() -> void:
 
 func test_cancelling_a_build_waiting_for_a_port_returns_its_inputs() -> void:
 	_fill_free_port()
-	_give_inputs("mining_drone")
-	sim.submit(_start("mining_drone"))
+	_give_inputs("small_craft")
+	sim.submit(_start("small_craft"))
 	sim.step(RUN_TICKS)
 	sim.submit({ "type": "cancel_job", "unit": STATION, "args": { "job": sim.view()["jobs"].keys()[0] } })
 	_step_balanced(1)
 	assert_eq(sim.view()["jobs"].size(), 0)
 	assert_eq(sim.ledger()["matter"]["jobs_g"], 0)
-	assert_eq(state["units"][STATION]["inventory"]["structural_frame"], 400000)
+	assert_eq(state["units"][STATION]["inventory"]["structural_frame"], 100000)
 
 
 func test_cancelling_a_claimed_port_releases_it() -> void:
-	_give_inputs("mining_drone")
-	sim.submit(_start("mining_drone"))
+	_give_inputs("small_craft")
+	sim.submit(_start("small_craft"))
 	sim.step(RUN_TICKS - 2)
 	var job: int = sim.view()["jobs"].keys()[0]
 	state["parts"][FABRICATOR]["shed"] = true
@@ -194,8 +205,8 @@ func test_cancelling_a_claimed_port_releases_it() -> void:
 
 
 func test_a_build_shed_on_its_last_tick_finishes_when_power_returns() -> void:
-	_give_inputs("mining_drone")
-	sim.submit(_start("mining_drone"))
+	_give_inputs("small_craft")
+	sim.submit(_start("small_craft"))
 	sim.step(RUN_TICKS - 2)
 	var job: int = sim.view()["jobs"].keys()[0]
 	state["parts"][FABRICATOR]["shed"] = true
@@ -206,8 +217,8 @@ func test_a_build_shed_on_its_last_tick_finishes_when_power_returns() -> void:
 
 
 func test_a_second_drone_waits_when_the_first_takes_the_last_port() -> void:
-	_give_inputs("mining_drone", 2)
-	var job_id := sim.submit(_start("mining_drone", 2))
+	_give_inputs("small_craft", 2)
+	var job_id := sim.submit(_start("small_craft", 2))
 	assert_gt(job_id, 0)
 	sim.step(RUN_TICKS * 2)
 	var events := sim.take_events()
@@ -216,19 +227,40 @@ func test_a_second_drone_waits_when_the_first_takes_the_last_port() -> void:
 
 
 func test_a_new_drone_takes_a_core_and_has_it_fitted_without_one() -> void:
-	_give_inputs("mining_drone")
-	Units.add_stock(state["units"][STATION]["inventory"], "assisted_core", 60000)
-	state["matter_start_g"] += 60000
-	sim.submit(_start("mining_drone"))
+	_give_inputs("small_craft")
+	_give_parts(["small_solar_panel_mk1", "small_heat_radiator_mk1", "assisted_core"])
+	sim.submit(_start("small_craft"))
 	sim.step(RUN_TICKS)
 	var id: int = _first(sim.take_events(), "unit_created")["data"]["unit"]
-	var body: int = state["units"][id]["root"]
-	var command := _attach(id, "assisted_core", body, "core")
+	var hull: int = state["units"][id]["root"]
+	var command := _attach(id, "assisted_core", hull, "core")
+	assert_eq(sim.check(command)["reason"], "over_power_budget", "a core draws power too")
+	sim.submit(_attach(id, "small_solar_panel_mk1", hull, "side_a_px"))
+	sim.submit(_attach(id, "small_heat_radiator_mk1", hull, "side_a_nx"))
+	_step_balanced(1)
+	sim.take_events()
 	assert_true(sim.check(command)["ok"])
 	sim.submit(command)
 	_step_balanced(1)
 	assert_eq(_types(sim.take_events()), ["part_attached"])
-	assert_eq(sim.view()["units"][id]["mass_g"], DRONE_G + 60000)
+	assert_eq(sim.view()["units"][id]["mass_g"], CRAFT_G + 190000)
+
+
+func test_a_bare_craft_refuses_a_laser_or_thruster_until_it_has_a_budget() -> void:
+	_give_inputs("small_craft")
+	sim.submit(_start("small_craft"))
+	sim.step(RUN_TICKS)
+	var id: int = _first(sim.take_events(), "unit_created")["data"]["unit"]
+	var hull: int = state["units"][id]["root"]
+	_give_parts(["small_solar_panel_mk1", "small_heat_radiator_mk1", "small_mining_laser_mk1"])
+	var laser := _attach(id, "small_mining_laser_mk1", hull, "side_a_nz")
+	assert_eq(sim.check(laser)["reason"], "over_power_budget")
+	sim.submit(_attach(id, "small_solar_panel_mk1", hull, "side_a_px"))
+	_step_balanced(1)
+	assert_eq(sim.check(laser)["reason"], "over_heat_budget")
+	sim.submit(_attach(id, "small_heat_radiator_mk1", hull, "side_a_nx"))
+	_step_balanced(1)
+	assert_true(sim.check(laser)["ok"])
 
 
 ## Check 9: output from the industry chain becomes a larger station.
@@ -277,8 +309,8 @@ func _assert_load_resumes(change: Callable, ticks: int = 8) -> void:
 
 func test_a_load_finishes_a_build_waiting_for_a_port() -> void:
 	var blocker := _fill_free_port()
-	_give_inputs("mining_drone")
-	sim.submit(_start("mining_drone"))
+	_give_inputs("small_craft")
+	sim.submit(_start("small_craft"))
 	sim.step(RUN_TICKS + 1)
 	assert_eq(sim.view()["jobs"].values()[0]["reason"], "no_free_port")
 	_assert_load_resumes(func(game: Sim) -> void: game._state["units"][blocker]["dock"] = {})

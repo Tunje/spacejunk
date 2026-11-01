@@ -22,6 +22,16 @@ const CHALCOPYRITE := 5
 const GREEN_ROCK := 6
 const OLIVINE := 7
 const LAPS := 3
+## What the drone is fitted with, in an order the power and heat budgets allow. `on_tank` fits to
+## the tank, not the hull.
+const DRONE_FITS: Array[Dictionary] = [
+	{ "item": "small_solar_panel_mk1", "at": "side_a_px" },
+	{ "item": "small_heat_radiator_mk1", "at": "side_a_nx" },
+	{ "item": "small_propellant_tank_mk1", "at": "stack_bottom" },
+	{ "item": "small_chemical_thruster_mk1", "at": "stack_bottom", "on_tank": true },
+	{ "item": "small_ore_container_mk1", "at": "side_a_pz" },
+	{ "item": "small_mining_laser_mk1", "at": "side_a_nz" },
+]
 ## How much longer than planned a step may run before the bot gives up.
 const ORDER_LIMIT_TICKS := 4000
 const LAP_LIMIT_TICKS := 6000
@@ -40,7 +50,9 @@ var marks := {}
 var lap_ticks: Array[int] = []
 var cycle_start_tick := 0
 var drone := 0
-var drone_body := 0
+var drone_hull := 0
+var drone_port := 0
+var drone_laser := 0
 var problems := PackedStringArray()
 ## Commands as submitted, as { tick, command }, for replays.
 var commands: Array[Dictionary] = []
@@ -122,23 +134,44 @@ func _part_d() -> void:
 
 
 func _part_e() -> void:
-	_job(FABRICATOR, "mining_drone", 1)
+	_job(FABRICATOR, "small_craft", 1)
 	var created := first_event("unit_created")
 	if created.is_empty():
 		problems.append("no drone was built")
 		return
 	drone = created["data"]["unit"]
-	drone_body = sim.view()["units"][drone]["parts"]["id"]
+	drone_hull = sim.view()["units"][drone]["parts"]["id"]
+	drone_port = Units.ports(sim._state, sim.defs(), drone)[0]
 	mark("drone_built")
+	_fit_drone()
+	mark("drone_fitted")
 	_job(FABRICATOR, "basic_core", 1)
 	_job(FABRICATOR, "assisted_core", 1)
-	_attach(drone, "assisted_core", drone_body, "core", "mount")
-	var fitted := last_event("part_attached")
-	_command("assign_core", drone, { "core": fitted["data"]["part"] })
+	_command("assign_core", drone, { "core": _fit("assisted_core", drone_hull, "core") })
 	_step()
 	mark("core_assigned")
 	_run_cycle()
 	mark("end")
+
+
+func _fit_drone() -> void:
+	for fit: Dictionary in DRONE_FITS:
+		_job(FABRICATOR, fit["item"], 1)
+	var tank := 0
+	for fit: Dictionary in DRONE_FITS:
+		var part := _fit(fit["item"], tank if fit.has("on_tank") else drone_hull, fit["at"])
+		if fit["item"] == "small_propellant_tank_mk1":
+			tank = part
+		elif fit["item"] == "small_mining_laser_mk1":
+			drone_laser = part
+
+
+## Attaches a part to the drone that must fit, and returns its ID.
+func _fit(item: String, parent: int, connector: String) -> int:
+	var part := _attach(drone, item, parent, connector, "mount")
+	if part == 0 and problems.is_empty():
+		problems.append("%s did not fit" % item)
+	return part
 
 
 func _run_cycle() -> void:
@@ -162,9 +195,9 @@ func cycle_steps() -> Array:
 		{ "type": "load_cargo", "args": { "from": STATION, "item": "propellant" } },
 		{ "type": "undock", "args": {} },
 		{ "type": "move_to", "args": { "target": RED_ROCK } },
-		{ "type": "start_mining", "args": { "deposit": HEMATITE, "module": drone_body } },
+		{ "type": "start_mining", "args": { "deposit": HEMATITE, "module": drone_laser } },
 		{ "type": "move_to", "args": { "target": STATION } },
-		{ "type": "dock", "args": { "port": drone_body, "target_port": FREE_PORT } },
+		{ "type": "dock", "args": { "port": drone_port, "target_port": FREE_PORT } },
 		{ "type": "unload_cargo", "args": { "to": STATION, "item": "hematite" } },
 	]
 
@@ -266,14 +299,18 @@ func _job(facility: int, recipe: String, count: int) -> void:
 	problems.append("%s never finished" % recipe)
 
 
-func _attach(unit: int, item: String, parent: int, connector: String, part_connector: String) -> void:
+## Attaches a part and returns its ID, or 0 if it was refused.
+func _attach(unit: int, item: String, parent: int, connector: String, part_connector: String) -> int:
 	if not problems.is_empty():
-		return
+		return 0
 	_command("attach_part", unit, {
 		"item": item, "from": STATION, "parent_part": parent,
 		"parent_connector": connector, "part_connector": part_connector,
 	})
-	_step()
+	for event in _step():
+		if event["type"] == "part_attached":
+			return event["data"]["part"]
+	return 0
 
 
 func _command(type: String, unit: int, args: Dictionary) -> int:

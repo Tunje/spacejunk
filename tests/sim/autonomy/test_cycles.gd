@@ -17,7 +17,9 @@ var sim: Sim
 var state: Dictionary
 var defs: Dictionary
 var drone: int
-var body: int
+var hull: int
+var dock_port: int
+var laser: int
 var core: int
 
 
@@ -29,42 +31,66 @@ func before_each() -> void:
 	defs = sim._ctx.defs
 	_shrink_world()
 	state["deposits"][DEPOSIT]["found"] = true
-	drone = _make_drone(FREE_PORT)
-	body = state["units"][drone]["root"]
-	core = state["units"][drone]["core"]
+	_make_first_drone()
 	state["matter_start_g"] = sim.ledger()["matter"]["total_g"]
 
 
 func _shrink_world() -> void:
 	state["bodies"][ROCK]["pos_mm"] = [2000000, 0, 0]
-	var capabilities: Dictionary = defs["modules"]["mining_drone_body"]["capabilities"]
-	capabilities["storage"]["ore"]["mass_g"] = HOLD_G
-	capabilities["port"]["dock_ticks"] = 2
-	capabilities["port"]["undock_ticks"] = 2
+	var modules: Dictionary = defs["modules"]
+	modules["small_ore_container_mk1"]["capabilities"]["storage"]["ore"]["mass_g"] = HOLD_G
+	modules["small_docking_port_mk1"]["capabilities"]["port"]["dock_ticks"] = 2
+	modules["small_docking_port_mk1"]["capabilities"]["port"]["undock_ticks"] = 2
 	defs["templates"] = defs["templates"].duplicate(true)
 
 
-## A drone with an Assisted Core assigned, docked at a station port.
-func _make_drone(port: int) -> int:
-	var id := Units.create(sim._ctx, "mining_drone", "Drone", state["units"][STATION]["pos_mm"])
+func _make_first_drone() -> void:
+	drone = _make_drone(FREE_PORT)
+	hull = state["units"][drone]["root"]
+	dock_port = Units.ports(state, defs, drone)[0]
+	laser = _part_of(drone, "small_mining_laser_mk1")
+	core = state["units"][drone]["core"]
+
+
+## A fully fitted drone with an Assisted Core assigned, docked at a station port.
+func _make_drone(target_port: int) -> int:
+	var id := Units.create(sim._ctx, "small_craft", "Drone", state["units"][STATION]["pos_mm"])
 	var unit: Dictionary = state["units"][id]
 	var root: int = unit["root"]
-	var fitted := Units.add_part(sim._ctx, id, "assisted_core", root, "core", "mount")
-	state["parts"][root]["children"].append(fitted)
-	unit["core"] = fitted
-	unit["dock"] = { "port": root, "target_unit": STATION, "target_port": port }
+	_fit(id, "small_solar_panel_mk1", root, "side_a_px")
+	_fit(id, "small_heat_radiator_mk1", root, "side_a_nx")
+	var tank := _fit(id, "small_propellant_tank_mk1", root, "stack_bottom")
+	_fit(id, "small_chemical_thruster_mk1", tank, "stack_bottom")
+	_fit(id, "small_ore_container_mk1", root, "side_a_pz")
+	_fit(id, "small_mining_laser_mk1", root, "side_a_nz")
+	unit["core"] = _fit(id, "assisted_core", root, "core")
+	unit["dock"] = { "port": Units.ports(state, defs, id)[0], "target_unit": STATION, "target_port": target_port }
 	unit["at_target"] = STATION
 	return id
 
 
-func _steps(unit_body: int = body, port: int = FREE_PORT) -> Array:
+func _fit(unit: int, def: String, parent: int, connector: String) -> int:
+	var part := Units.add_part(sim._ctx, unit, def, parent, connector, "mount")
+	state["parts"][parent]["children"].append(part)
+	return part
+
+
+func _part_of(unit: int, def: String) -> int:
+	for part: int in Units.part_ids(state, unit):
+		if state["parts"][part]["def"] == def:
+			return part
+	return 0
+
+
+func _steps(unit: int = drone, target_port: int = FREE_PORT) -> Array:
+	var port: int = Units.ports(state, defs, unit)[0]
 	return [
 		{ "type": "load_cargo", "args": { "from": STATION, "item": "propellant" } },
 		{ "type": "undock", "args": {} },
 		{ "type": "move_to", "args": { "target": ROCK } },
-		{ "type": "start_mining", "args": { "deposit": DEPOSIT, "module": unit_body } },
+		{ "type": "start_mining", "args": { "deposit": DEPOSIT, "module": _part_of(unit, "small_mining_laser_mk1") } },
 		{ "type": "move_to", "args": { "target": STATION } },
-		{ "type": "dock", "args": { "port": unit_body, "target_port": port } },
+		{ "type": "dock", "args": { "port": port, "target_port": target_port } },
 		{ "type": "unload_cargo", "args": { "to": STATION, "item": "hematite" } },
 	]
 
@@ -119,13 +145,6 @@ func _run_to_blocked(limit: int = 400) -> void:
 func _give_fuel(grams: int = 50000) -> void:
 	Units.add_stock(state["units"][drone]["inventory"], "propellant", grams)
 	state["matter_start_g"] += grams
-
-
-## Gives the drone a generator of its own, so a fault on its body leaves the core powered.
-func _add_panel() -> void:
-	var panel := Units.add_part(sim._ctx, drone, "solar_panel_mk1", body, "panel", "mount")
-	state["parts"][body]["children"].append(panel)
-	state["matter_start_g"] = sim.ledger()["matter"]["total_g"]
 
 
 func _assert_refused(command: Dictionary, reason: String) -> void:
@@ -230,7 +249,7 @@ func test_assign_core_sets_the_tier() -> void:
 
 func test_assign_core_needs_a_core_on_this_unit() -> void:
 	_assert_refused(_order("assign_core", { "core": SHIP_CORE }), "unknown_part")
-	_assert_refused(_order("assign_core", { "core": body }), "unknown_part")
+	_assert_refused(_order("assign_core", { "core": hull }), "unknown_part")
 	_assert_refused(_order("assign_core", { "core": "x" }), "malformed_command")
 
 
@@ -255,8 +274,7 @@ func test_a_detached_core_cancels_a_cycle_at_the_next_phase_two() -> void:
 
 
 func test_a_lower_tier_core_cancels_a_cycle_but_not_an_order() -> void:
-	var second := Units.add_part(sim._ctx, drone, "basic_core", body, "stack_top", "mount")
-	state["parts"][body]["children"].append(second)
+	var second := _fit(drone, "basic_core", hull, "side_b_nx")
 	sim.submit(_set_cycle())
 	sim.step()
 	sim.take_events()
@@ -271,14 +289,13 @@ func test_a_lower_tier_core_cancels_a_cycle_but_not_an_order() -> void:
 
 
 func test_a_module_fault_holds_the_step_and_resumes_it() -> void:
-	_add_panel()
 	sim.submit(_set_cycle())
 	_run_to_step("start_mining")
 	sim.step(3)
 	var mined: int = state["units"][drone]["inventory"].get("hematite", 0)
 	assert_gt(mined, 0)
 	sim.take_events()
-	state["parts"][body]["fault"] = "test_fault"
+	state["parts"][laser]["fault"] = "test_fault"
 	sim.step(4)
 	assert_eq(_task()["state"], "blocked")
 	assert_eq(_task()["reason"], "module_fault")
@@ -287,7 +304,7 @@ func test_a_module_fault_holds_the_step_and_resumes_it() -> void:
 	assert_eq(state["units"][drone]["inventory"]["hematite"], mined, "no work while held")
 	assert_eq(_types(sim.take_events()).count("task_blocked"), 1, "reported once")
 
-	state["parts"][body]["fault"] = ""
+	state["parts"][laser]["fault"] = ""
 	sim.step()
 	var resumed := _find(sim.take_events(), "task_resumed")
 	assert_eq(resumed["data"]["reason"], "module_fault")
@@ -299,8 +316,8 @@ func test_a_module_fault_holds_the_step_and_resumes_it() -> void:
 func test_lost_power_holds_the_step() -> void:
 	sim.submit(_set_cycle())
 	_run_to_step("start_mining")
-	state["parts"][body]["shed"] = true
-	state["parts"][body]["shed_until_tick"] = sim.current_tick() + 3
+	state["parts"][laser]["shed"] = true
+	state["parts"][laser]["shed_until_tick"] = sim.current_tick() + 3
 	sim.step()
 	assert_eq(_task()["reason"], "no_power")
 	assert_eq(state["units"][drone]["op"]["type"], "mining")
@@ -412,12 +429,7 @@ func test_a_core_is_not_a_laser() -> void:
 
 
 func test_a_detached_part_blocks_for_good() -> void:
-	var laser := Units.add_part(sim._ctx, drone, "mining_laser_mk1", body, "spare", "mount")
-	state["parts"][body]["children"].append(laser)
-	state["matter_start_g"] = sim.ledger()["matter"]["total_g"]
-	var steps := _steps()
-	steps[3]["args"]["module"] = laser
-	sim.submit(_set_cycle(steps))
+	sim.submit(_set_cycle())
 	sim.step()
 	sim.submit(_order("detach_part", { "part": laser, "to": STATION }))
 	_run_to_blocked()
@@ -465,14 +477,13 @@ func test_an_order_suspends_a_cycle_and_it_resumes_afterwards() -> void:
 
 
 func test_a_failed_order_brings_the_cycle_back_to_meet_the_same_problem() -> void:
-	_add_panel()
 	sim.submit(_set_cycle())
 	_run_to_step("start_mining")
 	var cycle_id: int = _task()["id"]
-	sim.submit(_order("start_mining", { "deposit": DEPOSIT, "module": body }))
+	sim.submit(_order("start_mining", { "deposit": DEPOSIT, "module": laser }))
 	sim.step()
 	assert_eq(_task()["kind"], "order")
-	state["parts"][body]["fault"] = "test_fault"
+	state["parts"][laser]["fault"] = "test_fault"
 	sim.take_events()
 	sim.step()
 	var events := sim.take_events()
@@ -566,7 +577,7 @@ func test_re_entry_when_docked_goes_to_undock() -> void:
 func test_no_safe_step_blocks_until_placement_allows() -> void:
 	var moves := [
 		{ "type": "move_to", "args": { "target": ROCK } },
-		{ "type": "start_mining", "args": { "deposit": DEPOSIT, "module": body } },
+		{ "type": "start_mining", "args": { "deposit": DEPOSIT, "module": laser } },
 	]
 	sim.submit(_set_cycle(moves))
 	sim.step()
@@ -587,9 +598,9 @@ func test_three_drones_on_one_port_are_served_in_arrival_order() -> void:
 		unit["dock"] = {}
 		unit["at_target"] = STATION
 	var waiters := [third, second]
-	state["units"][drone]["dock"] = { "port": body, "target_unit": STATION, "target_port": FREE_PORT }
+	state["units"][drone]["dock"] = { "port": dock_port, "target_unit": STATION, "target_port": FREE_PORT }
 	for id: int in waiters:
-		var steps := _steps(state["units"][id]["root"])
+		var steps := _steps(id)
 		sim.submit(_set_cycle(steps, id))
 		sim.step()
 	var second_task: int = state["units"][second]["task"]
@@ -608,7 +619,7 @@ func test_a_build_yields_a_port_to_an_earlier_waiter() -> void:
 	var second := _make_drone(FREE_PORT)
 	state["matter_start_g"] = sim.ledger()["matter"]["total_g"]
 	state["units"][second]["dock"] = {}
-	sim.submit(_set_cycle(_steps(state["units"][second]["root"]), second))
+	sim.submit(_set_cycle(_steps(second), second))
 	sim.step()
 	var tick: int = state["tasks"][state["units"][second]["task"]]["since_tick"]
 	assert_false(PortQueue.is_free_for_job(sim._ctx, FREE_PORT, tick + 1, 99), "the task was first")
@@ -621,8 +632,7 @@ func test_a_save_while_blocked_resumes_identically() -> void:
 	state = sim._state
 	defs = sim._ctx.defs
 	state["deposits"][DEPOSIT]["found"] = true
-	drone = _make_drone(FREE_PORT)
-	body = state["units"][drone]["root"]
+	_make_first_drone()
 	state["deposits"][DEPOSIT]["remaining_g"] = 0
 	sim.submit(_set_cycle())
 	sim.step(5)
@@ -666,21 +676,20 @@ func _occupant(game: Sim) -> int:
 
 
 func test_a_load_resumes_a_step_held_by_a_module_fault() -> void:
-	_add_panel()
 	sim.submit(_set_cycle())
 	_run_to_step("start_mining")
 	sim.step(2)
-	_set_fault(sim, body, "test_fault")
+	_set_fault(sim, laser, "test_fault")
 	sim.step(2)
 	assert_true(_task()["hold"])
-	_assert_load_resumes(func(game: Sim) -> void: _set_fault(game, body, ""))
+	_assert_load_resumes(func(game: Sim) -> void: _set_fault(game, laser, ""))
 
 
 func test_a_load_resumes_a_step_held_by_lost_power() -> void:
 	sim.submit(_set_cycle())
 	_run_to_step("start_mining")
-	state["parts"][body]["shed"] = true
-	state["parts"][body]["shed_until_tick"] = sim.current_tick() + 5
+	state["parts"][laser]["shed"] = true
+	state["parts"][laser]["shed_until_tick"] = sim.current_tick() + 5
 	sim.step()
 	assert_eq(_task()["reason"], "no_power")
 	_assert_load_resumes()
@@ -713,7 +722,7 @@ func test_a_load_resumes_a_cycle_waiting_for_a_port() -> void:
 	Units.add_stock(state["units"][second]["inventory"], "propellant", 50000)
 	state["matter_start_g"] = sim.ledger()["matter"]["total_g"]
 	drone = second
-	sim.submit(_set_cycle(_steps(state["units"][second]["root"]), second))
+	sim.submit(_set_cycle(_steps(second), second))
 	sim.step()
 	assert_eq(_task()["reason"], "port_busy")
 	_assert_load_resumes(func(game: Sim) -> void: game._state["units"][_occupant(game)]["dock"] = {})
@@ -731,12 +740,7 @@ func test_a_load_resumes_a_cycle_out_of_propellant() -> void:
 
 
 func test_a_load_keeps_a_cycle_with_a_missing_part_blocked() -> void:
-	var laser := Units.add_part(sim._ctx, drone, "mining_laser_mk1", body, "spare", "mount")
-	state["parts"][body]["children"].append(laser)
-	state["matter_start_g"] = sim.ledger()["matter"]["total_g"]
-	var steps := _steps()
-	steps[3]["args"]["module"] = laser
-	sim.submit(_set_cycle(steps))
+	sim.submit(_set_cycle())
 	sim.step()
 	sim.submit(_order("detach_part", { "part": laser, "to": STATION }))
 	_run_to_blocked()
@@ -747,7 +751,7 @@ func test_a_load_keeps_a_cycle_with_a_missing_part_blocked() -> void:
 func test_a_load_resumes_a_cycle_with_no_safe_step() -> void:
 	var steps := [
 		{ "type": "move_to", "args": { "target": ROCK } },
-		{ "type": "start_mining", "args": { "deposit": DEPOSIT, "module": body } },
+		{ "type": "start_mining", "args": { "deposit": DEPOSIT, "module": laser } },
 	]
 	sim.submit(_set_cycle(steps))
 	sim.step()

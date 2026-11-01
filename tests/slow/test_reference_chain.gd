@@ -55,8 +55,10 @@ func test_job_durations_match_the_page() -> void:
 	var expected := {
 		"refine_hematite": 15600, "refine_chalcopyrite": 6000, "refine_olivine": 5400,
 		"structural_frame": 10500, "wiring": 4200, "processor": 14400, "heat_radiator_mk1": 900,
-		"mining_laser_mk1": 1800, "ore_storage_mk1": 3000, "mining_drone": 3000, "basic_core": 1200,
-		"assisted_core": 3000,
+		"mining_laser_mk1": 1800, "ore_storage_mk1": 3000, "small_craft": 600,
+		"small_solar_panel_mk1": 400, "small_heat_radiator_mk1": 400, "small_propellant_tank_mk1": 300,
+		"small_chemical_thruster_mk1": 400, "small_ore_container_mk1": 300, "small_mining_laser_mk1": 600,
+		"basic_core": 1200, "assisted_core": 3000,
 	}
 	for recipe: String in expected:
 		assert_eq(bot.ticks_of(recipe), [expected[recipe]], recipe)
@@ -122,17 +124,28 @@ func test_check_9_the_output_expands_the_station() -> void:
 	assert_eq(_units("expanded")[STATION]["cargo"]["ore"]["cap_g"], 100000 * KG)
 
 
-func test_check_7_a_drone_is_built() -> void:
-	var drone: Dictionary = _units("drone_built")[bot.drone]
-	assert_eq(drone["kind"], "drone")
-	assert_eq(drone["core"], 0)
-	assert_eq(drone["inventory"], {})
-	assert_eq(drone["dock"]["target_port"], ReferenceBot.FREE_PORT)
-	assert_eq(drone["at_target"], STATION)
+func test_check_7_a_drone_is_built_from_parts() -> void:
+	var craft: Dictionary = _units("drone_built")[bot.drone]
+	assert_eq(craft["kind"], "drone")
+	assert_eq(craft["core"], 0)
+	assert_eq(craft["inventory"], {})
+	assert_eq(craft["mass_g"], 120 * KG)
+	assert_eq(craft["dock"], {
+		"port": bot.drone_port, "target_unit": STATION, "target_port": ReferenceBot.FREE_PORT,
+	})
+	assert_eq(craft["at_target"], STATION)
+	var drone: Dictionary = _units("drone_fitted")[bot.drone]
+	assert_eq(drone["mass_g"], 520 * KG)
+	assert_ne(bot.drone_laser, 0)
+	assert_eq(drone["power"]["supply_w"], 30000)
+	assert_eq(drone["fit"]["power_rated_w"], 22000)
 
 
 func test_check_8_a_core_runs_the_cycle_unaided() -> void:
-	assert_eq(_units("core_assigned")[bot.drone]["core_tier"], 2)
+	var drone: Dictionary = _units("core_assigned")[bot.drone]
+	assert_eq(drone["core_tier"], 2)
+	assert_eq(drone["fit"]["power_rated_w"], 26000)
+	assert_eq(drone["fit"]["heat_rated_w"], 25000)
 	assert_eq(bot.commands.back()["command"]["type"], "set_cycle", "nothing is ordered after it")
 	assert_eq(bot.lap_ticks.size(), ReferenceBot.LAPS)
 	assert_eq(bot.lap_ticks[0] - bot.cycle_start_tick, 5356)
