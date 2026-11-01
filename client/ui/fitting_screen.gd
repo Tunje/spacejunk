@@ -78,6 +78,13 @@ func bind(new_bridge: SimBridge, view: LocalView, new_markers: FittingMarkers) -
 	_modules = bridge.defs()["modules"]
 	bridge.view_updated.connect(refresh)
 	local_view.selection_changed.connect(refresh)
+	local_view.click_filter = allows_click
+
+
+## While fitting, a click may only pick a part of this craft. A click that misses a
+## ring would otherwise select what is behind it and move the screen to that craft.
+func allows_click(hit: Dictionary) -> bool:
+	return not visible or (hit.get("kind", "") == "unit" and hit["id"] == fit_unit())
 
 
 func toggle() -> void:
