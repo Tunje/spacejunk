@@ -59,7 +59,7 @@ Each small part takes the medium part's ID with `small_` in front, except the hu
 - **Rated power and heat rise** because the thruster now counts on its own, at 2 and 6 kW. It is still not a load during a trip, so running figures don't change.
 - **The transfer draw falls** because the old body was the port, and a transfer's operation names the port. The new port draws nothing. The drone had power to spare, so no lap figure moves.
 
-**Fit order now matters.** A bare craft has no solar or radiator, so the laser is refused with `over_power_budget` until both are fitted, and the thruster likewise. The working order is solar, radiator, then the rest. The Fit screen's refusal already gives the numbers.
+**Fit order now matters.** A bare craft has no solar or radiator, so the laser, the thruster and either core are refused with `over_power_budget` until those are fitted. The working order is solar, radiator, then the rest. The Fit screen's refusal already gives the numbers.
 
 ## 4. Question a: "any ship" both ways
 

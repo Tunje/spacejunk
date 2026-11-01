@@ -174,7 +174,7 @@ The expansion comes before the handover so that nothing is still being ordered w
 | 57 | On the drone, `assign_core` with the part ID from step 56 | Instant | `core_tier` 2 |
 | 58 | On the drone, `set_cycle` with the steps below | | Accepted. No further commands are submitted. |
 
-Steps 41 to 47 take 3000 ticks in all. Solar and the radiator must go on first, because the laser and thruster are refused until there is a power and heat budget.
+Steps 41 to 47 take 3000 ticks in all. Solar and the radiator must go on first, because the laser, the thruster and the core are all refused until there is a power and heat budget. The core goes on last in any case.
 
 ```gdscript
 [
