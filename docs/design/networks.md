@@ -162,4 +162,4 @@ A part's pose is derived from the part tree and is never saved. Facings and ups 
 - A child's rotation `R` is the one rotation that maps its connector's `facing` to the opposite of the parent connector's `facing` in the craft's frame, and its `up` to that connector's `up`. It is found by mapping the three axes `facing`, `up` and `facing x up`. It always exists, because B4 requires `up` at right angles to `facing`.
 - A child's origin is `parent_origin + R_parent * parent_connector.pos_mm - R * connector.pos_mm`.
 
-Every non-root module has one `mount` connector at its origin, and mates through it. Further connectors on a module carry parts above it, or a dock. Whether two connectors may join depends only on type, size, occupancy and load, never on rotation. The client uses the same rules to place parts and docked craft.
+Every non-root module has one `mount` connector at its origin, and mates through it. Further connectors on a module carry parts above it, or a dock. Whether two connectors may join depends only on type, whether either is size `core`, occupancy and load, never on rotation. The client uses the same rules to place parts and docked craft.

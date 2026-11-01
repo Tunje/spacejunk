@@ -1,8 +1,8 @@
 # Drones From Parts
 
-Status: proposal for the Lead to rule on. Nothing in `data/`, `sim/`, `client/` or the other design pages has changed.
+Status: approved by the Lead, with all five rulings in section 10 decided. The data, validator and design pages are done on `design/drone-from-parts`. The rest merges to main as one set.
 
-This replaces `mining_drone_body` with a small hull and small modules fitted through `attach_part`, under the owner's rule that no part stands alone and every part can go on any ship.
+This replaced `mining_drone_body` with a small hull and small modules fitted through `attach_part`, under the owner's rule that no part stands alone and every part can go on any ship.
 
 ## 1. Summary
 
@@ -207,10 +207,16 @@ All eight parts ship with `"model": null`, so the client draws labelled placehol
 
 If models are made later, this replaces the single `mining_drone` model in the workplan with eight: hull, port, thruster, tank, container, laser, solar panel and radiator. `visual` can't hold numbers, so reusing medium models at a smaller scale would need the client to work out the scale from `collision`. That's D's call when the time comes.
 
-## 10. Rulings needed
+## 10. Rulings
 
-1. The size rule in section 4.
-2. Goal 7 finishing when the drone works, in section 8.
-3. IDs: `small_craft` replaces `mining_drone` for the recipe and template, because the output is not yet a mining drone. This makes the 28 test references a rename, not a change of meaning.
-4. Who changes `sim/kernel/fitting_system.gd` and `test_data_loader.gd`.
-5. Whether the extra steps in section 6, and the repeat for each further drone, should go to the owner before work starts.
+1. **Size rule:** approved as in section 4, along with its three effects and the small port beating the medium one for now.
+2. **Goal 7:** finishes when the drone works, tested by capability.
+3. **IDs:** `small_craft` replaces `mining_drone` for the recipe and template, and `kind` stays `drone`.
+4. **`sim/kernel/fitting_system.gd` and `test_data_loader.gd`:** stay with Agent A.
+5. **Extra steps:** they don't block the work, since they follow from the owner's rule. The Lead is giving the owner the figures. Job queues and "fit like this one" stay out unless the owner asks.
+
+## 11. Known risks
+
+- **Cargo can pass `max_mass_kg`.** The limit is only tested at fitting, so a drone with a medium ore container can carry 2500 kg of ore on a hull limited to 1500 kg. Nothing stops it in flight, and the only cost is the higher trip price.
+- **The small port beats the medium port** on mass and cost at the same transfer rate. Raise the medium port's rate if replacing ports ever pays.
+- **A fitted drone costs at least 12 more commands,** and every further drone repeats them.

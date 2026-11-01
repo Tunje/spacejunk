@@ -19,6 +19,11 @@ const SHIP_TRIPS := [
 	["rock_olivine", 634, 32970, 629, 45083],
 ]
 const SHIP_PROPELLANT_LEFT_G := 542_252
+const DRONE_PARTS := [
+	"small_hull", "small_docking_port_mk1", "small_solar_panel_mk1", "small_heat_radiator_mk1",
+	"small_propellant_tank_mk1", "small_chemical_thruster_mk1", "small_ore_container_mk1",
+	"small_mining_laser_mk1", "assisted_core",
+]
 const DRONE_OUT := [1968, 6692]
 const DRONE_BACK := [1968, 11546]
 const START_MATTER_G := 374_510_000
@@ -141,9 +146,11 @@ func test_ship_trips_match_the_document() -> void:
 
 
 func test_drone_lap_matches_the_document() -> void:
-	var thruster: Dictionary = modules["mining_drone_body"]["capabilities"]["thruster"]
-	var dry_g := roundi((modules["mining_drone_body"]["mass_kg"]
-		+ modules["assisted_core"]["mass_kg"]) * 1000.0)
+	var thruster: Dictionary = modules["small_chemical_thruster_mk1"]["capabilities"]["thruster"]
+	var dry_kg := 0.0
+	for id: String in DRONE_PARTS:
+		dry_kg += modules[id]["mass_kg"]
+	var dry_g := roundi(dry_kg * 1000.0)
 	var body := _body("rock_hematite")
 	var stop_mm := int(body["radius_mm"]) + STANDOFF_MM
 	var there := _stop_point(UNDOCK_POINT, _vector(body["pos_mm"]), stop_mm)
@@ -245,7 +252,13 @@ func test_goods_fit_through_the_whole_chain() -> void:
 		["heat_radiator_mk1", 1], ["mining_laser_mk1", 1],
 		["attach", "mining_laser_mk1"], ["attach", "heat_radiator_mk1"],
 		["ore_storage_mk1", 1], ["attach", "ore_storage_mk1"],
-		["mining_drone", 1], ["basic_core", 1], ["assisted_core", 1],
+		["small_craft", 1], ["small_solar_panel_mk1", 1], ["small_heat_radiator_mk1", 1],
+		["small_propellant_tank_mk1", 1], ["small_chemical_thruster_mk1", 1],
+		["small_ore_container_mk1", 1], ["small_mining_laser_mk1", 1],
+		["attach", "small_solar_panel_mk1"], ["attach", "small_heat_radiator_mk1"],
+		["attach", "small_propellant_tank_mk1"], ["attach", "small_chemical_thruster_mk1"],
+		["attach", "small_ore_container_mk1"], ["attach", "small_mining_laser_mk1"],
+		["basic_core", 1], ["assisted_core", 1],
 		["attach", "assisted_core"],
 	]
 	for step: Array in steps:

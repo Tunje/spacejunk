@@ -275,15 +275,22 @@ While uninstalled, each module is a discrete `goods` item with the same ID (cont
 | `goods_storage_mk1` | Station | `structural_frame` | established |
 | `basic_core` | Core | `processor`, `wiring` | established |
 | `assisted_core` | Core | `basic_core`, `processor` | extrapolation |
-| `mining_drone_body` | Drone | None, built only through the `mining_drone` template | extrapolation |
+| `small_hull` | Drone | None, built only through the `small_craft` template | established |
+| `small_docking_port_mk1` | Drone | `structural_frame`, `wiring` | established |
+| `small_chemical_thruster_mk1` | Drone | `structural_frame` | established |
+| `small_propellant_tank_mk1` | Drone | `structural_frame` | established |
+| `small_ore_container_mk1` | Drone | `structural_frame`, `wiring` | established |
+| `small_mining_laser_mk1` | Drone | `structural_frame`, `wiring`, `processor` | extrapolation |
+| `small_solar_panel_mk1` | Drone | `structural_frame`, `wiring` | established |
+| `small_heat_radiator_mk1` | Drone | `structural_frame` | established |
 
 Rulings on section 7's wording:
 
-- **Any module may fit any craft** if the connectors allow it. The two lists say where a part is normally used. This is how the station gets radiators and batteries for refinery heat and load, since neither is on its list.
+- **Any module may fit any craft** if the connectors, load, mass, power and heat allow it. Connector size does not refuse a part, except that only cores join core connectors, and a root part has no mount, so it never fits another craft. The lists say where a part is normally used. This is how the station gets radiators and batteries for refinery heat and load, since neither is on its list.
 - **The depot is not a new module.** The finite propellant stock sits in `propellant_tank_mk1` units fitted to the station.
 - **"Ore and goods storage" is two modules,** matching the idea doc's two container types. One docking port definition serves both ships and stations.
 - **`command_hub` is the station frame.** It is the station's root part and carries its hardpoints, so section 7's "station frame" model and its "command hub" are one model. There is no separate frame module.
-- **Root parts are not fabricated.** The slice has one starter ship and one station, so `starter_hull` and `command_hub` exist only through the scenario.
+- **Root parts are never goods.** A root part exists only inside a unit, made by the scenario or a unit recipe. `starter_hull` and `command_hub` exist only through the scenario, and `small_hull` only through the `small_craft` recipe.
 
 ### 7.3 Components, cores and the drone
 
@@ -292,13 +299,15 @@ Rulings on section 7's wording:
 | `structural_frame` | Fabricator | `iron` |
 | `wiring` | Fabricator | `copper` |
 | `processor` | Fabricator | `silicon`, `copper` |
-| `mining_drone` (unit template) | Fabricator | `structural_frame`, `wiring`, `processor` |
+| `small_craft` (unit template) | Fabricator | `structural_frame`, `wiring` |
 
 **Cores** are modules, although workplan section 7 lists them under components. The contracts require this: a core carries the `ai_core.tier` capability, is fitted with `attach_part`, and is then selected with `assign_core`. Each root part has one small `side` connector for a core, so a slice unit carries one core at a time. Cores have no pipeline model, so the labelled placeholder rule applies. B5 keeps their power and heat draw small enough that fitting a core never fails a budget by accident. The starter ship and station begin with a `basic_core` fitted and assigned.
 
-**The drone** is one unit with one model, as section 7 implies. Its template holds a single root part, `mining_drone_body`, with built-in mining, ore and propellant storage, thrust, power, heat and docking, plus a core connector. It has no LIDAR, so it works deposits that have already been found. It is built from components only, not from full-size modules, which keeps it small. It appears docked at a free station port with no core and an empty tank, so core fitting stays a separate step (check 8). Its `min_ai_tier` is 1: a Basic Core can fly it order by order, and only `set_cycle` needs tier 2.
+**The drone** is a small ship, built from parts as a ship is, by the owner's rule that no part stands alone and every part fits any ship. The `small_craft` recipe builds a `small_hull` with a `small_docking_port_mk1` on it, which appears docked at a free station port with no core, no tank and an empty inventory. The player fabricates the small solar panel, radiator, tank, thruster, ore container and laser, and fits them with `attach_part`. Solar and radiator go first, since the laser and thruster are refused without power and heat budgets. The drone has no LIDAR, so it works deposits that have already been found. Core fitting stays a separate step (check 8). Every part's `min_ai_tier` is 1: a Basic Core can fly it order by order, and only `set_cycle` needs tier 2.
 
-**Unit templates.** A unit's `def` is its template ID. The slice has three: `starter_ship` (root `starter_hull`, kind `ship`), `starter_station` (root `command_hub`, kind `station`) and `mining_drone` (root `mining_drone_body`, kind `drone`). Only `mining_drone` is built by a recipe. B8 sets the other two.
+A finished drone with an Assisted Core weighs 580 kg, and its parts cost 8 frames, 10 wiring and 4 processors over 300 s of fabrication.
+
+**Unit templates.** A unit's `def` is its template ID. The slice has three: `starter_ship` (root `starter_hull`, kind `ship`), `starter_station` (root `command_hub`, kind `station`) and `small_craft` (root `small_hull`, kind `drone`). Only `small_craft` is built by a recipe. B8 sets the other two.
 
 **Fabrication output.** Goods stay on the station. Neither the ship nor the drone has goods capacity, so hauling in the slice means ore inward and propellant outward. A docked craft installs parts by naming the station as `from`.
 
@@ -308,9 +317,9 @@ Each unit has one inventory, with capacity by the contracts' three classes:
 
 | Class | Holds | Provided by |
 | ----- | ----- | ----------- |
-| `ore` | Ores | `ore_container_mk1`, `ore_storage_mk1`, `mining_drone_body` |
+| `ore` | Ores | `ore_container_mk1`, `ore_storage_mk1`, `small_ore_container_mk1` |
 | `goods` | Materials, components, cores, unfitted modules | `goods_storage_mk1` |
-| `propellant` | Propellant | `propellant_tank_mk1`, `mining_drone_body` |
+| `propellant` | Propellant | `propellant_tank_mk1`, `small_propellant_tank_mk1` |
 
 A0 expands this in the cargo spec.
 
@@ -320,7 +329,7 @@ A0 expands this in the cargo spec.
 
 For check 10, B5 and B8 set numbers so that attaching the starter ship's first upgrade fails with `over_heat_budget`, and fitting one `heat_radiator_mk1` first fixes it. Heat is the preferred case because the analysis ranks it a top foundation.
 
-The power and heat budgets sum every module's active draw, whether or not those modules ever run together. Starting fits and `mining_drone_body` must pass these same rules, so B5 needs ratings with that in mind, especially on the station, which carries the refinery and fabricator.
+The power and heat budgets sum every module's active draw, whether or not those modules ever run together. Starting fits and a finished drone must pass these same rules, so B5 needs ratings with that in mind, especially on the station, which carries the refinery and fabricator.
 
 ### 7.6 The ten checks against this content
 
@@ -332,7 +341,7 @@ The power and heat budgets sum every module's active draw, whether or not those 
 | 4 | Refine | `ore_refinery_mk1` makes metal and vents slag |
 | 5 | Fabricate | `fabricator_mk1` makes a `structural_frame` or other component |
 | 6 | Install | Components become a module, attached to the docked ship. Only modules attach, so this check needs one more fabrication step than check 5. |
-| 7 | Build a drone | The `mining_drone` recipe at the fabricator, appearing at a free port |
+| 7 | Build a drone | The `small_craft` recipe at the fabricator, appearing at a free port, then small parts fitted until a `drone` unit has parts giving `mine`, `thruster`, and ore and propellant storage |
 | 8 | Hand over | Hand-run the cycle first on the starter ship. Then fit an `assisted_core` to the drone with `attach_part`, select it with `assign_core`, and start `set_cycle`. The cycle must include a propellant load. |
 | 9 | Expand | Attach one more station module. B8 picks which. |
 | 10 | Fail and fix | Section 7.5 |

@@ -601,84 +601,6 @@
       }
     },
     {
-      "id": "mining_drone_body",
-      "name": "Mining Drone",
-      "mass_kg": 520,
-      "volume_m3": 2.6,
-      "power_kw": 20,
-      "heat_kw": 15,
-      "priority": 5,
-      "durability": 1000,
-      "min_ai_tier": 1,
-      "realism": "extrapolation",
-      "capabilities": {
-        "max_mass_kg": 1500,
-        "mine": {
-          "rate_kg_per_s": 5,
-          "hardness_max": 7
-        },
-        "storage": {
-          "ore": {
-            "mass_kg": 500,
-            "volume_m3": 0.2
-          },
-          "propellant": {
-            "mass_kg": 100,
-            "volume_m3": 0.1
-          }
-        },
-        "thruster": {
-          "speed_m_s": 250,
-          "propellant_kg_per_s": 0.05,
-          "rated_mass_kg": 1000
-        },
-        "generate": {
-          "power_kw": 30
-        },
-        "radiator": {
-          "reject_kw": 40
-        },
-        "heat_capacity": {
-          "limit_kj": 5000
-        },
-        "port": {
-          "transfer_kg_per_s": 50,
-          "dock_seconds": 20,
-          "undock_seconds": 10
-        }
-      },
-      "fabrication": null,
-      "connectors": [
-        {
-          "id": "core",
-          "type": "side",
-          "size": "core",
-          "pos_mm": [500, 0, 0],
-          "facing": "+x",
-          "up": "+y",
-          "load_limit_kg": 100
-        },
-        {
-          "id": "dock",
-          "type": "dock",
-          "size": "medium",
-          "pos_mm": [0, 800, 0],
-          "facing": "+y",
-          "up": "+z",
-          "load_limit_kg": 1000
-        }
-      ],
-      "collision": {
-        "shape": "box",
-        "center_mm": [0, 0, 0],
-        "size_mm": [1600, 1600, 1600]
-      },
-      "visual": {
-        "model": "mining_drone",
-        "tint": "#e8641b"
-      }
-    },
-    {
       "id": "mining_laser_mk1",
       "name": "Mining Laser",
       "mass_kg": 400,
@@ -895,6 +817,435 @@
       "visual": {
         "model": "propellant_tank_mk1",
         "tint": "#e8e4d8"
+      }
+    },
+    {
+      "id": "small_chemical_thruster_mk1",
+      "name": "Small Thruster",
+      "mass_kg": 50,
+      "volume_m3": 0.25,
+      "power_kw": 2,
+      "heat_kw": 6,
+      "priority": 5,
+      "durability": 1000,
+      "min_ai_tier": 1,
+      "realism": "established",
+      "capabilities": {
+        "thruster": {
+          "speed_m_s": 250,
+          "propellant_kg_per_s": 0.05,
+          "rated_mass_kg": 1000
+        }
+      },
+      "fabrication": {
+        "recipe": "small_chemical_thruster_mk1"
+      },
+      "connectors": [
+        {
+          "id": "mount",
+          "type": "stack",
+          "size": "small",
+          "pos_mm": [0, 0, 0],
+          "facing": "+y",
+          "up": "+z",
+          "load_limit_kg": 500
+        }
+      ],
+      "collision": {
+        "shape": "cylinder",
+        "center_mm": [0, -400, 0],
+        "size_mm": [700, 800, 700]
+      },
+      "visual": {
+        "model": null,
+        "tint": "#8a8d91"
+      }
+    },
+    {
+      "id": "small_docking_port_mk1",
+      "name": "Small Docking Port",
+      "mass_kg": 60,
+      "volume_m3": 0.3,
+      "power_kw": 0,
+      "heat_kw": 0,
+      "priority": 0,
+      "durability": 1000,
+      "min_ai_tier": 1,
+      "realism": "established",
+      "capabilities": {
+        "port": {
+          "transfer_kg_per_s": 50,
+          "dock_seconds": 20,
+          "undock_seconds": 10
+        }
+      },
+      "fabrication": {
+        "recipe": "small_docking_port_mk1"
+      },
+      "connectors": [
+        {
+          "id": "mount",
+          "type": "stack",
+          "size": "small",
+          "pos_mm": [0, 0, 0],
+          "facing": "-y",
+          "up": "+z",
+          "load_limit_kg": 500
+        },
+        {
+          "id": "dock",
+          "type": "dock",
+          "size": "small",
+          "pos_mm": [0, 400, 0],
+          "facing": "+y",
+          "up": "+z",
+          "load_limit_kg": 500
+        }
+      ],
+      "collision": {
+        "shape": "cylinder",
+        "center_mm": [0, 200, 0],
+        "size_mm": [800, 400, 800]
+      },
+      "visual": {
+        "model": null,
+        "tint": "#8a8d91"
+      }
+    },
+    {
+      "id": "small_heat_radiator_mk1",
+      "name": "Small Heat Radiator",
+      "mass_kg": 50,
+      "volume_m3": 0.25,
+      "power_kw": 0,
+      "heat_kw": 0,
+      "priority": 0,
+      "durability": 1000,
+      "min_ai_tier": 1,
+      "realism": "established",
+      "capabilities": {
+        "radiator": {
+          "reject_kw": 40
+        }
+      },
+      "fabrication": {
+        "recipe": "small_heat_radiator_mk1"
+      },
+      "connectors": [
+        {
+          "id": "mount",
+          "type": "side",
+          "size": "small",
+          "pos_mm": [0, 0, 0],
+          "facing": "-z",
+          "up": "+y",
+          "load_limit_kg": 500
+        }
+      ],
+      "collision": {
+        "shape": "box",
+        "center_mm": [0, 0, 75],
+        "size_mm": [1500, 1000, 150]
+      },
+      "visual": {
+        "model": null,
+        "tint": "#e8e4d8"
+      }
+    },
+    {
+      "id": "small_hull",
+      "name": "Small Hull",
+      "mass_kg": 60,
+      "volume_m3": 0.3,
+      "power_kw": 0,
+      "heat_kw": 0,
+      "priority": 0,
+      "durability": 1000,
+      "min_ai_tier": 1,
+      "realism": "established",
+      "capabilities": {
+        "max_mass_kg": 1500,
+        "heat_capacity": {
+          "limit_kj": 5000
+        }
+      },
+      "fabrication": null,
+      "connectors": [
+        {
+          "id": "core",
+          "type": "side",
+          "size": "core",
+          "pos_mm": [500, 1200, 0],
+          "facing": "+x",
+          "up": "+y",
+          "load_limit_kg": 100
+        },
+        {
+          "id": "stack_bottom",
+          "type": "stack",
+          "size": "small",
+          "pos_mm": [0, 0, 0],
+          "facing": "-y",
+          "up": "+z",
+          "load_limit_kg": 500
+        },
+        {
+          "id": "stack_top",
+          "type": "stack",
+          "size": "small",
+          "pos_mm": [0, 1600, 0],
+          "facing": "+y",
+          "up": "+z",
+          "load_limit_kg": 500
+        },
+        {
+          "id": "side_a_px",
+          "type": "side",
+          "size": "small",
+          "pos_mm": [500, 500, 0],
+          "facing": "+x",
+          "up": "+y",
+          "load_limit_kg": 500
+        },
+        {
+          "id": "side_a_nx",
+          "type": "side",
+          "size": "small",
+          "pos_mm": [-500, 500, 0],
+          "facing": "-x",
+          "up": "+y",
+          "load_limit_kg": 500
+        },
+        {
+          "id": "side_a_pz",
+          "type": "side",
+          "size": "small",
+          "pos_mm": [0, 500, 500],
+          "facing": "+z",
+          "up": "+y",
+          "load_limit_kg": 500
+        },
+        {
+          "id": "side_a_nz",
+          "type": "side",
+          "size": "small",
+          "pos_mm": [0, 500, -500],
+          "facing": "-z",
+          "up": "+y",
+          "load_limit_kg": 500
+        },
+        {
+          "id": "side_b_nx",
+          "type": "side",
+          "size": "small",
+          "pos_mm": [-500, 1200, 0],
+          "facing": "-x",
+          "up": "+y",
+          "load_limit_kg": 500
+        },
+        {
+          "id": "side_b_pz",
+          "type": "side",
+          "size": "small",
+          "pos_mm": [0, 1200, 500],
+          "facing": "+z",
+          "up": "+y",
+          "load_limit_kg": 500
+        },
+        {
+          "id": "side_b_nz",
+          "type": "side",
+          "size": "small",
+          "pos_mm": [0, 1200, -500],
+          "facing": "-z",
+          "up": "+y",
+          "load_limit_kg": 500
+        }
+      ],
+      "collision": {
+        "shape": "cylinder",
+        "center_mm": [0, 800, 0],
+        "size_mm": [1000, 1600, 1000]
+      },
+      "visual": {
+        "model": null,
+        "tint": "#e8e4d8"
+      }
+    },
+    {
+      "id": "small_mining_laser_mk1",
+      "name": "Small Mining Laser",
+      "mass_kg": 90,
+      "volume_m3": 0.45,
+      "power_kw": 20,
+      "heat_kw": 15,
+      "priority": 3,
+      "durability": 1000,
+      "min_ai_tier": 1,
+      "realism": "extrapolation",
+      "capabilities": {
+        "mine": {
+          "rate_kg_per_s": 5,
+          "hardness_max": 7
+        }
+      },
+      "fabrication": {
+        "recipe": "small_mining_laser_mk1"
+      },
+      "connectors": [
+        {
+          "id": "mount",
+          "type": "side",
+          "size": "small",
+          "pos_mm": [0, 0, 0],
+          "facing": "-z",
+          "up": "+y",
+          "load_limit_kg": 500
+        }
+      ],
+      "collision": {
+        "shape": "box",
+        "center_mm": [0, 0, 350],
+        "size_mm": [400, 400, 700]
+      },
+      "visual": {
+        "model": null,
+        "tint": "#e8641b"
+      }
+    },
+    {
+      "id": "small_ore_container_mk1",
+      "name": "Small Ore Container",
+      "mass_kg": 80,
+      "volume_m3": 0.4,
+      "power_kw": 0,
+      "heat_kw": 0,
+      "priority": 0,
+      "durability": 1000,
+      "min_ai_tier": 1,
+      "realism": "established",
+      "capabilities": {
+        "storage": {
+          "ore": {
+            "mass_kg": 500,
+            "volume_m3": 0.2
+          }
+        }
+      },
+      "fabrication": {
+        "recipe": "small_ore_container_mk1"
+      },
+      "connectors": [
+        {
+          "id": "mount",
+          "type": "side",
+          "size": "small",
+          "pos_mm": [0, 0, 0],
+          "facing": "-z",
+          "up": "+y",
+          "load_limit_kg": 500
+        }
+      ],
+      "collision": {
+        "shape": "box",
+        "center_mm": [0, 0, 400],
+        "size_mm": [800, 800, 800]
+      },
+      "visual": {
+        "model": null,
+        "tint": "#8a8d91"
+      }
+    },
+    {
+      "id": "small_propellant_tank_mk1",
+      "name": "Small Propellant Tank",
+      "mass_kg": 50,
+      "volume_m3": 0.25,
+      "power_kw": 0,
+      "heat_kw": 0,
+      "priority": 0,
+      "durability": 1000,
+      "min_ai_tier": 1,
+      "realism": "established",
+      "capabilities": {
+        "storage": {
+          "propellant": {
+            "mass_kg": 100,
+            "volume_m3": 0.1
+          }
+        }
+      },
+      "fabrication": {
+        "recipe": "small_propellant_tank_mk1"
+      },
+      "connectors": [
+        {
+          "id": "mount",
+          "type": "stack",
+          "size": "small",
+          "pos_mm": [0, 0, 0],
+          "facing": "+y",
+          "up": "+z",
+          "load_limit_kg": 500
+        },
+        {
+          "id": "stack_bottom",
+          "type": "stack",
+          "size": "small",
+          "pos_mm": [0, -1000, 0],
+          "facing": "-y",
+          "up": "+z",
+          "load_limit_kg": 500
+        }
+      ],
+      "collision": {
+        "shape": "cylinder",
+        "center_mm": [0, -500, 0],
+        "size_mm": [800, 1000, 800]
+      },
+      "visual": {
+        "model": null,
+        "tint": "#e8e4d8"
+      }
+    },
+    {
+      "id": "small_solar_panel_mk1",
+      "name": "Small Solar Panel",
+      "mass_kg": 80,
+      "volume_m3": 0.4,
+      "power_kw": 0,
+      "heat_kw": 0,
+      "priority": 0,
+      "durability": 1000,
+      "min_ai_tier": 1,
+      "realism": "established",
+      "capabilities": {
+        "generate": {
+          "power_kw": 30
+        }
+      },
+      "fabrication": {
+        "recipe": "small_solar_panel_mk1"
+      },
+      "connectors": [
+        {
+          "id": "mount",
+          "type": "side",
+          "size": "small",
+          "pos_mm": [0, 0, 0],
+          "facing": "-z",
+          "up": "+y",
+          "load_limit_kg": 500
+        }
+      ],
+      "collision": {
+        "shape": "box",
+        "center_mm": [0, 0, 75],
+        "size_mm": [1500, 1000, 150]
+      },
+      "visual": {
+        "model": null,
+        "tint": "#c9a227"
       }
     },
     {

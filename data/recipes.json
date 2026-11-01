@@ -217,32 +217,6 @@
       "abstract": true
     },
     {
-      "id": "mining_drone",
-      "facility": "fabricator",
-      "seconds": 300,
-      "power_kw": 100,
-      "inputs": [
-        {
-          "item": "structural_frame",
-          "count": 8
-        },
-        {
-          "item": "wiring",
-          "count": 10
-        },
-        {
-          "item": "processor",
-          "count": 4
-        }
-      ],
-      "outputs": [
-        {
-          "unit_template": "mining_drone"
-        }
-      ],
-      "abstract": true
-    },
-    {
       "id": "mining_laser_mk1",
       "facility": "fabricator",
       "seconds": 180,
@@ -448,6 +422,181 @@
           "item": "slag",
           "kg": 81,
           "sink": "slag_vent"
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "small_chemical_thruster_mk1",
+      "facility": "fabricator",
+      "seconds": 40,
+      "power_kw": 60,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item": "small_chemical_thruster_mk1",
+          "count": 1
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "small_craft",
+      "facility": "fabricator",
+      "seconds": 60,
+      "power_kw": 100,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 2
+        },
+        {
+          "item": "wiring",
+          "count": 2
+        }
+      ],
+      "outputs": [
+        {
+          "unit_template": "small_craft"
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "small_docking_port_mk1",
+      "facility": "fabricator",
+      "seconds": 30,
+      "power_kw": 60,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 1
+        },
+        {
+          "item": "wiring",
+          "count": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item": "small_docking_port_mk1",
+          "count": 1
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "small_heat_radiator_mk1",
+      "facility": "fabricator",
+      "seconds": 40,
+      "power_kw": 60,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item": "small_heat_radiator_mk1",
+          "count": 1
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "small_mining_laser_mk1",
+      "facility": "fabricator",
+      "seconds": 60,
+      "power_kw": 100,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 1
+        },
+        {
+          "item": "wiring",
+          "count": 2
+        },
+        {
+          "item": "processor",
+          "count": 4
+        }
+      ],
+      "outputs": [
+        {
+          "item": "small_mining_laser_mk1",
+          "count": 1
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "small_ore_container_mk1",
+      "facility": "fabricator",
+      "seconds": 30,
+      "power_kw": 60,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 1
+        },
+        {
+          "item": "wiring",
+          "count": 3
+        }
+      ],
+      "outputs": [
+        {
+          "item": "small_ore_container_mk1",
+          "count": 1
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "small_propellant_tank_mk1",
+      "facility": "fabricator",
+      "seconds": 30,
+      "power_kw": 60,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item": "small_propellant_tank_mk1",
+          "count": 1
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "small_solar_panel_mk1",
+      "facility": "fabricator",
+      "seconds": 40,
+      "power_kw": 60,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 1
+        },
+        {
+          "item": "wiring",
+          "count": 3
+        }
+      ],
+      "outputs": [
+        {
+          "item": "small_solar_panel_mk1",
+          "count": 1
         }
       ],
       "abstract": true

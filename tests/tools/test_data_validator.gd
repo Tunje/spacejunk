@@ -437,6 +437,19 @@ func test_unit_output_mass_counts_toward_balance() -> void:
 	_assert_error("recipe_unbalanced")
 
 
+func test_a_built_unit_needs_a_port_to_appear_at() -> void:
+	var hull := _entry("modules", "hull")
+	hull["capabilities"].erase("port")
+	hull["connectors"] = hull["connectors"].filter(func(connector: Dictionary) -> bool:
+		return connector["type"] != "dock")
+	var recipe := _fabrication("build_ship", 13, "x")
+	recipe["outputs"] = [{ "unit_template": "ship" }]
+	data["recipes"]["entries"].append(recipe)
+	data["recipes"]["entries"].sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return a["id"] < b["id"])
+	_assert_error("built_unit_without_port")
+
+
 func test_unit_output_must_be_alone() -> void:
 	_entry("recipes", "refine")["outputs"].append({ "unit_template": "ship" })
 	_assert_error("unit_output_not_alone")
@@ -478,8 +491,13 @@ func test_connector_type_mismatch() -> void:
 
 
 func test_connector_size_mismatch() -> void:
-	_entry("modules", "laser")["connectors"][0]["size"] = "small"
+	_template_root()["children"][1]["parent_connector"] = "core"
 	_assert_error("connector_size_mismatch")
+
+
+func test_sizes_other_than_core_join_freely() -> void:
+	_entry("modules", "laser")["connectors"][0]["size"] = "small"
+	assert_eq(DataValidator.validate(data), [] as Array[String])
 
 
 func test_connector_occupied() -> void:

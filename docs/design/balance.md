@@ -2,6 +2,8 @@
 
 Status: task B6, report stage. `data/` is unchanged. The owner chooses a pacing option, then B6 applies it. All figures are from the slice's first-pass data, measured on `main` at 9c74767. `data/` and `sim/` have not changed since.
 
+**Since this report,** the drone is built from parts ([drone_from_parts.md](drone_from_parts.md)). Its mass, cost, build time and lap are unchanged, so every figure here holds except the time to a working drone, which was measured with the old one-part drone. Section 6 of that page gives the new times: 1 to 5 minutes more to check 7 and to all ten checks. Where the tables below say "Drone", read the seven `small_` recipes, 300 s in all, which Options B and C halve.
+
 ## 1. Summary
 
 - **A first full run takes 86 to 100 minutes at 1x and 13 to 23 minutes at 8x.** That is from a fresh start to all ten checks, for a person who makes no mistakes.

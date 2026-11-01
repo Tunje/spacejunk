@@ -27,7 +27,7 @@ These need no core: `start_job`, `cancel_job`, `attach_part`, `detach_part`, `as
 
 An order is also rejected with `tier_too_low` if a module it uses has `min_ai_tier` above `core_tier`.
 
-**Coreless units.** The new drone appears docked, with no core and an empty tank ([spec.md](spec.md) section 7.3). It takes `attach_part` with the station as `from`, then `assign_core`. Until then it can receive but not act: another unit's transfer may name it as `from` or `to`, because only the unit giving the order needs a core. It can be refuelled two ways:
+**Coreless units.** A new small craft appears docked as a hull and a port, with no core, no tank and an empty inventory ([spec.md](spec.md) section 7.3). It takes `attach_part` with the station as `from`, then `assign_core`. Until then it can receive but not act: another unit's transfer may name it as `from` or `to`, because only the unit giving the order needs a core. Once a tank is fitted, it can be refuelled two ways:
 - Before it has a core, the station runs `unload_cargo` with `to` set to the drone. The station has a Basic Core.
 - Once it has a core, by its own `load_cargo`, which is how a cycle refuels.
 

@@ -74,7 +74,7 @@ The validator (B4) enforces these, so a balanced game cannot be authored wrong.
 - **Yield ceilings.** Refining outputs stay within the ceilings in spec section 7.1.
 - **Module items.** A module's item has `unit_mass_kg` equal to the module's `mass_kg`.
 - **Module recipes.** A recipe outputting a module has input mass equal to that module's mass.
-- **Unit templates.** Part mass of a built template equals recipe input mass (contracts section 5). The drone's fitted core is not part of its template.
+- **Unit templates.** Part mass of a built template equals recipe input mass (contracts section 5). A drone's fitted core and modules are not part of its template, and each is paid for by its own recipe.
 - **Discrete inputs.** A recipe's quantity of a discrete item is a whole multiple of its `unit_mass_kg`.
 - **Sinks exist.** Every sink route names a declared sink.
 
