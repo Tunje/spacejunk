@@ -105,6 +105,19 @@ func test_every_ring_on_a_bare_craft_can_be_clicked_from_all_round() -> void:
 		assert_eq(await _missed_rings(drone), [] as Array[String], "yaw step %d" % step)
 
 
+func test_the_panel_fits_with_all_six_parts_waiting() -> void:
+	var drone := ScreenshotDriver.build_drone(bridge, 0)
+	for fit: Dictionary in ScreenshotDriver.DRONE_FITS:
+		ScreenshotDriver.stock_part(bridge, fit["item"])
+	ScreenshotDriver._step(bridge)
+	view.refresh(0.0)
+	view.select("unit", drone, 0)
+	main.toggle_fitting()
+	await wait_process_frames(SETTLE_FRAMES)
+	assert_eq(screen._stock.size(), ScreenshotDriver.DRONE_FITS.size())
+	assert_lte(screen.get_global_rect().end.y, window.get_visible_rect().size.y)
+
+
 func test_every_ring_left_on_a_finished_drone_can_be_clicked() -> void:
 	var drone := await _open_on_drone(6)
 	assert_eq(await _missed_rings(drone), [] as Array[String])
