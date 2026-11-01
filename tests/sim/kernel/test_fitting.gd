@@ -145,6 +145,27 @@ func test_connector_type_size_and_occupancy() -> void:
 	_assert_refused(_attach(SHIP, "lidar_mk1", HULL, "side_a_px"), "connector_occupied", "attach_failed")
 
 
+func test_size_does_not_decide_a_join() -> void:
+	_give(STATION, "lidar_mk1", 3)
+	var defs := _own_defs()
+	var hull_end := Units.connector_of(defs["modules"]["starter_hull"], "side_c_pz")
+	var lidar_end := Units.connector_of(defs["modules"]["lidar_mk1"], "mount")
+	var command := _attach(SHIP, "lidar_mk1", HULL, "side_c_pz")
+	hull_end["size"] = "small"
+	assert_true(sim.check(command)["ok"], "medium part on a small connector")
+	lidar_end["size"] = "small"
+	hull_end["size"] = "medium"
+	assert_true(sim.check(command)["ok"], "small part on a medium connector")
+	hull_end["size"] = "large"
+	assert_eq(_run(command)["type"], "part_attached", "small part on a large connector")
+
+
+func test_core_joins_only_core() -> void:
+	_give(STATION, "basic_core")
+	_assert_refused(_attach(SHIP, "basic_core", HULL, "side_c_pz"), "connector_size_mismatch", "attach_failed")
+	assert_eq(sim.check(_attach(SHIP, "basic_core", HULL, "core"))["reason"], "connector_occupied")
+
+
 func test_a_part_cannot_mate_to_a_dock_connector() -> void:
 	_give(STATION, "docking_port_mk1")
 	var command := _attach(SHIP, "docking_port_mk1", PORT, "dock")

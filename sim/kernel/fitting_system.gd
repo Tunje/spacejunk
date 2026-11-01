@@ -6,6 +6,7 @@ extends SimSystem
 const ATTACH := "attach_part"
 const DETACH := "detach_part"
 const FAILED_EVENT := "attach_failed"
+const SIZE_CORE := "core"
 const REASON_INVALID_TARGET := "invalid_target"
 const REASON_UNKNOWN_PART := "unknown_part"
 const REASON_UNKNOWN_UNIT := "unknown_unit"
@@ -81,7 +82,7 @@ func _fit_failure(
 ) -> Dictionary:
 	if parent_end["type"] != part_end["type"] or parent_end["type"] == "dock":
 		return { "reason": "connector_type_mismatch", "detail": {} }
-	if parent_end["size"] != part_end["size"]:
+	if (parent_end["size"] == SIZE_CORE) != (part_end["size"] == SIZE_CORE):
 		return { "reason": "connector_size_mismatch", "detail": {} }
 	if Units.child_at(ctx.state, parent, parent_end["id"]) != 0:
 		return { "reason": "connector_occupied", "detail": {} }
