@@ -18,6 +18,7 @@ const MAX_Q30 := 2 << 30
 const MAX_SUBTICKS := 1 << 55
 const MAX_GM := 9_000_000_000_000_000_000
 const GM_KEY := "gm"
+const MAX_SPEED_UM_S := 1_000_000_000_000
 const INVENTORY_KEY := "inventory"
 
 
@@ -122,6 +123,9 @@ static func _limits(key: String) -> Array:
 		high = MAX_SUBTICKS
 	elif key == GM_KEY:
 		high = MAX_GM
+	elif key.ends_with("_um_s"):
+		low = -MAX_SPEED_UM_S
+		high = MAX_SPEED_UM_S
 	else:
 		return []
 	return [low, high]

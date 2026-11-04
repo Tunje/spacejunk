@@ -110,6 +110,12 @@ func view() -> Dictionary:
 	return result
 
 
+## Positions along a unit's current path, for drawing it: { place, points }, or {} if out of range
+## (contracts section 3). Planned burns are not applied.
+func predict(unit_id: int, from_tick: int, ticks: int, step: int) -> Dictionary:
+	return BurnSystem.predict(_ctx, unit_id, from_tick, ticks, step)
+
+
 func defs() -> Dictionary:
 	return _ctx.defs.duplicate(true)
 
@@ -202,7 +208,7 @@ static func _data_hash(defs_value: Dictionary) -> String:
 ## The order is the phase-list order within each phase.
 static func _default_systems() -> Array[SimSystem]:
 	return [
-		RailSystem.new(), UnitSystem.new(), FittingSystem.new(), FitCopySystem.new(), TaskSystem.new(), JobSystem.new(), CargoSystem.new(),
+		RailSystem.new(), UnitSystem.new(), BurnSystem.new(), FittingSystem.new(), FitCopySystem.new(), TaskSystem.new(), JobSystem.new(), CargoSystem.new(),
 		PowerSystem.new(), HeatSystem.new(), ConstructionSystem.new(),
 	]
 

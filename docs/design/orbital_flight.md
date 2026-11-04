@@ -393,3 +393,18 @@ Sizes compare with earlier kernel tasks: **S** is about A7's size, **M** about A
   - bad scenarios;
   - old saves;
   - the loader's exact GM.
+
+### 11.10 A11 results: burns for the player's ship
+
+- **`BurnSystem`** (sim/networks/burn_system.gd) is registered after `RailSystem` and `UnitSystem`, and before `PowerSystem`. contracts.md sections 3, 5, 6 and 7 hold the commands, events, `check` detail, `predict` and view fields as built. D has had the shape since the start of A11.
+- **The thruster:** a burn uses the healthy thruster with the most `thrust_n`, which must also have `exhaust_mm_s`.
+- **Each tick's delta-v** is thrust over the unit's mass at the start of the tick, with a carried remainder.
+- **Propellant** flows at thrust / exhaust speed, also with a remainder. It is claimed against reservations and leaves in phase 6 through `propellant_exhaust`, so the matter ledger holds.
+- **Drift:** in a frame, a burn changes `vel_um_s`, and the unit drifts in a straight line, with a carry in tenths of a micrometre so the drift is exact. A `move_to` in a frame stops the drift.
+- **Frame margins,** a change from 11.2: a drifting unit leaves at the frame's radius + **2000 km**, and joins at radius + 1000 km under 1 m/s. The gap stops a slow unit at the edge flapping in and out.
+- **Measured:**
+  - The first Hohmann burn from 700 km (45.7 m/s), flown as a finite burn of 844 ticks, gives an apoapsis of 759.3 km, against 760 km for an instant impulse.
+  - The delta-v delivered matches the request within the rounding of its direction.
+  - Leaving the cluster frame at 1 AU puts the unit 304 m from where the frame plus its drift would have, which is the integer precision at 1 AU that A9 predicted.
+  - A save and load midway through two burns, one on an orbit and one in a frame, is byte-exact and runs on identically.
+- **Tests:** tests/sim/networks/test_burns.gd, 13 tests. They patch B13's thruster figures (3 kN, 3000 m/s) into the cached data until B13 is on main.
