@@ -3,7 +3,7 @@ extends RefCounted
 ## The public simulation API (contracts section 3) and the tick loop (section 4).
 
 const TICKS_PER_SECOND := 10
-const CONTRACT_VERSION := 1
+const CONTRACT_VERSION := 2
 const SCENARIO_EMPTY := "empty"
 ## Undrained events past this are dropped, oldest first.
 const MAX_QUEUED_EVENTS := 65536
@@ -197,7 +197,7 @@ static func _data_hash(defs_value: Dictionary) -> String:
 ## The order is the phase-list order within each phase.
 static func _default_systems() -> Array[SimSystem]:
 	return [
-		UnitSystem.new(), FittingSystem.new(), TaskSystem.new(), JobSystem.new(), CargoSystem.new(),
+		UnitSystem.new(), FittingSystem.new(), FitCopySystem.new(), TaskSystem.new(), JobSystem.new(), CargoSystem.new(),
 		PowerSystem.new(), HeatSystem.new(), ConstructionSystem.new(),
 	]
 

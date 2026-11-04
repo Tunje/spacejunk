@@ -279,6 +279,7 @@ Jobs are not tasks. They belong to a facility part, have no owner task and need 
 | `running` | A run is in progress |
 | `paused` | A run is in progress, with its inputs held, and stopped by `reason` |
 | `cancelling` | Cancelled, with inputs waiting for room to return |
+| `queued` | Behind the active job in its facility's queue. Holds nothing and reserves nothing |
 
 | Condition | Status | `reason` | Clears when |
 | --------- | ------ | -------- | ----------- |
@@ -289,6 +290,7 @@ Jobs are not tasks. They belong to a facility part, have no owner task and need 
 | No port at run end | `paused` | `no_free_port` | A port is granted |
 
 Rules:
+- A facility holds an ordered queue of up to 16 jobs (C9). Only the job at `queue_pos` 0 is active. `queue_job` adds to the end, `move_job` reorders and `cancel_job` removes. The queue rules are in [contracts.md](contracts.md) section 5. A job that is `waiting` on `missing_inputs` can be moved back, so a stuck job does not hold up the jobs behind it.
 - `start_job` does not check stock. It is rejected only with `facility_busy` if the facility has a job, or for an unknown recipe or wrong facility. A job can wait for ore that is still being hauled, so a large `count` is how a player sets up a production line.
 - Each entry into `waiting` or `paused` emits `job_paused`, and each exit emits `job_resumed`. Moving to `running` for the first time emits `job_started`, and later runs emit nothing further.
 - Work is counted in remaining ticks, held in the job. `end_tick` is recalculated on resume and is 0 while the job is not running.
