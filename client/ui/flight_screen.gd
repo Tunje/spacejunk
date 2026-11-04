@@ -15,6 +15,9 @@ const LOOP_POINTS := 128
 const PREDICT_POINTS := 96
 const DRIFT_SECONDS := 600.0
 const DRIFT_POINTS := 24
+## Paths along an unchanged orbit or drift are worked out again at most this often.
+## predict costs tens of milliseconds on an escape path, too much for every tick.
+const PATH_REFRESH_MS := 250
 const MARKER_LOCAL_FRACTION := 0.03
 const MARKER_MAP := 0.35
 const PATH_COLOUR := Color(0.62, 0.65, 0.7)
@@ -33,6 +36,7 @@ var current_path: Array[PackedFloat64Array] = []
 var planned_path: Array[PackedFloat64Array] = []
 var marker := PackedFloat64Array()
 var _path_key := ""
+var _path_ms := -PATH_REFRESH_MS
 var _burns_key := ""
 var _title: Label
 var _place: Label
@@ -172,7 +176,9 @@ func burn_at_apsis(target: float) -> void:
 	if orbit.is_empty():
 		return
 	var tick: int = bridge.current_view["tick"]
-	burn_tick = tick + OrbitPath.ticks_until(orbit, tick, target)
+	var wait := OrbitPath.ticks_until(orbit, tick, target)
+	if wait > 0:
+		burn_tick = tick + wait
 	refresh()
 
 
@@ -210,9 +216,9 @@ func refresh() -> void:
 	_place.text = FlightLogic.place_text(view, unit_id())
 	_when.set_value_no_signal(float(burn_tick - tick - 1) / bridge.ticks_per_second())
 	var flying: bool = shown["dock"].is_empty()
-	var on_orbit: bool = not shown.get("orbit", {}).is_empty()
-	_peri_button.disabled = not on_orbit
-	_apo_button.disabled = not on_orbit
+	var orbit: Dictionary = shown.get("orbit", {})
+	_peri_button.disabled = orbit.is_empty() or OrbitPath.ticks_until(orbit, tick, 0.0) < 0
+	_apo_button.disabled = orbit.is_empty() or OrbitPath.is_open(orbit)
 	_sync_burns(shown, tick)
 	var command := pending_command()
 	preview = {} if command.is_empty() or not flying else bridge.check(command)
@@ -282,21 +288,25 @@ func _add_burn_row(burn_id: int, action: String) -> void:
 
 ## Works the path data out again only when the tick or the burn changes.
 func _update_paths(view: Dictionary, command: Dictionary) -> void:
-	var key := "%d:%d:%s:%s" % [unit_id(), view["tick"], str(command), str(preview.get("ok", false))]
-	if key == _path_key:
+	var shown := unit()
+	var key := "%d:%s:%s:%s:%s:%s" % [unit_id(), str(shown.get("orbit", {})), str(shown.get("vel_um_s", [])),
+		str(shown["dock"]), str(command), str(preview.get("ok", false))]
+	var now := Time.get_ticks_msec()
+	if key == _path_key and now - _path_ms < PATH_REFRESH_MS:
 		return
 	_path_key = key
+	_path_ms = now
 	current_path = _current_path(view)
 	planned_path = []
 	marker = PackedFloat64Array()
 	if preview.get("ok", false):
 		marker = _position_at(view, burn_tick)
 		var detail: Dictionary = preview["detail"]
-		var shown := unit()
 		if not detail.get("orbit", {}).is_empty():
 			var orbit: Dictionary = detail["orbit"]
 			var parent: int = orbit.get("parent", shown["orbit"].get("parent", 0))
-			planned_path = OrbitPath.loop(orbit, WorldPosition.of(view["bodies"][parent]), burn_tick, LOOP_POINTS)
+			var body: Dictionary = view["bodies"][parent]
+			planned_path = OrbitPath.ahead(orbit, WorldPosition.of(body), burn_tick, LOOP_POINTS, float(body.get("soi_mm", 0)))
 		elif not marker.is_empty() and shown.get("orbit", {}).is_empty():
 			planned_path = OrbitPath.drift(marker, detail["vel_um_s"], DRIFT_SECONDS, DRIFT_POINTS)
 	_show_diagram(view)
@@ -323,8 +333,12 @@ func _current_path(view: Dictionary) -> Array[PackedFloat64Array]:
 	if not bridge.sim.has_method("predict") or not shown["dock"].is_empty():
 		return points
 	var ticks := roundi(DRIFT_SECONDS * bridge.ticks_per_second())
-	if not shown.get("orbit", {}).is_empty():
-		ticks = ceili(OrbitPath.period_ticks(shown["orbit"]))
+	var orbit: Dictionary = shown.get("orbit", {})
+	if OrbitPath.is_open(orbit):
+		var soi: float = float(view["bodies"][orbit["parent"]].get("soi_mm", 0))
+		ticks = OrbitPath.ticks_to_reach(orbit, view["tick"], soi)
+	elif not orbit.is_empty():
+		ticks = ceili(OrbitPath.period_ticks(orbit))
 	elif FlightLogic.speed_of(shown.get("vel_um_s", [0, 0, 0])) == 0:
 		return points
 	var path: Dictionary = bridge.sim.predict(unit_id(), view["tick"], ticks, maxi(1, ticks / PREDICT_POINTS))

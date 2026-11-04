@@ -377,3 +377,13 @@ func test_a_real_burn_from_the_screen() -> void:
 	assert_string_ends_with(screen._place.text, "drifting 2.0 m/s")
 	assert_gt(screen.current_path.size(), 2, "predict draws the drift")
 	assert_eq(main.event_log.lines[-1], "Probe: burn done, 2.0 m/s")
+
+
+func test_a_burn_bigger_than_the_tank_says_it_will_stop_short() -> void:
+	_start(StubSim.SCENARIO_ORBIT)
+	_open()
+	screen.set_components(1500.0)
+	assert_string_contains(screen._cost.text, "Only 1.8 t aboard, so it will stop short")
+	assert_string_starts_with(screen._after.text, "Then escaping Cairn, periapsis ")
+	assert_eq(screen._after.text.count("escaping"), 1, "said once")
+

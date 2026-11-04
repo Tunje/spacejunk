@@ -116,7 +116,7 @@ static func tonnes(grams: int) -> String:
 
 
 ## One log line for an event, or "" if the player does not need to see it.
-static func event(entry: Dictionary, unit_name: String, items: Dictionary) -> String:
+static func event(entry: Dictionary, unit_name: String, items: Dictionary, bodies: Dictionary = {}) -> String:
 	var data: Dictionary = entry["data"]
 	match entry["type"]:
 		"command_rejected", "attach_failed":
@@ -140,6 +140,9 @@ static func event(entry: Dictionary, unit_name: String, items: Dictionary) -> St
 		"burn_short":
 			var why: String = "The craft was busy with another order" if data["reason"] == "part_busy" else reason(data["reason"])
 			return "%s: burn stopped at %s. %s" % [unit_name, FlightLogic.speed(data["dv_um_s"]), why]
+		"soi_changed":
+			var to_name: String = bodies.get(data["to"], {}).get("name", "another body")
+			return "%s: now orbiting %s" % [unit_name, to_name]
 		"frame_left":
 			return "%s drifted out of its frame onto an orbit" % unit_name
 		"frame_joined":
