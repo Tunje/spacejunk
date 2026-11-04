@@ -251,6 +251,7 @@ Sizes compare with earlier kernel tasks: **S** is about A7's size, **M** about A
 | A14 | **Planet grid and terrain** | `PlanetGrid`: cell IDs, neighbours, integer cell directions and the integer noise from section 8, plus `cell(seed, id)` on demand. Pure functions, with the proof's checks as tests: 12 pentagons, Euler, symmetry and replay. | A9's trig only | M |
 | A15 | **Landing and takeoff** | Autopilot operations between an orbit and a cell, with an integer delta-v cost from the body's figures, as in B's planets.md section 3.2. The landed state, and leaving it. The player's ship uses the same operations, because a hand-flown descent isn't proposed. | A10, A11, A14 | M |
 | A16 | **Planet shadow** | A solar generator gives nothing while its unit is in a planet's shadow. This is an integer cylinder test from the star direction, in phase 3. C found that this is what stretches laps around a planet. | A10 | S |
+| A18 | **Trips across spheres of influence** | Added after A13 by the Lead. The cluster orbits the star, so no core can fly to a planet until the planner handles a trip that changes parent body. That needs patched-conic transfers: from one orbit to an escape or capture hyperbola, with the sphere-crossing tick found by bounded integer search on the rails, and a window from both bodies' positions. Planned after A15. | A12, A13 | L |
 | A17 | **Performance and limits** | Re-measure [perf_budget.md](perf_budget.md) with rails, burns and window searches at 20 times the slice, measure the top speed of time warp at slice size, and update the budget's rules. | A13 | S |
 
 **Order and why:**
@@ -466,3 +467,25 @@ Sizes compare with earlier kernel tasks: **S** is about A7's size, **M** about A
   - Eccentric or inclined targets.
   - Trips that change sphere of influence.
   - A transfer that passes through the planet isn't checked, which is A15.
+
+### 11.13 A15 results: landing, takeoff and collisions
+
+- **`LandingSystem`** (sim/networks/landing_system.gd) adds `land { body, cell }` and `take_off { altitude_mm }` as atomic autopilot operations, `landing` and `taking_off`, with an integer delta-v cost and no simulated descent. That is planets.md section 3.2's model.
+- **The cost**, paid at the start:
+  - the burn down half an ellipse from the current radius to the surface;
+  - plus killing the speed left at the surface, with a 3% gravity loss;
+  - priced by the rocket equation.
+  - The op lasts the half ellipse. Takeoff is the reverse, onto a circular orbit through the cell's direction, moving east around +Y.
+- **Landed** is a fourth place, beside an orbit, a frame and the old world.
+  - The unit's `landed { body, cell }` sets its `pos_mm` to the cell's centre at its integer height, from the body's `planet { seed, height_range_m }` through `PlanetGrid`.
+  - A landed unit never moves, can't burn, and can't `move_to`.
+- **Collisions:** every tick, a unit on an orbit below its parent's radius crashes.
+  - It comes down on the cell below. That is the nearest cell centre, found by walking downhill from the nearest icosahedron corner.
+  - Its burn or transfer ends, and `crashed` fires. Damage isn't modelled.
+  - This also catches transfers that pass through a planet, which A13 left open.
+- **Measured:** landing from a 700 km orbit on the 600 km planet costs 2681 m/s, about 9.8 t of propellant for the starter ship, over 8760 ticks. That is just above section 7's 2.3 to 2.6 km/s, because a ship on the descent ellipse meets the surface at 2.5 km/s, not at circular speed.
+- **Not done:**
+  - Surface types and slope limits on landing, which need planets.md's rule tables in `data/`.
+  - Damage on a crash.
+  - Planet rotation.
+  - Planetary deposits and scanning a patch of cells, which are B's and C's.

@@ -43,7 +43,9 @@ static func unit_place(state: Dictionary, unit_id: int) -> int:
 	var unit: Dictionary = state["units"][unit_id]
 	if not unit["dock"].is_empty():
 		return unit_place(state, unit["dock"]["target_unit"])
-	return ON_ORBIT if not unit["orbit"].is_empty() else unit["frame"]
+	if not unit["orbit"].is_empty() or not unit.get("landed", {}).is_empty():
+		return ON_ORBIT
+	return unit["frame"]
 
 
 ## The frame a move_to target sits in, as unit_place gives for units.
@@ -63,6 +65,8 @@ static func world_mm(state: Dictionary, table: String, id: int) -> Array[int]:
 	var base: Array[int] = [0, 0, 0]
 	if not entry["orbit"].is_empty():
 		base = world_mm(state, "bodies", entry["orbit"]["parent"])
+	elif table == "units" and not entry.get("landed", {}).is_empty():
+		base = world_mm(state, "bodies", entry["landed"]["body"])
 	elif table != "frames" and entry["frame"] != 0:
 		base = world_mm(state, "frames", entry["frame"])
 	return [base[0] + pos[0], base[1] + pos[1], base[2] + pos[2]]
