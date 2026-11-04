@@ -851,3 +851,37 @@ func test_load_dir_reads_scenarios() -> void:
 func test_load_dir_reports_missing_files() -> void:
 	var errors := DataValidator.validate(DataValidator.load_dir("res://tests/no_such_dir/"))
 	assert_eq(errors.size(), DataValidator.FILES.size())
+
+
+func _gear(value: Variant) -> void:
+	_entry("modules", "laser")["capabilities"]["landing_gear"] = { "max_touchdown_m_s": value }
+
+
+func test_landing_gear_passes() -> void:
+	_gear(6)
+	assert_eq(DataValidator.validate(data), [] as Array[String])
+
+
+func test_landing_gear_accepts_fractions_of_a_metre() -> void:
+	_gear(2.5)
+	assert_eq(DataValidator.validate(data), [] as Array[String])
+
+
+func test_landing_gear_must_be_above_zero() -> void:
+	_gear(0)
+	_assert_error("bad_number")
+
+
+func test_landing_gear_must_convert_to_whole_mm_s() -> void:
+	_gear(1.0004)
+	_assert_error("inexact_value")
+
+
+func test_landing_gear_needs_its_limit() -> void:
+	_entry("modules", "laser")["capabilities"]["landing_gear"] = {}
+	_assert_error("missing_field")
+
+
+func test_landing_gear_is_an_object() -> void:
+	_entry("modules", "laser")["capabilities"]["landing_gear"] = 6
+	_assert_error("bad_capability")

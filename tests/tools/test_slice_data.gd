@@ -8,12 +8,12 @@ const ITEMS := [
 ]
 const MODULES := [
 	"assisted_core", "basic_core", "battery_bank_mk1", "chemical_thruster_mk1", "command_hub",
-	"docking_port_mk1", "fabricator_mk1", "goods_storage_mk1", "heat_radiator_mk1", "lidar_mk1",
-	"mining_laser_mk1", "ore_container_mk1", "ore_refinery_mk1", "ore_storage_mk1",
-	"propellant_tank_mk1", "small_chemical_thruster_mk1", "small_docking_port_mk1",
-	"small_heat_radiator_mk1", "small_hull", "small_mining_laser_mk1", "small_ore_container_mk1",
-	"small_propellant_tank_mk1", "small_solar_panel_mk1", "solar_farm_mk1", "solar_panel_mk1",
-	"starter_hull",
+	"docking_port_mk1", "fabricator_mk1", "goods_storage_mk1", "heat_radiator_mk1",
+	"landing_legs_mk1", "lidar_mk1", "mining_laser_mk1", "ore_container_mk1",
+	"ore_refinery_mk1", "ore_storage_mk1", "propellant_tank_mk1", "small_chemical_thruster_mk1",
+	"small_docking_port_mk1", "small_heat_radiator_mk1", "small_hull", "small_landing_legs_mk1",
+	"small_mining_laser_mk1", "small_ore_container_mk1", "small_propellant_tank_mk1",
+	"small_solar_panel_mk1", "solar_farm_mk1", "solar_panel_mk1", "starter_hull",
 ]
 const DEPOSIT_ITEMS := ["chalcopyrite", "hematite", "olivine"]
 const TEMPLATES := ["small_craft", "starter_ship", "starter_station"]

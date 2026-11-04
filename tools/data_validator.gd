@@ -74,6 +74,7 @@ const CAPABILITIES := {
 		"max_discharge_kw": [1000, false], "charge_efficiency_ppm": [1, true],
 	},
 	"radiator": { "reject_kw": [1000, false] },
+	"landing_gear": { "max_touchdown_m_s": [1000, false] },
 	"heat_capacity": { "limit_kj": [1000, false] },
 	"port": {
 		"transfer_kg_per_s": [1000, false], "dock_seconds": [1, true],
