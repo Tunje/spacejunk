@@ -1372,7 +1372,7 @@ func _validate_burn(unit: Dictionary, args: Dictionary) -> Dictionary:
 	var detail: Dictionary = {
 		"dv_um_s": dv,
 		"propellant_g": OrbitMath.burn_g(mass, dv, thruster["exhaust_mm_s"]),
-		"burn_ticks": maxi(1, IntMath.mul_div(dv, mass, thruster["thrust_n"] * 100_000_000)),
+		"burn_ticks": IntMath.mul_div_ceil(dv, mass, thruster["thrust_n"] * 100_000_000),
 		"orbit": {}, "vel_um_s": [0, 0, 0], "leaves_frame": false,
 	}
 	if not unit["orbit"].is_empty():
@@ -1409,7 +1409,7 @@ func _apply_plan_burn(unit: Dictionary, args: Dictionary) -> void:
 
 func _apply_cancel_burn(unit: Dictionary, id: int) -> void:
 	if unit["burn"].get("id", 0) == id:
-		_end_burn(unit, "burn_done", "")
+		_end_burn(unit, "burn_short", "cancelled")
 		return
 	unit["burns"] = unit["burns"].filter(func(burn: Dictionary) -> bool: return burn["id"] != id)
 
@@ -1428,8 +1428,9 @@ func _advance_flight(unit: Dictionary) -> void:
 	_drift(unit)
 
 
+## A unit doing anything else at the burn tick drops the burn (A11).
 func _start_burn(unit: Dictionary, planned: Dictionary) -> void:
-	if unit["op"]["type"] != "idle":
+	if unit["op"]["type"] != "idle" or not unit["route"].is_empty() or unit["task"] != 0:
 		_emit("burn_short", unit["id"], { "burn": planned["id"], "reason": "part_busy", "dv_um_s": 0, "propellant_g": 0 })
 		return
 	var thruster := _thruster(unit)
@@ -1437,19 +1438,30 @@ func _start_burn(unit: Dictionary, planned: Dictionary) -> void:
 	unit["burn_dir"] = OrbitMath.unit(vector)
 	unit["burn"] = {
 		"id": planned["id"], "dv_um_s": IntMath.dist(vector, [0, 0, 0]), "done_um_s": 0,
-		"start_tick": _state["tick"], "propellant_g": 0,
+		"start_tick": _state["tick"], "propellant_g": 0, "dv_rem": 0, "flow_rem": 0,
 	}
 	unit["op"] = { "type": "burning", "target": 0, "part": thruster["part"], "start_tick": _state["tick"], "end_tick": 0 }
 	unit["at_target"] = 0
 	_emit("burn_started", unit["id"], { "burn": planned["id"] })
 
 
+## As A11 does it: delta-v per tick from thrust over mass at the tick's start, and
+## propellant as a constant mass flow, each with its remainder carried. The last,
+## partial tick pays its share of a full tick's flow, rounded up.
 func _burn_step(unit: Dictionary) -> void:
 	var burn: Dictionary = unit["burn"]
 	var thruster := _thruster(unit)
+	if thruster.is_empty():
+		_end_burn(unit, "burn_short", "module_missing")
+		return
 	var mass := _unit_mass(unit)
-	var step := mini(burn["dv_um_s"] - burn["done_um_s"], IntMath.mul_div(thruster["thrust_n"], 100_000_000, mass))
-	var spent := OrbitMath.burn_g(mass, step, thruster["exhaust_mm_s"])
+	var accel_total: int = IntMath.mul_div(thruster["thrust_n"], 1_000_000_000, mass) + burn["dv_rem"]
+	var full_step := accel_total / TICKS_PER_SECOND
+	var flow_total: int = thruster["thrust_n"] * 1_000_000 + burn["flow_rem"]
+	var flow_divisor: int = thruster["exhaust_mm_s"] * TICKS_PER_SECOND
+	var full_flow := flow_total / flow_divisor
+	var step := mini(burn["dv_um_s"] - burn["done_um_s"], full_step)
+	var spent := full_flow if step == full_step else IntMath.mul_div_ceil(full_flow, step, maxi(1, full_step))
 	if unit["inventory"].get("propellant", 0) < spent:
 		_end_burn(unit, "burn_short", "no_propellant")
 		return
@@ -1470,6 +1482,8 @@ func _burn_step(unit: Dictionary) -> void:
 	else:
 		for axis in 3:
 			unit["vel_um_s"][axis] += added[axis]
+	burn["dv_rem"] = accel_total - full_step * TICKS_PER_SECOND
+	burn["flow_rem"] = flow_total - full_flow * flow_divisor
 	unit["inventory"]["propellant"] -= spent
 	if unit["inventory"]["propellant"] == 0:
 		unit["inventory"].erase("propellant")
@@ -1506,12 +1520,12 @@ func _drift(unit: Dictionary) -> void:
 ## Read-only path points in the unit's place, following the current orbit or drift.
 func predict(unit_id: int, from_tick: int, ticks: int, step: int) -> Dictionary:
 	var unit: Dictionary = _state["units"].get(unit_id, {})
-	if unit.is_empty() or step <= 0:
-		return { "place": {}, "points": [] }
+	if unit.is_empty() or step <= 0 or ticks / step >= PREDICT_LIMIT:
+		return {}
 	var place: Dictionary = { "orbit_parent": unit["orbit"]["parent"] } if not unit["orbit"].is_empty() else { "frame": unit["frame"] }
 	var points: Array = []
 	var tick := from_tick
-	while tick <= from_tick + ticks and points.size() < PREDICT_LIMIT:
+	while tick <= from_tick + ticks:
 		points.append(_motion_at(unit, tick)["r"] if unit["orbit"].is_empty() else OrbitMath.position_at(unit["orbit"], tick))
 		tick += step
 	return { "place": place, "points": points }

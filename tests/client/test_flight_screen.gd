@@ -318,3 +318,28 @@ func test_on_the_real_sim_undocked_it_shows_checks_answer() -> void:
 	else:
 		assert_eq(screen._cost.text, OrderText.reason(result["reason"], result["detail"]))
 		assert_true(screen._plan_button.disabled)
+
+
+func test_burn_events_reach_the_log() -> void:
+	_start(StubSim.SCENARIO_ORBIT)
+	_open()
+	screen.burn_now()
+	screen.set_components(40.0)
+	screen.plan()
+	_ticks(5)
+	assert_eq(main.event_log.lines[-1], "First Probe: burn started")
+	(screen._burns_box.get_child(0).get_child(1) as Button).pressed.emit()
+	_ticks(1)
+	assert_string_starts_with(main.event_log.lines[-1], "First Probe: burn stopped at ")
+	assert_string_ends_with(main.event_log.lines[-1], " m/s. Cancelled")
+
+
+func test_a_finished_burn_is_logged_with_its_delta_v() -> void:
+	_start(StubSim.SCENARIO_ORBIT)
+	_open()
+	screen.burn_now()
+	screen.set_components(10.0)
+	var burn_ticks: int = screen.preview["detail"]["burn_ticks"]
+	screen.plan()
+	_ticks(burn_ticks + 5)
+	assert_eq(main.event_log.lines[-1], "First Probe: burn done, 10.0 m/s")

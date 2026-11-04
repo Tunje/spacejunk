@@ -104,7 +104,8 @@ func test_a_planned_burn_runs_and_raises_the_orbit() -> void:
 	assert_eq(unit["op"]["type"], "idle")
 	assert_almost_eq(_apoapsis_mm(unit["orbit"]), _apoapsis_mm(preview["orbit"]), _apoapsis_mm(preview["orbit"]) * 0.01,
 		"a finite burn lands near the one-impulse preview")
-	assert_almost_eq(fuel_before - int(unit["inventory"]["propellant"]), preview["propellant_g"], preview["propellant_g"] / 20)
+	assert_almost_eq(fuel_before - int(unit["inventory"]["propellant"]), preview["propellant_g"], preview["propellant_g"] / 20,
+		"a constant flow over the burn comes close to the rocket equation")
 	assert_eq(sim.ledger()["matter_g"], matter, "propellant goes to exhaust, not nowhere")
 	var events := sim.take_events().map(func(e: Dictionary) -> String: return e["type"])
 	assert_has(events, "burn_started")
@@ -147,8 +148,13 @@ func test_cancel_removes_a_planned_burn_and_stops_a_running_one() -> void:
 	sim.submit(_burn(sim.current_tick() + 1, 50_000_000))
 	sim.step(3)
 	var running: int = sim.view()["units"][ship]["burn"]["id"]
+	sim.take_events()
 	sim.submit({ "type": "cancel_burn", "unit": ship, "args": { "burn": running } })
 	sim.step(1)
+	var shorts := _events("burn_short")
+	assert_eq(shorts.size(), 1)
+	assert_eq(shorts[0]["data"]["reason"], "cancelled")
+	assert_gt(shorts[0]["data"]["dv_um_s"], 0)
 	assert_true(sim.view()["units"][ship]["burn"].is_empty())
 	assert_eq(sim.view()["units"][ship]["op"]["type"], "idle")
 
@@ -159,7 +165,7 @@ func test_predict_follows_the_orbit_and_the_drift() -> void:
 	assert_eq(path["place"], { "orbit_parent": sim.view()["units"][ship]["orbit"]["parent"] })
 	assert_eq(path["points"].size(), 61)
 	assert_eq(path["points"][0], sim.view()["units"][ship]["pos_mm"])
-	assert_eq(sim.predict(ship, 0, 1_000_000, 1)["points"].size(), StubSim.PREDICT_LIMIT)
+	assert_eq(sim.predict(ship, 0, 1_000_000, 1), {}, "too many points is refused, not capped")
 	_frame_sim()
 	path = sim.predict(ship, sim.current_tick(), 100, 50)
 	assert_eq(path["place"], { "frame": sim.view()["units"][ship]["frame"] })

@@ -324,6 +324,8 @@ func _current_path(view: Dictionary) -> Array[PackedFloat64Array]:
 	elif FlightLogic.speed_of(shown.get("vel_um_s", [0, 0, 0])) == 0:
 		return points
 	var path: Dictionary = bridge.sim.predict(unit_id(), view["tick"], ticks, maxi(1, ticks / PREDICT_POINTS))
+	if path.is_empty():
+		return points
 	var base := _place_world(view, path["place"])
 	for point: Array in path["points"]:
 		points.append(OrbitPath.shifted(point, base))
@@ -334,7 +336,7 @@ func _current_path(view: Dictionary) -> Array[PackedFloat64Array]:
 func _position_at(view: Dictionary, tick: int) -> PackedFloat64Array:
 	if bridge.sim.has_method("predict"):
 		var path: Dictionary = bridge.sim.predict(unit_id(), tick, 0, 1)
-		if not path["points"].is_empty():
+		if not path.get("points", []).is_empty():
 			return OrbitPath.shifted(path["points"][0], _place_world(view, path["place"]))
 	return OrbitPath.shifted(WorldPosition.of(unit()), [0, 0, 0])
 
