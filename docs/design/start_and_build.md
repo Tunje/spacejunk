@@ -254,9 +254,9 @@ Research (section 5) can be split off and done after the new start works. Withou
    - **The star (recommended, and A agrees):** a circular orbit at 1 AU, which is where today's star position already puts the cluster. A's integer trig keeps the frame's absolute position within about 150 m at that distance, with no drift, and nothing inside the frame sees even that. There's no planet shadow, so every power figure and lap stays as it is, in line with "leave the pacing figures as they are". The cost is that the first planet is an interplanetary trip, which needs spheres of influence (A12) and the planner (A13) first.
    - **A 600 km planet, at a 1000 km orbit:** the planet is the first place to explore, with trips of about 22 minutes, 364 m/s each way and a window every 79 minutes (A's section 5 table). But the cluster would spend about a fifth of each 56-minute orbit in the planet's shadow (A16), which changes every solar figure in the start and the drone's laps.
 
-## 9. Schema fields for orbits (for the Lead's single pass)
+## 9. Schema fields for orbits
 
-A needs these before A10 ([orbital_flight.md](orbital_flight.md) section 11.4). They are proposed here with values for the new start, and are not yet applied to [schemas.md](schemas.md).
+These are now in [schemas.md](schemas.md) sections 2, 5 and 14, in the shapes A10 reads (contract version 3). This section keeps the values for the new start.
 
 ### 9.1 Thrusters
 
@@ -273,16 +273,16 @@ A needs these before A10 ([orbital_flight.md](orbital_flight.md) section 11.4). 
 | Field | On | Star | Planet (600 km) | Rocks |
 | ----- | -- | ---- | --------------- | ----- |
 | `gm_km3_s2` | Star, planet | 132712440018 | 3531.6 | None: rocks have no gravity in the frame |
-| `soi_m` | Planet | None: the root body has no sphere of influence | About 1.5 × 10^11 if it orbits at 1 AU | None |
-| `orbit` | Planet, frame | None | Parent, plus elements in A's units, which A9 fixes | None: members of the frame |
-| `seed`, `kind` and settings | Planet | | As in [planets.md](planets.md) section 1 | |
+| `soi_m` | Planet | None: the root body has no sphere of influence | About 1.5 × 10^11 if it orbits at 1 AU. Not read until A12 | None |
+| `orbit` | Planet, frame | None | `parent` and `a_mm`, plus optional `e_ppm` and four angles in millidegrees, all whole numbers | None: members of the frame |
+| `seed`, `kind` and settings | Planet | | As in [planets.md](planets.md) section 1. Not read until A15 | |
 | `frame` with a local `pos_mm` | Rocks, starting units | | | The cluster frame |
 
-Scenarios gain a `frames` list: `key`, `orbit` and `radius_m`. Body kinds gain `planet`.
+Scenarios gain a `frames` list of `{ key, name, radius_mm, orbit }`. Frame IDs come after every body and its deposits, and before the units. Body kind `planet` arrives with A15. For the new start, the cluster frame's orbit is `{ "parent": "star", "a_mm": 149597870700000 }`, which is 1 AU and circular.
 
 **GM units, agreed with A.** The star's GM is 1.327 × 10^20 m³/s², which fits neither JSON's 2^53 nor a 64-bit integer. So:
 - **Data** states `gm_km3_s2` as a plain JSON number: the star is 132712440018, exact under 2^53, and the planet is 3531.6.
 - **The simulation unit** is 1000 m³/s². The loader multiplies by 10^6 under the usual exact-conversion rule, so the star becomes 1.327 × 10^17, the planet 3,531,600,000, and a moon of about 200 km roughly 65,000,000.
-- A is correcting the range row in orbital_flight.md section 11.4 with the Lead.
+- The loader converts whole numbers by integer multiplication, so the star's GM stays exact.
 
 The new start's propellant gets tighter under the rocket equation. A's figures put a round trip between orbits at 5 to 44% of a ship's mass, and landing at 54 to 58%. That adds weight to decision 1, option A: making propellant from ice.
