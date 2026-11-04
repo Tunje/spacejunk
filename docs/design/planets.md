@@ -10,8 +10,9 @@ Status: **proposal for the owner**, task design/planets. Nothing here is built, 
 - **A hex is a place, not a block of rock.** At 600 km radius a hex is about 7 km across, so it works as a claim: at most one landing or build site, and a chance of one hidden deposit. It is not dug out cell by cell.
 - **One choice for you: a fixed count or a fixed size.** Your figure gives every planet 100,002 hexes, so a small moon's hexes are 2.4 km and a large world's are 14.5 km. The alternative fixes every hex at about 7 km, so a 200 km moon has about 11,000 hexes and a 1,200 km world about 400,000. I lean towards fixed size, since a hex then means the same in play everywhere, but both are the same code (section 5).
 - **Recommended look: smooth terrain over hex data**, as KSP does it, with the hex grid shown only as an overlay in map and build modes. Hex columns are cheaper but look like a board game and show visible steps from orbit.
-- **The boundary:** whatever decides play (height, type, slope, deposits) is integer and deterministic, and Agent A proves it. Everything below hex size (bumps, rocks, colour blending, clouds, water) is client-only float detail and never reaches the simulation.
-- **Cost:** the client's planet renderer is the largest piece. Nothing here belongs in the slice. All of it can wait until after the M4 judgement, and only a paper proof and one throwaway picture make sense before it.
+- **It is already proven to work.** Agent A's test script builds the 100,002-cell grid with exactly 12 pentagons, gives every hex an integer height in about 20 µs on demand, and replays identically.
+- **The boundary, agreed with Agent A:** whatever decides play (height, type, slope, deposits) is integer and deterministic, and Agent A proves it. Everything below hex size (bumps, rocks, colour blending, clouds, water) is client-only float detail and never reaches the simulation.
+- **Cost:** the client's planet renderer is the largest piece. Nothing here belongs in the slice. All of it can wait until after the M4 judgement, and only one throwaway picture makes sense before it.
 
 ## 1. What a planet is
 
@@ -20,7 +21,7 @@ Status: **proposal for the owner**, task design/planets. Nothing here is built, 
 | `seed` | 48213 | Lays out every height, moisture and deposit roll |
 | `kind` | `temperate` | Picks the ranges below and the rule table |
 | `radius_km` | 600 | Datum sphere. Also sets hex size (section 5) |
-| `height_range_m` | 8000 | Highest peak and deepest basin, either side of the datum |
+| `height_range_m` | 8000 | Highest peak and deepest basin, either side of the datum. At most 8000, the range Agent A has proven |
 | `roughness` | 0 to 1000 | How rugged: more small-scale noise, more cliffs |
 | `sea_level_m` | -200, or none | Height below which hexes are sea. None means a dry world |
 | `temperature` | 0 to 1000 | Overall warmth. Later this can come from distance to the star |
@@ -29,7 +30,7 @@ Status: **proposal for the owner**, task design/planets. Nothing here is built, 
 
 All settings are integers. The seed picks values for each setting inside the kind's range, so a kind can describe thousands of planets and a scenario can still fix one exactly.
 
-**Why noise and not randomness.** Each hex's height is a sum of smooth noise at several scales: broad continents, mountain ranges (a ridged layer), and local roughness. Neighbouring hexes get similar values, so land forms coasts, ranges and basins. Pure random heights give static.
+**Why noise and not randomness.** Each hex's height is a sum of smooth noise at three scales, from broad continents down to local roughness. Neighbouring hexes get similar values, so land forms coasts, ranges and basins. Pure random heights give static. Agent A's test planet at the full ±8000 m ranged from -6963 to +6380 m, with the steepest step between neighbours 2342 m. A ridged layer, which gives sharper mountain chains, would be a later addition for A to prove.
 
 ## 2. Surface types
 
@@ -39,8 +40,8 @@ Every input is an integer the simulation can compute for one hex on demand.
 
 | Input | Source |
 | ----- | ------ |
-| Height | Agent A's noise for this seed and cell, scaled by `height_range_m` and `roughness` |
-| Latitude | From the cell's centre: the height of the centre above the equator as a fraction of the radius, in thousandths. No trigonometry needed |
+| Height | Agent A's noise for this seed and cell, a signed integer in metres, scaled down by `height_range_m` and `roughness` with integer multiply-divide |
+| Latitude | The north component of the cell's direction (Agent A's grid has +Z at the north pole), in thousandths. That is the sine of the latitude, so no trigonometry is needed |
 | Temperature | `temperature`, minus a share for latitude, minus a share for height, so poles and peaks are cold |
 | Moisture | A second noise field, 0 to 1000, plus `moisture_bias` |
 | Slope | The largest height difference to any of the cell's six (or five) neighbours |
@@ -94,7 +95,7 @@ Today a deposit is an entity on a body. A scenario lists bodies (`star` or `aste
 
 **Build sites.** One surface site per hex. A site needs a buildable type and a slope below the build limit. A surface base is the same as a station today: a unit made from parts with the same attachment rules, but with a landed state and a cell in place of a free position. Seven kilometres is far larger than any base, so the hex is a claim, not a footprint.
 
-**Landing.** A craft lands on a hex, not on a point. Landing is allowed on a landable type with slope below the craft's limit. The landed position is the cell's centre at its integer height. How a craft gets there is Agent A's flight question. This page only fixes where it may end up.
+**Landing.** A craft lands on a hex, not on a point. Landing is allowed on a landable type with slope below the craft's limit. The landed position is the cell's centre at its integer height. The planet does not rotate in this proposal, so a landed unit never moves. Landing and takeoff are autopilot operations with an integer delta-v cost, set out in [orbital_flight.md](orbital_flight.md). No descent is simulated. This page only fixes where a craft may end up.
 
 ### 3.3 What changes
 
@@ -111,7 +112,7 @@ Each of these is a contract change, so it goes through the Lead.
 
 ## 4. The boundary with the simulation
 
-Agreed with Agent A (pending their reply, see section 8).
+Agreed with Agent A. The figures behind it are in section 8.
 
 **The simulation reads, and Agent A proves:**
 - The cell grid: IDs, neighbours and integer cell centres.
@@ -125,7 +126,7 @@ Agreed with Agent A (pending their reply, see section 8).
 - Colours, colour blending between types, textures, normal maps.
 - Water surface, clouds, atmosphere glow, ice sheen.
 
-**One rule ties them together:** at the hex scale the client uses the simulation's own integer heights, not its own noise. The generator is plain `RefCounted` code with no state, so the client can call it directly. Godot's built-in float noise is fine for client-only detail but never for hex heights, because it is not guaranteed to match.
+**One rule ties them together:** the client takes each hex's centre height from the simulation's own integer function, never from its own noise. It can call the function directly, since the generator is plain `RefCounted` code with no state, or read the height from the view. The ground at a hex centre is then exactly what the simulation believes, and float detail lives only between centres. Godot's built-in float noise is fine for client-only detail but never for hex heights, because it is not guaranteed to match.
 
 As with ship models, nothing generated for display ever decides play.
 
@@ -137,7 +138,7 @@ As with ship models, nothing generated for display ever decides play.
 | 600 km | 100,002 | 7.2 km | 45 km² |
 | 1,200 km | 100,002 | 14.5 km | 181 km² |
 
-Exactly 12 of the hexes are pentagons, wherever the grid is laid. They are slightly smaller, and the rules treat them as cells with five neighbours.
+Exactly 12 of the hexes are pentagons, wherever the grid is laid. They are slightly smaller, and the rules treat them as cells with five neighbours. On Agent A's grid at 600 km, the distance between neighbouring centres runs from 5.4 to 7.9 km, so "7 km" is an average.
 
 **The owner's choice: a fixed count or a fixed size.**
 
@@ -160,7 +161,7 @@ The art style is KSP-like with original designs: no KSP planet names, textures o
 Each hex is a flat-topped prism at its height, coloured by type.
 
 - For: simple and cheap to build. Every hex reads clearly, which suits a strategy map.
-- Against: it is not the KSP look. With heights spread over thousands of metres, neighbouring columns differ by hundreds of metres, so the planet shows steps even from orbit. Close up, a craft lands on a 7 km flat table edged by cliffs.
+- Against: it is not the KSP look. Neighbouring columns often differ by hundreds of metres, and by up to 2.3 km on Agent A's test planet, so the planet shows steps even from orbit. Close up, a craft lands on a 7 km flat table edged by cliffs.
 
 ### Option B: smooth terrain over hex data (recommended)
 
@@ -179,15 +180,35 @@ The base mesh has a vertex every 7 km, which is flat cardboard from a lander's c
 2. **Float detail noise**, client only, added on top of the smooth surface: hills, rocks and small craters, scattered from the planet's visual seed. Boulders are drawn as instances.
 3. **Landing pads are flat.** Around a landed craft or a base, the detail fades out within a set radius, about 200 m, so the craft sits exactly at the simulation's height and never clips into a visual hill.
 4. **Precision.** Single-precision floats on a 600 km sphere are good to about 6 cm, and the client's floating origin already keeps the camera near zero. Chunks are built relative to their own origin.
-5. **Collision is not needed** for landing as a state. If Agent A's flight lets a craft descend under its own control, the ground height at a point should come from integer interpolation of the cell heights, defined on A's page, and never from the visual mesh.
+5. **No collision is needed.** Landing and takeoff are autopilot operations, not simulated descents, so the simulation never asks for the ground height between cell centres, and the visual mesh decides nothing.
 
-## 8. Open with Agent A
+## 8. Agreed with Agent A
 
-- Cell ID scheme, neighbours and integer cell centres.
-- The integer noise function, its range proof and its cost per cell in GDScript. A whole planet is 100,000 cells times several noise layers. The simulation only needs a few cells at a time, but the client needs every cell to draw the planet, so this cost decides whether drawing needs a cache or a background thread.
-- Whether the planet rotates, and the frame for landed units.
-- Height unit and range, and the datum radius.
-- Ground height between cell centres, if descent is flown rather than ordered.
+Agent A answered every open question and measured the grid in a throwaway script (Godot headless, GDScript, n = 100). [orbital_flight.md](orbital_flight.md) holds the proofs.
+
+| Question | Answer |
+| -------- | ------ |
+| Cell IDs | North pole 0, south pole 1, then the rest across 10 diamonds of n × n. Any point on a diamond edge maps to its single owning cell in one step |
+| Grid check | 100,002 cells: 12 pentagons and 99,990 hexagons, 300,000 edges, 200,000 triangles. Every neighbour link goes both ways |
+| Cell centres | An integer unit direction per cell in the planet's frame, +Z north. Centre = direction × (datum radius + height), in mm, with integer maths only |
+| Height | Signed whole metres, -8000 to +8000, about a 600 km datum |
+| Noise | Smooth integer value noise, three octaves. Each octave is a weighted mix, so it cannot leave its range, and no product passes 2^62, so nothing overflows. Moisture is the same noise with an offset seed |
+| Deposit and other rolls | A hash of the seed, cell ID and a salt for each roll |
+| Rotation | None. The planet's frame does not move, so a landed unit never moves and there are no launch windows from the ground. Rotation can come later as one angle derived from the tick |
+| Landing and takeoff | Autopilot operations with an integer delta-v cost, owned by A |
+| Replay | Identical heights. A save holds only the seed plus changes |
+
+**Cost of generation** at n = 100:
+
+| Work | Time | Memory |
+| ---- | ---- | ------ |
+| One cell's height and rolls, on demand | about 20 µs | none kept |
+| Whole planet: cell IDs | 0.15 s | |
+| Whole planet: neighbour table | 0.55 s | 2.4 MB |
+| Whole planet: directions | 1.7 s | 2.4 MB |
+| Whole planet: heights | 2.0 s | 0.4 MB |
+
+The simulation only ever needs a few cells at a time. The client needs the whole planet to draw it, which takes about 4.4 s in GDScript, so it should build each planet once in a background thread and cache it. That is about 5 MB per planet. Fixed-size hexes would make a 1,200 km world four times that.
 
 ## 9. Cost
 
@@ -196,13 +217,13 @@ None of this is in the slice. The slice has one asteroid field and no planets, a
 | Who | Work | Rough size |
 | --- | ---- | ---------- |
 | Lead | Contract changes: body kind `planet`, landed state, cell IDs, scan patch, cell query, new events and reason codes | One contract round |
-| A | Grid, integer noise, range and determinism proofs, frames, landing state, a perf test for whole-planet generation | 3 to 4 tasks, part of the flight work |
+| A | Turn the proven grid and noise into `sim/` code with tests, plus the landed state and a perf test for whole-planet generation. The proofs themselves are done | 2 to 3 tasks, part of the flight work |
 | B | Spec and schema updates; `data/` for planet kinds, rule tables, palettes and deposit chances; validator checks; balance figures for planet deposits | 2 to 3 tasks |
 | C | Patch scanning, deposits created when found, mining from a landed unit, surface build sites | 2 to 3 tasks |
 | D | Planet renderer with chunked detail, hex overlay, landing-site picker, system map planets | 4 to 6 tasks, the largest share |
 
 **Checks and figures.** New tests: a golden hash over every cell of one fixed planet, so any change to generation shows up; every rule table covers all inputs; deposit tables name real items; the matter ledger still holds when a deposit is created on discovery; a generation perf test; and client screenshots of one planet from orbit and from the ground. The reference scenario and balance report stay as they are, since they cover the slice. A planet scenario gets its own figures later.
 
-**Before M4, if the owner wants to see it early:** Agent A's paper proof, and one throwaway client picture of a seeded planet using option B, kept off `main`. Both are small and take nothing from M3, but D's time on M3 comes first.
+**Before M4, if the owner wants to see it early:** Agent A's proof is already done. What remains is one throwaway client picture of a seeded planet using option B, kept off `main`. It is small and takes nothing from M3, but D's time on M3 comes first.
 
 **After M4:** everything else, starting with the contract round, then A and B in parallel, then C and D.
