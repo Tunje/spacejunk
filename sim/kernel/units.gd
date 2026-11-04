@@ -28,7 +28,7 @@ static func create(ctx: SimContext, template_id: String, unit_name: String, pos_
 static func new_record(id: int, def: String, kind: String, unit_name: String, pos_mm: Array) -> Dictionary:
 	return {
 		"id": id, "def": def, "kind": kind, "name": unit_name, "pos_mm": pos_mm.duplicate(),
-		"at_target": 0, "root": 0, "core": 0, "task": 0, "cycle_task": 0, "last_cycle": [],
+		"frame": 0, "orbit": {}, "at_target": 0, "root": 0, "core": 0, "task": 0, "cycle_task": 0, "last_cycle": [],
 		"op": { "type": IDLE_OP, "target": 0, "part": 0, "start_tick": 0, "end_tick": 0 },
 		"route": {}, "dock": {}, "inventory": {}, "reserved": {},
 		"demand_w": 0, "heat_stored_j": 0, "heat_input_w": 0,

@@ -3,7 +3,7 @@ extends RefCounted
 ## The public simulation API (contracts section 3) and the tick loop (section 4).
 
 const TICKS_PER_SECOND := 10
-const CONTRACT_VERSION := 2
+const CONTRACT_VERSION := 3
 const SCENARIO_EMPTY := "empty"
 ## Undrained events past this are dropped, oldest first.
 const MAX_QUEUED_EVENTS := 65536
@@ -49,11 +49,15 @@ static func new_game(scenario_id: String, seed_value: int) -> Sim:
 
 static func from_save(save_text: String) -> Sim:
 	var state: Variant = Canon.decode(save_text)
-	if typeof(state) != TYPE_DICTIONARY or not _has_state_shape(state):
+	if typeof(state) != TYPE_DICTIONARY:
 		_last_error = ERROR_CORRUPT
 		return null
-	if state["contract_version"] != CONTRACT_VERSION or state["ticks_per_second"] != TICKS_PER_SECOND:
-		_last_error = ERROR_VERSION_MISMATCH
+	# Version first: an older save is a version mismatch, not corrupt, even though its shape differs.
+	if state.get("contract_version") != CONTRACT_VERSION or state.get("ticks_per_second") != TICKS_PER_SECOND:
+		_last_error = ERROR_VERSION_MISMATCH if state.has("contract_version") else ERROR_CORRUPT
+		return null
+	if not _has_state_shape(state):
+		_last_error = ERROR_CORRUPT
 		return null
 	var definitions := _load_defs(state["scenario"])
 	if definitions.is_empty() or state["data_hash"] != _data_hash(definitions):
@@ -99,7 +103,7 @@ func current_tick() -> int:
 func view() -> Dictionary:
 	var result := {
 		"tick": _state["tick"], "seed": _state["seed"],
-		"units": {}, "bodies": {}, "deposits": {}, "jobs": {}, "tasks": {},
+		"units": {}, "bodies": {}, "frames": {}, "deposits": {}, "jobs": {}, "tasks": {},
 	}
 	for system in _systems:
 		system.fill_view(_ctx, result)
@@ -167,6 +171,7 @@ static func _new_state(scenario_id: String, seed_value: int, defs_value: Diction
 		"units": {},
 		"parts": {},
 		"bodies": {},
+		"frames": {},
 		"deposits": {},
 		"jobs": {},
 		"tasks": {},
@@ -197,7 +202,7 @@ static func _data_hash(defs_value: Dictionary) -> String:
 ## The order is the phase-list order within each phase.
 static func _default_systems() -> Array[SimSystem]:
 	return [
-		UnitSystem.new(), FittingSystem.new(), FitCopySystem.new(), TaskSystem.new(), JobSystem.new(), CargoSystem.new(),
+		RailSystem.new(), UnitSystem.new(), FittingSystem.new(), FitCopySystem.new(), TaskSystem.new(), JobSystem.new(), CargoSystem.new(),
 		PowerSystem.new(), HeatSystem.new(), ConstructionSystem.new(),
 	]
 

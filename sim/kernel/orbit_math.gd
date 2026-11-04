@@ -240,13 +240,13 @@ static func make_orbit(gm: int, a_mm: int, e: int, p: Array, q: Array, m0: int, 
 	assert(a_mm > 0 and e >= 0 and e < ONE, "an elliptic orbit")
 	return {
 		"a_mm": a_mm,
-		"e": e,
+		"e_q30": e,
 		"b_mm": smul_div(a_mm, root(ONE * ONE - e * e), ONE),
-		"p": [p[0], p[1], p[2]],
-		"q": [q[0], q[1], q[2]],
-		"period_sub": period_sub(gm, a_mm),
-		"m0": m0 & ANGLE_MASK,
-		"epoch": epoch,
+		"p_q30": [p[0], p[1], p[2]],
+		"q_q30": [q[0], q[1], q[2]],
+		"period_subticks": period_sub(gm, a_mm),
+		"m0_angle": m0 & ANGLE_MASK,
+		"epoch_tick": epoch,
 	}
 
 
@@ -268,10 +268,10 @@ static func directions(inclination: int, node: int, periapsis: int) -> Array:
 
 
 static func mean_anomaly(orbit: Dictionary, tick: int) -> int:
-	var dt: int = tick - int(orbit["epoch"])
+	var dt: int = tick - int(orbit["epoch_tick"])
 	assert(absi(dt) < MAX_DT, "tick within range of the orbit's epoch")
-	var period: int = orbit["period_sub"]
-	return (int(orbit["m0"]) + fraction_of_turn(posmod(dt * SUB_TICKS, period), period)) & ANGLE_MASK
+	var period: int = orbit["period_subticks"]
+	return (int(orbit["m0_angle"]) + fraction_of_turn(posmod(dt * SUB_TICKS, period), period)) & ANGLE_MASK
 
 
 ## The eccentric anomaly for mean anomaly m, by Newton's method from Danby's start. It stops when
@@ -294,8 +294,8 @@ static func eccentric_anomaly(m: int, e: int) -> int:
 
 ## Position in mm relative to the parent at a tick.
 static func position_at(orbit: Dictionary, tick: int) -> Array[int]:
-	var sc := sin_cos(eccentric_anomaly(mean_anomaly(orbit, tick), orbit["e"]))
-	var x := smul_div(orbit["a_mm"], sc[1] - int(orbit["e"]), ONE)
+	var sc := sin_cos(eccentric_anomaly(mean_anomaly(orbit, tick), orbit["e_q30"]))
+	var x := smul_div(orbit["a_mm"], sc[1] - int(orbit["e_q30"]), ONE)
 	var y := smul_div(orbit["b_mm"], sc[0], ONE)
 	return _place(orbit, x, y)
 
@@ -303,7 +303,7 @@ static func position_at(orbit: Dictionary, tick: int) -> Array[int]:
 ## Position in mm and velocity in um/s relative to the parent at a tick, as { r, v }.
 static func state_at(orbit: Dictionary, gm: int, tick: int) -> Dictionary:
 	var a: int = orbit["a_mm"]
-	var e: int = orbit["e"]
+	var e: int = orbit["e_q30"]
 	var sc := sin_cos(eccentric_anomaly(mean_anomaly(orbit, tick), e))
 	var x := smul_div(a, sc[1] - e, ONE)
 	var y := smul_div(orbit["b_mm"], sc[0], ONE)
@@ -320,8 +320,8 @@ static func state_at(orbit: Dictionary, gm: int, tick: int) -> Dictionary:
 
 
 static func _place(orbit: Dictionary, x: int, y: int) -> Array[int]:
-	var p: Array = orbit["p"]
-	var q: Array = orbit["q"]
+	var p: Array = orbit["p_q30"]
+	var q: Array = orbit["q_q30"]
 	return [smul_div(x, p[0], ONE) + smul_div(y, q[0], ONE),
 		smul_div(x, p[1], ONE) + smul_div(y, q[1], ONE),
 		smul_div(x, p[2], ONE) + smul_div(y, q[2], ONE)]

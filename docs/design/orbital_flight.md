@@ -358,3 +358,38 @@ Sizes compare with earlier kernel tasks: **S** is about A7's size, **M** about A
 **Not done in A9:**
 - Hyperbolic orbits, in A12.
 - Positions at 1 AU better than about 300 m. That would need Q40 trigonometry and roughly twice the cost. It isn't needed while frames convert at their radius.
+
+### 11.9 A10 results: rails, frames and places in state
+
+- **State:**
+  - Bodies gain `frame`, `orbit` and `gm`.
+  - Units gain `frame` and `orbit`.
+  - A new `frames` table holds each frame's orbit, `radius_mm` and derived `pos_mm`.
+  - A docked unit's place is its host's, worked out by `RailSystem.unit_place` rather than stored, so a newly built unit needs no extra step.
+- **Frames are their own table, not bodies of a new kind.** They take IDs from the same counter, after the bodies and their deposits. Kept apart, a frame never appears where code or the client lists targetable bodies.
+- **`RailSystem` is registered first.** In phase 2 it sets `pos_mm` on every orbiting body and frame from the tick. Those positions are saved, which contracts.md section 8 now allows as the one exception to the no-derived-caches rule, because they are a pure function of the stored orbit and the tick.
+- **Travel inside a frame is unchanged,** and the reference scenario has no frames, so all its figures hold. A `move_to` to a target on an orbit or in another frame is refused with `unsupported_orbit` until A13.
+- **The view** gains `frames`, plus `frame`, `orbit` and `world_mm` per body and unit, and `gm` per body.
+- **Scenario data**, in sim units after loading:
+  - Bodies may have `gm_km3_s2`, `orbit` and `frame`.
+  - Frames are `{ key, name, radius_mm, orbit }`.
+  - Units may have `frame`.
+  - An orbit is `{ parent, a_mm, e_ppm, inclination_mdeg, node_mdeg, periapsis_mdeg, mean_anomaly_mdeg }`, all whole numbers, so no float is involved. Only `parent` and `a_mm` are required.
+  - A body on an orbit needs no `pos_mm`.
+- **The loader:**
+  - `gm_km3_s2` becomes `gm` in 1000 m³/s².
+  - `thrust_kn` becomes `thrust_n`.
+  - Whole numbers now convert by integer multiplication, so the star's GM stays exact beyond 2^53.
+- **The contract is version 3.** An older save is refused with `version_mismatch`, because the version is now checked before the shape. contracts.md also lists what A11 to A15 will add, so C and D can work against it.
+- **Tests:** tests/sim/kernel/test_rails.gd, 13 tests. They cover:
+  - positions on rails;
+  - world positions through the chain;
+  - a docked unit's frame;
+  - a trip inside a frame identical to the reference figures;
+  - refusal of trips across places;
+  - a byte-exact save and load midway through a trip, running on identically;
+  - strict ranges;
+  - the view;
+  - bad scenarios;
+  - old saves;
+  - the loader's exact GM.

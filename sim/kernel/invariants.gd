@@ -12,6 +12,12 @@ const MAX_STORE_J := 1_000_000_000_000_000
 const MAX_VOLUME_L := 1_000_000_000_000
 const MAX_TICK := 1_000_000_000_000_000
 const MAX_POSITION_MM := 4_000_000_000_000_000_000
+## Orbit fields (orbital_flight.md section 11.4): Q30 ratios and directions, binary angles, periods
+## in sub-ticks, and GM in units of 1000 m^3/s^2.
+const MAX_Q30 := 2 << 30
+const MAX_SUBTICKS := 1 << 55
+const MAX_GM := 9_000_000_000_000_000_000
+const GM_KEY := "gm"
 const INVENTORY_KEY := "inventory"
 
 
@@ -106,6 +112,16 @@ static func _limits(key: String) -> Array:
 		high = MAX_POSITION_MM
 	elif key == "tick" or key.ends_with("_tick"):
 		high = MAX_TICK
+	elif key.ends_with("_q30"):
+		low = -MAX_Q30
+		high = MAX_Q30
+	elif key.ends_with("_angle"):
+		high = OrbitMath.ANGLE_MASK
+	elif key.ends_with("_subticks"):
+		low = 1
+		high = MAX_SUBTICKS
+	elif key == GM_KEY:
+		high = MAX_GM
 	else:
 		return []
 	return [low, high]

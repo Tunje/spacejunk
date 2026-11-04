@@ -7,6 +7,8 @@ const STANDOFF_MM := 150000
 const CAPABILITY := "thruster"
 const PROPELLANT := "propellant"
 const SINK := "propellant_exhaust"
+## A move_to target outside the unit's frame, or on an orbit, needs the transfer planner of A13.
+const REASON_OTHER_PLACE := "unsupported_orbit"
 
 
 ## The fastest healthy thruster, lowest part ID on a tie, as { part, thruster } or { reason }.
@@ -26,6 +28,9 @@ static func thruster(ctx: SimContext, unit_id: int) -> Dictionary:
 
 ## Where a trip would end, what it takes and what it costs, or { reason }.
 static func quote(ctx: SimContext, unit_id: int, target: int) -> Dictionary:
+	var place := RailSystem.unit_place(ctx.state, unit_id)
+	if place == RailSystem.ON_ORBIT or place != RailSystem.target_place(ctx.state, target):
+		return { "reason": REASON_OTHER_PLACE }
 	var found := thruster(ctx, unit_id)
 	if found.has("reason"):
 		return found
