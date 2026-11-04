@@ -547,3 +547,22 @@ perf_budget.md section 5a has the figures.
   - Trips two levels apart, such as a moon of another planet.
   - Inclined targets.
   - Lambert transfers.
+
+### 11.17 A19 results: hand-flown landing
+
+- **Low flight** (sim/networks/low_flight.gd) is a fifth place, near a planet's surface.
+  - Orbit records can't hold the near-vertical paths a landing uses, so below 20 km above the datum a unit flies as a position and velocity relative to the body. Gravity, GM / r², is applied each tick in integers, with the frame's tenth-of-a-micrometre carry.
+  - Above 30 km it converts back to an orbit, with the gap to stop flapping.
+  - A unit on an orbit that dips below 20 km switches in automatically.
+- **Ground and touchdown:**
+  - The ground is the cell below at its real height, from the planet's settings through PlanetGrid.
+  - Touching it at or under the unit's touchdown limit lands. Over it crashes. Both leave the unit landed on the cell, with `speed_um_s` in the event.
+  - The limit comes from B15's `landing_gear.max_touchdown_m_s` capability: the best healthy part's, and 0 without gear.
+  - The autopilot's atomic `land` now needs gear too (`no_landing_gear`), per the Lead.
+- **Burns:**
+  - They work landed, which is a lift-off into low flight, and in low flight.
+  - The basis there is level prograde, normal, and radial straight up, so the axes stay steady on a vertical descent.
+  - A lift-off whose thrust is under the ship's weight settles back and lands again at near-zero speed.
+- **`predict` in low flight** runs the same integration and reports where and how fast the path meets the ground. The test checks that the predicted contact tick, cell and speed equal what the flight then does.
+- **Tests:** in test_landing.gd: gentle and hard touchdowns, contact at the real height, prediction against the flight, entering and leaving low flight from a dipping orbit, lift-off with and without enough thrust, gear for the autopilot, and a byte-exact save in low flight. They give the starter hull landing gear in the cached data until B15's legs are on main.
+- **Not done:** crash damage, slope limits (B reserved `max_slope_mdeg` for later), and planet rotation.

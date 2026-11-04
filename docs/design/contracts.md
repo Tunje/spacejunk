@@ -31,6 +31,7 @@ Valid ranges are asserted at commit in test runs.
 - **In a frame:** `frame` is a frame's ID, and `pos_mm` is local to it. A frame is a co-moving region, such as the rock cluster, with an orbit and a `radius_mm`, and no gravity inside it. Travel inside one frame works exactly as networks.md section 6 says.
 - **Neither:** `frame` is 0 and `orbit` is `{}`. This is the old world, in which nothing moves on its own. A scenario without frames is entirely here, and behaves as in contract version 2.
 - **Landed** (from A15): `landed` is `{ body, cell }`, and `pos_mm` is the cell's centre relative to the body, at its integer height. A landed unit never moves, because planets don't rotate. A body's terrain comes from its `planet` settings, `{ seed, height_range_m, sea_level_m, weights }`, agreed with B, through `PlanetGrid`. `sea_level_m` is optional, and its absence means a dry world. `weights` defaults to [4, 2, 1]. A body without them is a smooth sphere.
+- **Low flight** (from A19): `low_flight` is a body's ID, `pos_mm` is relative to its centre in its fixed frame, and `vel_um_s` is the only velocity. Gravity is applied every tick in integers. A unit on an orbit enters low flight below 20 km above the body's datum, which orbit records can't hold for near-vertical paths, and goes back to an orbit above 30 km. It meets the ground at the cell below's real height. At or under its touchdown limit it lands, and over it it crashes; either way it ends landed on that cell. The limit is the highest `landing_gear.max_touchdown_mm_s` of its healthy parts, and 0 with none.
 - A docked unit is wherever its host is, and its own `frame` and `orbit` are not read.
 
 An orbit record holds `parent`, `a_mm`, `b_mm`, `e_q30`, `p_q30` and `q_q30` (the directions towards periapsis and 90 degrees ahead), `period_subticks`, `m0_angle` and `epoch_tick`. A hyperbolic record (from A12) has `hyperbolic = true`, with `a_mm` as its positive semi-axis, `m0_rad` (mean anomaly in Q30 radians, which does not wrap) and `motion_q60` (mean motion in radians per tick, Q60) in place of `period_subticks` and `m0_angle`.
@@ -102,6 +103,7 @@ Rules:
   - `place` is `{ orbit_parent }` or `{ frame }`.
   - `points` are in that place's coordinates, from `from_tick` every `step` ticks up to `from_tick + ticks`.
   - It returns `{}` for an unknown unit, or for 10,000 points or more.
+  - In low flight it integrates gravity exactly as the simulation does. `place` is `{ low_flight }`, and it adds `contact`, `{ tick, cell, speed_um_s }` where the path meets the ground, or `{}`. It costs one integration step per tick asked for.
   - A docked unit predicts as its host.
 - `quote(unit, target, from_tick) -> Dictionary` gives the trip a `move_to` would take, leaving at the first chance at or after `from_tick`. It is read-only, like `view()`. The result is `{ kind, target, depart_tick, arrive_tick, ticks, cost_g }`, or `{ reason }`:
   - `kind` is `"route"` for today's straight-line trip inside one frame or the old world. It leaves at `from_tick` and also carries the route's `from_mm`, `to_mm`, `length_mm` and `speed_mm_s`.
@@ -211,14 +213,14 @@ Running shortfalls are still handled by shedding and faults.
 - Core assignment, priorities, cycles, cargo and dock state are not copied.
 - `check` dry-runs the copy and returns `detail` as `{ attach, missing, refused }` counts.
 
-| `plan_burn` | `tick`, `prograde_um_s`, `normal_um_s`, `radial_um_s` | Places a burn. `tick` must be after the current tick, so "burn now" is `current_tick() + 1`. At its tick (phase 2) the burn fixes its direction from the unit's orbit, or from its frame's orbit, or from fixed axes (+X, +Y, +Z) in the old world. It then delivers thrust / mass each tick from phase 5 until done. The burn's ID comes from the entity counter. Refused with `not_flying` when docked, `burn_in_past`, `module_missing` with no thruster that has `thrust_n` and `exhaust_mm_s`, or `malformed_command`. |
+| `plan_burn` | `tick`, `prograde_um_s`, `normal_um_s`, `radial_um_s` | Places a burn. It also works landed, where it is a lift-off into low flight, and in low flight. There prograde is the level part of the velocity, or east around +Y when still, and radial is straight up. `tick` must be after the current tick, so "burn now" is `current_tick() + 1`. At its tick (phase 2) the burn fixes its direction from the unit's orbit, or from its frame's orbit, or from fixed axes (+X, +Y, +Z) in the old world. It then delivers thrust / mass each tick from phase 5 until done. The burn's ID comes from the entity counter. Refused with `not_flying` when docked, `burn_in_past`, `module_missing` with no thruster that has `thrust_n` and `exhaust_mm_s`, or `malformed_command`. |
 | `cancel_burn` | `burn` | Removes a planned burn, or ends a running one with `burn_short` reason `cancelled`. `invalid_target` if the unit has no such burn. |
 
 A burn whose tick comes while the unit has another operation, a route or a task is dropped with `burn_short` reason `part_busy`. A burn crossing the narrow band of orbits just below escape speed, which an orbit record cannot hold, carries each tick's change forward until the sum is past it, so a finite burn flies through escape without stopping. An order that replaces `burning` ends the burn the same way. 
 
 | Command | Arguments | Effect |
 | ------- | --------- | ------ |
-| `land` | `body`, `cell` | From an orbit around `body`, an atomic autopilot descent to the cell. Its cost is the burn down half an ellipse to the surface, plus killing the remaining speed with a 3% gravity loss, by the rocket equation. It is paid at the start, and the op `landing` lasts the half ellipse. Refused with `not_flying` when not on an orbit around that body, `invalid_target` for a cell outside the grid, `no_propellant`, `module_missing` or `part_busy`. |
+| `land` | `body`, `cell` | From an orbit around `body`, an atomic autopilot descent to the cell. It needs landing gear, as a hand-flown landing does, and is refused with `no_landing_gear` without it. Its cost is the burn down half an ellipse to the surface, plus killing the remaining speed with a 3% gravity loss, by the rocket equation. It is paid at the start, and the op `landing` lasts the half ellipse. Refused with `not_flying` when not on an orbit around that body, `invalid_target` for a cell outside the grid, `no_propellant`, `module_missing` or `part_busy`. |
 | `take_off` | `altitude_mm` | From a landed place, the same in reverse (op `taking_off`), onto a circular orbit at that altitude through the cell's direction, moving east around +Y. Refused with `not_landed`, `malformed_command`, or `invalid_target` at or past the body's sphere of influence. |
 
 A unit on an orbit whose position falls below its parent body's radius crashes. It comes down landed on the cell below, a running burn ends with `burn_short` reason `crashed`, a transfer ends, and `crashed` fires. Damage is not modelled yet. Landing doesn't yet check a cell's surface type or slope, which waits for planets.md's rule tables in `data/`.
@@ -271,6 +273,7 @@ Orbit reason codes:
 - `burn_in_past`, `not_flying`, and `cancelled` (a burn's end only).
 - `no_window`: from `next_window`, when the trip costs more than the cap.
 - `not_landed`: a `take_off` from anywhere but the ground.
+- `no_landing_gear`: an autopilot `land` by a unit with no healthy landing gear.
 - Dropped: `too_fast_to_join`, because a unit arriving too fast simply doesn't join, and the view shows it. `not_over_cell` is also dropped, because landing costs don't depend on where the orbit passes.
 
 Orbit events:
@@ -279,7 +282,8 @@ Orbit events:
 - `burn_short { burn, reason, dv_um_s, propellant_g }`, with reason `no_propellant`, `part_busy`, `module_missing`, `unsupported_orbit` or `cancelled`.
 - `frame_left { frame }` and `frame_joined { frame }`.
 - `soi_changed { from, to }`, with the old and new parent bodies.
-- `landed { body, cell }`, `took_off { body }`, and `crashed { body, cell }`.
+- `landed { body, cell }` and `crashed { body, cell }`. After a touchdown from low flight both also carry `speed_um_s`. `took_off { body }` is the autopilot's.
+- `low_flight_entered { body }` and `low_flight_left { body }`. A burn running at touchdown ends with `burn_short` reason `landed` or `crashed`.
 
 ## 7. State view
 
@@ -294,6 +298,7 @@ This shape is frozen. Fields may be added, but changes or removals go through th
     def = "...", kind = "ship", name = "...", pos_mm = [0, 0, 0], at_target = 3,   # 0 means at nothing
     frame = 6, orbit = {}, world_mm = [0, 0, 0],   # a docked unit shows its host's frame
     landed = {},                                   # { body, cell } on the ground
+    low_flight = 0, touchdown_mm_s = 0,            # body ID near its surface; landing-gear limit
     core = 21, core_tier = 1, task = 4,   # core 0 and tier 0 mean no core
     op = { type = "mining", target = 12, part = 9, start_tick = 100, end_tick = 0 },
     route = { target = 3, from_mm = [], to_mm = [], eta_tick = 180 },  # {} when not moving
