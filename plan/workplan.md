@@ -312,8 +312,8 @@ D can start as soon as L7 is done, using a stub simulation, so M2 does not block
 | D2 | D | 3D local view: floating origin, orbit camera, raycast selection, issuing orders | D1 |
 | D8 | D | Space scene: procedural asteroid field, star, lighting, backdrop | D2 |
 | D9 | D | 3D system map | D2 |
-| B9 | B | Style brief and style test: 2 models at a game-weight target (hull and one module) to prove the KSP-style look, off-white parts against the white picture background, and triangle budgets. No batch until this passes. | B5, D2, GPU slot |
-| B10 | B | Write all model briefs and request the full batch | B9, GPU slots |
+| B9 | B | Style brief and style test: 2 models at a game-weight target (hull and one module) to prove the KSP-style look, off-white parts against the white picture background, and triangle budgets. No batch until this passes. | B5, D2 |
+| B12 | B | Write all model briefs and request the full batch (renumbered from B10, which became the start redesign) | B9 |
 | B11 | B | Import step: scale check, origins, materials, alignment to the connectors in `data/`; replace placeholders | B10 |
 | D3 | D | Inspection panels: cargo, power, heat, status | D1, A6 |
 | D4 | D | Ship fitting screen on the 3D hull, showing mass, power and heat limits | D3, A5 |
