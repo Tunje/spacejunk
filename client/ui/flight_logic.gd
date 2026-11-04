@@ -88,6 +88,8 @@ static func preview_lines(detail: Dictionary, view: Dictionary, unit_id: int, ti
 		FlightLogic.speed(detail["dv_um_s"]), OrderText.tonnes(detail["propellant_g"]),
 		OrderText.duration(float(detail["burn_ticks"]) / ticks_per_second),
 	]
+	if detail.get("approximate", false):
+		cost += " (estimated: too long to fly through ahead)"
 	var aboard: int = unit["inventory"].get("propellant", 0)
 	if detail["propellant_g"] > aboard:
 		cost += ". Only %s aboard, so it will stop short" % OrderText.tonnes(aboard)
