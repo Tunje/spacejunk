@@ -14,6 +14,8 @@ class_name ScreenshotDriver extends Node
 ##   --fly-at=peri|apo|<seconds>     places it at an apsis or so many seconds ahead
 ##   --fly-delay=<frames>            waits first, such as for an undock to finish
 ##   --fly-plan=<frames>             plans the burn, then runs that many frames
+##   --outlines=1                    shows the hex outlines on planets
+##   --planet-wait=1                 waits for every planet's terrain before the rest
 ##   --copy=1                        (stub_load) strips two parts off the first ship and
 ##                                   opens fitting there, to show "Fit like this one"
 ##   --fit=<item>  --fit-slot=<connector>  opens fitting after the orders and picks both
@@ -55,6 +57,11 @@ func _ready() -> void:
 
 func _run() -> void:
 	var view: LocalView = main.local_view
+	if parsed.has("planet-wait"):
+		while PlanetMesh.busy():
+			await get_tree().process_frame
+	if parsed.has("outlines"):
+		view.set_planet_outlines(true)
 	var camera: OrbitCamera = view.camera
 	if parsed.has("speed"):
 		main.bridge.set_speed(int(parsed["speed"]))
