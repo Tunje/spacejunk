@@ -229,8 +229,10 @@ This section is for the Lead and the other agents. It turns option 3 into ordere
 - **A frame is a body.** It has an ID from the entity counter, an orbit on rails like any body, and no mass. Its members are the rocks and the units inside it.
 - **Inside the frame, nothing changes.** Members store a local `pos_mm` relative to the frame's origin. `move_to`, stand-off, `at_target`, routes, prices and halts work exactly as [networks.md](networks.md) section 6 says today. Every figure in [reference_scenario.md](reference_scenario.md) section 2 holds, because those figures are already local.
 - **The world position** of a member is the frame's rails position plus its local `pos_mm`. Only the view and frame changes need it.
-- **Leaving the frame.** A burn placed on a unit in a frame takes it out. The unit's new orbit is worked out from the frame's position and velocity at that tick, plus its local offset and the burn. Leaving needs no special command.
-- **Joining the frame.** A unit on an orbit joins when it is within the frame's radius and its speed relative to the frame is under a small threshold, checked in phase 5. Its local `pos_mm` is then fixed from its world position, and its orbit is cleared. The autopilot's arrival burn at a frame target is planned to meet both conditions.
+- **Burns inside the frame (changed by A9).** A burn on a unit in the frame gives it a local velocity in mm/s, and it drifts in a straight line in the frame's coordinates, since the frame has no gravity inside it. This is how the player flies their ship by hand among the rocks. Stopping takes an opposite burn. `move_to` routes inside the frame are unchanged.
+- **Leaving the frame.** A drifting unit leaves when it passes the frame's radius. Its orbit is then worked out from the frame's position and velocity at that tick, plus its local offset and velocity, and its local position is cleared. Leaving needs no special command.
+  - A9 found why the conversion has to wait for the radius. The cluster orbits the star at 1 AU, where integer positions are good to about 300 m (11.7). Converting at the first burn would make a ship jump by up to that much in front of rocks 150 m away. At the radius, the same error is invisible.
+- **Joining the frame.** A unit on an orbit joins when it is within the frame's radius and its speed relative to the frame is under a small threshold, checked in phase 5. Its local `pos_mm` and local velocity are then fixed from its world position and velocity, and its orbit is cleared. The autopilot's arrival burn at a frame target is planned to meet both conditions.
   - The radius and threshold are kernel constants for the Lead to approve. I propose the cluster's own radius plus 1000 km, and 1 m/s.
   - A player who arrives too fast drifts past. That is a real piloting mistake, and the view shows it.
 - **Where the frame orbits,** the star or a planet, is scenario data, and B10 decides it. The frame needs nothing extra either way.
@@ -241,7 +243,7 @@ Sizes compare with earlier kernel tasks: **S** is about A7's size, **M** about A
 
 | # | Task | What it delivers | Depends on | Size |
 | - | ---- | ---------------- | ---------- | ---- |
-| A9 | **Orbit maths library** | `OrbitMath`, pure static functions with no state:<br>- sine table from integer CORDIC, plus integer `atan2`, `acos` and `isqrt` helpers<br>- elliptic Kepler solve<br>- elements to position and velocity, and back again (the burn-to-new-orbit function)<br>- integer rocket equation<br>- signed `mul_div`<br>Golden test vectors from a float reference, round trips of elements to position and velocity and back with stated error bounds, and range tests at the limits of section 3. | Contracts for units (11.4) | M |
+| A9 | **Orbit maths library** | `OrbitMath`, pure static functions with no state:<br>- sine table from integer CORDIC, plus an integer `atan2` (`angle_of`) and rounded square roots<br>- elliptic Kepler solve<br>- elements to position and velocity, and back again (the burn-to-new-orbit function)<br>- integer rocket equation<br>- signed `mul_div`, rounded to nearest<br>A float reference for the client, round trips of elements to position and velocity and back with stated error bounds, and range tests at the limits of section 3. **Done on kernel/A9; results in 11.8.** | Contracts for units (11.4) | M |
 | A10 | **Rails, frames and landing places in state** | Bodies, frames and units carry `orbit`, `frame` or `cell`, and `pos_mm` is derived for orbits and cells. The scenario loader, `to_save`/`from_save`, strict-check range rules, and `view()` with orbit elements per object. Today's in-frame travel is moved under the frame unchanged. | A9 and the save contract | L |
 | A11 | **Burns, for the player's ship first** | Burns on a ship, run in phase 5, delivering a set delta-v in a direction fixed at the start, as one impulse per tick until done or out of propellant. Per tick: propellant to `propellant_exhaust` by the rocket equation, a new orbit by A9, and the thruster as a power and heat load while burning. Leaving a frame and joining one (11.2). `check` returns the predicted orbit after a planned burn, so the client can draw it before the player commits. | A10 | L |
 | A12 | **Spheres of influence** | Hyperbolic orbits, with an integer `sinh`/`cosh` built from the A9 rocket-equation exponential. Exact detection of the tick an orbit leaves or enters a sphere of influence, by bounded integer bisection on the rails function, so the result never depends on step size. Re-parenting on that tick. Needed for any trip between the cluster's parent and a planet. | A11 | L |
@@ -269,7 +271,7 @@ Sizes compare with earlier kernel tasks: **S** is about A7's size, **M** about A
 
 | Section | Change |
 | ------- | ------ |
-| 1, Units and ranges | New rows:<br>- Angle in binary angle units, 2^32 per turn, stored masked to 0..2^32-1<br>- Ratio in Q30, where 2^30 is 1.0, for eccentricity and direction vectors<br>- Speed and delta-v in mm/s, within ±10^9<br>- Gravitational parameter in m³/s², 0 to 10^21<br>Position keeps its range. |
+| 1, Units and ranges | New rows, as changed by A9:<br>- Angle in binary angle units, **2^48** per turn, stored masked to 0..2^48-1. At 2^32 one unit is 220 km at 1 AU.<br>- Ratio in Q30, where 2^30 is 1.0, for eccentricity and direction vectors<br>- Speed and delta-v in **µm/s** inside orbits, within ±10^12, so repeated conversions don't add up rounding. Commands and the view may still use mm/s.<br>- Gravitational parameter in **1000 m³/s²**, 0 to 9 x 10^18. The star's 1.327e20 m³/s² doesn't fit in m³/s². Data gives `gm_km3_s2`.<br>- An orbit's period in 1/65536 ticks.<br>Position keeps its range. |
 | 1, Coordinates | Orbits use the simulation axes, so a planet's north pole and the reference plane's normal are **+Y**, not +Z as I told B. B's page needs that one-word fix. A local `pos_mm` is relative to its frame. |
 | 3, Public API | `check` of a burn returns the orbit after it. `predict(unit, from_tick, ticks, step)` returns derived positions for drawing a path, read-only, like `view()`. `quote` gains `depart_tick`. `next_window` is new. |
 | 4, Tick order | Phase 5 runs burns, then frame and sphere-of-influence changes, in ascending unit ID. Phase 3 applies planet shadow to solar supply. |
@@ -282,7 +284,7 @@ Sizes compare with earlier kernel tasks: **S** is about A7's size, **M** about A
 **Other pages:**
 - **networks.md section 6** is rewritten by me in A10 to A13. Inside a frame it stays word for word. Outside a frame it gains burns, transfers, frames and landing.
 - **schemas.md:**
-  - The thruster capability gains `exhaust_m_s` and `thrust_kn`, and `speed_m_s` goes. A burn's per-tick delta-v is thrust over mass, so it needs thrust.
+  - The thruster capability gains `exhaust_m_s` and `thrust_kn`. A burn's per-tick delta-v is thrust over mass, so it needs thrust. `speed_m_s`, `propellant_kg_per_s` and `rated_mass_kg` stay, because in-frame `move_to` trips still read them (corrected after B asked).
   - Bodies gain `gm_m3_s2`, `soi_m` and an orbit, and planets also gain a seed.
   - Scenarios gain frames.
   - All of these are B's data. I need them before A10's loader and A11's burns.
@@ -322,6 +324,37 @@ Sizes compare with earlier kernel tasks: **S** is about A7's size, **M** about A
 
 ### 11.7 Risks
 
-- **Elements to position and velocity and back** is the one piece of maths the proof didn't run. Near-circular and near-equatorial orbits make some angles undefined, so A9 has to handle those cases explicitly, by measuring angles from the reference axis when they degenerate. If its round-trip error can't be bounded to metres, finite burns fall back to one impulse at the burn's midpoint.
-- **A burn runs one conversion per tick,** about 50 µs by estimate. That is cheap for a few ships, but A17 must check many cores burning at once.
+- **Elements to position and velocity and back** is bounded (11.8). The periapsis is measured in the orbit's own plane from the current position, so circular and equatorial orbits need no special case. Per-tick finite burns stay, and the fallback isn't needed.
+- **A burn runs one conversion per tick,** 65 µs measured. That is cheap for a few ships, but A17 must check many cores burning at once.
+- **Positions at 1 AU are good to about 300 m,** from the Q30 sines. This is why 11.2 converts at the frame's radius, not at the first burn. Planet-scale orbits are good to millimetres.
 - **Time warp.** The player flying a 20 to 40 minute transfer by hand will want more than 8x. The slice's real size should allow far more than the 11x limit at 20 times the slice, but that's unmeasured until A17.
+
+### 11.8 A9 results: the orbit maths library
+
+`sim/kernel/orbit_math.gd` and `tests/sim/kernel/test_orbit_math.gd`. Measured in Godot 4.7.2, headless.
+
+| Measure | Result |
+| ------- | ------ |
+| Sine and cosine | Within 2.2 units of 2^-30, from a 4096-entry table built by integer CORDIC plus the angle-addition rule |
+| `angle_of` (integer atan2) | Within 6.5 units of 2^-48 of a turn, for inputs from 1 to 2^61 |
+| Positions against the float reference | Within 9 parts per billion of the orbit's size, from a 250 km moon orbit to 1 AU. That is 3 mm at 700 km and about 400 m at 1 AU. |
+| **Round trip, position and velocity to an orbit and back**, worst gap over the next whole period | 0.2 m for a low moon orbit, 0.2 m at 700 km, 7 m at 40,000 km (e up to 0.3). At e = 0.9 it reaches 630 m at 40,000 km. At 1 AU it is 38 km over a year. |
+| 600 conversions in a row (a one-minute burn with no thrust) | 22 m over the next period at 700 km |
+| Prograde burn from 700 km | Apoapsis at 760 km within 1 m of the Hohmann formula |
+| No drift | An orbit is exactly where it started after a whole number of periods, and an orbit record saves byte-exact through `Canon` |
+| Rocket equation | Within 0.9 parts per million |
+| Cost | Position 14 µs, position and velocity 26 µs, position and velocity to an orbit 65 µs |
+
+**The error bound,** asserted per case: 2 m plus 3e-7 of the orbit's size, times ((1 + e) / (1 - e))^1.5. It comes from Q30 sines and ratios. Vis-viva magnifies a speed error in an orbit's size, more so at high eccentricity, and a size error becomes a gap along the path a period later.
+
+**Choices A9 made that change 11.4,** already edited above:
+- Angles use 2^48 to a turn, not 2^32.
+- Speeds inside orbits are in µm/s.
+- GM is in 1000 m³/s².
+- Everything rounds to nearest. Rounding down biased every converted orbit slightly small.
+
+**For D, the float reference** is `position_float` in the test file: Kepler's equation in floats, from the stored orbit record. A client drawing an orbit this way matches the simulation within 9 parts per billion, well inside 1 m at planet scale. Use 64-bit floats, not Godot's Vector3, which is 32-bit and only good to about 1 part in 10^7.
+
+**Not done in A9:**
+- Hyperbolic orbits, in A12.
+- Positions at 1 AU better than about 300 m. That would need Q40 trigonometry and roughly twice the cost. It isn't needed while frames convert at their radius.
