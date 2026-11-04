@@ -12,6 +12,28 @@ The slice is one star system, one asteroid field, one starter ship and one small
 
 Nothing beyond the slice is scheduled in detail. Section 9 is direction only, and milestone M4 decides whether it happens.
 
+### Owner rulings, 2026-11-04 (these override anything below that disagrees)
+
+The core idea of the game is as follows:
+
+- **You start with only your ship.** There is no station, no other ship and nothing built on a planet. Space holds rocks and planets, and nothing else.
+- From there you mine, explore and create new technology. You then build ships and stations to refine, to test new technology and to gather more resources.
+- You plan routes for your automated ships, which run on cycles until the resource runs out.
+
+**Everything is buildable.** That covers every hull of every size, every station hub and station module, and every part. A ship or station exists only because the player built it. The starter station in sections 1 and 7 is withdrawn.
+
+**Flight is mixed.** The player flies their own ship. Automated flight belongs to the AI cores, and is what a core does for a ship it controls. The autopilot is not how all flight works. Every run mixes player-flown and core-flown ships.
+
+**Orbits:** option 3 of [orbital_flight.md](../docs/design/orbital_flight.md) is approved. It covers integer orbits on rails, an autopilot for core-flown ships, and manual burns. Because the player flies their own ship, manual burns are not to be pushed to the end.
+
+**Planets:** hexes are a fixed size of about 7 km ([planets.md](../docs/design/planets.md)).
+
+**Pacing:** leave the figures as they are for now ([balance.md](../docs/design/balance.md)).
+
+**Approved:** a job queue for the refinery and fabricator, and a "fit like this one" action that copies one craft's fit onto another.
+
+**Research:** "create new tech" and "run tests for new tech" are part of the core loop. Item 3 of section 4 deferred research; that deferral is now under review.
+
 ## 2. Assumed decisions
 
 All are confirmed by the owner. Flight in the slice is order-based, not hands-on. "Newman Probe" and "spacejunk" are both placeholder names.
