@@ -364,7 +364,9 @@ A unit has `key`, `template`, `name`, `pos_mm`, `inventory` and `dock`, and an o
 
 **Entity IDs.** The counter starts at 1 and issues IDs in file order: each body, then that body's deposits, then each frame, then each unit, then that unit's parts in template order. This makes IDs known in advance.
 
-**Planned, not read yet.** A planet body will gain `soi_m` (A12), and `seed`, `kind` and the settings of [planets.md](planets.md) section 1 (A15), with body kind `planet`. They are listed here so content can be planned, but no loader reads them, and the validator rejects them until those tasks land.
+**Planned, not read yet.** A planet body will gain `seed`, `kind` and the settings of [planets.md](planets.md) section 1 (A15), with body kind `planet`. They are listed here so content can be planned, but no loader reads them, and the validator rejects them until that task lands.
+
+**No sphere-of-influence field.** A body's sphere of influence is not data. A12 works it out at scenario load from Laplace's formula, a × (GM / parent GM)^(2/5), and stores it as `soi_mm` in the state. So it always agrees with the GMs and orbits.
 
 **Validity.** A docked unit's `pos_mm` equals its host's, and starting inventory fits the unit's capacity, by mass and volume per cargo class. The validator checks both.
 

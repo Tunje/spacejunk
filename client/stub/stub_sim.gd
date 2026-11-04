@@ -18,11 +18,15 @@ const EVENT_LIMIT := 4096
 
 const STANDOFF_MM := 150000
 const CLUSTER_RADIUS_MM := 50_000_000_000
-## stub_orbit's moon, and the probe's circular orbit round it.
-const MOON_GM := 65_138_398
-const MOON_RADIUS_MM := 250_000_000
-const MOON_POS_MM := [0, 0, -20_000_000_000]
-const PROBE_ORBIT_MM := 400_000_000
+## stub_orbit's 600 km planet, with the settings of planets.md section 1, and the
+## probe's circular orbit round it.
+const PLANET_GM := 3_531_600_000
+const PLANET_RADIUS_MM := 600_000_000
+const PLANET_POS_MM := [0, 0, -20_000_000_000]
+const PROBE_ORBIT_MM := 700_000_000
+const PLANET_SEED := 48213
+const PLANET_RANGE_M := 6000
+const PLANET_SEA_LEVEL_M := -400
 ## C9: jobs on one facility, counting the active one.
 const QUEUE_LIMIT := 16
 const JOB_VIEW_FIELDS: Array[String] = [
@@ -1280,8 +1284,9 @@ func _world_of(entry: Dictionary) -> Array:
 func _put_probe_in_orbit() -> void:
 	var moon := _next_id(_state)
 	_state["bodies"][moon] = {
-		"kind": "planet", "name": "Pebble", "pos_mm": MOON_POS_MM.duplicate(), "radius_mm": MOON_RADIUS_MM,
-		"visual_seed": 7, "scanned": true, "frame": 0, "orbit": {}, "gm": MOON_GM,
+		"kind": "planet", "name": "Cairn", "pos_mm": PLANET_POS_MM.duplicate(), "radius_mm": PLANET_RADIUS_MM,
+		"visual_seed": 7, "scanned": true, "frame": 0, "orbit": {}, "gm": PLANET_GM,
+		"seed": PLANET_SEED, "height_range_m": PLANET_RANGE_M, "sea_level_m": PLANET_SEA_LEVEL_M,
 	}
 	for id: int in _state["units"]:
 		var unit: Dictionary = _state["units"][id]
@@ -1289,7 +1294,7 @@ func _put_probe_in_orbit() -> void:
 			unit["dock"] = {}
 			unit["at_target"] = 0
 			unit["frame"] = 0
-			unit["orbit"] = OrbitMath.make_orbit(MOON_GM, PROBE_ORBIT_MM, 0,
+			unit["orbit"] = OrbitMath.make_orbit(PLANET_GM, PROBE_ORBIT_MM, 0,
 				[OrbitMath.ONE, 0, 0], [0, 0, -OrbitMath.ONE], 0, 0)
 			unit["orbit"]["parent"] = moon
 

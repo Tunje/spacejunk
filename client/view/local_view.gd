@@ -153,6 +153,13 @@ func _handle_key(key: InputEventKey) -> void:
 		get_viewport().set_input_as_handled()
 
 
+## Hex outlines on every planet, on or off.
+func set_planet_outlines(on: bool) -> void:
+	BodyNode.show_outlines = on
+	for id: int in bodies:
+		bodies[id].set_outlines(on)
+
+
 func focus_on_selection() -> void:
 	if selected_kind != "":
 		focus_on(selected_kind, selected_id)

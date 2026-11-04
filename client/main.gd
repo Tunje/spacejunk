@@ -116,6 +116,9 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	elif key.physical_keycode == KEY_ESCAPE and flight_screen.visible:
 		toggle_flight()
 		get_viewport().set_input_as_handled()
+	elif key.physical_keycode == KEY_O:
+		local_view.set_planet_outlines(not BodyNode.show_outlines)
+		get_viewport().set_input_as_handled()
 	elif key.physical_keycode == KEY_J:
 		toggle_industry()
 		get_viewport().set_input_as_handled()

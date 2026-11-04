@@ -273,12 +273,11 @@ These are now in [schemas.md](schemas.md) sections 2, 5 and 14, in the shapes A1
 | Field | On | Star | Planet (600 km) | Rocks |
 | ----- | -- | ---- | --------------- | ----- |
 | `gm_km3_s2` | Star, planet | 132712440018 | 3531.6 | None: rocks have no gravity in the frame |
-| `soi_m` | Planet | None: the root body has no sphere of influence | About 1.5 × 10^11 if it orbits at 1 AU. Not read until A12 | None |
 | `orbit` | Planet, frame | None | `parent` and `a_mm`, plus optional `e_ppm` and four angles in millidegrees, all whole numbers | None: members of the frame |
 | `seed`, `kind` and settings | Planet | | As in [planets.md](planets.md) section 1. Not read until A15 | |
 | `frame` with a local `pos_mm` | Rocks, starting units | | | The cluster frame |
 
-Scenarios gain a `frames` list of `{ key, name, radius_mm, orbit }`. Frame IDs come after every body and its deposits, and before the units. Body kind `planet` arrives with A15. For the new start, the cluster frame's orbit is `{ "parent": "star", "a_mm": 149597870700000 }`, which is 1 AU and circular.
+Scenarios gain a `frames` list of `{ key, name, radius_mm, orbit }`. Frame IDs come after every body and its deposits, and before the units. Body kind `planet` arrives with A15. There's no `soi_m`: A12 works out each sphere of influence from the GMs and the orbit at load. For the new start, the cluster frame's orbit is `{ "parent": "star", "a_mm": 149597870700000 }`, which is 1 AU and circular.
 
 **GM units, agreed with A.** The star's GM is 1.327 × 10^20 m³/s², which fits neither JSON's 2^53 nor a 64-bit integer. So:
 - **Data** states `gm_km3_s2` as a plain JSON number: the star is 132712440018, exact under 2^53, and the planet is 3531.6.
