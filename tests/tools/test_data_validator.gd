@@ -219,6 +219,7 @@ func test_capability_field_missing() -> void:
 func test_rated_mass_must_be_above_zero() -> void:
 	_entry("modules", "laser")["capabilities"]["thruster"] = {
 		"speed_m_s": 1, "propellant_kg_per_s": 1, "rated_mass_kg": 0,
+		"exhaust_m_s": 3000, "thrust_kn": 3,
 	}
 	_assert_error("bad_number")
 
@@ -554,6 +555,7 @@ func test_heat_needs_heat_capacity() -> void:
 func test_thruster_needs_propellant_storage() -> void:
 	_entry("modules", "laser")["capabilities"]["thruster"] = {
 		"speed_m_s": 1, "propellant_kg_per_s": 1, "rated_mass_kg": 100,
+		"exhaust_m_s": 3000, "thrust_kn": 3,
 	}
 	_entry("modules", "hull")["capabilities"]["storage"].erase("propellant")
 	_assert_error("propellant_storage_missing")
@@ -655,6 +657,126 @@ func test_start_dock_needs_the_host_position() -> void:
 	_scenario()["units"][1]["pos_mm"] = [5, 0, 0]
 	_scenario()["units"][1]["dock"] = { "host": "ship", "port": 0, "host_port": 0 }
 	_assert_error("bad_start_dock")
+
+
+## The star gets gravity and the rock and ship sit in a cluster frame on a 1 AU orbit.
+func _add_cluster() -> void:
+	var star: Dictionary = _scenario()["bodies"][0]
+	star["gm_km3_s2"] = 132712440018
+	_scenario()["frames"] = [{
+		"key": "cluster", "name": "Cluster", "radius_mm": 1000000000,
+		"orbit": { "parent": "star", "a_mm": 149597870700000 },
+	}]
+	_scenario()["bodies"][1]["frame"] = "cluster"
+	_scenario()["units"][0]["frame"] = "cluster"
+
+
+func test_frames_and_orbits_pass() -> void:
+	_add_cluster()
+	_scenario()["frames"][0]["orbit"].merge({
+		"e_ppm": 16700, "inclination_mdeg": 0, "node_mdeg": 1000, "periapsis_mdeg": 359999,
+		"mean_anomaly_mdeg": 90000,
+	})
+	assert_eq(DataValidator.validate(data), [] as Array[String])
+
+
+func test_body_on_an_orbit_needs_no_position() -> void:
+	_add_cluster()
+	var rock: Dictionary = _scenario()["bodies"][1]
+	rock.erase("frame")
+	rock.erase("pos_mm")
+	rock["orbit"] = { "parent": "star", "a_mm": 200000000000000 }
+	assert_eq(DataValidator.validate(data), [] as Array[String])
+
+
+func test_body_on_an_orbit_with_a_position() -> void:
+	_add_cluster()
+	_scenario()["bodies"][1].erase("frame")
+	_scenario()["bodies"][1]["orbit"] = { "parent": "star", "a_mm": 200000000000000 }
+	_assert_error("bad_place")
+
+
+func test_body_needs_a_position_without_an_orbit() -> void:
+	_scenario()["bodies"][1].erase("pos_mm")
+	_assert_error("missing_field")
+
+
+func test_orbit_parent_needs_gravity() -> void:
+	_add_cluster()
+	_scenario()["bodies"][0].erase("gm_km3_s2")
+	_assert_error("orbit_without_gravity")
+
+
+func test_orbit_parent_must_exist() -> void:
+	_add_cluster()
+	_scenario()["frames"][0]["orbit"]["parent"] = "nothing"
+	_assert_error("orbit_without_gravity")
+
+
+func test_orbit_takes_whole_numbers_only() -> void:
+	_add_cluster()
+	_scenario()["frames"][0]["orbit"]["e_ppm"] = 0.5
+	_assert_error("not_whole")
+
+
+func test_orbit_must_be_elliptic() -> void:
+	_add_cluster()
+	_scenario()["frames"][0]["orbit"]["e_ppm"] = 1000000
+	_assert_error("out_of_range")
+
+
+func test_orbit_angle_within_one_turn() -> void:
+	_add_cluster()
+	_scenario()["frames"][0]["orbit"]["node_mdeg"] = 360000
+	_assert_error("out_of_range")
+
+
+func test_orbit_unknown_field() -> void:
+	_add_cluster()
+	_scenario()["frames"][0]["orbit"]["a_m"] = 1
+	_assert_error("unknown_field")
+
+
+func test_frame_needs_radius_mm() -> void:
+	_add_cluster()
+	_scenario()["frames"][0].erase("radius_mm")
+	_assert_error("missing_field")
+
+
+func test_unknown_frame() -> void:
+	_add_cluster()
+	_scenario()["units"][0]["frame"] = "elsewhere"
+	_assert_error("unknown_frame")
+
+
+func test_docked_unit_has_no_frame() -> void:
+	_add_cluster()
+	_scenario()["units"][1]["frame"] = "cluster"
+	_scenario()["units"][1]["dock"] = { "host": "ship", "port": 0, "host_port": 0 }
+	_assert_error("bad_place")
+
+
+func test_frame_key_is_unique_across_bodies() -> void:
+	_add_cluster()
+	_scenario()["frames"][0]["key"] = "rock"
+	_assert_error("duplicate_id")
+
+
+func test_gm_must_fit_the_contract_range() -> void:
+	_scenario()["bodies"][0]["gm_km3_s2"] = 9100000000000
+	_assert_error("out_of_range")
+
+
+func test_gm_far_beyond_the_range_reports_the_range() -> void:
+	_scenario()["bodies"][0]["gm_km3_s2"] = 1e13
+	_assert_error("out_of_range")
+
+
+func test_thruster_needs_burn_figures() -> void:
+	_entry("modules", "laser")["capabilities"]["thruster"] = {
+		"speed_m_s": 1, "propellant_kg_per_s": 1, "rated_mass_kg": 100,
+	}
+	_assert_error("missing_field")
 
 
 func test_load_dir_reads_scenarios() -> void:

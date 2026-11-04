@@ -40,8 +40,20 @@ const TEMPLATE_FIELDS := ["id", "name", "kind", "root"]
 const SINK_FIELDS := ["id", "name", "items"]
 const SCENARIO_DIR := "scenarios/"
 const SCENARIO_FIELDS := ["schema_version", "id", "name", "seed", "bodies", "units"]
-const BODY_FIELDS := ["key", "name", "kind", "pos_mm", "radius_mm", "visual_seed", "deposits"]
+const SCENARIO_OPTIONAL := ["frames"]
+const BODY_FIELDS := ["key", "name", "kind", "radius_mm", "visual_seed", "deposits"]
+const BODY_OPTIONAL := ["pos_mm", "gm_km3_s2", "orbit", "frame"]
+const FRAME_FIELDS := ["key", "name", "radius_mm", "orbit"]
+const ORBIT_FIELDS := ["parent", "a_mm"]
+const ORBIT_ANGLES := ["inclination_mdeg", "node_mdeg", "periapsis_mdeg", "mean_anomaly_mdeg"]
 const UNIT_FIELDS := ["key", "template", "name", "pos_mm", "inventory", "dock"]
+const UNIT_OPTIONAL := ["frame"]
+## Contracts section 1: gm in 1000 m3/s2, up to 9 x 10^18. Data states km3/s2.
+const GM_FACTOR := 1_000_000
+const MAX_GM := 9_000_000_000_000_000_000
+## OrbitMath.MAX_A_MM.
+const MAX_A_MM := 1_000_000_000_000_000
+const MDEG_PER_TURN := 360_000
 const DOCK_FIELDS := ["host", "port", "host_port"]
 const BODY_KINDS := ["star", "asteroid"]
 
@@ -63,7 +75,7 @@ const CAPABILITIES := {
 	},
 	"thruster": {
 		"speed_m_s": [1000, false], "propellant_kg_per_s": [1000, false],
-		"rated_mass_kg": [1000, false],
+		"rated_mass_kg": [1000, false], "exhaust_m_s": [1000, false], "thrust_kn": [1000, false],
 	},
 }
 const OTHER_CAPABILITIES := ["storage", "max_mass_kg", "facility", "always_on"]
@@ -248,6 +260,8 @@ func _converts_exactly(value: Variant, factor: int) -> bool:
 func _check_number(where: String, field: String, value: Variant, factor: int, limit: int) -> void:
 	if not _is_number(value) or float(value) < 0.0:
 		_err("bad_number", where, "%s is not a non-negative number" % field)
+	elif float(value) * factor > float(limit):
+		_err("out_of_range", where, field)
 	elif not _converts_exactly(value, factor):
 		_err("inexact_value", where, "%s does not convert exactly" % field)
 	elif _to_sim(value, factor) > limit:
@@ -877,7 +891,7 @@ func _shape_scenario(scenario: Variant) -> void:
 		_err("bad_scenario", "data/scenarios", "missing, unparsable or has no id")
 		return
 	var where := "scenarios/%s" % scenario["id"]
-	if not _has_fields(where, scenario, SCENARIO_FIELDS):
+	if not _has_fields(where, scenario, SCENARIO_FIELDS, SCENARIO_OPTIONAL):
 		return
 	if scenario["schema_version"] != SCHEMA_VERSION:
 		_err("bad_schema_version", where, str(scenario["schema_version"]))
@@ -889,6 +903,11 @@ func _shape_scenario(scenario: Variant) -> void:
 	var keys := {}
 	for body: Variant in scenario["bodies"]:
 		_shape_body(where, body, keys)
+	if not scenario.get("frames", []) is Array:
+		_err("bad_scenario", where, "frames is not an array")
+	else:
+		for frame: Variant in scenario.get("frames", []):
+			_shape_frame(where, frame, keys)
 	for unit: Variant in scenario["units"]:
 		_shape_scenario_unit(where, unit, keys)
 
@@ -906,23 +925,66 @@ func _shape_body(where: String, body: Variant, keys: Dictionary) -> void:
 	if not body is Dictionary:
 		_err("bad_scenario", where, "body is not an object")
 		return
-	if not _has_fields(where, body, BODY_FIELDS):
+	if not _has_fields(where, body, BODY_FIELDS, BODY_OPTIONAL):
 		return
 	_claim_key(where, body, keys)
 	_check_name(where, body)
 	_check_enum(where, "kind", body["kind"], BODY_KINDS)
-	_check_position(where, body["pos_mm"])
+	var at := "%s.%s" % [where, str(body["key"])]
+	if body.has("orbit"):
+		_shape_orbit(at, body["orbit"])
+		if body.has("pos_mm"):
+			_err("bad_place", at, "a body on an orbit takes its position from the orbit")
+		if body.has("frame"):
+			_err("bad_place", at, "a body is on an orbit or in a frame, not both")
+	elif not body.has("pos_mm"):
+		_err("missing_field", where, "pos_mm")
+	else:
+		_check_position(where, body["pos_mm"])
+	if body.has("gm_km3_s2"):
+		_check_positive(at, "gm_km3_s2", body["gm_km3_s2"], GM_FACTOR, MAX_GM)
+	if body.has("frame") and not body["frame"] is String:
+		_err("bad_place", at, "frame is not a frame key")
 	_check_whole(where, "radius_mm", body["radius_mm"], 1, MAX_JSON_WHOLE)
 	_check_whole(where, "visual_seed", body["visual_seed"], 0, MAX_JSON_WHOLE)
 	if not body["deposits"] is Array:
 		_err("bad_scenario", where, "deposits is not an array")
 
 
+func _shape_frame(where: String, frame: Variant, keys: Dictionary) -> void:
+	if not frame is Dictionary:
+		_err("bad_scenario", where, "frame is not an object")
+		return
+	if not _has_fields(where, frame, FRAME_FIELDS):
+		return
+	_claim_key(where, frame, keys)
+	_check_name(where, frame)
+	_check_whole(where, "radius_mm", frame["radius_mm"], 1, MAX_JSON_WHOLE)
+	_shape_orbit("%s.%s" % [where, str(frame["key"])], frame["orbit"])
+
+
+## An orbit is whole numbers only (schemas.md section 14), so no float reaches it.
+func _shape_orbit(where: String, orbit: Variant) -> void:
+	if not orbit is Dictionary:
+		_err("bad_orbit", where, "orbit is not an object")
+		return
+	if not _has_fields(where, orbit, ORBIT_FIELDS, ["e_ppm"] + ORBIT_ANGLES):
+		return
+	if not orbit["parent"] is String:
+		_err("bad_orbit", where, "parent is not a body key")
+	_check_whole(where, "a_mm", orbit["a_mm"], 1, MAX_A_MM)
+	if orbit.has("e_ppm"):
+		_check_whole(where, "e_ppm", orbit["e_ppm"], 0, PPM - 1)
+	for angle: String in ORBIT_ANGLES:
+		if orbit.has(angle):
+			_check_whole(where, angle, orbit[angle], 0, MDEG_PER_TURN - 1)
+
+
 func _shape_scenario_unit(where: String, unit: Variant, keys: Dictionary) -> void:
 	if not unit is Dictionary:
 		_err("bad_scenario", where, "unit is not an object")
 		return
-	if not _has_fields(where, unit, UNIT_FIELDS):
+	if not _has_fields(where, unit, UNIT_FIELDS, UNIT_OPTIONAL):
 		return
 	_claim_key(where, unit, keys)
 	_check_name(where, unit)
@@ -948,6 +1010,7 @@ func _cross_scenario(scenario: Dictionary) -> void:
 		for id: Variant in body["deposits"]:
 			if not _deposits.has(id):
 				_err("unknown_deposit", where, str(id))
+	_cross_places(where, scenario)
 	var units := {}
 	for unit: Dictionary in scenario["units"]:
 		units[unit["key"]] = unit
@@ -962,6 +1025,36 @@ func _cross_scenario(scenario: Dictionary) -> void:
 		_check_inventory(at, unit, parts)
 		if unit["dock"] != null:
 			_check_start_dock(at, unit, parts, units, used_ports)
+
+
+## Orbit parents must be bodies with gravity, and frame keys must name frames.
+func _cross_places(where: String, scenario: Dictionary) -> void:
+	var gravity := {}
+	for body: Dictionary in scenario["bodies"]:
+		if body.has("gm_km3_s2"):
+			gravity[body["key"]] = true
+	var frames := {}
+	for frame: Variant in scenario.get("frames", []):
+		if frame is Dictionary and frame.has("key"):
+			frames[frame["key"]] = true
+	var orbiting: Array = scenario["bodies"].duplicate()
+	orbiting.append_array(scenario.get("frames", []))
+	for entry: Variant in orbiting:
+		if not entry is Dictionary or not entry.get("orbit") is Dictionary:
+			continue
+		var parent: Variant = entry["orbit"].get("parent")
+		if parent == entry.get("key") or not gravity.has(parent):
+			_err("orbit_without_gravity", "%s.%s" % [where, str(entry.get("key"))], str(parent))
+	var placed: Array = scenario["bodies"].duplicate()
+	placed.append_array(scenario["units"])
+	for entry: Dictionary in placed:
+		if not entry.has("frame"):
+			continue
+		var at := "%s.%s" % [where, str(entry.get("key"))]
+		if not frames.has(entry["frame"]):
+			_err("unknown_frame", at, str(entry["frame"]))
+		if entry.get("dock") != null:
+			_err("bad_place", at, "a docked unit takes its host's place, so it has no frame")
 
 
 ## Starting stock must fit the unit's own storage, by mass and volume per cargo class.
