@@ -1,10 +1,13 @@
 class_name IndustryScreen extends PanelContainer
-## Refinery and fabricator controls. Shows each facility's job and its recipes.
-## Start stays enabled without stock, because a job may wait for ore on its way.
+## Refinery and fabricator controls. Shows each facility's active job, its queue
+## and its recipes. Start stays enabled without stock, because a job may wait for
+## ore on its way; on a busy facility it becomes Queue.
 
 const WIDTH_PX := 400
 const RECIPES_HEIGHT_PX := 250
 const MAX_COUNT := 99
+const QUEUE_ROW_PX := 38
+const QUEUE_ROWS_SHOWN := 4
 
 signal closed
 
@@ -21,6 +24,12 @@ var _tabs: HBoxContainer
 var _job_label: Label
 var _job_bar: ProgressBar
 var _cancel_button: Button
+var _back_button: Button
+var _queue_heading: Label
+var _queue_scroll: ScrollContainer
+var _queue_box: VBoxContainer
+var _queue_key := ""
+var _queue_rows: Array[Dictionary] = []
 var _count: SpinBox
 var _recipe_box: VBoxContainer
 var _message: Label
@@ -53,11 +62,21 @@ func _ready() -> void:
 	_job_bar.step = 0.001
 	_job_bar.custom_minimum_size = Vector2(0, 8)
 	column.add_child(_job_bar)
-	_cancel_button = Button.new()
-	_cancel_button.text = "Cancel job"
-	_cancel_button.focus_mode = Control.FOCUS_NONE
+	var job_buttons := HBoxContainer.new()
+	column.add_child(job_buttons)
+	_cancel_button = _add_button(job_buttons, "Cancel job")
 	_cancel_button.pressed.connect(cancel)
-	column.add_child(_cancel_button)
+	_back_button = _add_button(job_buttons, "Move back")
+	_back_button.tooltip_text = "Let the next queued job go first"
+	_back_button.pressed.connect(move_active_back)
+	_queue_heading = _add_label(column)
+	_queue_heading.modulate = ClientTheme.MID_GREY.lightened(0.35)
+	_queue_scroll = ScrollContainer.new()
+	_queue_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	column.add_child(_queue_scroll)
+	_queue_box = VBoxContainer.new()
+	_queue_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_queue_scroll.add_child(_queue_box)
 	column.add_child(HSeparator.new())
 	var count_row := HBoxContainer.new()
 	column.add_child(count_row)
@@ -98,18 +117,43 @@ func toggle() -> void:
 		closed.emit()
 
 
+## Always queue_job, which also starts an idle facility, so two quick presses in
+## one tick both count. A Sim from before C9 does not know it, so it gets start_job.
 func start(recipe: Dictionary) -> void:
-	var command := IndustryLogic.start_command(unit_id, facility["part"], recipe, int(_count.value))
-	var result: Dictionary = bridge.check(command)
-	_message.text = "" if result["ok"] else OrderText.reason(result["reason"], result["detail"])
-	if result["ok"]:
-		bridge.submit(command)
+	var command := IndustryLogic.start_command(unit_id, facility["part"], recipe, int(_count.value), false)
+	if bridge.check(command)["reason"] in ["unknown_command", "not_in_stub"]:
+		command = IndustryLogic.start_command(unit_id, facility["part"], recipe, int(_count.value), true)
+	_send(command)
 
 
 func cancel() -> void:
 	var job := IndustryLogic.job_on(bridge.current_view, facility.get("part", 0))
 	if not job.is_empty():
 		bridge.submit(IndustryLogic.cancel_command(unit_id, job["id"]))
+
+
+## Moves a job to a 1-based place among the queued jobs.
+func move(job_id: int, position: int) -> void:
+	_send(IndustryLogic.move_command(unit_id, job_id, position))
+
+
+## Ends a queued job at once; nothing of it has been taken from stock yet.
+func remove(job_id: int) -> void:
+	_send(IndustryLogic.cancel_command(unit_id, job_id))
+
+
+## A waiting active job, such as one short of ore, lets the next one go first.
+func move_active_back() -> void:
+	var job := IndustryLogic.job_on(bridge.current_view, facility.get("part", 0))
+	if not job.is_empty():
+		move(job["id"], 1)
+
+
+func _send(command: Dictionary) -> void:
+	var result: Dictionary = bridge.check(command)
+	_message.text = "" if result["ok"] else OrderText.reason(result["reason"], result["detail"])
+	if result["ok"]:
+		bridge.submit(command)
 
 
 func choose_facility(entry: Dictionary) -> void:
@@ -135,6 +179,7 @@ func refresh() -> void:
 	_sync_tabs(found)
 	_sync_recipes()
 	_show_job(view)
+	_show_queue(view)
 	_show_stock(unit["inventory"])
 
 
@@ -187,9 +232,52 @@ func _sync_recipes() -> void:
 func _show_job(view: Dictionary) -> void:
 	var job := IndustryLogic.job_on(view, facility["part"])
 	_cancel_button.disabled = job.is_empty() or job["status"] == "cancelling"
+	var queued := IndustryLogic.queue_on(view, facility["part"]).size() - (0 if job.is_empty() else 1)
+	_back_button.disabled = job.is_empty() or queued == 0 or not IndustryLogic.can_move(job)
+	for row: Dictionary in _rows:
+		(row["start"] as Button).text = "Start" if job.is_empty() and queued == 0 else "Queue"
 	_job_bar.value = 0.0 if job.is_empty() else IndustryLogic.job_progress(job, view["tick"])
 	_job_label.text = "Idle" if job.is_empty() else IndustryLogic.job_line(job, _defs)
 	_job_label.modulate = ClientTheme.GOLD if not job.is_empty() and not job["reason"].is_empty() else Color.WHITE
+
+
+## Queued jobs below the active one, each with Up, Down and Remove.
+func _show_queue(view: Dictionary) -> void:
+	var jobs := IndustryLogic.queue_on(view, facility["part"])
+	var queued: Array[Dictionary] = []
+	for job: Dictionary in jobs:
+		if job.get("queue_pos", 0) > 0:
+			queued.append(job)
+	_queue_heading.text = "Queue: %d of %d" % [jobs.size(), IndustryLogic.QUEUE_LIMIT] if not jobs.is_empty() else "Queue empty"
+	var key := str(queued.map(func(job: Dictionary) -> int: return job["id"]))
+	if key != _queue_key:
+		_queue_key = key
+		_build_queue_rows(queued)
+	for index in range(queued.size()):
+		var row: Dictionary = _queue_rows[index]
+		(row["label"] as Label).text = "%d. %s" % [index + 1, IndustryLogic.job_line(queued[index], _defs)]
+		(row["up"] as Button).disabled = index == 0
+		(row["down"] as Button).disabled = index == queued.size() - 1
+	_queue_scroll.custom_minimum_size = Vector2(0, mini(queued.size(), QUEUE_ROWS_SHOWN) * QUEUE_ROW_PX)
+	_queue_scroll.visible = not queued.is_empty()
+
+
+func _build_queue_rows(queued: Array[Dictionary]) -> void:
+	_clear(_queue_box)
+	_queue_rows.clear()
+	for index in range(queued.size()):
+		var job_id: int = queued[index]["id"]
+		var row := HBoxContainer.new()
+		_queue_box.add_child(row)
+		var label := _add_label(row)
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var up := _add_button(row, "Up")
+		up.pressed.connect(func() -> void: move(job_id, index))
+		var down := _add_button(row, "Down")
+		down.pressed.connect(func() -> void: move(job_id, index + 2))
+		var remove_button := _add_button(row, "Remove")
+		remove_button.pressed.connect(remove.bind(job_id))
+		_queue_rows.append({ "job": job_id, "label": label, "up": up, "down": down, "remove": remove_button })
 
 
 func _show_stock(stock: Dictionary) -> void:
@@ -204,6 +292,14 @@ func _add_label(parent: Control) -> Label:
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	parent.add_child(label)
 	return label
+
+
+func _add_button(parent: Control, text: String) -> Button:
+	var button := Button.new()
+	button.text = text
+	button.focus_mode = Control.FOCUS_NONE
+	parent.add_child(button)
+	return button
 
 
 func _clear(box: Control) -> void:

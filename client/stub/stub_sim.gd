@@ -10,11 +10,18 @@ const SCENARIO_LOAD := "stub_load"
 const LOAD_EXTRA_SHIPS := 11
 const LOAD_SHIP_SPACING_MM := 40000
 const DATA_DIR := "res://client/stub/data/"
-const SAVE_HEADER := "stub-save:1\n"
+const SAVE_HEADER := "stub-save:2\n"
 const SAVE_PREFIX := "stub-save:"
 const EVENT_LIMIT := 4096
 
 const STANDOFF_MM := 150000
+## C9: jobs on one facility, counting the active one.
+const QUEUE_LIMIT := 16
+const JOB_VIEW_FIELDS: Array[String] = [
+	"unit", "facility", "recipe", "count_left", "status", "reason", "start_tick", "end_tick", "queue_pos",
+]
+## Statuses of an active job that move_job refuses with job_busy.
+const BUSY_STATUSES: Array[String] = ["running", "paused", "cancelling"]
 
 static var _last_error := ""
 
@@ -89,7 +96,7 @@ func view() -> Dictionary:
 		"units": units,
 		"bodies": _state["bodies"].duplicate(true),
 		"deposits": _state["deposits"].duplicate(true),
-		"jobs": {},
+		"jobs": _jobs_view(),
 		"tasks": _state["tasks"].duplicate(true),
 	}
 
@@ -123,6 +130,9 @@ func ledger() -> Dictionary:
 		matter += _parts_mass(unit["parts"])
 		for item: String in unit["inventory"]:
 			matter += unit["inventory"][item]
+	for id: int in _state["jobs"]:
+		for item: String in _state["jobs"][id]["held"]:
+			matter += _state["jobs"][id]["held"][item]
 	return { "matter_g": matter }
 
 
@@ -132,7 +142,7 @@ static func _load_defs() -> Dictionary:
 	return {
 		"modules": _index_by_id(_convert(_read_json("modules.json"))),
 		"items": _index_by_id(_convert(_read_json("items.json"))),
-		"recipes": {},
+		"recipes": _index_by_id(_convert(_read_json("recipes.json"))),
 		"templates": _templates(),
 		"sinks": {},
 	}
@@ -204,7 +214,7 @@ static func _build_state(module_defs: Dictionary, seed_value: int, extra_ships: 
 	var scenario: Dictionary = _convert(_read_json("scenario.json"))
 	var state: Dictionary = {
 		"tick": 0, "seed": seed_value, "next_id": 1, "next_command": 1, "queue": [],
-		"units": {}, "bodies": {}, "deposits": {}, "hidden_deposits": {}, "tasks": {},
+		"units": {}, "bodies": {}, "deposits": {}, "hidden_deposits": {}, "tasks": {}, "jobs": {},
 	}
 	_add_extra_ships(scenario["units"], extra_ships)
 	var body_ids: Dictionary = {}
@@ -488,6 +498,16 @@ func _validate(command: Dictionary) -> Dictionary:
 			return _validate_attach(unit, args)
 		"detach_part":
 			return _validate_detach(unit, args)
+		"start_job":
+			return _validate_queue(unit, args, true)
+		"queue_job":
+			return _validate_queue(unit, args, false)
+		"move_job":
+			return _validate_move_job(unit, args)
+		"cancel_job":
+			return _validate_cancel_job(unit, args)
+		"copy_fit":
+			return _validate_copy_fit(unit, args)
 	return _result("not_in_stub")
 
 
@@ -504,6 +524,12 @@ func _validate_attach(unit: Dictionary, args: Dictionary) -> Dictionary:
 	var problem := _partner_problem(unit, from)
 	if not problem.is_empty():
 		return _result(problem)
+	return _validate_attach_parts(unit, args)
+
+
+## Attach checks once the stock's unit is known to be within reach.
+func _validate_attach_parts(unit: Dictionary, args: Dictionary) -> Dictionary:
+	var from: int = args.get("from", 0)
 	var item: String = args.get("item", "")
 	if not _defs["modules"].has(item):
 		return _result("invalid_target")
@@ -664,6 +690,7 @@ func _run_tick() -> void:
 	_state["queue"] = waiting
 	for id: int in _sorted_keys(_state["units"]):
 		_advance_unit(_state["units"][id])
+	_advance_jobs()
 
 
 func _apply(command: Dictionary) -> void:
@@ -686,6 +713,17 @@ func _apply(command: Dictionary) -> void:
 			_apply_attach(unit, args)
 		"detach_part":
 			_apply_detach(unit, args)
+		"start_job", "queue_job":
+			_apply_queue(unit, command)
+		"move_job":
+			_apply_move_job(args)
+		"cancel_job":
+			_apply_cancel_job(args["job"])
+		"copy_fit":
+			var plan := _plan_copy(unit, args["source"], args["from"], true)
+			_emit("fit_copied", unit["id"], {
+				"source": args["source"], "attached": plan["attached"], "missing": plan["missing"], "refused": plan["refused"],
+			})
 		"move_to":
 			_begin(unit, command, "moving", args["target"], 0, _travel_ticks(unit, args["target"]))
 			unit["at_target"] = 0
@@ -706,7 +744,7 @@ func _apply(command: Dictionary) -> void:
 			_begin(unit, command, "mining", args["deposit"], args["module"], 0)
 
 
-func _apply_attach(unit: Dictionary, args: Dictionary) -> void:
+func _apply_attach(unit: Dictionary, args: Dictionary, announce := true) -> void:
 	var item: String = args["item"]
 	var stock: Dictionary = _state["units"][args["from"]]["inventory"]
 	stock[item] -= _defs["modules"][item]["mass_g"]
@@ -716,7 +754,8 @@ func _apply_attach(unit: Dictionary, args: Dictionary) -> void:
 		"def": item, "parent_connector": args["parent_connector"], "connector": args["part_connector"], "children": [],
 	})
 	_find_part(unit, args["parent_part"])["children"].append(part)
-	_emit("part_attached", unit["id"], { "part": part["id"] })
+	if announce:
+		_emit("part_attached", unit["id"], { "part": part["id"] })
 
 
 func _apply_detach(unit: Dictionary, args: Dictionary) -> void:
@@ -854,3 +893,278 @@ func _emit(event_type: String, unit: int, data: Dictionary) -> void:
 	if _events.size() >= EVENT_LIMIT:
 		_events.pop_front()
 	_events.append({ "tick": _state["tick"], "type": event_type, "unit": unit, "data": data })
+
+
+# --- Jobs (C9 queue, simplified: no power, and a fault only refuses new jobs) ---
+
+func _jobs_view() -> Dictionary:
+	var shown: Dictionary = {}
+	for id: int in _sorted_keys(_state["jobs"]):
+		var job: Dictionary = {}
+		for field: String in JOB_VIEW_FIELDS:
+			job[field] = _state["jobs"][id][field]
+		shown[id] = job
+	return shown
+
+
+## The facility's jobs, the active one first, then by queue position.
+func _facility_jobs(facility: int) -> Array[int]:
+	var found: Array[int] = []
+	for id: int in _sorted_keys(_state["jobs"]):
+		if _state["jobs"][id]["facility"] == facility:
+			found.append(id)
+	found.sort_custom(func(a: int, b: int) -> bool: return _state["jobs"][a]["queue_pos"] < _state["jobs"][b]["queue_pos"])
+	return found
+
+
+func _validate_queue(unit: Dictionary, args: Dictionary, start_only: bool) -> Dictionary:
+	var part := _find_part(unit, args.get("facility", 0))
+	if part.is_empty():
+		return _result("unknown_part")
+	var facility: Dictionary = _module(part)["capabilities"].get("facility", {})
+	if facility.is_empty():
+		return _result("invalid_target")
+	var recipe: Dictionary = _defs["recipes"].get(args.get("recipe", ""), {})
+	if recipe.is_empty():
+		return _result("unknown_recipe")
+	if recipe["facility"] != facility["type"]:
+		return _result("wrong_facility")
+	var count: Variant = args.get("count", 0)
+	if not count is int or count < 1:
+		return _result("malformed_command")
+	if part["state"] == "fault":
+		return _result("module_fault")
+	var queued := _facility_jobs(part["id"]).size()
+	if start_only and queued > 0:
+		return _result("facility_busy")
+	if queued >= QUEUE_LIMIT:
+		return _result("queue_full")
+	return _result()
+
+
+func _validate_move_job(unit: Dictionary, args: Dictionary) -> Dictionary:
+	var job: Dictionary = _state["jobs"].get(args.get("job", 0), {})
+	if job.is_empty() or job["unit"] != unit["id"]:
+		return _result("unknown_job")
+	if not args.get("position", 0) is int:
+		return _result("malformed_command")
+	if job["queue_pos"] == 0 and BUSY_STATUSES.has(job["status"]):
+		return _result("job_busy")
+	return _result()
+
+
+func _validate_cancel_job(unit: Dictionary, args: Dictionary) -> Dictionary:
+	var job: Dictionary = _state["jobs"].get(args.get("job", 0), {})
+	return _result() if not job.is_empty() and job["unit"] == unit["id"] else _result("unknown_job")
+
+
+func _apply_queue(unit: Dictionary, command: Dictionary) -> void:
+	var args: Dictionary = command["args"]
+	var position := _facility_jobs(args["facility"]).size()
+	var id := _next_id(_state)
+	_state["jobs"][id] = {
+		"unit": unit["id"], "facility": args["facility"], "recipe": args["recipe"], "count_left": args["count"],
+		"status": "waiting" if position == 0 else "queued", "reason": "", "start_tick": 0, "end_tick": 0,
+		"queue_pos": position, "held": {}, "started": false,
+	}
+	_emit("job_queued", unit["id"], { "job": id, "command": command["id"], "position": position })
+
+
+## Positions are 1-based among the queued jobs. Moving the active job back hands
+## the facility to the first queued job.
+func _apply_move_job(args: Dictionary) -> void:
+	var job_id: int = args["job"]
+	var order := _facility_jobs(_state["jobs"][job_id]["facility"])
+	order.erase(job_id)
+	if order.is_empty():
+		return
+	var queued: Array = order.slice(1)
+	var at := clampi(args["position"], 1, queued.size() + 1)
+	queued.insert(at - 1, job_id)
+	_renumber([order[0]] + queued)
+	_emit("job_moved", _state["jobs"][job_id]["unit"], { "job": job_id, "position": _state["jobs"][job_id]["queue_pos"] })
+
+
+func _apply_cancel_job(job_id: int) -> void:
+	var job: Dictionary = _state["jobs"][job_id]
+	var stock: Dictionary = _state["units"][job["unit"]]["inventory"]
+	for item: String in job["held"]:
+		stock[item] = stock.get(item, 0) + job["held"][item]
+	_state["jobs"].erase(job_id)
+	_renumber(_facility_jobs(job["facility"]))
+	_emit("job_cancelled", job["unit"], { "job": job_id, "recipe": job["recipe"], "facility": job["facility"] })
+
+
+func _renumber(order: Array) -> void:
+	for index in range(order.size()):
+		var job: Dictionary = _state["jobs"][order[index]]
+		job["queue_pos"] = index
+		if index == 0 and job["status"] == "queued":
+			job["status"] = "waiting"
+		elif index > 0:
+			job["status"] = "queued"
+			job["reason"] = ""
+
+
+## A finished job leaves its facility empty for the rest of the tick, so the next
+## one starts the tick after.
+func _advance_jobs() -> void:
+	var emptied: Array[int] = []
+	for id: int in _sorted_keys(_state["jobs"]):
+		var job: Dictionary = _state["jobs"][id]
+		if job["queue_pos"] != 0:
+			continue
+		if job["status"] == "running" and _state["tick"] >= job["end_tick"]:
+			if _finish_run(id):
+				emptied.append(job["facility"])
+		elif job["status"] == "waiting":
+			_try_start(id)
+	for facility: int in emptied:
+		_renumber(_facility_jobs(facility))
+
+
+func _try_start(id: int) -> void:
+	var job: Dictionary = _state["jobs"][id]
+	var recipe: Dictionary = _defs["recipes"][job["recipe"]]
+	var stock: Dictionary = _state["units"][job["unit"]]["inventory"]
+	for input: Dictionary in recipe["inputs"]:
+		if stock.get(input["item"], 0) < input["grams"]:
+			if job["reason"] != "missing_inputs":
+				job["reason"] = "missing_inputs"
+				_emit("job_paused", job["unit"], { "job": id, "reason": "missing_inputs" })
+			return
+	for input: Dictionary in recipe["inputs"]:
+		stock[input["item"]] -= input["grams"]
+		if stock[input["item"]] == 0:
+			stock.erase(input["item"])
+		job["held"][input["item"]] = job["held"].get(input["item"], 0) + input["grams"]
+	if job["reason"] == "missing_inputs":
+		_emit("job_resumed", job["unit"], { "job": id, "reason": "missing_inputs" })
+	job["status"] = "running"
+	job["reason"] = ""
+	job["start_tick"] = _state["tick"]
+	job["end_tick"] = _state["tick"] + recipe["ticks"]
+	if not job["started"]:
+		job["started"] = true
+		_emit("job_started", job["unit"], { "job": id, "command": 0 })
+
+
+## True when that was the job's last run, so it has left the facility.
+func _finish_run(id: int) -> bool:
+	var job: Dictionary = _state["jobs"][id]
+	var recipe: Dictionary = _defs["recipes"][job["recipe"]]
+	var stock: Dictionary = _state["units"][job["unit"]]["inventory"]
+	job["held"] = {}
+	for output: Dictionary in recipe["outputs"]:
+		stock[output["item"]] = stock.get(output["item"], 0) + output["grams"]
+	_emit("job_finished", job["unit"], { "job": id, "recipe": job["recipe"], "facility": job["facility"] })
+	job["count_left"] -= 1
+	job["start_tick"] = 0
+	job["end_tick"] = 0
+	if job["count_left"] > 0:
+		job["status"] = "waiting"
+		_try_start(id)
+		return false
+	_state["jobs"].erase(id)
+	return true
+
+
+# --- Copy fit (C9) ---
+
+func _validate_copy_fit(unit: Dictionary, args: Dictionary) -> Dictionary:
+	var source_id: int = args.get("source", 0)
+	if not _state["units"].has(source_id):
+		return _result("unknown_unit")
+	if source_id == unit["id"]:
+		return _result("invalid_target")
+	var from: int = args.get("from", 0)
+	var problem := _partner_problem(unit, from)
+	var docked_here: bool = _state["units"].get(from, {}).get("dock", {}).get("target_unit", 0) == unit["id"]
+	if not problem.is_empty() and not docked_here:
+		return _result(problem)
+	if _state["units"][source_id]["parts"]["def"] != unit["parts"]["def"]:
+		return _result("fit_mismatch")
+	var plan := _plan_copy(unit, source_id, from, false)
+	var missing := 0
+	for item: String in plan["missing"]:
+		missing += plan["missing"][item]
+	return _result("", { "attach": plan["attached"].size(), "missing": missing, "refused": plan["refused"].size() })
+
+
+## Copies like FitCopySystem: source parts in ascending ID (parents first), each
+## fitted where the source has it, with further passes while a pass fits anything.
+## Every part left over is refused with its reason, and `missing` separately counts
+## the left-over parts `from` does not hold, so one part can be in both.
+## With `apply` false it works on a copy of the state, so check() changes nothing.
+func _plan_copy(unit: Dictionary, source_id: int, from: int, apply: bool) -> Dictionary:
+	var sim: StubSim = self
+	if not apply:
+		sim = StubSim.new()
+		sim._defs = _defs
+		sim._state = _state.duplicate(true)
+	return sim._copy(sim._state["units"][unit["id"]], sim._state["units"][source_id], from)
+
+
+func _copy(unit: Dictionary, source: Dictionary, from: int) -> Dictionary:
+	var parents: Dictionary = {}
+	_note_parents(source["parts"], parents)
+	var mapped: Dictionary = { source["parts"]["id"]: unit["parts"]["id"] }
+	var pending: Array = _sorted_keys(parents)
+	var reasons: Dictionary = {}
+	var attached: Array[int] = []
+	var progress := true
+	while progress and not pending.is_empty():
+		progress = false
+		var left: Array = []
+		for source_part: int in pending:
+			var part := _find_part(source, source_part)
+			if not mapped.has(parents[source_part]):
+				reasons[source_part] = "parent_not_fitted"
+				left.append(source_part)
+				continue
+			var parent := _find_part(unit, mapped[parents[source_part]])
+			var present := _child_at(parent, part["parent_connector"])
+			if not present.is_empty() and present["def"] == part["def"] and present["connector"] == part["connector"]:
+				mapped[source_part] = present["id"]
+				progress = true
+				continue
+			var args: Dictionary = {
+				"item": part["def"], "from": from, "parent_part": parent["id"],
+				"parent_connector": part["parent_connector"], "part_connector": part["connector"],
+			}
+			var result := _validate_attach_parts(unit, args)
+			if not result["ok"]:
+				reasons[source_part] = result["reason"]
+				left.append(source_part)
+				continue
+			_apply_attach(unit, args, false)
+			mapped[source_part] = _child_at(parent, part["parent_connector"])["id"]
+			attached.append(mapped[source_part])
+			progress = true
+		pending = left
+	var refused: Array[Dictionary] = []
+	var needed: Dictionary = {}
+	for source_part: int in pending:
+		var item: String = _find_part(source, source_part)["def"]
+		refused.append({ "source_part": source_part, "item": item, "reason": reasons[source_part] })
+		needed[item] = needed.get(item, 0) + 1
+	var missing: Dictionary = {}
+	for item: String in _sorted_keys(needed):
+		var held: int = _state["units"][from]["inventory"].get(item, 0) / _defs["modules"][item]["mass_g"]
+		if needed[item] > held:
+			missing[item] = needed[item] - held
+	return { "attached": attached, "missing": missing, "refused": refused }
+
+
+## Every part below the root, keyed by ID, with its parent's ID.
+func _note_parents(part: Dictionary, parents: Dictionary) -> void:
+	for child: Dictionary in part["children"]:
+		parents[child["id"]] = part["id"]
+		_note_parents(child, parents)
+
+
+func _child_at(parent: Dictionary, connector: String) -> Dictionary:
+	for child: Dictionary in parent["children"]:
+		if child["parent_connector"] == connector:
+			return child
+	return {}
