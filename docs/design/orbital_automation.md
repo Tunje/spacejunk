@@ -19,7 +19,7 @@ The same rules behave very differently depending on what orbits what. B's [plane
 
 | Layout | What changes for a drone | Lap figures |
 | ------ | ------------------------ | ----------- |
-| **A. A cluster in solar orbit**: station and rocks 30 to 50 km apart, all circling the star | Almost nothing. Over a 4-hour session the rocks drift a few hundred metres relative to the station. | Exact, if each rock shares the station's orbit size. Otherwise the drift moves a lap by about 5 to 9 ticks over 4 hours. |
+| **A. A cluster in solar orbit**: station and rocks 30 to 50 km apart, all circling the star | Nothing. The cluster is one co-moving frame, and trips inside it stay straight-line, as today. | Exact, as today. |
 | **B. One ring around a planet**: station and rocks in the same orbit, at different points along it | No windows: every departure is as good as any other. But a hop takes about one orbit, and the 3-minute trip becomes about 32 minutes. | Fixed, but longer. |
 | **C. Different orbits around a planet** | Transfer windows open and close. A drone waits, sometimes for hours, or pays a lot more propellant. | Vary with orbital phase. Most of this page is about this layout. |
 
@@ -27,7 +27,6 @@ How the figures were worked out, *illustrative*, from the standard formulas. Rea
 
 | Case | Result |
 | ---- | ------ |
-| Layout A: rock 50 km closer to the star than the station | Drifts 54 m per hour along the orbit |
 | Layout B: rock 50 km ahead in a 100 km orbit, one-orbit phasing hop | 32.3 minutes, 17 m/s |
 | Layout B: the same hop over 2 orbits | 64.9 minutes, 9 m/s |
 | Layout C: station at 100 km, rock at 150 km | Window every 5.5 hours, 76 m/s, 17 minutes in flight |
@@ -88,7 +87,7 @@ Commands, events and the view gain one operation, `waiting`, with its departure 
 
 ## 6. Lap figures, tests and saves
 
-**Layout A or B.** The lap figures survive. In layout A the drift is slow but never stops: a rock 50 km nearer the star drifts about 100 m over a slice run, but about 5 km over a 100-hour game. A's page proposes one of two fixes, and either keeps today's laps exact. Either the cluster is one co-moving frame, with today's straight trips exact inside it, or every rock gets the station's orbit period, which [planets.md](planets.md) section 9 now requires. In layout B the figures change once, because trips take about an orbit, and stay fixed after that.
+**Layout A or B.** The lap figures survive. In layout A, the Lead has ruled that the cluster is one co-moving frame, as A's page proposes: the cluster as a whole moves on its solar orbit, and trips inside it stay straight-line. Relative drift between the rocks never arises, so today's laps stay exact however long a game runs. In layout B the figures change once, because trips take about an orbit, and stay fixed after that.
 
 **Layout C.** Fixed per-lap numbers go, but the tests stay exact. The window rule is deterministic, so for circular orbits in one plane every departure tick can be worked out by hand from the orbit periods. The golden test then asserts:
 
@@ -128,11 +127,11 @@ A (newmanprobe-db) agrees all five assumptions, with these details:
 2. **The two queries.** `quote(unit, target, depart_tick)` gives `{ arrive_tick, cost_g }` in closed form for a Hohmann transfer between circular orbits in one plane. Time of flight is half the transfer orbit's period, fixed for each pair of orbits, and `cost_g` comes from the rocket equation in integers. `next_window` is also closed form, because the phase gap closes at a constant rate. Eccentric orbits need a bounded search. Inside the rock cluster, today's straight-line quote stays.
 3. **Parking.** Co-moving: the target's position plus a fixed offset, in a frame that doesn't rotate, with no propellant spent holding station. A landed unit's position comes from its planet cell, and planets don't rotate in the proposal.
 4. **Atomic after departure.** This fits the autopilot. A paid trip runs to arrival, unaffected by faults or power, and a stop while waiting for a window cancels with nothing paid.
-5. **Scale.** The cluster's drift is negligible over a slice run but adds up over a long game, and A's page proposes the two fixes in section 6.
+5. **Scale.** Real drift between the rocks would be negligible over a slice run but would add up over a long game. The Lead ruled for A's co-moving frame, so the slice has none.
 
 A also adds the pacing fact in section 1. With a 600 km planet at Kerbin gravity, a low orbit takes about 33 minutes, so a planet trip takes 15 to 20 minutes of game time. Even with the orbit compressed to 10 minutes, A measured a 5.3-minute trip from 700 to 760 km, with an 86-minute synodic period.
 
-**From B**, as B's recommendation and not a decision: in the slice, the station and the three rocks stay one cluster in a shared solar orbit, with no planet near them, so the fixed laps hold. Planets come only after M4. [planets.md](planets.md) section 9 now places the rocks ahead of, behind, above or below the station, never nearer the star or farther from it.
+**From B**, as B's recommendation and not a decision: in the slice, the station and the three rocks stay one cluster in a shared solar orbit, with no planet near them, so the fixed laps hold. Planets come only after M4.
 
 ## 9. Questions for the owner
 
