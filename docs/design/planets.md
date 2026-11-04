@@ -8,7 +8,7 @@ Status: **proposal for the owner**, task design/planets. Nothing here is built, 
 - **Each hex gets one integer height and one surface type.** The type comes from a small rule table on height, latitude, moisture and slope, so there are ice caps, seas, deserts, highlands and cliffs without hand placement.
 - **Variety comes from planet kinds**, not from the seed alone. A kind (airless moon, desert world, ocean world, ice world, temperate world) sets the ranges for sea level, roughness, temperature and palette, and the seed picks within them. That stops every planet looking like the same continents in a different colour.
 - **A hex is a place, not a block of rock.** At 600 km radius a hex is about 7 km across, so it works as a claim: at most one landing or build site, and a chance of one hidden deposit. It is not dug out cell by cell.
-- **One choice for you: a fixed count or a fixed size.** Your figure gives every planet 100,002 hexes, so a small moon's hexes are 2.4 km and a large world's are 14.5 km. The alternative fixes every hex at about 7 km, so a 200 km moon has about 11,000 hexes and a 1,200 km world about 400,000. I lean towards fixed size, since a hex then means the same in play everywhere, but both are the same code (section 5).
+- **Decided by the owner (2026-11-04): a fixed hex size of about 7 km.** The number of cells follows the planet's size: about 11,000 on a 200 km moon, 100,002 at 600 km and about 400,000 on a 1,200 km world. A hex then means the same in play everywhere (section 5).
 - **Recommended look: smooth terrain over hex data**, as KSP does it, with the hex grid shown only as an overlay in map and build modes. Hex columns are cheaper but look like a board game and show visible steps from orbit.
 - **It is already proven to work.** Agent A's test script builds the 100,002-cell grid with exactly 12 pentagons, gives every hex an integer height in about 20 µs on demand, and replays identically.
 - **The boundary, agreed with Agent A:** whatever decides play (height, type, slope, deposits) is integer and deterministic, and Agent A proves it. Everything below hex size (bumps, rocks, colour blending, clouds, water) is client-only float detail and never reaches the simulation.
@@ -41,7 +41,7 @@ Every input is an integer the simulation can compute for one hex on demand.
 | Input | Source |
 | ----- | ------ |
 | Height | Agent A's noise for this seed and cell, a signed integer in metres, scaled down by `height_range_m` and `roughness` with integer multiply-divide |
-| Latitude | The north component of the cell's direction (Agent A's grid has +Z at the north pole), in thousandths. That is the sine of the latitude, so no trigonometry is needed |
+| Latitude | The north component of the cell's direction (+Y is north, matching the contracts' axes), in thousandths. That is the sine of the latitude, so no trigonometry is needed |
 | Temperature | `temperature`, minus a share for latitude, minus a share for height, so poles and peaks are cold |
 | Moisture | A second noise field, 0 to 1000, plus `moisture_bias` |
 | Slope | The largest height difference to any of the cell's six (or five) neighbours |
@@ -142,7 +142,7 @@ As with ship models, nothing generated for display ever decides play.
 
 Exactly 12 of the hexes are pentagons, wherever the grid is laid. They are slightly smaller, and the rules treat them as cells with five neighbours. On Agent A's grid at 600 km, the distance between neighbouring centres runs from 5.4 to 7.9 km, so "7 km" is an average.
 
-**The owner's choice: a fixed count or a fixed size.**
+**Decided: fixed size.** The owner chose fixed size on 2026-11-04. The comparison is kept as the reason.
 
 | | Fixed count (owner's figure) | Fixed size |
 | - | ---------------------------- | ---------- |
@@ -152,7 +152,7 @@ Exactly 12 of the hexes are pentagons, wherever the grid is laid. They are sligh
 | For | Same cost to generate and draw on every planet | A hex means the same everywhere: one site, the same deposit odds, the same landing scale. Small moons are cheap |
 | Against | Hex size, and with it site spacing and deposit density, changes from world to world | Large worlds cost four times as much to draw |
 
-B leans towards fixed size. Either is the same code, since `n` is one setting.
+`n` is one setting, picked from the radius so a hex is about 7 km.
 
 ## 6. The look
 
@@ -192,7 +192,7 @@ Agent A answered every open question and measured the grid in a throwaway script
 | -------- | ------ |
 | Cell IDs | North pole 0, south pole 1, then the rest across 10 diamonds of n × n. Any point on a diamond edge maps to its single owning cell in one step |
 | Grid check | 100,002 cells: 12 pentagons and 99,990 hexagons, 300,000 edges, 200,000 triangles. Every neighbour link goes both ways |
-| Cell centres | An integer unit direction per cell in the planet's frame, +Z north. Centre = direction × (datum radius + height), in mm, with integer maths only |
+| Cell centres | An integer unit direction per cell in the planet's frame, +Y north, matching contracts.md section 1. Centre = direction × (datum radius + height), in mm, with integer maths only |
 | Height | Signed whole metres, -8000 to +8000, about a 600 km datum |
 | Noise | Smooth integer value noise, three octaves. Each octave is a weighted mix, so it cannot leave its range, and no product passes 2^62, so nothing overflows. Moisture is the same noise with an offset seed |
 | Deposit and other rolls | A hash of the seed, cell ID and a salt for each roll |
