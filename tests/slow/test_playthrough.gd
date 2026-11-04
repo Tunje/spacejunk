@@ -2,6 +2,7 @@ extends GutTest
 ## All ten goals on the real Sim through the real panels, from one shared run.
 
 const SAVE_PATH := "user://test_playthrough.save"
+const AUTO_PATH := "user://test_playthrough_autosave.save"
 const LAP_LIMIT := 2000
 
 var main: Node
@@ -12,6 +13,7 @@ var laps_before_load := 0
 
 
 func before_all() -> void:
+	SaveStore.autosave_path = AUTO_PATH
 	main = load("res://client/main.tscn").instantiate()
 	add_child(main)
 	player = PanelPlayer.new(main)
@@ -45,6 +47,9 @@ func _save_and_load_mid_cycle() -> void:
 	player.view.refresh(0.016)
 	DirAccess.remove_absolute(SAVE_PATH)
 	SaveStore.path = SaveStore.DEFAULT_PATH
+	if FileAccess.file_exists(AUTO_PATH):
+		DirAccess.remove_absolute(AUTO_PATH)
+	SaveStore.autosave_path = SaveStore.DEFAULT_AUTOSAVE_PATH
 
 
 func after_all() -> void:

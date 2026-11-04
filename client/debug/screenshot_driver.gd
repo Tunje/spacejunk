@@ -15,6 +15,7 @@ class_name ScreenshotDriver extends Node
 ##   --drone-fly=1                   then gives it a core and propellant, and sends it to a rock
 ##   --drone-fit=<item>              then opens fitting on it with that part chosen and in stock
 ##   --goals-done=<count>            marks the first goals done, to show a later hint
+##   --autosave=1                    autosaves to a side file, never the player's, and loads it
 
 const DRONE_FITS: Array[Dictionary] = [
 	{ "item": "small_solar_panel_mk1", "at": "side_a_px" },
@@ -25,6 +26,8 @@ const DRONE_FITS: Array[Dictionary] = [
 	{ "item": "small_mining_laser_mk1", "at": "side_a_nz" },
 ]
 const RUN_STEP_S := 0.1
+const SHOT_SAVE_PATH := "user://screenshot.save"
+const SHOT_AUTOSAVE_PATH := "user://screenshot_autosave.save"
 
 var main: Node3D
 var parsed: Dictionary = {}
@@ -92,6 +95,12 @@ func _run() -> void:
 		for index in range(int(parsed["goals-done"])):
 			main.goal_panel.tracker.complete(GoalTracker.GOALS[index]["id"])
 		main.goal_panel.refresh()
+	if parsed.has("autosave"):
+		SaveStore.path = SHOT_SAVE_PATH
+		SaveStore.autosave_path = SHOT_AUTOSAVE_PATH
+		main.save_game()
+		main.autosave()
+		main.load_game()
 
 
 func _show_demo_drone() -> void:
