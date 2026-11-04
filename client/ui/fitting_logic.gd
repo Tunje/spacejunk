@@ -90,11 +90,15 @@ static func copy_command(unit_id: int, source: int, from: int) -> Dictionary:
 	return { "type": "copy_fit", "unit": unit_id, "args": { "source": source, "from": from } }
 
 
-## "Will fit 5, missing 1" from a copy_fit check's detail counts.
+## "Will fit 5, missing 1" from a copy_fit check's detail counts. Every part not
+## fitted is refused, including those short of stock, which `missing` also
+## counts; so "won't fit" is what is left after the missing ones.
 static func copy_summary(detail: Dictionary) -> String:
 	var text := "Will fit %d" % detail.get("attach", 0)
-	if detail.get("missing", 0) > 0:
-		text += ", missing %d" % detail["missing"]
-	if detail.get("refused", 0) > 0:
-		text += ", %d won't fit" % detail["refused"]
+	var missing: int = detail.get("missing", 0)
+	if missing > 0:
+		text += ", missing %d" % missing
+	var other: int = detail.get("refused", 0) - missing
+	if other > 0:
+		text += ", %d won't fit" % other
 	return text

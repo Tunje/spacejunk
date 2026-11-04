@@ -40,6 +40,7 @@ const REASONS: Dictionary = {
 	"over_load_limit": "Too much mass on that connector",
 	"over_mass_limit": "Over the mass limit",
 	"over_power_budget": "Over the power budget",
+	"parent_not_fitted": "The part it sits on was not fitted",
 	"part_busy": "That part is in use",
 	"player_order": "Replaced by a new order",
 	"player_stop": "Stopped",
@@ -158,5 +159,6 @@ static func fit_copied(data: Dictionary, unit_name: String, items: Dictionary) -
 			names.append("%s x%d" % [items.get(item, {}).get("name", item), data["missing"][item]])
 		text += ". Missing %s" % ", ".join(names)
 	for refused: Dictionary in data["refused"]:
-		text += ". %s: %s" % [items.get(refused["item"], {}).get("name", refused["item"]), reason(refused["reason"])]
+		if refused["reason"] != "missing_inputs":
+			text += ". %s: %s" % [items.get(refused["item"], {}).get("name", refused["item"]), reason(refused["reason"])]
 	return text

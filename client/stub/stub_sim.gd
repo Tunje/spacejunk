@@ -1091,7 +1091,10 @@ func _validate_copy_fit(unit: Dictionary, args: Dictionary) -> Dictionary:
 	return _result("", { "attach": plan["attached"].size(), "missing": missing, "refused": plan["refused"].size() })
 
 
-## Walks the source's tree and fits each part this unit lacks at the same place.
+## Copies like FitCopySystem: source parts in ascending ID (parents first), each
+## fitted where the source has it, with further passes while a pass fits anything.
+## Every part left over is refused with its reason, and `missing` separately counts
+## the left-over parts `from` does not hold, so one part can be in both.
 ## With `apply` false it works on a copy of the state, so check() changes nothing.
 func _plan_copy(unit: Dictionary, source_id: int, from: int, apply: bool) -> Dictionary:
 	var sim: StubSim = self
@@ -1099,52 +1102,65 @@ func _plan_copy(unit: Dictionary, source_id: int, from: int, apply: bool) -> Dic
 		sim = StubSim.new()
 		sim._defs = _defs
 		sim._state = _state.duplicate(true)
-	var plan: Dictionary = { "attached": [], "missing": {}, "refused": [] }
-	var source: Dictionary = sim._state["units"][source_id]
-	var target: Dictionary = sim._state["units"][unit["id"]]
-	sim._copy_children(target, source["parts"], target["parts"], from, plan)
-	return plan
+	return sim._copy(sim._state["units"][unit["id"]], sim._state["units"][source_id], from)
 
 
-func _copy_children(unit: Dictionary, source_part: Dictionary, target_part: Dictionary, from: int, plan: Dictionary) -> void:
-	for child: Dictionary in source_part["children"]:
-		if _module(child)["capabilities"].has("core"):
-			continue
-		var placed := _child_at(target_part, child["parent_connector"])
-		if placed.is_empty():
-			placed = _copy_one(unit, child, target_part, from, plan)
-		elif placed["def"] != child["def"]:
-			plan["refused"].append({ "source_part": child["id"], "item": child["def"], "reason": "connector_occupied" })
-			placed = {}
-		if placed.is_empty():
-			_skip_subtree(child, plan)
-		else:
-			_copy_children(unit, child, placed, from, plan)
+func _copy(unit: Dictionary, source: Dictionary, from: int) -> Dictionary:
+	var parents: Dictionary = {}
+	_note_parents(source["parts"], parents)
+	var mapped: Dictionary = { source["parts"]["id"]: unit["parts"]["id"] }
+	var pending: Array = _sorted_keys(parents)
+	var reasons: Dictionary = {}
+	var attached: Array[int] = []
+	var progress := true
+	while progress and not pending.is_empty():
+		progress = false
+		var left: Array = []
+		for source_part: int in pending:
+			var part := _find_part(source, source_part)
+			if not mapped.has(parents[source_part]):
+				reasons[source_part] = "parent_not_fitted"
+				left.append(source_part)
+				continue
+			var parent := _find_part(unit, mapped[parents[source_part]])
+			var present := _child_at(parent, part["parent_connector"])
+			if not present.is_empty() and present["def"] == part["def"] and present["connector"] == part["connector"]:
+				mapped[source_part] = present["id"]
+				progress = true
+				continue
+			var args: Dictionary = {
+				"item": part["def"], "from": from, "parent_part": parent["id"],
+				"parent_connector": part["parent_connector"], "part_connector": part["connector"],
+			}
+			var result := _validate_attach_parts(unit, args)
+			if not result["ok"]:
+				reasons[source_part] = result["reason"]
+				left.append(source_part)
+				continue
+			_apply_attach(unit, args, false)
+			mapped[source_part] = _child_at(parent, part["parent_connector"])["id"]
+			attached.append(mapped[source_part])
+			progress = true
+		pending = left
+	var refused: Array[Dictionary] = []
+	var needed: Dictionary = {}
+	for source_part: int in pending:
+		var item: String = _find_part(source, source_part)["def"]
+		refused.append({ "source_part": source_part, "item": item, "reason": reasons[source_part] })
+		needed[item] = needed.get(item, 0) + 1
+	var missing: Dictionary = {}
+	for item: String in _sorted_keys(needed):
+		var held: int = _state["units"][from]["inventory"].get(item, 0) / _defs["modules"][item]["mass_g"]
+		if needed[item] > held:
+			missing[item] = needed[item] - held
+	return { "attached": attached, "missing": missing, "refused": refused }
 
 
-func _copy_one(unit: Dictionary, child: Dictionary, parent: Dictionary, from: int, plan: Dictionary) -> Dictionary:
-	var args: Dictionary = {
-		"item": child["def"], "from": from, "parent_part": parent["id"],
-		"parent_connector": child["parent_connector"], "part_connector": child["connector"],
-	}
-	var result := _validate_attach_parts(unit, args)
-	if result["reason"] == "missing_inputs":
-		plan["missing"][child["def"]] = plan["missing"].get(child["def"], 0) + 1
-		return {}
-	if not result["ok"]:
-		plan["refused"].append({ "source_part": child["id"], "item": child["def"], "reason": result["reason"] })
-		return {}
-	_apply_attach(unit, args, false)
-	var added := _child_at(parent, child["parent_connector"])
-	plan["attached"].append(added["id"])
-	return added
-
-
-## Parts below one that could not be fitted are counted as missing.
-func _skip_subtree(part: Dictionary, plan: Dictionary) -> void:
+## Every part below the root, keyed by ID, with its parent's ID.
+func _note_parents(part: Dictionary, parents: Dictionary) -> void:
 	for child: Dictionary in part["children"]:
-		plan["missing"][child["def"]] = plan["missing"].get(child["def"], 0) + 1
-		_skip_subtree(child, plan)
+		parents[child["id"]] = part["id"]
+		_note_parents(child, parents)
 
 
 func _child_at(parent: Dictionary, connector: String) -> Dictionary:

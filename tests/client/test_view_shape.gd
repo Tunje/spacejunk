@@ -25,7 +25,9 @@ const TASK_FIELDS: Array[String] = [
 const DEFS_SECTIONS: Array[String] = ["modules", "items", "recipes", "templates", "sinks"]
 const BODY_FIELDS: Array[String] = ["kind", "name", "pos_mm", "radius_mm", "visual_seed", "scanned"]
 const DEPOSIT_FIELDS: Array[String] = ["body", "item", "remaining_g", "hardness"]
-const JOB_FIELDS: Array[String] = ["unit", "facility", "recipe", "count_left", "status", "reason", "start_tick", "end_tick"]
+const JOB_FIELDS: Array[String] = [
+	"unit", "facility", "recipe", "count_left", "status", "reason", "start_tick", "end_tick", "queue_pos",
+]
 
 
 ## A new game from each backend present. `reference` runs the entity checks

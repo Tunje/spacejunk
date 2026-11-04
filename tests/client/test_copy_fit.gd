@@ -111,6 +111,8 @@ func test_a_part_not_in_stock_is_reported_missing() -> void:
 	_open_on(ships[0])
 	var button: Button = _row_for(ships[1])["button"]
 	assert_eq(button.text, "Fit like Probe 2: Will fit 0, missing 1")
+	assert_eq(bridge.check(FittingLogic.copy_command(ships[0], ships[1], ships[0]))["detail"],
+		{ "attach": 0, "missing": 1, "refused": 1 }, "a missing part is also refused, as in C9")
 	assert_true(button.disabled)
 	bridge.submit(FittingLogic.copy_command(ships[0], ships[1], ships[0]))
 	_ticks(1)
@@ -129,6 +131,9 @@ func test_a_part_in_the_way_is_refused() -> void:
 	var result: Dictionary = bridge.check(FittingLogic.copy_command(ships[0], ships[1], ships[0]))
 	assert_true(result["ok"])
 	assert_eq(result["detail"], { "attach": 0, "missing": 0, "refused": 1 })
+	bridge.submit(FittingLogic.copy_command(ships[0], ships[1], ships[0]))
+	_ticks(1)
+	assert_eq(main.event_log.lines[-1], "First Probe: fitted 0 parts. Mining Laser: That connector is already in use")
 
 
 func test_a_different_hull_is_a_fit_mismatch() -> void:
@@ -158,5 +163,20 @@ func test_stock_comes_from_the_docked_host_first() -> void:
 
 
 func test_the_summary_text() -> void:
-	assert_eq(FittingLogic.copy_summary({ "attach": 5, "missing": 1, "refused": 0 }), "Will fit 5, missing 1")
+	assert_eq(FittingLogic.copy_summary({ "attach": 5, "missing": 1, "refused": 1 }), "Will fit 5, missing 1")
 	assert_eq(FittingLogic.copy_summary({ "attach": 2, "missing": 0, "refused": 1 }), "Will fit 2, 1 won't fit")
+	assert_eq(FittingLogic.copy_summary({ "attach": 0, "missing": 1, "refused": 3 }), "Will fit 0, missing 1, 2 won't fit")
+
+
+func test_parts_on_an_unfitted_part_are_refused_as_parent_not_fitted() -> void:
+	var tank := _part_with(ships[0], "stub_tank")
+	var source_tank := _part_with(ships[1], "stub_tank")
+	assert_ne(tank, 0)
+	sim._find_part(sim._state["units"][ships[0]], sim._state["units"][ships[0]]["parts"]["id"])["children"] = 		sim._state["units"][ships[0]]["parts"]["children"].filter(func(p: Dictionary) -> bool: return p["id"] != tank)
+	bridge.start(sim)
+	var result: Dictionary = bridge.check(FittingLogic.copy_command(ships[0], ships[1], ships[0]))
+	assert_eq(result["detail"], { "attach": 0, "missing": 2, "refused": 2 }, "the tank and the thruster on it")
+	bridge.submit(FittingLogic.copy_command(ships[0], ships[1], ships[0]))
+	_ticks(1)
+	assert_string_contains(main.event_log.lines[-1], "The part it sits on was not fitted")
+	assert_ne(source_tank, 0)
