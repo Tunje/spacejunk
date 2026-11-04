@@ -10,6 +10,12 @@ const STAR_ENERGY := 14.0
 const PLANET_COLOUR := Color(0.42, 0.40, 0.37)
 const OUTLINE_COLOUR := Color(1.0, 1.0, 1.0, 0.35)
 const SITE_COLOUR := Color(1.0, 0.55, 0.1)
+## Within this many radii of its centre a planet is drawn at true scale, so close-up
+## terrain and craft on it share one scale. Further out it is compressed like any
+## body. Compression keeps the angular size, so the switch can't be seen.
+const TRUE_SCALE_RADII := 6.0
+## The base mesh sits this far under the close-up detail, which is drawn over it.
+const BASE_SINK_M := 60.0
 
 ## Hex outlines on every planet, toggled from the client (key O).
 static var show_outlines := false
@@ -79,10 +85,15 @@ func _build_planet(mesh: MeshInstance3D, body: Dictionary) -> void:
 		planet_built(built)
 
 
+func is_true_scale(distance_m: float) -> bool:
+	return kind == "planet" and distance_m < radius_m * TRUE_SCALE_RADII
+
+
 ## The terrain arrived: swap it in for the placeholder sphere.
 func planet_built(built: Dictionary) -> void:
 	var meshes := PlanetMesh.to_meshes(built)
 	surface.mesh = meshes[0]
+	surface.scale = Vector3.ONE * (1.0 - BASE_SINK_M / radius_m)
 	var material := StandardMaterial3D.new()
 	material.vertex_color_use_as_albedo = true
 	material.roughness = 0.95
@@ -144,6 +155,6 @@ func _build_star(mesh: MeshInstance3D) -> void:
 
 ## Places the body from its focus-relative position, compressing distant ones.
 func place(relative_m: Vector3) -> void:
-	var factor := FloatingOrigin.compression(relative_m.length())
+	var factor := 1.0 if is_true_scale(relative_m.length()) else FloatingOrigin.compression(relative_m.length())
 	position = relative_m * factor
 	scale = Vector3.ONE * radius_m * factor * (STAR_DRAWN_SCALE if kind == "star" else 1.0)

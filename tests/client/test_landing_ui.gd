@@ -169,10 +169,13 @@ func test_a_landed_craft_stands_on_the_drawn_surface() -> void:
 	var dir := PlanetGrid.direction(4321, _n())
 	var radial := Vector3(dir[0], dir[1], dir[2]).normalized()
 	assert_almost_eq(up.dot(radial), 1.0, 0.001, "upright on its cell")
-	var vertices: PackedVector3Array = body.planet["surface"][Mesh.ARRAY_VERTEX]
-	var ground := body.transform * vertices[4321]
+	# The ground at the cell is the sim's height there; close up, the detail tiles are
+	# levelled to it round a landed craft, and the base mesh sits a little below.
+	var height := PlanetGrid.height_m(SEED, dir, PlanetMesh.DEFAULT_WEIGHTS, RANGE_M)
+	var ground := body.position + radial * (RADIUS_MM / 1000.0 + height)
 	var feet := craft.position + up * craft.bottom_m
 	assert_almost_eq(feet.distance_to(ground), 0.0, 1.0, "its lowest part is on the ground")
+	assert_eq(body.scale, Vector3.ONE * RADIUS_MM / 1000.0, "drawn at true scale this close")
 
 
 func test_take_off_back_to_orbit() -> void:
