@@ -10,7 +10,7 @@ The owner asked: "gravity based movement like in kerbal maybe?" The workplan rec
 - **My recommendation is option 3:** real orbits with an autopilot first, and manual manoeuvre planning added later on the same maths. **Start it after the M4 judgement, not before.**
 - **It changes nothing in the slice.** The slice's rocks are 30 to 50 km from the station, far from any planet. They drift apart by about 100 m over a whole run. Gravity only starts to matter once there is a planet to orbit, and planets come after the slice. Doing this before M4 would delay M4 for a change the owner couldn't see.
 - **Full Kerbal-style flight (option 1) is a bad trade for this game.** The game's main claim is automation. Hand-flown burns can't be repeated by a drone, and Kerbal relies on time warp of 1000x and more, which this simulation can't reach.
-- **The real costs are pacing and propellant.** In a gravity well a trip takes about half an orbit, and the right moment to leave can be over an hour away. A trip around a Kerbin-sized planet takes 17 to 44 minutes of game time, and a round trip costs 6 to 44% of a ship's mass in propellant. Today a whole drone lap costs 2.7%. Landing on a 600 km planet and returning to orbit costs well over half the ship's mass.
+- **The real costs are pacing and propellant.** In a gravity well a trip takes about half an orbit, and the right moment to leave comes round only every 41 minutes to 5.5 hours (section 5). A trip around a Kerbin-sized planet takes 17 to 44 minutes of game time, and a round trip costs 5 to 44% of a ship's mass in propellant. Today a whole drone lap costs 2.7%. Landing on a 600 km planet and returning to orbit costs well over half the ship's mass.
 
 ## 2. The three options
 
@@ -19,7 +19,7 @@ The owner asked: "gravity based movement like in kerbal maybe?" The workplan rec
 | What the player does | Plans burns on manoeuvre nodes and flies them | Picks a target and presses Move to. The autopilot waits for the window and flies the transfer. | As option 2, then adds a manual mode for players who want it |
 | Integer determinism | Possible, but every burn makes a new orbit from position and speed, which needs more integer maths than I proved (section 9) | Proved: orbits on rails, planned transfers (section 3) | Option 2 first, then the same step as option 1 |
 | Automation | Poor. A drone's cycle can't contain hand-flown burns, so automation would need option 2's autopilot anyway. | Good. A cycle step is still "move to target". It waits for a window instead of leaving at once (section 4). | Good. Manual nodes are for the player's own ships. |
-| Pacing | Needs huge time warp | Trips and waits of minutes to an hour of game time, and 8x is enough (section 5) | Same as option 2 |
+| Pacing | Needs huge time warp | Trips of 17 to 44 minutes, and waits of up to a few hours of game time. 8x is enough (section 5). | Same as option 2 |
 | Work | Largest. It needs a full flight-planning screen before anything flies. | Medium (section 8) | Option 2's work, then manual mode as a later step |
 
 **Option 3, because** option 2 is the part that automation needs, and it is the foundation option 1 would need anyway. Manual planning later is a client screen plus one integer function, turning a burn into a new orbit, on top of the same rails.
@@ -88,10 +88,28 @@ C's [orbital_automation.md](orbital_automation.md) covers this in full. What we 
 
 In any gravity well, a cheap transfer takes half the transfer orbit's period. The next chance to leave comes round once per synodic period, which is long when two orbits are close. That is the physics, so a planet can't host 6-minute laps without changing it.
 
-| Planet, 600 km radius | Low orbit (700 km) | 700 to 760 km | 700 to 1000 km | 700 to 2000 km | Speed in low orbit |
-| --------------------- | ------------------ | ------------- | -------------- | -------------- | ------------------ |
-| **Kerbin gravity, 9.81 m/s², GM 3.53e12** | 33 min | 17 min, 90 m/s, window every 4.7 h | 22 min, 364 m/s, every 79 min | 44 min, 860 m/s, every 41 min | 2.2 km/s |
-| Compressed, 10-minute low orbit, GM 3.76e13 | 10 min | 5.3 min, 295 m/s, every 86 min | 6.7 min, 1188 m/s, every 24 min | 13 min, 2805 m/s, every 13 min | 7.3 km/s |
+### Orbit figures
+
+This is the one table of trip and window figures. [orbital_automation.md](orbital_automation.md) links here and doesn't repeat them.
+
+All rows use a 600 km planet at Kerbin gravity (9.81 m/s² at the surface, GM 3.5316e12 m³/s²), with circular orbits in one plane and Hohmann transfers. Each case gives its orbits as radius from the planet's centre, with altitude in brackets. The station is always in a 700 km orbit (100 km altitude), which takes 32.6 minutes and moves at 2.2 km/s.
+
+| Case | Rock's orbit | Time in flight | Delta-v each way | Propellant, round trip | Window comes round every | At 8x: flight, window spacing |
+| ---- | ------------ | -------------- | ---------------- | ---------------------- | ------------------------ | ----------------------------- |
+| Different orbits | 750 km (150 km) | 17.2 min | 76 m/s | 5% | 5.5 h | 2.2 min, 41 min |
+| Different orbits | 760 km (160 km) | 17.4 min | 90 m/s | 6% | 4.7 h | 2.2 min, 35 min |
+| Different orbits | 900 km (300 km) | 19.9 min | 264 m/s | 16% | 1.7 h | 2.5 min, 13 min |
+| Different orbits | 1000 km (400 km) | 21.8 min | 364 m/s | 22% | 79 min | 2.7 min, 10 min |
+| Different orbits | 2000 km (1400 km) | 43.7 min | 860 m/s | 44% | 41 min | 5.5 min, 5 min |
+| Same ring, rock 50 km ahead, one-orbit phasing hop | 700 km (100 km) | 32.3 min | 17 m/s for the hop | 1% | Any time | 4.0 min, none |
+| Same ring, the same hop over two orbits | 700 km (100 km) | 64.9 min | 9 m/s for the hop | Under 1% | Any time | 8.1 min, none |
+
+- **Propellant** is the share of the ship's mass at 3000 m/s exhaust speed, there and back.
+- **A wait** can be anything from zero to the full window spacing, depending on when the order is given.
+- **The closer two orbits are, the rarer their windows:** 5.5 hours apart at 50 km of difference, 41 minutes at 1300 km.
+- **The same-ring rows have no windows,** but a hop takes about one orbit however close the rock is.
+
+**Compressed gravity, for comparison.** At GM 3.76e13, ten times Kerbin's, a 700 km orbit takes 10 minutes but moves at 7.3 km/s. The 700 to 760 km transfer takes 5.3 minutes and 295 m/s each way, with a window every 86 minutes.
 
 The 600 km radius with Kerbin's 9.81 m/s² is already Kerbal's own compression: about ten times Earth's density, so a small world still has real gravity.
 
@@ -99,8 +117,8 @@ The 600 km radius with Kerbin's 9.81 m/s² is already Kerbal's own compression: 
 - **A Kerbin-like planet:** 600 km radius, GM 3.53e12 m³/s², and no rotation, as agreed with B.
 - **Don't compress gravity further.** A 10-minute orbit needs 7.3 km/s of orbital speed, so landing and leaving would cost nearly all of a chemical ship's mass.
 - **Orbits for stations and moons from 700 km to about 2000 km.**
-- **The rock cluster stays a cluster.** Either it is one co-moving frame, with today's trips exact, or every rock in it gets the station's period, so the rocks circle each other and never drift apart. I prefer the co-moving frame, because it keeps every figure in [reference_scenario.md](reference_scenario.md).
-- **Planet trips are expeditions, not laps:** 17 to 44 minutes of game time, or 2 to 6 minutes at 8x. A window wait of up to 79 minutes is 10 minutes at 8x, and the autopilot waits on its own. Very close orbits, like 700 to 760 km, should be avoided by design, because their windows are hours apart.
+- **Decided by the Lead: the rock cluster is one co-moving frame.** Inside it there is no gravity between members and no drift, and today's straight-line trips are exact. This keeps [reference_scenario.md](reference_scenario.md) and checks 1 to 10 unchanged by construction, and places no limit on where rocks sit. The alternative, giving every rock the station's period, was not chosen.
+- **Planet trips are expeditions, not laps:** 17 to 44 minutes of game time, or 2 to 6 minutes at 8x. Windows come round every 41 minutes to 5.5 hours, and the autopilot waits on its own. Content should avoid orbits close to the station's, whose windows are hours apart, or put such rocks in the same ring.
 
 ### Time warp
 
