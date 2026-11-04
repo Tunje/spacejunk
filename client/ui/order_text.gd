@@ -8,7 +8,7 @@ const REASONS: Dictionary = {
 	"data_mismatch": "The save was made with different game data",
 	"no_save": "No saved game yet",
 	"unknown_scenario": "The save names an unknown scenario",
-	"unsupported_orbit": "That path is not flown yet",
+	"unsupported_orbit": "Can't fly there from here yet",
 	"version_mismatch": "The save is from a different version",
 	"bad_cycle": "That cycle is not valid",
 	"burn_in_past": "That time has already passed",
@@ -65,6 +65,8 @@ const REASONS: Dictionary = {
 const OPERATIONS: Dictionary = {
 	"idle": "Idle",
 	"moving": "Moving",
+	"waiting": "Waiting for window",
+	"burning": "Burning",
 	"docking": "Docking",
 	"undocking": "Undocking",
 	"loading": "Loading",

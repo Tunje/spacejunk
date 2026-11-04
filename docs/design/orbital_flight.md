@@ -285,7 +285,7 @@ Sizes compare with earlier kernel tasks: **S** is about A7's size, **M** about A
 - **networks.md section 6** is rewritten by me in A10 to A13. Inside a frame it stays word for word. Outside a frame it gains burns, transfers, frames and landing.
 - **schemas.md:**
   - The thruster capability gains `exhaust_m_s` and `thrust_kn`. A burn's per-tick delta-v is thrust over mass, so it needs thrust. `speed_m_s`, `propellant_kg_per_s` and `rated_mass_kg` stay, because in-frame `move_to` trips still read them (corrected after B asked).
-  - Bodies gain `gm_m3_s2`, `soi_m` and an orbit, and planets also gain a seed.
+  - Bodies gain `gm_km3_s2` (held as `gm` in 1000 m³/s²) and an orbit, and planets also gain a seed. The sphere of influence is derived at load (11.11), so there is no `soi_m`.
   - Scenarios gain frames.
   - All of these are B's data. I need them before A10's loader and A11's burns.
 - **accounting.md:**
@@ -434,3 +434,35 @@ Sizes compare with earlier kernel tasks: **S** is about A7's size, **M** about A
 - **Not done:**
   - Crashing into a body. A unit whose path goes through a planet passes through it until landing exists in A15.
   - Predicting a sphere change ahead of time. `predict` still follows the current orbit only. A13's planner will need the crossing tick, found by bounded integer search on the rails function.
+
+### 11.12 A13 results: the autopilot planner
+
+- **`Transfer`** (sim/networks/transfer.gd) plans trips between orbits around the same parent body.
+  - A unit's orbit is its own, its frame's or its host's.
+  - A target's orbit is its frame's or its own. A body with gravity is a place to orbit or land on, so it isn't a rendezvous target, and landing is A15.
+  - Both orbits must be near-circular (e ≤ 0.01) and in one plane (within 1°). Anything else is `unsupported_orbit`.
+- **Hohmann transfers** between different radii.
+  - The window is closed form. The target must lead by half a turn less its motion during the flight, and the phase gap closes at a constant rate, so the wait is one long division on the two periods.
+  - The flight is half the transfer orbit's period. Both burns are priced by the rocket equation and paid at departure.
+- **Phasing** within one ring (radii within 1/15, where windows would be ten or more orbits apart).
+  - It leaves at once on an orbit whose period brings it back to its start just as the target arrives there.
+  - That takes one or more turns, changing the period by at most a tenth per turn.
+- **The `move_to` step** (MoveStep, CargoSystem) works as contracts.md sections 3 and 7 describe.
+  - It waits with op `waiting` until the window. Nothing is paid, and `stop` cancels freely.
+  - At the stored window it pays and rides the transfer orbit on rails. The transfer is atomic.
+  - On arrival it parks at the stand-off beside a target in a frame, joining the frame, or takes a target unit's orbit.
+  - A wait whose task is held over its window takes the next window instead of leaving late.
+  - A player's order that finds no propellant at its window ends with `no_propellant`, as a route does. A cycle's step is held, and `MoveStep.retry` quotes the next window once the propellant is there.
+  - Inside one frame, a `move_to` is still today's route, so every slice figure holds.
+- **Queries for C:** `Travel.quote_trip`, `Travel.next_window` and `Travel.quote_leg`. The last prices a lap leg from another place at any mass, for the lap gate. `Sim.quote` and `Sim.next_window` are the read-only versions.
+- **A change from the plan:** the autopilot's burns are paid as impulses at departure, and the flight rides the transfer orbit on rails. It doesn't place finite burns through A11. That makes the arrival tick exact, and it matches the trip record agreed with C. A finite burn of a few minutes against a flight of 20 minutes or more changes little. The thruster isn't a power or heat load during an autopilot trip, as with today's routes.
+- **Measured:**
+  - Hohmann from 700 km to 900 km: 11,962 ticks, matching half the transfer period to two ticks. It lands within a kilometre of the target frame before parking.
+  - The window is within two ticks of relative motion of exact.
+  - Phasing 20° ahead in one ring: 0.94 of an orbit at 88 m/s.
+  - Save and load while waiting and in flight is byte-exact, and the run goes on to the same arrival.
+- **Not done:**
+  - Lambert transfers, which leave between windows at a higher cost.
+  - Eccentric or inclined targets.
+  - Trips that change sphere of influence.
+  - A transfer that passes through the planet isn't checked, which is A15.
