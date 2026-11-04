@@ -43,8 +43,9 @@ func apply(ctx: SimContext, command: Dictionary) -> void:
 func calculate_power(ctx: SimContext) -> void:
 	var flows := {}
 	ctx.flows[FLOW_KEY] = flows
+	var casters := RailSystem.shadow_casters(ctx.state)
 	for id: int in _sorted(ctx.state["units"]):
-		flows[id] = _available(ctx, id)
+		flows[id] = _available(ctx, id, casters)
 
 
 func allocate(ctx: SimContext) -> void:
@@ -70,11 +71,11 @@ func fill_ledger(ctx: SimContext, ledger: Dictionary) -> void:
 
 
 ## Phase 3: healthy supply and what each healthy battery can give this tick.
-func _available(ctx: SimContext, unit: int) -> Dictionary:
+func _available(ctx: SimContext, unit: int, casters: Array) -> Dictionary:
 	var index := UnitIndex.of(ctx, unit)
 	# Generators are solar, so a unit in a planet's shadow has none (orbital_flight.md 11.3, A16).
 	var supply_w := 0
-	if not index["generators"].is_empty() and not RailSystem.in_shadow(ctx.state, unit):
+	if not index["generators"].is_empty() and (casters.is_empty() or not RailSystem.in_shadow(ctx.state, unit, casters)):
 		supply_w = UnitIndex.healthy_total(ctx, index["generators"])
 	var budget_w := 0
 	var batteries := {}

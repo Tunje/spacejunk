@@ -511,3 +511,11 @@ Sizes compare with earlier kernel tasks: **S** is about A7's size, **M** about A
   - behind the planet, in front, behind but beside the shadow;
   - landed on the day and night sides;
   - supply 0 in shadow after a tick.
+
+### 11.15 A17 results: performance and limits
+
+perf_budget.md section 5a has the figures.
+- **Orbital load at 20 times the slice:** 14.9 ms mean and 30.8 ms at the 99th percentile for step and view, inside the 16 and 33 ms budget.
+- **Before two fixes it was 26 ms:** the frame-join check now tests positions before velocities, and planet-shadow casters are worked out once per tick.
+- **Burn previews:** a burn's flown preview costs about 0.2 ms per burn tick in `check`, so the client calls it on an edit, not every frame. Phase 1 no longer runs it, which removed 185 ms spikes when a burn was applied.
+- **Time warp:** at the slice's real size a tick costs 0.23 ms, so one core can run about 440x. At 20 times the slice it is about 7x.
