@@ -12,7 +12,7 @@ Read `plan/workplan.md` before starting a task. `docs/design/contracts.md` is th
 - Contracts change only through the Lead.
 - `tools/test.ps1 -Quick` skips `tests/slow` for use while working. A task is done when the full `tools/test.ps1` passes on its branch with `main` merged in, its acceptance check holds, and new behaviour has tests.
 - Client work also needs a screenshot read back by the agent.
-- If blocked for more than a short attempt, report to the Lead (session `newmanprobe-14`) rather than work around it.
+- If blocked for more than a short attempt, report to the Lead rather than work around it. Session names change on every restart, so use the name in the Lead's latest message to you.
 
 ## GPU holds
 
