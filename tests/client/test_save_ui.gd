@@ -2,6 +2,7 @@ extends GutTest
 ## Save and load through the real client, on the real Sim unless stated.
 
 const TEST_PATH := "user://test_slot.save"
+const AUTO_PATH := "user://test_autosave.save"
 
 var main: Node
 var bridge: SimBridge
@@ -11,6 +12,7 @@ var panel: OrderPanel
 
 func before_each() -> void:
 	SaveStore.path = TEST_PATH
+	SaveStore.autosave_path = AUTO_PATH
 	_remove_slot()
 	main = load("res://client/main.tscn").instantiate()
 	add_child_autofree(main)
@@ -20,6 +22,7 @@ func before_each() -> void:
 func after_each() -> void:
 	_remove_slot()
 	SaveStore.path = SaveStore.DEFAULT_PATH
+	SaveStore.autosave_path = SaveStore.DEFAULT_AUTOSAVE_PATH
 
 
 func _wire() -> void:
@@ -31,12 +34,13 @@ func _wire() -> void:
 
 
 func _remove_slot() -> void:
-	if FileAccess.file_exists(TEST_PATH):
-		DirAccess.remove_absolute(TEST_PATH)
+	for at: String in [TEST_PATH, AUTO_PATH]:
+		if FileAccess.file_exists(at):
+			DirAccess.remove_absolute(at)
 
 
-func _write_slot(text: String) -> void:
-	var file := FileAccess.open(TEST_PATH, FileAccess.WRITE)
+func _write_slot(text: String, at := TEST_PATH) -> void:
+	var file := FileAccess.open(at, FileAccess.WRITE)
 	file.store_string(text)
 	file.close()
 
@@ -268,4 +272,158 @@ func test_keys_and_buttons_save_and_load() -> void:
 	main.time_controls.save_pressed.emit()
 	assert_eq(_last_log(), "Game saved")
 	main.time_controls.load_pressed.emit()
+	assert_eq(_last_log(), "Game loaded")
+
+
+func _slot_text(at: String) -> String:
+	return FileAccess.get_file_as_string(at)
+
+
+func test_the_autosave_has_its_own_file_on_user_storage() -> void:
+	assert_string_starts_with(SaveStore.DEFAULT_AUTOSAVE_PATH, "user://")
+	assert_ne(SaveStore.DEFAULT_AUTOSAVE_PATH, SaveStore.DEFAULT_PATH)
+
+
+func test_autosave_fires_when_the_timer_runs_out() -> void:
+	main._process(main.AUTOSAVE_SECONDS - 1.0)
+	assert_false(SaveStore.exists(AUTO_PATH), "not before five minutes")
+	main._process(1.0)
+	assert_true(SaveStore.exists(AUTO_PATH))
+	assert_false(SaveStore.exists(), "the manual slot is left alone")
+	assert_eq(_last_log(), "Game autosaved")
+	assert_false(FileAccess.file_exists(AUTO_PATH + ".tmp"))
+
+
+func test_the_timer_restarts_after_an_autosave() -> void:
+	main._process(main.AUTOSAVE_SECONDS)
+	DirAccess.remove_absolute(AUTO_PATH)
+	main._process(main.AUTOSAVE_SECONDS - 1.0)
+	assert_false(SaveStore.exists(AUTO_PATH))
+	main._process(1.0)
+	assert_true(SaveStore.exists(AUTO_PATH))
+
+
+func test_closing_the_window_autosaves() -> void:
+	panel.press("Undock")
+	_run_ticks(160)
+	var closing_hash: String = bridge.sim.state_hash()
+	main._notification(NOTIFICATION_WM_CLOSE_REQUEST)
+	assert_true(SaveStore.exists(AUTO_PATH))
+	var second: Node = load("res://client/main.tscn").instantiate()
+	add_child_autofree(second)
+	second.get_node("Bridge").set_paused(true)
+	second.load_game()
+	assert_eq(second.event_log.lines[-1], "Autosave loaded")
+	assert_eq(second.get_node("Bridge").sim.state_hash(), closing_hash)
+
+
+func test_a_game_that_never_started_does_not_autosave() -> void:
+	var unstarted: Node = load("res://client/main.tscn").instantiate()
+	unstarted._notification(NOTIFICATION_WM_CLOSE_REQUEST)
+	unstarted._process(main.AUTOSAVE_SECONDS * 2.0)
+	unstarted.free()
+	assert_false(SaveStore.exists(AUTO_PATH))
+
+
+func test_load_picks_a_newer_autosave() -> void:
+	main.save_game()
+	panel.press("Undock")
+	_run_ticks(160)
+	var auto_hash: String = bridge.sim.state_hash()
+	main.autosave()
+	_run_ticks(80)
+	main.load_game()
+	assert_eq(bridge.sim.state_hash(), auto_hash)
+	assert_eq(_last_log(), "Autosave loaded")
+
+
+func test_load_picks_a_newer_manual_save() -> void:
+	main.autosave()
+	panel.press("Undock")
+	_run_ticks(160)
+	var manual_hash: String = bridge.sim.state_hash()
+	main.save_game()
+	_run_ticks(80)
+	main.load_game()
+	assert_eq(bridge.sim.state_hash(), manual_hash)
+	assert_eq(_last_log(), "Game loaded")
+
+
+func test_f9_and_the_load_button_pick_the_newer_slot() -> void:
+	main.save_game()
+	main.autosave()
+	var key := InputEventKey.new()
+	key.pressed = true
+	key.physical_keycode = KEY_F9
+	main._unhandled_key_input(key)
+	assert_eq(_last_log(), "Autosave loaded")
+	main.save_game()
+	main.time_controls.load_pressed.emit()
+	assert_eq(_last_log(), "Game loaded")
+
+
+func test_an_autosave_never_overwrites_the_manual_save() -> void:
+	main.save_game()
+	var manual := _slot_text(TEST_PATH)
+	panel.press("Undock")
+	_run_ticks(160)
+	main._process(main.AUTOSAVE_SECONDS)
+	main._notification(NOTIFICATION_WM_CLOSE_REQUEST)
+	main.autosave()
+	assert_eq(_slot_text(TEST_PATH), manual)
+	assert_ne(_slot_text(AUTO_PATH), manual)
+
+
+func test_a_failed_autosave_is_reported_and_play_goes_on() -> void:
+	SaveStore.autosave_path = "user://no_such_folder/autosave.save"
+	main.autosave()
+	assert_eq(_last_log(), "Autosave failed: could not write the file")
+	var tick: int = bridge.sim.current_tick()
+	_run_ticks(80)
+	assert_gt(bridge.sim.current_tick(), tick)
+
+
+func test_a_damaged_autosave_falls_back_to_the_manual_save() -> void:
+	panel.press("Undock")
+	_run_ticks(160)
+	var manual_hash: String = bridge.sim.state_hash()
+	main.save_game()
+	_run_ticks(80)
+	_write_slot("not a save at all", AUTO_PATH)
+	main.load_game()
+	assert_eq(bridge.sim.state_hash(), manual_hash)
+	assert_eq(main.event_log.lines[-2], "Autosave failed to load: The save file is damaged")
+	assert_eq(_last_log(), "Game loaded")
+
+
+func test_a_newer_autosave_the_sim_rejects_falls_back_to_the_manual_save() -> void:
+	main.save_game()
+	var manual_hash: String = bridge.sim.state_hash()
+	assert_true(SaveStore.write("garbage", {}, AUTO_PATH))
+	panel.press("Undock")
+	_run_ticks(80)
+	main.load_game()
+	assert_eq(bridge.sim.state_hash(), manual_hash)
+	assert_eq(main.event_log.lines[-2], "Autosave failed to load: The save file is damaged")
+	assert_eq(_last_log(), "Game loaded")
+
+
+func test_a_damaged_autosave_with_no_manual_save_changes_nothing() -> void:
+	_write_slot("not a save at all", AUTO_PATH)
+	var hash_before: String = bridge.sim.state_hash()
+	main.load_game()
+	assert_eq(_last_log(), "Autosave failed to load: The save file is damaged")
+	assert_eq(bridge.sim.state_hash(), hash_before)
+
+
+func test_a_manual_save_without_a_stamp_still_loads_and_counts_as_oldest() -> void:
+	main.save_game()
+	var data: Dictionary = JSON.parse_string(_slot_text(TEST_PATH))
+	data.erase("saved_us")
+	main.autosave()
+	_write_slot(JSON.stringify(data))
+	main.load_game()
+	assert_eq(_last_log(), "Autosave loaded")
+	DirAccess.remove_absolute(AUTO_PATH)
+	main.load_game()
 	assert_eq(_last_log(), "Game loaded")

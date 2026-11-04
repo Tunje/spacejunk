@@ -3,6 +3,8 @@ extends Node3D
 
 const SCENARIO := "reference"
 const SEED_VALUE := 1
+## Real seconds between autosaves, counted whether or not the game is paused.
+const AUTOSAVE_SECONDS := 300.0
 
 ## The stub stays reachable for tests and tools, with `--scenario=stub` after `--`.
 @export var scenario := SCENARIO
@@ -21,6 +23,10 @@ const SEED_VALUE := 1
 @onready var markers: EntityMarkers = %Markers
 @onready var system_map: SystemMap = $SystemMap
 @onready var standing_orders: StandingOrdersScreen = %StandingOrders
+
+## False until a game is running, so a failed start never autosaves.
+var _started := false
+var _autosave_left := AUTOSAVE_SECONDS
 
 
 func _ready() -> void:
@@ -55,6 +61,22 @@ func _ready() -> void:
 	ScreenshotDriver.attach_if_requested(self, args)
 	ScreenshotRunner.attach_if_requested(self, args)
 	FrameProbe.attach_if_requested(self, args)
+	_started = true
+
+
+func _process(delta: float) -> void:
+	if not _started:
+		return
+	_autosave_left -= delta
+	if _autosave_left <= 0.0:
+		autosave()
+
+
+## Closing the window autosaves first. Godot still quits on its own afterwards,
+## so project.godot needs no change.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST and _started:
+		autosave()
 
 
 func _new_backend(id: String) -> RefCounted:
@@ -133,38 +155,70 @@ func _open_side_screen(screen: Control) -> void:
 	screen.toggle()
 
 
-## Saves between ticks, after the bridge has drained events, as contracts require.
+## Saves to the manual slot, which only F5 and the Save button write.
 func save_game() -> void:
+	var saved := _write_slot(SaveStore.path)
+	event_log.add_line("Game saved" if saved else "Save failed: could not write the file")
+
+
+## Saves to the autosave slot and restarts the timer. A failed write is reported
+## and play goes on.
+func autosave() -> void:
+	_autosave_left = AUTOSAVE_SECONDS
+	var saved := _write_slot(SaveStore.autosave_path)
+	event_log.add_line("Game autosaved" if saved else "Autosave failed: could not write the file")
+
+
+## Runs from input, a signal or this node's own frame, never inside a bridge
+## step, so it always saves between ticks, as contracts require.
+func _write_slot(at: String) -> bool:
 	var client_state := {
 		"goals": goal_panel.tracker.save_state(),
 		"automation": automation_screen.save_state(),
 	}
-	var saved := SaveStore.write(bridge.sim.to_save(), client_state)
-	event_log.add_line("Game saved" if saved else "Save failed: could not write the file")
+	return SaveStore.write(bridge.sim.to_save(), client_state, at)
 
 
-## A failed load changes nothing, so the game in progress carries on.
+## Loads whichever slot is newer. A slot that exists but cannot be loaded is
+## reported, and the other one is used instead. A failed load changes nothing,
+## so the game in progress carries on.
 func load_game() -> void:
-	var slot := SaveStore.read()
-	if slot.has("reason"):
-		_report_load_failure(slot["reason"])
-		return
 	var script: GDScript = bridge.sim.get_script()
-	var loaded: RefCounted = script.from_save(slot["sim"])
-	if loaded == null:
-		_report_load_failure(script.last_error())
+	var failures: Array[String] = []
+	var slots := SaveStore.read_newest_first()
+	for slot: Dictionary in slots:
+		if slot.has("reason") and slot["reason"] != SaveStore.REASON_NO_SAVE:
+			failures.append(_load_failure_line(slot, slot["reason"]))
+	for slot: Dictionary in slots:
+		if slot.has("reason"):
+			continue
+		var loaded: RefCounted = script.from_save(slot["sim"])
+		if loaded == null:
+			failures.append(_load_failure_line(slot, script.last_error()))
+			continue
+		for line: String in failures:
+			event_log.add_line(line)
+		_apply_load(loaded, slot["client"])
+		event_log.add_line("Autosave loaded" if slot["auto"] else "Game loaded")
 		return
+	if failures.is_empty():
+		failures.append("Load failed: %s" % OrderText.reason(SaveStore.REASON_NO_SAVE))
+	for line: String in failures:
+		event_log.add_line(line)
+
+
+func _load_failure_line(slot: Dictionary, reason: String) -> String:
+	var text := OrderText.reason(reason)
+	return ("Autosave failed to load: %s" if slot["auto"] else "Load failed: %s") % text
+
+
+func _apply_load(loaded: RefCounted, client_state: Dictionary) -> void:
 	_close_screens()
 	bridge.start(loaded)
 	local_view.rebuild()
-	goal_panel.tracker.restore_state(slot["client"].get("goals", {}))
-	automation_screen.restore_state(slot["client"].get("automation", {}))
+	goal_panel.tracker.restore_state(client_state.get("goals", {}))
+	automation_screen.restore_state(client_state.get("automation", {}))
 	goal_panel.refresh()
-	event_log.add_line("Game loaded")
-
-
-func _report_load_failure(reason: String) -> void:
-	event_log.add_line("Load failed: %s" % OrderText.reason(reason))
 
 
 func _close_screens() -> void:
