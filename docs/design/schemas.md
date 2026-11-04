@@ -154,7 +154,7 @@ A multi-role part has one `power_kw` and one `heat_kw`, which apply whenever it 
 
 A trip's cost is its travel time at `propellant_kg_per_s`, scaled by the unit's mass at departure over `rated_mass_kg`, and paid in one lump at departure ([autonomy.md](autonomy.md) section 4). The network spec holds the exact formula.
 
-**Two kinds of thruster figure.** Trips inside a frame read `speed_m_s`, `propellant_kg_per_s` and `rated_mass_kg`, exactly as above. Burns outside a frame read only `exhaust_m_s` (loaded as `exhaust_mm_s`) and `thrust_kn` (loaded as `thrust_n`), through the rocket equation of [orbital_flight.md](orbital_flight.md) section 7. For today's thrusters, `thrust_kn` is `propellant_kg_per_s` times `exhaust_m_s`, so both kinds of figure give the same propellant flow: 3 kN for `chemical_thruster_mk1` and 0.15 kN for `small_chemical_thruster_mk1`, at 3000 m/s. `exhaust_m_s` and `thrust_kn` are not in `data/` yet. B adds them, together with the validator change, before A11 reads them, and from then on all five fields are required. A thruster is not a power or heat load during a trip, so in the slice its `power_kw` and `heat_kw` count only toward fitting budgets.
+**Two kinds of thruster figure.** Trips inside a frame read `speed_m_s`, `propellant_kg_per_s` and `rated_mass_kg`, exactly as above. Burns outside a frame read only `exhaust_m_s` (loaded as `exhaust_mm_s`) and `thrust_kn` (loaded as `thrust_n`), through the rocket equation of [orbital_flight.md](orbital_flight.md) section 7. For today's thrusters, `thrust_kn` is `propellant_kg_per_s` times `exhaust_m_s`, so both kinds of figure give the same propellant flow: 3 kN for `chemical_thruster_mk1` and 0.15 kN for `small_chemical_thruster_mk1`, at 3000 m/s. All five fields are required, and the validator checks them (task B13). A thruster is not a power or heat load during a trip, so in the slice its `power_kw` and `heat_kw` count only toward fitting budgets.
 
 ## 6. Connectors
 
@@ -301,6 +301,13 @@ B4 enforces these on top of section 3 of the accounting spec.
 - Each template passes the fitting rules in contracts section 5, including mass, power, heat and connectors.
 - A unit with any `heat_kw` above 0 has `heat_capacity`, since its limit is otherwise 0.
 - A unit with `thruster` has `propellant` storage.
+
+**Scenario places** (section 14)
+- An orbit's `parent` is a body in the same scenario with `gm_km3_s2`, and is not the orbiting entry itself.
+- Every `frame` key names a frame in the scenario. A docked unit has no `frame`.
+- A body on an `orbit` has neither `pos_mm` nor `frame`. A body without an orbit has `pos_mm`.
+- Orbits are whole numbers: `a_mm` from 1 to 10^15, `e_ppm` from 0 to 999999, and each angle from 0 to 359999 millidegrees. `gm_km3_s2` stays within the contract range of `gm` once converted.
+- Frame keys share the one key space with bodies and units.
 
 **Coverage**
 - A source is a deposit, a recipe or scenario stock. A use is a recipe input, a fitted part, propellant burn or a sink (spec section 10).

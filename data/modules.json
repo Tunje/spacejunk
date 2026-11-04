@@ -139,7 +139,9 @@
         "thruster": {
           "speed_m_s": 500,
           "propellant_kg_per_s": 1,
-          "rated_mass_kg": 10000
+          "rated_mass_kg": 10000,
+          "exhaust_m_s": 3000,
+          "thrust_kn": 3
         }
       },
       "fabrication": {
@@ -834,7 +836,9 @@
         "thruster": {
           "speed_m_s": 250,
           "propellant_kg_per_s": 0.05,
-          "rated_mass_kg": 1000
+          "rated_mass_kg": 1000,
+          "exhaust_m_s": 3000,
+          "thrust_kn": 0.15
         }
       },
       "fabrication": {
