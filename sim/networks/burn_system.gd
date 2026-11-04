@@ -34,6 +34,13 @@ const REASON_ESCAPE := "unsupported_orbit"
 const REASON_CANCELLED := "cancelled"
 const CAPABILITY := "thruster"
 const MAX_DV_UM_S := 1_000_000_000_000
+## Near escape speed lies a band of orbits OrbitMath can't hold: exactly parabolic, or ellipses far
+## larger than any sphere of influence. A burn crossing it carries each tick's change forward until
+## the sum lands outside the band, up to this much, rather than stopping just short of escape.
+const MAX_HELD_UM_S := 50_000_000
+## check flies a planned burn tick by tick, as the real one will be, for up to this many ticks.
+## A longer burn is previewed as one impulse, marked `approximate`.
+const MAX_PREVIEW_TICKS := 20_000
 const JOIN_MARGIN_MM := 1_000_000_000
 const LEAVE_MARGIN_MM := 2_000_000_000
 const JOIN_SPEED_UM_S := 1_000_000
@@ -209,6 +216,7 @@ func _start(ctx: SimContext, unit_id: int, planned: Dictionary) -> void:
 	unit["burn"] = {
 		"id": planned["id"], "start_tick": ctx.tick, "dir_q30": OrbitMath.unit(vector), "dv_um_s": dv,
 		"done_um_s": 0, "thruster": found["part"], "dv_remainder": 0, "flow_remainder": 0,
+		"held_um_s": [0, 0, 0],
 	}
 	unit["op"] = { "type": OP_BURNING, "target": 0, "part": found["part"], "start_tick": ctx.tick, "end_tick": 0 }
 	unit["at_target"] = 0
@@ -230,14 +238,9 @@ func _thrust(ctx: SimContext, unit_id: int) -> void:
 	if not Units.can_run(part):
 		return
 	var stats: Dictionary = Units.module_of(ctx.state, ctx.defs, burn["thruster"])["capabilities"][CAPABILITY]
-	var mass_g := Units.unit_mass(ctx.state, ctx.defs, unit_id)
-	# Thrust over mass in um/s^2, then this tick's share with a carried remainder.
-	var accel := IntMath.mul_div(stats["thrust_n"], 1_000_000_000, mass_g)
-	var full := Rate.amount(accel, burn["dv_remainder"])
-	var flow := IntMath.mul_div(stats["thrust_n"], 1_000_000, stats["exhaust_mm_s"])
-	var full_g := Rate.amount(flow, burn["flow_remainder"])
-	var dv := mini(full, burn["dv_um_s"] - burn["done_um_s"])
-	var grams := full_g if dv == full else IntMath.mul_div_ceil(full_g, dv, maxi(1, full))
+	var step := _step(stats, Units.unit_mass(ctx.state, ctx.defs, unit_id), burn)
+	var dv: int = step["dv_um_s"]
+	var grams: int = step["grams"]
 	if grams > Reservations.free_stock(ctx, unit_id, Travel.PROPELLANT):
 		_end(ctx, unit_id, REASON_NO_PROPELLANT)
 		return
@@ -247,33 +250,70 @@ func _thrust(ctx: SimContext, unit_id: int) -> void:
 	if not _change_velocity(ctx, unit_id, change):
 		_end(ctx, unit_id, REASON_ESCAPE)
 		return
-	burn["dv_remainder"] = Rate.carry(accel, burn["dv_remainder"])
-	burn["flow_remainder"] = Rate.carry(flow, burn["flow_remainder"])
+	burn["dv_remainder"] = step["dv_remainder"]
+	burn["flow_remainder"] = step["flow_remainder"]
 	if grams > 0:
 		Reservations.claim_stock(ctx, unit_id, Travel.PROPELLANT, grams)
 		ctx.record_delta(unit_id, self, { "kind": DELTA_PROPELLANT, "unit": unit_id, "grams": grams })
 	burn["done_um_s"] += dv
 	burn["spent_g"] = burn.get("spent_g", 0) + grams
 	if burn["done_um_s"] >= burn["dv_um_s"]:
-		_end(ctx, unit_id, "")
+		var held: int = IntMath.dist(burn["held_um_s"], [0, 0, 0])
+		if held > 0:
+			# It finished inside the band: the change still held could not be delivered.
+			burn["done_um_s"] -= held
+			_end(ctx, unit_id, REASON_ESCAPE)
+		else:
+			_end(ctx, unit_id, "")
 
 
-## Adds a velocity change in um/s. False if the orbit it makes is not one OrbitMath can hold yet.
+## One tick of a burn: thrust over mass in um/s^2, and the propellant flow, each with a carried
+## remainder. Shared by the real burn and check's preview, so the two give the same orbit.
+static func _step(stats: Dictionary, mass_g: int, burn: Dictionary) -> Dictionary:
+	var accel := IntMath.mul_div(stats["thrust_n"], 1_000_000_000, mass_g)
+	var full := Rate.amount(accel, burn["dv_remainder"])
+	var flow := IntMath.mul_div(stats["thrust_n"], 1_000_000, stats["exhaust_mm_s"])
+	var full_g := Rate.amount(flow, burn["flow_remainder"])
+	var dv := mini(full, burn["dv_um_s"] - burn["done_um_s"])
+	return {
+		"dv_um_s": dv, "grams": full_g if dv == full else IntMath.mul_div_ceil(full_g, dv, maxi(1, full)),
+		"dv_remainder": Rate.carry(accel, burn["dv_remainder"]),
+		"flow_remainder": Rate.carry(flow, burn["flow_remainder"]),
+	}
+
+
+## A velocity change on an orbit, with any change held from earlier ticks, as { orbit, held }:
+## the new orbit, or the same orbit and a larger held change inside the band near escape. {} once
+## the held change passes MAX_HELD_UM_S.
+static func _apply(ctx: SimContext, orbit: Dictionary, tick: int, change: Array, held: Array) -> Dictionary:
+	var total: Array[int] = []
+	for axis in 3:
+		total.append(int(change[axis]) + int(held[axis]))
+	var gm: int = ctx.state["bodies"][orbit["parent"]]["gm"]
+	var now := OrbitMath.state_at(orbit, gm, tick)
+	var v: Array = now["v"]
+	var after := OrbitMath.from_state(now["r"], [v[0] + total[0], v[1] + total[1], v[2] + total[2]], gm, tick)
+	if after.is_empty():
+		if IntMath.dist(total, [0, 0, 0]) > MAX_HELD_UM_S:
+			return {}
+		return { "orbit": orbit, "held": total }
+	after["parent"] = orbit["parent"]
+	return { "orbit": after, "held": [0, 0, 0] }
+
+
+## Adds a velocity change in um/s, with any change held from earlier ticks. Inside the band near
+## escape it holds the change for later instead. False once the held change passes MAX_HELD_UM_S.
 func _change_velocity(ctx: SimContext, unit_id: int, change: Array) -> bool:
 	var unit: Dictionary = ctx.state["units"][unit_id]
 	if unit["orbit"].is_empty():
 		for axis in 3:
 			unit["vel_um_s"][axis] += change[axis]
 		return true
-	var orbit: Dictionary = unit["orbit"]
-	var gm: int = ctx.state["bodies"][orbit["parent"]]["gm"]
-	var now := OrbitMath.state_at(orbit, gm, ctx.tick)
-	var v: Array = now["v"]
-	var after := OrbitMath.from_state(now["r"], [v[0] + change[0], v[1] + change[1], v[2] + change[2]], gm, ctx.tick)
-	if after.is_empty():
+	var result := _apply(ctx, unit["orbit"], ctx.tick, change, unit["burn"]["held_um_s"])
+	if result.is_empty():
 		return false
-	after["parent"] = orbit["parent"]
-	unit["orbit"] = after
+	unit["orbit"] = result["orbit"]
+	unit["burn"]["held_um_s"] = result["held"]
 	return true
 
 
@@ -319,7 +359,9 @@ static func _basis(ctx: SimContext, unit_id: int, tick: int) -> Array:
 	return [prograde, normal, OrbitMath.cross(prograde, normal)]
 
 
-## What check shows for a planned burn: one impulse at its tick.
+## What check shows for a planned burn. On an orbit it flies the burn tick by tick from its tick,
+## through the same _step and _apply as the real one, assuming the thruster has power throughout.
+## In a frame, or past MAX_PREVIEW_TICKS, it is one impulse.
 static func _preview(ctx: SimContext, unit_id: int, args: Dictionary, found: Dictionary) -> Dictionary:
 	var unit: Dictionary = ctx.state["units"][unit_id]
 	var vector := _burn_vector(ctx, unit_id, args, args["tick"])
@@ -337,6 +379,8 @@ static func _preview(ctx: SimContext, unit_id: int, args: Dictionary, found: Dic
 			detail["vel_um_s"][axis] += vector[axis]
 		detail["leaves_frame"] = unit["frame"] != 0 and detail["vel_um_s"] != [0, 0, 0]
 		return detail
+	if detail["burn_ticks"] <= MAX_PREVIEW_TICKS:
+		return _fly_preview(ctx, orbit, vector, dv, mass_g, args["tick"], found, detail)
 	var gm: int = ctx.state["bodies"][orbit["parent"]]["gm"]
 	var at := OrbitMath.state_at(orbit, gm, args["tick"])
 	var v: Array = at["v"]
@@ -344,6 +388,37 @@ static func _preview(ctx: SimContext, unit_id: int, args: Dictionary, found: Dic
 	if not after.is_empty():
 		after["parent"] = orbit["parent"]
 	detail["orbit"] = after
+	detail["approximate"] = true
+	return detail
+
+
+static func _fly_preview(ctx: SimContext, orbit: Dictionary, vector: Array, dv: int, mass_g: int,
+		tick: int, found: Dictionary, detail: Dictionary) -> Dictionary:
+	var stats: Dictionary = Units.module_of(ctx.state, ctx.defs, found["part"])["capabilities"][CAPABILITY]
+	var direction := OrbitMath.unit(vector)
+	var burn := { "dv_um_s": dv, "done_um_s": 0, "dv_remainder": 0, "flow_remainder": 0 }
+	var held: Array = [0, 0, 0]
+	var spent := 0
+	var ticks := 0
+	while burn["done_um_s"] < dv:
+		var step := _step(stats, mass_g - spent, burn)
+		var change: Array[int] = []
+		for axis in 3:
+			change.append(OrbitMath.smul_div(direction[axis], step["dv_um_s"], OrbitMath.ONE))
+		var result := _apply(ctx, orbit, tick + ticks, change, held)
+		if result.is_empty():
+			detail["orbit"] = {}
+			return detail
+		orbit = result["orbit"]
+		held = result["held"]
+		burn["dv_remainder"] = step["dv_remainder"]
+		burn["flow_remainder"] = step["flow_remainder"]
+		burn["done_um_s"] += step["dv_um_s"]
+		spent += step["grams"]
+		ticks += 1
+	detail["orbit"] = orbit if held == [0, 0, 0] else {}
+	detail["propellant_g"] = spent
+	detail["burn_ticks"] = ticks
 	return detail
 
 
