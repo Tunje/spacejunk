@@ -8,6 +8,7 @@ Status: **proposal for the owner**, task design/planets. Nothing here is built, 
 - **Each hex gets one integer height and one surface type.** The type comes from a small rule table on height, latitude, moisture and slope, so there are ice caps, seas, deserts, highlands and cliffs without hand placement.
 - **Variety comes from planet kinds**, not from the seed alone. A kind (airless moon, desert world, ocean world, ice world, temperate world) sets the ranges for sea level, roughness, temperature and palette, and the seed picks within them. That stops every planet looking like the same continents in a different colour.
 - **A hex is a place, not a block of rock.** At 600 km radius a hex is about 7 km across, so it works as a claim: at most one landing or build site, and a chance of one hidden deposit. It is not dug out cell by cell.
+- **One choice for you: a fixed count or a fixed size.** Your figure gives every planet 100,002 hexes, so a small moon's hexes are 2.4 km and a large world's are 14.5 km. The alternative fixes every hex at about 7 km, so a 200 km moon has about 11,000 hexes and a 1,200 km world about 400,000. I lean towards fixed size, since a hex then means the same in play everywhere, but both are the same code (section 5).
 - **Recommended look: smooth terrain over hex data**, as KSP does it, with the hex grid shown only as an overlay in map and build modes. Hex columns are cheaper but look like a board game and show visible steps from orbit.
 - **The boundary:** whatever decides play (height, type, slope, deposits) is integer and deterministic, and Agent A proves it. Everything below hex size (bumps, rocks, colour blending, clouds, water) is client-only float detail and never reaches the simulation.
 - **Cost:** the client's planet renderer is the largest piece. Nothing here belongs in the slice. All of it can wait until after the M4 judgement, and only a paper proof and one throwaway picture make sense before it.
@@ -138,7 +139,17 @@ As with ship models, nothing generated for display ever decides play.
 
 Exactly 12 of the hexes are pentagons, wherever the grid is laid. They are slightly smaller, and the rules treat them as cells with five neighbours.
 
-**Recommendation: fix the hex size, not the count.** Pick `n` from the radius so a hex is always about 7 km. A 200 km moon gets `n` = 33 and about 11,000 cells, and a 1,200 km world gets `n` = 200 and about 400,000. Hexes then mean the same thing everywhere, and small moons stay cheap. The other choice, 100,002 everywhere, makes a small moon's hexes tiny and a large world's coarse. Either is the same code, since `n` is one setting.
+**The owner's choice: a fixed count or a fixed size.**
+
+| | Fixed count (owner's figure) | Fixed size |
+| - | ---------------------------- | ---------- |
+| Rule | `n` = 100 on every planet | `n` from the radius, so a hex is about 7 km |
+| 200 km moon | 100,002 hexes, 2.4 km each | `n` = 33, about 11,000 hexes |
+| 1,200 km world | 100,002 hexes, 14.5 km each | `n` = 200, about 400,000 hexes |
+| For | Same cost to generate and draw on every planet | A hex means the same everywhere: one site, the same deposit odds, the same landing scale. Small moons are cheap |
+| Against | Hex size, and with it site spacing and deposit density, changes from world to world | Large worlds cost four times as much to draw |
+
+B leans towards fixed size. Either is the same code, since `n` is one setting.
 
 ## 6. The look
 
