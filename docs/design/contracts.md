@@ -91,7 +91,7 @@ Rules:
 - `current_tick()` is the number of completed ticks and is 0 in a new game. `step` runs tick `current_tick() + 1`. `step` with `tick_count < 1` does nothing.
 - `submit` deep-copies its argument and stamps `current_tick() + 1`. A float in a command is rejected in phase 1.
 - `check` runs phase 1 validation without effects and returns `{ ok, reason, detail }`. For `attach_part` and `detach_part`, `detail` gives projected mass, power and heat against limits. For `move_to`, it gives ticks and propellant. It is advisory: `submit` can still be rejected if the state changes.
-- `check` of `plan_burn` previews the burn as one impulse at its tick. `detail` is `{ dv_um_s, propellant_g, burn_ticks, orbit, vel_um_s, leaves_frame }`:
+- `check` of `plan_burn` previews the burn. On an orbit it flies the burn tick by tick from its tick, through the same steps as the real burn and assuming the thruster has power throughout, so `orbit`, `propellant_g` and `burn_ticks` are what the burn will give. A burn of over 20,000 ticks, or one in a frame, is previewed as one impulse, and an impulse preview on an orbit carries `approximate = true`. `detail` is `{ dv_um_s, propellant_g, burn_ticks, orbit, vel_um_s, leaves_frame }`:
   - `orbit` is the orbit record after the burn, with `parent`, or `{}` if the unit isn't on an orbit or would escape.
   - `vel_um_s` is the local velocity after the burn, for a unit in a frame.
   - `leaves_frame` is true for any drift in a frame.
@@ -206,7 +206,7 @@ Running shortfalls are still handled by shedding and faults.
 | `plan_burn` | `tick`, `prograde_um_s`, `normal_um_s`, `radial_um_s` | Places a burn. `tick` must be after the current tick, so "burn now" is `current_tick() + 1`. At its tick (phase 2) the burn fixes its direction from the unit's orbit, or from its frame's orbit, or from fixed axes (+X, +Y, +Z) in the old world. It then delivers thrust / mass each tick from phase 5 until done. The burn's ID comes from the entity counter. Refused with `not_flying` when docked, `burn_in_past`, `module_missing` with no thruster that has `thrust_n` and `exhaust_mm_s`, or `malformed_command`. |
 | `cancel_burn` | `burn` | Removes a planned burn, or ends a running one with `burn_short` reason `cancelled`. `invalid_target` if the unit has no such burn. |
 
-A burn whose tick comes while the unit has another operation, a route or a task is dropped with `burn_short` reason `part_busy`. An order that replaces `burning` ends the burn the same way. **Coming with orbits:** `land { body, cell }` and `take_off {}` in A15.
+A burn whose tick comes while the unit has another operation, a route or a task is dropped with `burn_short` reason `part_busy`. A burn crossing the narrow band of orbits just below escape speed, which an orbit record cannot hold, carries each tick's change forward until the sum is past it, so a finite burn flies through escape without stopping. An order that replaces `burning` ends the burn the same way. **Coming with orbits:** `land { body, cell }` and `take_off {}` in A15.
 
 New command types go through the Lead. C0 may refine autonomy commands, events, reason codes and task view fields without a separate change, and tells the Lead what changed.
 

@@ -134,9 +134,9 @@ func test_check_previews_a_prograde_burn_as_hohmann_predicts() -> void:
 	var orbit: Dictionary = detail["orbit"]
 	assert_eq(orbit["parent"], keys["Planet"])
 	var apoapsis := float(orbit["a_mm"]) * (1.0 + float(orbit["e_q30"]) / ONE)
-	assert_almost_eq(apoapsis, 760_000_000.0, 50_000.0)
+	assert_almost_eq(apoapsis, 760_000_000.0, 1_000_000.0, "a finite burn, within 1 km of the impulse")
 	var mass_g := Units.unit_mass(sim._state, sim._ctx.defs, keys["Orbiter"])
-	assert_almost_eq(detail["propellant_g"], OrbitMath.burn_g(mass_g, dv_um_s, EXHAUST_MM_S), 1)
+	assert_almost_eq(detail["propellant_g"], OrbitMath.burn_g(mass_g, dv_um_s, EXHAUST_MM_S), 10)
 	assert_almost_eq(detail["dv_um_s"], dv_um_s, 2)
 	assert_gt(detail["burn_ticks"], 1)
 
@@ -364,6 +364,45 @@ func test_save_and_load_on_a_hyperbola_is_byte_exact() -> void:
 	loaded.step(1000)
 	assert_eq(loaded.state_hash(), sim.state_hash())
 	assert_eq(sim.ledger()["violations"], PackedStringArray())
+
+
+## D's finding: a finite burn from a fast ellipse must fly through the band near escape speed
+## that OrbitMath can't hold, and end on the hyperbola the check preview promised.
+func test_a_finite_burn_flies_through_escape_speed() -> void:
+	var orbiter := _unit("Orbiter")
+	orbiter["orbit"] = OrbitMath.from_state([700_000_000, 0, 0], [0, 0, -3_100_000_000], GM_PLANET, 0)
+	orbiter["orbit"]["parent"] = keys["Planet"]
+	orbiter["pos_mm"] = [700_000_000, 0, 0]
+	var command := _burn("Orbiter", 1, 200_000_000)
+	var preview: Dictionary = sim.check(command)["detail"]["orbit"]
+	assert_true(preview.get("hyperbolic", false), "the preview escapes")
+	sim.submit(command)
+	var events := _until("burn_done", 20_000)
+	var done := _of_type(events, "burn_done")
+	assert_true(_of_type(events, "burn_short").is_empty(), str(_of_type(events, "burn_short")))
+	assert_almost_eq(done["data"]["dv_um_s"], 200_000_000, 2)
+	var orbit: Dictionary = orbiter["orbit"]
+	assert_true(orbit.get("hyperbolic", false), "the burn escapes too")
+	print("BURN through escape: preview e %.4f, flown e %.4f" % [
+		float(preview["e_q30"]) / ONE, float(orbit["e_q30"]) / ONE])
+	assert_eq(orbit, preview, "the preview flew the same burn")
+	assert_eq(sim.ledger()["violations"], PackedStringArray())
+
+
+## The same from a circular orbit at 5000 km, where escape is about 350 m/s away.
+func test_a_finite_burn_from_a_circular_orbit_escapes() -> void:
+	var orbiter := _unit("Orbiter")
+	orbiter["orbit"] = OrbitMath.make_orbit(GM_PLANET, 5_000_000_000, 0, [ONE, 0, 0], [0, 0, -ONE], 0, 0)
+	orbiter["orbit"]["parent"] = keys["Planet"]
+	orbiter["pos_mm"] = OrbitMath.position_at(orbiter["orbit"], 0)
+	sim.submit(_burn("Orbiter", 1, 400_000_000))
+	var events := _until("burn_done", 100_000)
+	assert_false(_of_type(events, "burn_done").is_empty(), str(_types_of(events)))
+	assert_true(_unit("Orbiter")["orbit"].get("hyperbolic", false))
+
+
+func _types_of(events: Array[Dictionary]) -> Array:
+	return events.map(func(e: Dictionary) -> String: return e["type"])
 
 
 func test_the_view_shows_burns() -> void:
