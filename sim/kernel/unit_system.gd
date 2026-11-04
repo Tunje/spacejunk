@@ -14,7 +14,7 @@ func fill_view(ctx: SimContext, view: Dictionary) -> void:
 			"name": body["name"], "kind": body["kind"], "pos_mm": body["pos_mm"].duplicate(),
 			"radius_mm": body["radius_mm"], "visual_seed": body["visual_seed"], "scanned": body["scanned"],
 			"frame": body["frame"], "orbit": body["orbit"].duplicate(true), "gm": body["gm"],
-			"soi_mm": body.get("soi_mm", 0),
+			"soi_mm": body.get("soi_mm", 0), "planet": body.get("planet", {}).duplicate(),
 			"world_mm": RailSystem.world_mm(ctx.state, "bodies", id),
 		}
 	var deposits: Dictionary = ctx.state["deposits"]

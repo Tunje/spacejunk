@@ -37,7 +37,7 @@ static func _add_body(ctx: SimContext, entry: Dictionary, deposits: Dictionary, 
 	var body := {
 		"id": id, "name": entry["name"], "kind": entry["kind"], "pos_mm": entry.get("pos_mm", [0, 0, 0]).duplicate(),
 		"radius_mm": entry["radius_mm"], "visual_seed": entry["visual_seed"], "scanned": false,
-		"frame": 0, "orbit": {}, "gm": entry.get("gm", 0), "soi_mm": 0,
+		"frame": 0, "orbit": {}, "gm": entry.get("gm", 0), "soi_mm": 0, "planet": entry.get("planet", {}).duplicate(),
 	}
 	ctx.state["bodies"][id] = body
 	for def: String in entry["deposits"]:

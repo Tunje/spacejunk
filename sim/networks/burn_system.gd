@@ -63,7 +63,7 @@ func validate(ctx: SimContext, command: Dictionary) -> Dictionary:
 		if typeof(args.get(key)) != TYPE_INT:
 			return SimSystem.reject(REASON_MALFORMED)
 	var unit_id: int = command["unit"]
-	if not ctx.state["units"][unit_id]["dock"].is_empty():
+	if not ctx.state["units"][unit_id]["dock"].is_empty() or not ctx.state["units"][unit_id]["landed"].is_empty():
 		return SimSystem.reject(REASON_NOT_FLYING)
 	if args["tick"] <= ctx.state["tick"]:
 		return SimSystem.reject(REASON_IN_PAST)
@@ -174,6 +174,8 @@ static func predict(ctx: SimContext, unit_id: int, from_tick: int, ticks: int, s
 					Sim.TICKS_PER_SECOND * 1000))
 			points.append(point)
 	var place := { "orbit_parent": orbit["parent"] } if not orbit.is_empty() else { "frame": unit["frame"] }
+	if not unit["landed"].is_empty():
+		place = { "landed": unit["landed"]["body"] }
 	return { "place": place, "points": points }
 
 
@@ -203,7 +205,7 @@ func _start(ctx: SimContext, unit_id: int, planned: Dictionary) -> void:
 	var found := thruster(ctx, unit_id)
 	if found.is_empty():
 		reason = REASON_NO_THRUSTER
-	elif not unit["dock"].is_empty():
+	elif not unit["dock"].is_empty() or not unit["landed"].is_empty():
 		reason = REASON_NOT_FLYING
 	elif unit["op"]["type"] != Units.IDLE_OP or not unit["route"].is_empty() or unit["task"] != 0:
 		reason = REASON_BUSY
