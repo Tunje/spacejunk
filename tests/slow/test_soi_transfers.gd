@@ -1,7 +1,8 @@
 extends GutTest
 ## Autopilot trips across spheres of influence (task A18): out from an orbit around the central
 ## body to a ring around its moon, and back. A compact system keeps the trips to hours of game time:
-## a heavy central body, a home frame at 20,000 km and a moon at 30,000 km.
+## a heavy central body, a home frame at 20,000 km and a moon at 30,000 km. In tests/slow because
+## the trips step about 250,000 ticks between them.
 
 const GM_ROOT := 100_000_000_000_000  # 1e17 m^3/s^2 in units of 1000 m^3/s^2
 const GM_MOON := 10_000_000_000       # 1e13 m^3/s^2
