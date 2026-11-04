@@ -34,8 +34,8 @@ func allocate(ctx: SimContext) -> void:
 		var op_type: String = unit["op"]["type"]
 		if op_type == MoveStep.OP_MOVING and unit["op"]["start_tick"] == ctx.tick:
 			_depart(ctx, id)
-		elif op_type == MoveStep.OP_WAITING and unit["op"]["depart_tick"] == ctx.tick \
-				and not unit["op"].has("reason"):
+		elif op_type == MoveStep.OP_WAITING and unit["op"]["depart_tick"] <= ctx.tick \
+				and not unit["op"].has("reason") and TaskSystem.is_running(ctx, unit):
 			_depart(ctx, id)
 		elif op_type == DockStep.OP_DOCKING and unit["task"] != 0 and not unit["op"].has("granted"):
 			_grant_ports(ctx, id)
@@ -82,8 +82,9 @@ func _depart(ctx: SimContext, id: int) -> void:
 		return
 	if quoted["kind"] == Transfer.KIND:
 		# A wait that has reached its stored window leaves now. Quoting afresh could put the window
-		# a tick later through rounding, and the unit would never go.
-		if op["type"] == MoveStep.OP_WAITING:
+		# a tick later through rounding, and the unit would never go. A wait that missed its window,
+		# held by its task, takes the next one: leaving late would miss the target.
+		if op["type"] == MoveStep.OP_WAITING and op["depart_tick"] == ctx.tick:
 			quoted["depart_tick"] = ctx.tick
 			quoted["arrive_tick"] = ctx.tick + quoted["ticks"] - 1
 		if quoted["depart_tick"] > ctx.tick:

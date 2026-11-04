@@ -83,6 +83,8 @@ func to_save() -> String                     # canonical form; see section 8
 func state_hash() -> String                  # SHA-256 of to_save()
 func ledger() -> Dictionary                  # tests only; see section 9
 func predict(unit: int, from_tick: int, ticks: int, step: int) -> Dictionary  # path for drawing
+func quote(unit: int, target: int, from_tick: int) -> Dictionary      # a move_to's trip and window
+func next_window(unit: int, target: int, from_tick: int, cap_g: int) -> Dictionary
 ```
 
 Rules:
@@ -100,7 +102,12 @@ Rules:
   - `points` are in that place's coordinates, from `from_tick` every `step` ticks up to `from_tick + ticks`.
   - It returns `{}` for an unknown unit, or for 10,000 points or more.
   - A docked unit predicts as its host.
-- **Coming with orbits:** in A13, `quote` gains a departure tick, and `next_window(unit, target, from_tick, cap)` is added.
+- `quote(unit, target, from_tick) -> Dictionary` gives the trip a `move_to` would take, leaving at the first chance at or after `from_tick`. It is read-only, like `view()`. The result is `{ kind, target, depart_tick, arrive_tick, ticks, cost_g }`, or `{ reason }`:
+  - `kind` is `"route"` for today's straight-line trip inside one frame or the old world. It leaves at `from_tick` and also carries the route's `from_mm`, `to_mm`, `length_mm` and `speed_mm_s`.
+  - `kind` is `"transfer"` for an autopilot trip between places (orbital_flight.md section 11.12). It leaves at its next window and also carries `dv_um_s`.
+  - `arrive_tick` is the tick `arrived` fires, `depart_tick + ticks - 1`.
+- `next_window(unit, target, from_tick, cap_g) -> Dictionary` gives the same as `quote` if it costs at most `cap_g`, otherwise `{ reason: "no_window" }`.
+- Sim code prices a leg the unit hasn't reached yet, such as a cycle's lap gate, with `Travel.quote_leg(ctx, unit, from_place, target, mass_g, from_tick)`. That gives the same dictionary, from the place of a body or unit at a given mass.
 - `defs()` returns `{ modules, items, recipes, templates, sinks }`, each keyed by definition ID, including connectors, collision and visual, so clients never parse data units. Fields are renamed to their sim unit: `mass_kg` to `mass_g`, `power_kw` to `power_w`, `heat_kw` to `heat_w`, `volume_m3` to `volume_l`, `load_limit_kg` to `load_limit_g`, `density_kg_m3` to `density_g_l`, `seconds` to `ticks`, and likewise for any other unit-suffixed field (`docs/design/schemas.md` section 2).
 - Scenario `"empty"` is built into the kernel for tests that precede `data/`.
 - The event queue is bounded (A1 sets the bound) and starts empty on load.
@@ -254,7 +261,8 @@ Known reason codes: `over_mass_limit`, `over_power_budget`, `over_heat_budget`, 
 Orbit reason codes:
 - `unsupported_orbit`: a `move_to` target that is on an orbit or in another frame, a burn whose result is exactly parabolic (which neither orbit form can hold, and which rounding makes vanishingly rare), and later the planner's limits.
 - `burn_in_past`, `not_flying`, and `cancelled` (a burn's end only).
-- Coming: `no_window` (A13) and `not_over_cell` (A15). `too_fast_to_join` was dropped. A unit arriving too fast simply doesn't join, and the view shows it.
+- `no_window`: from `next_window`, when the trip costs more than the cap.
+- Coming: `not_over_cell` (A15). `too_fast_to_join` was dropped. A unit arriving too fast simply doesn't join, and the view shows it.
 
 Orbit events:
 - `burn_started { burn }`.
@@ -300,7 +308,7 @@ This shape is frozen. Fields may be added, but changes or removals go through th
 }
 ```
 
-- `op.type`: `idle`, `moving`, `docking`, `undocking`, `loading`, `unloading`, `mining`, `scanning` or `burning`. While `burning`, `part` is the thruster, which draws power and gives heat like any running load. A shed thruster gives no thrust that tick.
+- `op.type`: `idle`, `moving`, `waiting`, `docking`, `undocking`, `loading`, `unloading`, `mining`, `scanning` or `burning`. A `move_to` between places is `waiting` until its window. Its op carries `depart_tick`, and `end_tick` is `depart_tick - 1`. Nothing is paid while waiting, and `stop` cancels it freely. From departure it is `moving`, with the unit's `transfer` set to `{ target, depart_tick, arrive_tick }` and `route` left `{}`. A paid transfer is atomic and runs to arrival. While `burning`, `part` is the thruster, which draws power and gives heat like any running load. A shed thruster gives no thrust that tick.
 - A unit also shows `vel_um_s`, its local velocity in a frame. It shows `burns`, its planned burns in tick order as `{ id, tick, prograde_um_s, normal_um_s, radial_um_s }`. And it shows `burn`, the running burn as `{ id, dv_um_s, done_um_s, start_tick }`, or `{}`.
 - A part's `state`: `on`, `shed` or `fault`.
 - A job's `status`: `queued`, `waiting`, `running`, `paused` or `cancelling`. `queue_pos` is its place in its facility's queue, 0 for the active job.

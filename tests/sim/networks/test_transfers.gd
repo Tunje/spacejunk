@@ -226,6 +226,23 @@ func test_missing_propellant_at_departure_ends_a_players_order() -> void:
 	assert_eq(sim._state["sinks"].get(Travel.SINK, {}), {})
 
 
+## A wait whose task is held at the window doesn't leave late: when it runs again it takes the next.
+func test_a_missed_window_takes_the_next_one() -> void:
+	var first := sim.quote(keys["Ship"], keys["Rock"], 1)
+	sim.submit(_move("Rock"))
+	sim.step(5)
+	var task: Dictionary = sim._state["tasks"][_ship()["task"]]
+	var depart: int = _ship()["op"]["depart_tick"]
+	# Hold the task across its window, as an offline core would, then let it run again.
+	task["state"] = "blocked"
+	sim.step(depart + 3 - sim.current_tick())
+	assert_eq(_ship()["transfer"], {}, "nothing left while held")
+	task["state"] = "running"
+	sim.step()
+	assert_eq(_ship()["op"]["type"], MoveStep.OP_WAITING)
+	assert_gt(_ship()["op"]["depart_tick"], first["depart_tick"], "the next window")
+
+
 func test_save_and_load_while_waiting_and_in_flight_is_byte_exact() -> void:
 	var quoted := sim.quote(keys["Ship"], keys["Rock"], 1)
 	sim.submit(_move("Rock"))
