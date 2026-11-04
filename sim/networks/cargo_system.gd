@@ -89,6 +89,8 @@ func _depart(ctx: SimContext, id: int) -> void:
 		"speed_remainder": 0, "eta_tick": op["end_tick"],
 	}
 	unit["at_target"] = 0
+	unit["vel_um_s"] = [0, 0, 0]
+	unit["drift_carry"] = [0, 0, 0]
 	_clear_followers(ctx, id)
 
 
