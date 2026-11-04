@@ -72,7 +72,10 @@ func fill_ledger(ctx: SimContext, ledger: Dictionary) -> void:
 ## Phase 3: healthy supply and what each healthy battery can give this tick.
 func _available(ctx: SimContext, unit: int) -> Dictionary:
 	var index := UnitIndex.of(ctx, unit)
-	var supply_w := UnitIndex.healthy_total(ctx, index["generators"])
+	# Generators are solar, so a unit in a planet's shadow has none (orbital_flight.md 11.3, A16).
+	var supply_w := 0
+	if not index["generators"].is_empty() and not RailSystem.in_shadow(ctx.state, unit):
+		supply_w = UnitIndex.healthy_total(ctx, index["generators"])
 	var budget_w := 0
 	var batteries := {}
 	for entry: Array in index["batteries"]:

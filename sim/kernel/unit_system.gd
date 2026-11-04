@@ -87,8 +87,9 @@ func _power_view(ctx: SimContext, id: int) -> Dictionary:
 	var stored_j := 0
 	for battery: Array in index["batteries"]:
 		stored_j += ctx.state["parts"][battery[0]]["stored_j"]
+	var shadow: bool = not index["generators"].is_empty() and RailSystem.in_shadow(ctx.state, id)
 	return {
-		"supply_w": UnitIndex.healthy_total(ctx, index["generators"]),
+		"supply_w": 0 if shadow else UnitIndex.healthy_total(ctx, index["generators"]), "in_shadow": shadow,
 		"demand_w": ctx.state["units"][id]["demand_w"], "stored_j": stored_j,
 		"capacity_j": index["capacity_j"], "max_discharge_w": index["max_discharge_w"],
 	}

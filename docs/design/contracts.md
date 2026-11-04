@@ -30,7 +30,7 @@ Valid ranges are asserted at commit in test runs.
 - **On an orbit:** `orbit` is an orbit record around the body `orbit.parent`, and `pos_mm` is relative to that parent, derived from the tick in phase 2.
 - **In a frame:** `frame` is a frame's ID, and `pos_mm` is local to it. A frame is a co-moving region, such as the rock cluster, with an orbit and a `radius_mm`, and no gravity inside it. Travel inside one frame works exactly as networks.md section 6 says.
 - **Neither:** `frame` is 0 and `orbit` is `{}`. This is the old world, in which nothing moves on its own. A scenario without frames is entirely here, and behaves as in contract version 2.
-- **Landed** (from A15): `landed` is `{ body, cell }`, and `pos_mm` is the cell's centre relative to the body, at its integer height. A landed unit never moves, because planets don't rotate. A body's terrain comes from its `planet` settings, `{ seed, height_range_m }`, through `PlanetGrid`. A body without them is a smooth sphere.
+- **Landed** (from A15): `landed` is `{ body, cell }`, and `pos_mm` is the cell's centre relative to the body, at its integer height. A landed unit never moves, because planets don't rotate. A body's terrain comes from its `planet` settings, `{ seed, height_range_m, sea_level_m, weights }`, agreed with B, through `PlanetGrid`. `sea_level_m` is optional, and its absence means a dry world. `weights` defaults to [4, 2, 1]. A body without them is a smooth sphere.
 - A docked unit is wherever its host is, and its own `frame` and `orbit` are not read.
 
 An orbit record holds `parent`, `a_mm`, `b_mm`, `e_q30`, `p_q30` and `q_q30` (the directions towards periapsis and 90 degrees ahead), `period_subticks`, `m0_angle` and `epoch_tick`. A hyperbolic record (from A12) has `hyperbolic = true`, with `a_mm` as its positive semi-axis, `m0_rad` (mean anomaly in Q30 radians, which does not wrap) and `motion_q60` (mean motion in radians per tick, Q60) in place of `period_subticks` and `m0_angle`.
@@ -305,7 +305,7 @@ This shape is frozen. Fields may be added, but changes or removals go through th
     cargo = { "ore": { used_g = 0, cap_g = 0, used_l = 0, cap_l = 0 } },
     fit = { mass_g = 0, mass_limit_g = 0, power_budget_w = 0, power_rated_w = 0,
             heat_budget_w = 0, heat_rated_w = 0 },
-    power = { supply_w = 0, demand_w = 0, stored_j = 0, capacity_j = 0, max_discharge_w = 0 },
+    power = { supply_w = 0, in_shadow = false, demand_w = 0, stored_j = 0, capacity_j = 0, max_discharge_w = 0 },
     heat = { stored_j = 0, limit_j = 0, reject_w = 0, input_w = 0 },
   } },
   bodies = { 3: { kind = "asteroid", pos_mm = [], radius_mm = 0, visual_seed = 0, scanned = false,
@@ -318,6 +318,7 @@ This shape is frozen. Fields may be added, but changes or removals go through th
 }
 ```
 
+- `power.supply_w` is what the generators give this tick. Generators are solar, so it is 0 while `in_shadow`: a body with gravity stands between the unit and the star, by a cylinder test (from A16).
 - `op.type`: `idle`, `moving`, `waiting`, `docking`, `undocking`, `loading`, `unloading`, `mining`, `scanning` or `burning`. A `move_to` between places is `waiting` until its window. Its op carries `depart_tick`, and `end_tick` is `depart_tick - 1`. Nothing is paid while waiting, and `stop` cancels it freely. From departure it is `moving`, with the unit's `transfer` set to `{ target, depart_tick, arrive_tick }` and `route` left `{}`. A paid transfer is atomic and runs to arrival. While `burning`, `part` is the thruster, which draws power and gives heat like any running load. A shed thruster gives no thrust that tick.
 - A unit also shows `vel_um_s`, its local velocity in a frame. It shows `burns`, its planned burns in tick order as `{ id, tick, prograde_um_s, normal_um_s, radial_um_s }`. And it shows `burn`, the running burn as `{ id, dv_um_s, done_um_s, start_tick }`, or `{}`.
 - A part's `state`: `on`, `shed` or `fault`.

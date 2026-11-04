@@ -491,8 +491,23 @@ Sizes compare with earlier kernel tasks: **S** is about A7's size, **M** about A
   - A Mun-sized moon, 200 km, needs about 1230 m/s, so it's short by about 210 kg.
   - The 600 km planet needs about 5.2 km/s for the round trip, beyond any single ship without refuelling.
   - None of these include the trip from the cluster to the moon. B has these figures for the new start.
+  - B10's probe is heavier, at 6.78 t dry, so it has about 775 m/s. At a fixed density the round trip scales with the radius, so it can land on and return from a body of about **90 km** at Kerbin's density, and still from a Minmus-sized one.
 - **Not done:**
   - Surface types and slope limits on landing, which need planets.md's rule tables in `data/`.
   - Damage on a crash.
   - Planet rotation.
   - Planetary deposits and scanning a patch of cells, which are B's and C's.
+
+### 11.14 A16 results: planet shadow
+
+- **`RailSystem.in_shadow(state, unit)`** is an integer cylinder test.
+  - The unit is in shadow if a body with gravity on an orbit is between it and the body of kind `star`.
+  - That means the unit is behind the body as seen from the star, and closer to the star-to-body line than the body's radius.
+  - It uses world positions, so it works for units on orbits, in frames, landed and docked.
+- **In phase 3 `PowerSystem` gives a shadowed unit no supply,** because every generator in the data is solar. A later non-solar generator, such as a reactor, needs a field saying so.
+  - Batteries then carry the loads, and anything left is shed by the existing rules, which is what C described for laps around a planet.
+  - The power view's `supply_w` follows, and `in_shadow` shows why.
+- **Tests** (in test_landing.gd):
+  - behind the planet, in front, behind but beside the shadow;
+  - landed on the day and night sides;
+  - supply 0 in shadow after a tick.

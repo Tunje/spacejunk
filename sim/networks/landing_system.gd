@@ -29,7 +29,7 @@ const REASON_NOT_LANDED := "not_landed"
 ## Landing and takeoff lose 3% more than the ideal burns to gravity: on an airless body the craft
 ## kills its speed close to the ground, so the loss is small.
 const GRAVITY_LOSS_PERMILLE := 1030
-## The default octave weights for a planet's height, as A14's tests use.
+## Octave weights for a planet's height when its `planet` settings give none, as A14's tests use.
 const HEIGHT_WEIGHTS := [4, 2, 1]
 
 
@@ -164,7 +164,8 @@ static func cell_mm(ctx: SimContext, body_id: int, cell: int) -> Array[int]:
 	var planet: Dictionary = body.get("planet", {})
 	if not planet.is_empty():
 		var dir := PlanetGrid.direction(cell, n)
-		height = PlanetGrid.height_m(planet["seed"], dir, HEIGHT_WEIGHTS, planet.get("height_range_m", 0))
+		height = PlanetGrid.height_m(planet["seed"], dir, planet.get("weights", HEIGHT_WEIGHTS),
+			planet.get("height_range_m", 0))
 	return PlanetGrid.centre_mm(cell, n, body["radius_mm"], height)
 
 
