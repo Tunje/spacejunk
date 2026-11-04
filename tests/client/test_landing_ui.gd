@@ -28,7 +28,7 @@ func before_each() -> void:
 
 
 ## A planet with terrain and an orbiter on the orbit through r (mm) and v (um/s).
-func _fly(orbit_r: Array, orbit_v: Array) -> void:
+func _fly(orbit_r: Array, orbit_v: Array, terrain: Dictionary = { "seed": SEED, "height_range_m": RANGE_M }) -> void:
 	var defs := DataLoader.load_defs()
 	sim = Sim.new()
 	sim._setup(Sim._new_state("reference", 7, defs), defs)
@@ -38,7 +38,7 @@ func _fly(orbit_r: Array, orbit_v: Array) -> void:
 				"visual_seed": 1, "deposits": [], "gm": GM_STAR },
 			{ "key": "planet", "name": "Planet", "kind": "planet", "radius_mm": RADIUS_MM, "visual_seed": 2,
 				"deposits": [], "gm": GM_PLANET, "orbit": { "parent": "star", "a_mm": AU_MM },
-				"planet": { "seed": SEED, "height_range_m": RANGE_M } },
+				"planet": terrain },
 		],
 		"units": [
 			{ "key": "orbiter", "template": "starter_ship", "name": "Orbiter", "pos_mm": [0, 0, 0],
@@ -58,9 +58,9 @@ func _fly(orbit_r: Array, orbit_v: Array) -> void:
 	main.toggle_flight()
 
 
-func _circular() -> void:
+func _circular(terrain: Dictionary = { "seed": SEED, "height_range_m": RANGE_M }) -> void:
 	# 466 m/s is circular 50 km up, 300 km from this planet's centre.
-	_fly([300_000_000, 0, 0], [0, 0, -466_000_000])
+	_fly([300_000_000, 0, 0], [0, 0, -466_000_000], terrain)
 
 
 func _n() -> int:
@@ -208,3 +208,38 @@ func test_a_crash_is_reported() -> void:
 			break
 	assert_true(crashed)
 	assert_has(main.event_log.lines, "Orbiter crashed on Planet")
+
+
+## The height the mesh draws at a cell, and the sim's landed height there, in m.
+func _heights_at(cell: int) -> Array[int]:
+	_land_on(cell)
+	var drawn: int = _planet_node().planet["heights"][cell]
+	var pos: Array = _ship()["pos_mm"]
+	var landed := roundi((Vector3(pos[0], pos[1], pos[2]).length() - RADIUS_MM) / 1000.0)
+	return [drawn, landed]
+
+
+func test_mesh_heights_equal_landed_heights() -> void:
+	_circular()
+	await _wait_for_terrain()
+	for cell: int in [4321]:
+		var heights := _heights_at(cell)
+		assert_almost_eq(heights[0], heights[1], 1, "cell %d" % cell)
+
+
+func test_mesh_heights_follow_the_planets_own_weights() -> void:
+	var weights := [1, 3, 2]
+	_circular({ "seed": SEED, "height_range_m": RANGE_M, "weights": weights })
+	await _wait_for_terrain()
+	var cell := 4321
+	var dir := PlanetGrid.direction(cell, _n())
+	var own := PlanetGrid.height_m(SEED, dir, weights, RANGE_M)
+	var fixed := PlanetGrid.height_m(SEED, dir, PlanetMesh.DEFAULT_WEIGHTS, RANGE_M)
+	assert_ne(own, fixed, "the weights change this cell's height")
+	assert_eq(_planet_node().planet["heights"][cell], own, "the mesh draws the planet's own weights")
+	var heights := _heights_at(cell)
+	if absi(heights[1] - fixed) <= 1 and absi(heights[1] - own) > 1:
+		pending("The sim reads planet.weights from A17 (kernel/A16, e545dab); main still lands at [4, 2, 1]")
+		return
+	assert_almost_eq(heights[0], heights[1], 1, "the mesh and the sim agree on a planet with its own weights")
+

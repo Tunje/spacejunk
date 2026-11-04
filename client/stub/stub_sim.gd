@@ -1286,7 +1286,7 @@ func _put_probe_in_orbit() -> void:
 	_state["bodies"][moon] = {
 		"kind": "planet", "name": "Cairn", "pos_mm": PLANET_POS_MM.duplicate(), "radius_mm": PLANET_RADIUS_MM,
 		"visual_seed": 7, "scanned": true, "frame": 0, "orbit": {}, "gm": PLANET_GM, "soi_mm": 0,
-		"planet": { "seed": PLANET_SEED, "height_range_m": PLANET_RANGE_M }, "sea_level_m": PLANET_SEA_LEVEL_M,
+		"planet": { "seed": PLANET_SEED, "height_range_m": PLANET_RANGE_M, "sea_level_m": PLANET_SEA_LEVEL_M },
 	}
 	for id: int in _state["units"]:
 		var unit: Dictionary = _state["units"][id]

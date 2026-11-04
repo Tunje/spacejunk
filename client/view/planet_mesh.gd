@@ -48,7 +48,7 @@ static func settings_of(body: Dictionary) -> Dictionary:
 		"seed": int(source.get("seed", body.get("visual_seed", 0))),
 		"radius_mm": int(body["radius_mm"]),
 		"range_m": mini(int(source.get("height_range_m", range_default)), PlanetGrid.MAX_HEIGHT_M),
-		"sea_level_m": body.get("sea_level_m", null),
+		"sea_level_m": source.get("sea_level_m", body.get("sea_level_m", null)),
 		"weights": source.get("weights", body.get("weights", DEFAULT_WEIGHTS)),
 		"n": PlanetGrid.n_for_radius(int(body["radius_mm"])),
 	}
