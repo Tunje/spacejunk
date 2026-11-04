@@ -19,6 +19,17 @@ var anchor_mm: Array = [0, 0, 0]
 var instance_total := 0
 
 
+## The anchor in the world for this view: the rocks share a frame that may move,
+## so the local anchor gets the frame's offset of the first rock found.
+func world_anchor(view: Dictionary) -> Array:
+	var ids: Array = view["bodies"].keys()
+	ids.sort()
+	for id: int in ids:
+		if view["bodies"][id]["kind"] == "asteroid":
+			return WorldPosition.local_to_world(view["bodies"][id], anchor_mm)
+	return anchor_mm
+
+
 ## The middle of the targetable asteroids, in sim millimetres.
 static func anchor_of(view: Dictionary) -> Array:
 	var total := [0, 0, 0]
@@ -45,6 +56,8 @@ static func keep_clear(view: Dictionary, anchor: Array) -> Array[Dictionary]:
 				"radius_m": body["radius_mm"] * FloatingOrigin.MM_TO_M,
 			})
 	for id: int in view["units"]:
+		if not view["units"][id].get("orbit", {}).is_empty():
+			continue
 		var pos: Array = view["units"][id]["pos_mm"]
 		clear.append({ "at_m": FloatingOrigin.relative_m(pos, pos, anchor, anchor, 0.0), "radius_m": 300.0 })
 	return clear

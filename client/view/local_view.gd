@@ -81,10 +81,11 @@ func bind(new_bridge: SimBridge) -> void:
 ## Starts the camera on the star's side, so the first view shows sunlit hulls.
 func _face_the_lit_side() -> void:
 	var view: Dictionary = bridge.current_view
-	var focus: Array = view["units"][focus_id]["pos_mm"]
+	var focus := WorldPosition.of(view["units"][focus_id])
 	for id: int in view["bodies"]:
 		if view["bodies"][id]["kind"] == "star":
-			var to_star := FloatingOrigin.relative_m(view["bodies"][id]["pos_mm"], view["bodies"][id]["pos_mm"], focus, focus, 0.0)
+			var star := WorldPosition.of(view["bodies"][id])
+			var to_star := FloatingOrigin.relative_m(star, star, focus, focus, 0.0)
 			var direction := to_star.normalized()
 			camera.yaw = atan2(direction.x, direction.z) + LIT_SIDE_OFFSET
 			camera.pitch = -clampf(asin(direction.y), -LIT_PITCH_LIMIT, LIT_PITCH_LIMIT)
@@ -237,12 +238,12 @@ func refresh(delta: float) -> void:
 	for id: int in bodies:
 		var entry: Dictionary = after["bodies"][id]
 		var relative := FloatingOrigin.relative_m(
-			before["bodies"].get(id, entry)["pos_mm"], entry["pos_mm"], focus_before, focus_after, alpha)
+			WorldPosition.of(before["bodies"].get(id, entry)), WorldPosition.of(entry), focus_before, focus_after, alpha)
 		bodies[id].place(relative)
 		if bodies[id].kind == "star":
 			sun.look_at_from_position(relative.normalized(), Vector3.ZERO)
 			fill.look_at_from_position(-relative.normalized(), Vector3.ZERO)
-	field.position = FloatingOrigin.relative_m(field.anchor_mm, field.anchor_mm, focus_before, focus_after, alpha)
+	field.position = FloatingOrigin.relative_m(field.world_anchor(before), field.world_anchor(after), focus_before, focus_after, alpha)
 	for docked_pass: bool in [false, true]:
 		for id: int in crafts:
 			if after["units"][id]["dock"].is_empty() != docked_pass:
@@ -261,7 +262,7 @@ func _place_craft(craft: CraftNode, id: int, before: Dictionary, after: Dictiona
 		focus_before: Array, focus_after: Array, alpha: float, delta: float) -> void:
 	var unit: Dictionary = after["units"][id]
 	var relative := FloatingOrigin.relative_m(
-		before["units"].get(id, unit)["pos_mm"], unit["pos_mm"], focus_before, focus_after, alpha)
+		WorldPosition.of(before["units"].get(id, unit)), WorldPosition.of(unit), focus_before, focus_after, alpha)
 	if not unit["route"].is_empty():
 		var aim := CraftLayout.to_metres(unit["route"]["to_mm"]) - CraftLayout.to_metres(unit["route"]["from_mm"])
 		if aim.length_squared() > 0.0:
@@ -295,7 +296,7 @@ func _is_crowded(unit: Dictionary, id: int, view: Dictionary) -> bool:
 		return false
 	for other: int in view["units"]:
 		var neighbour: Dictionary = view["units"][other]
-		if other != id and neighbour["kind"] != "station" and neighbour["dock"].is_empty():
+		if other != id and neighbour["kind"] != "station" and neighbour["dock"].is_empty() 				and WorldPosition.same_place(unit, neighbour):
 			if IntMath.dist(unit["pos_mm"], neighbour["pos_mm"]) < CROWD_MM:
 				return true
 	return false
@@ -387,7 +388,7 @@ func _sync_entities() -> void:
 
 func _position_in(view: Dictionary, fallback: Dictionary, kind: String, id: int) -> Array:
 	var section: String = "units" if kind == "unit" else "bodies"
-	return view[section].get(id, fallback[section][id])["pos_mm"]
+	return WorldPosition.of(view[section].get(id, fallback[section][id]))
 
 
 func _node_of(kind: String, id: int) -> Node3D:

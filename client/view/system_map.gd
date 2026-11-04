@@ -89,17 +89,17 @@ func refresh(delta: float) -> void:
 	var before: Dictionary = bridge.previous_view
 	var alpha := bridge.interpolation_alpha()
 	var centre: int = local_view.commanded_unit
-	var centre_before: Array = before["units"].get(centre, after["units"][centre])["pos_mm"]
-	var centre_after: Array = after["units"][centre]["pos_mm"]
+	var centre_before := WorldPosition.of(before["units"].get(centre, after["units"][centre]))
+	var centre_after := WorldPosition.of(after["units"][centre])
 	entries.clear()
 	for id: int in after["bodies"]:
 		var body: Dictionary = after["bodies"][id]
-		var from_mm: Array = before["bodies"].get(id, body)["pos_mm"]
-		_add_entry("body", id, body["name"], FloatingOrigin.relative_m(from_mm, body["pos_mm"], centre_before, centre_after, alpha))
+		var from_mm := WorldPosition.of(before["bodies"].get(id, body))
+		_add_entry("body", id, body["name"], FloatingOrigin.relative_m(from_mm, WorldPosition.of(body), centre_before, centre_after, alpha))
 	for id: int in after["units"]:
 		var unit: Dictionary = after["units"][id]
-		var from_mm: Array = before["units"].get(id, unit)["pos_mm"]
-		_add_entry("unit", id, unit["name"], FloatingOrigin.relative_m(from_mm, unit["pos_mm"], centre_before, centre_after, alpha))
+		var from_mm := WorldPosition.of(before["units"].get(id, unit))
+		_add_entry("unit", id, unit["name"], FloatingOrigin.relative_m(from_mm, WorldPosition.of(unit), centre_before, centre_after, alpha))
 	_draw_routes(after, centre_after)
 	eta_text = _eta_for_selection(after)
 	camera.update_view(delta)
@@ -124,7 +124,8 @@ func _draw_routes(view: Dictionary, centre: Array) -> void:
 	for id: int in view["units"]:
 		var unit: Dictionary = view["units"][id]
 		if not unit["route"].is_empty():
-			_add_line(mesh, _relative(unit["pos_mm"], centre), _relative(unit["route"]["to_mm"], centre), ClientTheme.ORANGE)
+			_add_line(mesh, _relative(WorldPosition.of(unit), centre),
+				_relative(WorldPosition.local_to_world(unit, unit["route"]["to_mm"]), centre), ClientTheme.ORANGE)
 	var target := _selected_position(view)
 	if not target.is_empty() and view["units"].has(local_view.commanded_unit):
 		var unit: Dictionary = view["units"][local_view.commanded_unit]
@@ -143,10 +144,11 @@ func _add_line(mesh: ImmediateMesh, from: Vector3, to: Vector3, colour: Color) -
 func _selected_position(view: Dictionary) -> Array:
 	match local_view.selected_kind:
 		"body":
-			return view["bodies"].get(local_view.selected_id, {}).get("pos_mm", [])
+			if view["bodies"].has(local_view.selected_id):
+				return WorldPosition.of(view["bodies"][local_view.selected_id])
 		"unit":
-			if local_view.selected_id != local_view.commanded_unit:
-				return view["units"].get(local_view.selected_id, {}).get("pos_mm", [])
+			if local_view.selected_id != local_view.commanded_unit and view["units"].has(local_view.selected_id):
+				return WorldPosition.of(view["units"][local_view.selected_id])
 	return []
 
 

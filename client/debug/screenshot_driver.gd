@@ -10,6 +10,8 @@ class_name ScreenshotDriver extends Node
 ##   --last=<order key>              pressed --last-delay frames after --then
 ##   --cycle=1                       fits a tier 2 core and starts a short cycle at once
 ##   --jobs=<recipe id>[,<id>...]    opens the jobs screen and starts or queues each recipe
+##   --fly=<m/s>[,<normal>,<radial>]  opens flight on the commanded craft with that burn typed in
+##   --fly-at=peri|apo|<seconds>     places it at an apsis or so many seconds ahead
 ##   --copy=1                        (stub_load) strips two parts off the first ship and
 ##                                   opens fitting there, to show "Fit like this one"
 ##   --fit=<item>  --fit-slot=<connector>  opens fitting after the orders and picks both
@@ -93,6 +95,8 @@ func _run() -> void:
 		await _start_demo_cycle()
 	if parsed.has("copy"):
 		_open_copy_fit()
+	if parsed.has("fly"):
+		_open_flight()
 	if parsed.has("drone"):
 		_show_demo_drone()
 	if parsed.has("goals-done"):
@@ -258,6 +262,26 @@ func _open_jobs() -> void:
 	ScreenshotDriver._step(main.bridge)
 	main.bridge.set_paused(true)
 	screen.refresh()
+
+
+func _open_flight() -> void:
+	main.toggle_flight()
+	var screen: FlightScreen = main.flight_screen
+	var values: PackedFloat64Array = []
+	for part: String in parsed["fly"].split(","):
+		values.append(float(part))
+	while values.size() < 3:
+		values.append(0.0)
+	match parsed.get("fly-at", ""):
+		"peri":
+			screen.burn_at_apsis(0.0)
+		"apo":
+			screen.burn_at_apsis(PI)
+		"":
+			screen.burn_now()
+		var seconds:
+			screen.burn_tick = main.bridge.current_view["tick"] + 1 + roundi(float(seconds) * main.bridge.ticks_per_second())
+	screen.set_components(values[0], values[1], values[2])
 
 
 ## Takes the laser and solar slab off the first ship into its own hold, so another

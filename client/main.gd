@@ -23,6 +23,7 @@ const AUTOSAVE_SECONDS := 300.0
 @onready var markers: EntityMarkers = %Markers
 @onready var system_map: SystemMap = $SystemMap
 @onready var standing_orders: StandingOrdersScreen = %StandingOrders
+@onready var flight_screen: FlightScreen = %FlightScreen
 
 ## False until a game is running, so a failed start never autosaves.
 var _started := false
@@ -51,7 +52,9 @@ func _ready() -> void:
 	automation_screen.bind(bridge, local_view, order_panel)
 	goal_panel.bind(bridge, event_log, fitting_screen)
 	system_map.bind(bridge, local_view)
+	flight_screen.bind(bridge, local_view, system_map)
 	time_controls.map_pressed.connect(toggle_map)
+	time_controls.fly_pressed.connect(toggle_flight)
 	time_controls.policy_pressed.connect(standing_orders.toggle)
 	time_controls.fit_pressed.connect(toggle_fitting)
 	time_controls.jobs_pressed.connect(toggle_industry)
@@ -80,7 +83,7 @@ func _notification(what: int) -> void:
 
 
 func _new_backend(id: String) -> RefCounted:
-	if id == StubSim.SCENARIO_ID or id == StubSim.SCENARIO_LOAD:
+	if [StubSim.SCENARIO_ID, StubSim.SCENARIO_LOAD, StubSim.SCENARIO_ORBIT].has(id):
 		return StubSim.new_game(id, SEED_VALUE)
 	return Sim.new_game(id, SEED_VALUE)
 
@@ -106,6 +109,12 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif key.physical_keycode == KEY_ESCAPE and automation_screen.visible:
 		toggle_automation()
+		get_viewport().set_input_as_handled()
+	elif key.physical_keycode == KEY_B:
+		toggle_flight()
+		get_viewport().set_input_as_handled()
+	elif key.physical_keycode == KEY_ESCAPE and flight_screen.visible:
+		toggle_flight()
 		get_viewport().set_input_as_handled()
 	elif key.physical_keycode == KEY_J:
 		toggle_industry()
@@ -146,10 +155,15 @@ func toggle_automation() -> void:
 	_open_side_screen(automation_screen)
 
 
+## Manual flight. It draws its paths in whichever view is open, so the map stays.
+func toggle_flight() -> void:
+	_open_side_screen(flight_screen)
+
+
 ## One side screen at a time, beside the order panel, which always stays up so
 ## Undock and the other orders are never out of reach.
 func _open_side_screen(screen: Control) -> void:
-	for other: Control in [fitting_screen, industry_screen, automation_screen]:
+	for other: Control in [fitting_screen, industry_screen, automation_screen, flight_screen]:
 		if other != screen and other.visible:
 			other.toggle()
 	screen.toggle()
@@ -222,7 +236,7 @@ func _apply_load(loaded: RefCounted, client_state: Dictionary) -> void:
 
 
 func _close_screens() -> void:
-	for screen: Control in [fitting_screen, industry_screen, automation_screen]:
+	for screen: Control in [fitting_screen, industry_screen, automation_screen, flight_screen]:
 		if screen.visible:
 			screen.toggle()
 	if standing_orders.visible:
