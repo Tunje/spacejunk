@@ -15,6 +15,13 @@ const LOOP_POINTS := 128
 const PREDICT_POINTS := 96
 const DRIFT_SECONDS := 600.0
 const DRIFT_POINTS := 24
+## Paths along an unchanged orbit or drift are worked out again at most this often.
+## predict costs tens of milliseconds on an escape path, too much for every tick.
+const PATH_REFRESH_MS := 250
+## check(plan_burn) flies the burn tick by tick (A12), tens of ms for a long one.
+## Typing waits this long after the last edit before asking; an unchanged burn on
+## an unchanged craft is asked again at most every PATH_REFRESH_MS.
+const EDIT_SETTLE_MS := 150
 const MARKER_LOCAL_FRACTION := 0.03
 const MARKER_MAP := 0.35
 const PATH_COLOUR := Color(0.62, 0.65, 0.7)
@@ -33,6 +40,13 @@ var current_path: Array[PackedFloat64Array] = []
 var planned_path: Array[PackedFloat64Array] = []
 var marker := PackedFloat64Array()
 var _path_key := ""
+var _path_ms := -PATH_REFRESH_MS
+var _preview_key := ""
+var _preview_ms := -PATH_REFRESH_MS
+## While typing, the earliest time the preview may be asked for.
+var _settle_until := 0
+## How many times check(plan_burn) has run, for tests.
+var checks := 0
 var _burns_key := ""
 var _title: Label
 var _place: Label
@@ -95,7 +109,7 @@ func _ready() -> void:
 		label.text = "%s (m/s)" % axis
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var spin := _add_spin(row, -MAX_DV_M_S, MAX_DV_M_S, DV_STEP_M_S)
-		spin.value_changed.connect(func(_value: float) -> void: refresh())
+		spin.value_changed.connect(func(_value: float) -> void: _edited())
 		_axes.append(spin)
 	_cost = _add_label(column)
 	_after = _add_label(column)
@@ -149,9 +163,11 @@ func components() -> Array[int]:
 	return out
 
 
+## Sets the burn at once, as a button or the screenshot driver does, with no wait.
 func set_components(prograde_m_s: float, normal_m_s := 0.0, radial_m_s := 0.0) -> void:
 	for index in 3:
 		_axes[index].set_value_no_signal([prograde_m_s, normal_m_s, radial_m_s][index])
+	_settle_until = 0
 	refresh()
 
 
@@ -172,7 +188,9 @@ func burn_at_apsis(target: float) -> void:
 	if orbit.is_empty():
 		return
 	var tick: int = bridge.current_view["tick"]
-	burn_tick = tick + OrbitPath.ticks_until(orbit, tick, target)
+	var wait := OrbitPath.ticks_until(orbit, tick, target)
+	if wait > 0:
+		burn_tick = tick + wait
 	refresh()
 
 
@@ -210,12 +228,12 @@ func refresh() -> void:
 	_place.text = FlightLogic.place_text(view, unit_id())
 	_when.set_value_no_signal(float(burn_tick - tick - 1) / bridge.ticks_per_second())
 	var flying: bool = shown["dock"].is_empty()
-	var on_orbit: bool = not shown.get("orbit", {}).is_empty()
-	_peri_button.disabled = not on_orbit
-	_apo_button.disabled = not on_orbit
+	var orbit: Dictionary = shown.get("orbit", {})
+	_peri_button.disabled = orbit.is_empty() or OrbitPath.ticks_until(orbit, tick, 0.0) < 0
+	_apo_button.disabled = orbit.is_empty() or OrbitPath.is_open(orbit)
 	_sync_burns(shown, tick)
 	var command := pending_command()
-	preview = {} if command.is_empty() or not flying else bridge.check(command)
+	_update_preview(shown, command, flying)
 	_show_preview(view, flying)
 	_plan_button.disabled = not preview.get("ok", false)
 	_update_paths(view, command)
@@ -223,7 +241,33 @@ func refresh() -> void:
 
 func _on_when_changed(seconds: float) -> void:
 	burn_tick = bridge.current_view["tick"] + 1 + roundi(seconds * bridge.ticks_per_second())
+	_edited()
+
+
+## A typed edit: refresh the rest now, and ask for the preview once typing settles.
+func _edited() -> void:
+	_settle_until = Time.get_ticks_msec() + EDIT_SETTLE_MS
 	refresh()
+
+
+## Asks check(plan_burn) only when the burn, or the craft it is planned on, has
+## changed, or PATH_REFRESH_MS has passed; never while typing has not settled.
+func _update_preview(shown: Dictionary, command: Dictionary, flying: bool) -> void:
+	if command.is_empty() or not flying:
+		preview = {}
+		_preview_key = ""
+		return
+	var key := "%s|%s|%s|%d" % [str(command), str(shown.get("orbit", {})), str(shown.get("vel_um_s", [])),
+		int(shown["inventory"].get("propellant", 0))]
+	var now := Time.get_ticks_msec()
+	if now < _settle_until:
+		return
+	if key == _preview_key and now - _preview_ms < PATH_REFRESH_MS:
+		return
+	_preview_key = key
+	_preview_ms = now
+	preview = bridge.check(command)
+	checks += 1
 
 
 func _show_preview(view: Dictionary, flying: bool) -> void:
@@ -282,21 +326,25 @@ func _add_burn_row(burn_id: int, action: String) -> void:
 
 ## Works the path data out again only when the tick or the burn changes.
 func _update_paths(view: Dictionary, command: Dictionary) -> void:
-	var key := "%d:%d:%s:%s" % [unit_id(), view["tick"], str(command), str(preview.get("ok", false))]
-	if key == _path_key:
+	var shown := unit()
+	var key := "%d:%s:%s:%s:%s:%s" % [unit_id(), str(shown.get("orbit", {})), str(shown.get("vel_um_s", [])),
+		str(shown["dock"]), str(command), str(preview.get("ok", false))]
+	var now := Time.get_ticks_msec()
+	if key == _path_key and now - _path_ms < PATH_REFRESH_MS:
 		return
 	_path_key = key
+	_path_ms = now
 	current_path = _current_path(view)
 	planned_path = []
 	marker = PackedFloat64Array()
 	if preview.get("ok", false):
 		marker = _position_at(view, burn_tick)
 		var detail: Dictionary = preview["detail"]
-		var shown := unit()
 		if not detail.get("orbit", {}).is_empty():
 			var orbit: Dictionary = detail["orbit"]
 			var parent: int = orbit.get("parent", shown["orbit"].get("parent", 0))
-			planned_path = OrbitPath.loop(orbit, WorldPosition.of(view["bodies"][parent]), burn_tick, LOOP_POINTS)
+			var body: Dictionary = view["bodies"][parent]
+			planned_path = OrbitPath.ahead(orbit, WorldPosition.of(body), burn_tick, LOOP_POINTS, float(body.get("soi_mm", 0)))
 		elif not marker.is_empty() and shown.get("orbit", {}).is_empty():
 			planned_path = OrbitPath.drift(marker, detail["vel_um_s"], DRIFT_SECONDS, DRIFT_POINTS)
 	_show_diagram(view)
@@ -323,8 +371,12 @@ func _current_path(view: Dictionary) -> Array[PackedFloat64Array]:
 	if not bridge.sim.has_method("predict") or not shown["dock"].is_empty():
 		return points
 	var ticks := roundi(DRIFT_SECONDS * bridge.ticks_per_second())
-	if not shown.get("orbit", {}).is_empty():
-		ticks = ceili(OrbitPath.period_ticks(shown["orbit"]))
+	var orbit: Dictionary = shown.get("orbit", {})
+	if OrbitPath.is_open(orbit):
+		var soi: float = float(view["bodies"][orbit["parent"]].get("soi_mm", 0))
+		ticks = OrbitPath.ticks_to_reach(orbit, view["tick"], soi)
+	elif not orbit.is_empty():
+		ticks = ceili(OrbitPath.period_ticks(orbit))
 	elif FlightLogic.speed_of(shown.get("vel_um_s", [0, 0, 0])) == 0:
 		return points
 	var path: Dictionary = bridge.sim.predict(unit_id(), view["tick"], ticks, maxi(1, ticks / PREDICT_POINTS))
@@ -354,6 +406,9 @@ func _place_world(view: Dictionary, place: Dictionary) -> Array:
 
 func _process(_delta: float) -> void:
 	if visible and bridge != null:
+		if _settle_until > 0 and Time.get_ticks_msec() >= _settle_until:
+			_settle_until = 0
+			refresh()
 		_draw_paths()
 
 

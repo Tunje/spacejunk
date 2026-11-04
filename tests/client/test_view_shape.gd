@@ -24,7 +24,7 @@ const TASK_FIELDS: Array[String] = [
 ]
 const DEFS_SECTIONS: Array[String] = ["modules", "items", "recipes", "templates", "sinks"]
 const BODY_FIELDS: Array[String] = [
-	"kind", "name", "pos_mm", "radius_mm", "visual_seed", "scanned", "frame", "orbit", "gm", "world_mm",
+	"kind", "name", "pos_mm", "radius_mm", "visual_seed", "scanned", "frame", "orbit", "gm", "soi_mm", "world_mm",
 ]
 const FRAME_FIELDS: Array[String] = ["name", "radius_mm", "orbit", "pos_mm", "world_mm"]
 const DEPOSIT_FIELDS: Array[String] = ["body", "item", "remaining_g", "hardness"]
