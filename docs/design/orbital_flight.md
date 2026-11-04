@@ -1,6 +1,6 @@
 # Orbital Flight
 
-Status: proposal for the owner to decide on (task kernel/orbital-proposal). Nothing in `sim/`, `data/`, `client/` or the contracts has changed. The planet half is in [planets.md](planets.md) by B, and what automation does with orbits is in [orbital_automation.md](orbital_automation.md) by C.
+Status: option 3 approved by the owner on 2026-11-04, with one correction: flight is mixed, and the player flies their own ship, so manual burns come early, not last (rulings at the top of [workplan.md](../../plan/workplan.md)). Section 11 is the implementation plan (task A8), awaiting the Lead's approval. Sections 1 to 10 are the proposal as approved. Nothing in `sim/`, `data/`, `client/` or the contracts has changed yet. The planet half is in [planets.md](planets.md) by B, and what automation does with orbits is in [orbital_automation.md](orbital_automation.md) by C.
 
 The owner asked: "gravity based movement like in kerbal maybe?" The workplan records order-based flight as owner-confirmed (lines 17 and 79), so this page looks at reversing that decision.
 
@@ -209,3 +209,119 @@ Nothing needs to happen before M4. The proof script can stay as a reference for 
 - **The client:** drawing 100,002 cells, orbit lines, and float noise matching integer heights at hex centres.
 - **Landing and takeoff costs** are worked out from the formulas, not flown.
 - **Godot in other builds and machines.** Everything is integer, so it should match, but I only ran it on the owner's PC with the editor binary.
+
+## 11. Implementation plan (A8)
+
+This section is for the Lead and the other agents. It turns option 3 into ordered kernel tasks, with the owner's correction applied: **the player flies their own ship with manual burns, and an AI core flies the ships it controls with the same burns, planned for it.** No sim code exists yet.
+
+### 11.1 The shape of it
+
+- **One way to change an orbit: a burn.** The player places a burn on their ship. A core's autopilot plans the same burns and places them for its ship. The simulation then runs every burn the same way, in phase 5, whoever placed it. Mixed flight therefore needs no second flight model, and a core-flown trip is just a list of burns that a player could have made by hand.
+- **Three ways to be somewhere.** Every body and unit is in exactly one of these at any tick:
+  - **On an orbit:** stored orbit elements around a parent body, with its position derived from the tick (section 3).
+  - **In a frame:** a co-moving frame such as the rock cluster, with a local `pos_mm` and today's straight-line travel inside it.
+  - **Landed:** on a planet cell, with its position derived from the cell (B's [planets.md](planets.md) section 8).
+  - **Docked** units keep today's rule and follow their host, whichever of the three the host is in.
+- **Positions are always derived and never added up**, so saves, the state hash and 8x stay exact (section 3's proof).
+
+### 11.2 The co-moving cluster frame
+
+- **A frame is a body.** It has an ID from the entity counter, an orbit on rails like any body, and no mass. Its members are the rocks and the units inside it.
+- **Inside the frame, nothing changes.** Members store a local `pos_mm` relative to the frame's origin. `move_to`, stand-off, `at_target`, routes, prices and halts work exactly as [networks.md](networks.md) section 6 says today. Every figure in [reference_scenario.md](reference_scenario.md) section 2 holds, because those figures are already local.
+- **The world position** of a member is the frame's rails position plus its local `pos_mm`. Only the view and frame changes need it.
+- **Leaving the frame.** A burn placed on a unit in a frame takes it out. The unit's new orbit is worked out from the frame's position and velocity at that tick, plus its local offset and the burn. Leaving needs no special command.
+- **Joining the frame.** A unit on an orbit joins when it is within the frame's radius and its speed relative to the frame is under a small threshold, checked in phase 5. Its local `pos_mm` is then fixed from its world position, and its orbit is cleared. The autopilot's arrival burn at a frame target is planned to meet both conditions.
+  - The radius and threshold are kernel constants for the Lead to approve. I propose the cluster's own radius plus 1000 km, and 1 m/s.
+  - A player who arrives too fast drifts past. That is a real piloting mistake, and the view shows it.
+- **Where the frame orbits,** the star or a planet, is scenario data, and B10 decides it. The frame needs nothing extra either way.
+
+### 11.3 Kernel tasks, in order
+
+Sizes compare with earlier kernel tasks: **S** is about A7's size, **M** about A4 (power), and **L** about A6 (travel and docking).
+
+| # | Task | What it delivers | Depends on | Size |
+| - | ---- | ---------------- | ---------- | ---- |
+| A9 | **Orbit maths library** | `OrbitMath`, pure static functions with no state:<br>- sine table from integer CORDIC, plus integer `atan2`, `acos` and `isqrt` helpers<br>- elliptic Kepler solve<br>- elements to position and velocity, and back again (the burn-to-new-orbit function)<br>- integer rocket equation<br>- signed `mul_div`<br>Golden test vectors from a float reference, round trips of elements to position and velocity and back with stated error bounds, and range tests at the limits of section 3. | Contracts for units (11.4) | M |
+| A10 | **Rails, frames and landing places in state** | Bodies, frames and units carry `orbit`, `frame` or `cell`, and `pos_mm` is derived for orbits and cells. The scenario loader, `to_save`/`from_save`, strict-check range rules, and `view()` with orbit elements per object. Today's in-frame travel is moved under the frame unchanged. | A9 and the save contract | L |
+| A11 | **Burns, for the player's ship first** | Burns on a ship, run in phase 5, delivering a set delta-v in a direction fixed at the start, as one impulse per tick until done or out of propellant. Per tick: propellant to `propellant_exhaust` by the rocket equation, a new orbit by A9, and the thruster as a power and heat load while burning. Leaving a frame and joining one (11.2). `check` returns the predicted orbit after a planned burn, so the client can draw it before the player commits. | A10 | L |
+| A12 | **Spheres of influence** | Hyperbolic orbits, with an integer `sinh`/`cosh` built from the A9 rocket-equation exponential. Exact detection of the tick an orbit leaves or enters a sphere of influence, by bounded integer bisection on the rails function, so the result never depends on step size. Re-parenting on that tick. Needed for any trip between the cluster's parent and a planet. | A11 | L |
+| A13 | **Core autopilot: the transfer planner** | `quote(unit, target, depart_tick)` and `next_window(unit, target, from_tick, cap)` as [orbital_automation.md](orbital_automation.md) uses them. Hohmann and same-ring phasing transfers in closed form, the `waiting` operation, and atomic transfers. `move_to` across frames, planets and orbits places the planned burns through A11's path and reserves their propellant at departure. Inside a frame, `move_to` is unchanged. | A11, A12 | L |
+| A14 | **Planet grid and terrain** | `PlanetGrid`: cell IDs, neighbours, integer cell directions and the integer noise from section 8, plus `cell(seed, id)` on demand. Pure functions, with the proof's checks as tests: 12 pentagons, Euler, symmetry and replay. | A9's trig only | M |
+| A15 | **Landing and takeoff** | Autopilot operations between an orbit and a cell, with an integer delta-v cost from the body's figures, as in B's planets.md section 3.2. The landed state, and leaving it. The player's ship uses the same operations, because a hand-flown descent isn't proposed. | A10, A11, A14 | M |
+| A16 | **Planet shadow** | A solar generator gives nothing while its unit is in a planet's shadow. This is an integer cylinder test from the star direction, in phase 3. C found that this is what stretches laps around a planet. | A10 | S |
+| A17 | **Performance and limits** | Re-measure [perf_budget.md](perf_budget.md) with rails, burns and window searches at 20 times the slice, measure the top speed of time warp at slice size, and update the budget's rules. | A13 | S |
+
+**Order and why:**
+- **A9 to A11 come first,** because the player has to fly their own ship before anything else.
+- **A14 has no state and only needs A9's trig,** so it can run beside A10 and A11, which puts D's planet renderer on real data early.
+- **A12 and A13 are the core-flown half.** C's cycle work waits for A13's queries, not for the whole chain (11.6).
+- **Total:** about 4 L, 3 M and 2 S. The proposal's estimate of 4 to 5 tasks was too low, because manual burns and spheres of influence are now in it.
+
+**Not in the plan,** each for the Lead to schedule later if wanted:
+- Lambert transfers: a chosen flight time, so a core can pay more to leave between windows.
+- Inclined and eccentric targets for the planner. The first planner assumes near-circular orbits in one plane, and refuses anything else with a reason.
+- A coast-skip mode for time warp above the tick rate's limit.
+- Planet rotation.
+
+### 11.4 Contract changes for the Lead to approve
+
+**contracts.md**
+
+| Section | Change |
+| ------- | ------ |
+| 1, Units and ranges | New rows:<br>- Angle in binary angle units, 2^32 per turn, stored masked to 0..2^32-1<br>- Ratio in Q30, where 2^30 is 1.0, for eccentricity and direction vectors<br>- Speed and delta-v in mm/s, within ±10^9<br>- Gravitational parameter in m³/s², 0 to 10^21<br>Position keeps its range. |
+| 1, Coordinates | Orbits use the simulation axes, so a planet's north pole and the reference plane's normal are **+Y**, not +Z as I told B. B's page needs that one-word fix. A local `pos_mm` is relative to its frame. |
+| 3, Public API | `check` of a burn returns the orbit after it. `predict(unit, from_tick, ticks, step)` returns derived positions for drawing a path, read-only, like `view()`. `quote` gains `depart_tick`. `next_window` is new. |
+| 4, Tick order | Phase 5 runs burns, then frame and sphere-of-influence changes, in ascending unit ID. Phase 3 applies planet shadow to solar supply. |
+| 5, Commands | `plan_burn` places a burn: `{unit, tick, prograde_mm_s, normal_mm_s, radial_mm_s}`. The tick must be in the future, and "burn now" is the next tick. `cancel_burn {unit, burn}` removes one. `move_to` keeps its form. Outside a frame it waits for a window, then flies an atomic transfer. `land {unit, body, cell}` and `take_off {unit}` are new. |
+| 6, Events | `burn_started`, `burn_done` (with delta-v delivered and propellant spent), `burn_short` (out of propellant), `frame_joined`, `frame_left`, `soi_changed`, `landed` and `took_off`. |
+| 6, Reason codes | `burn_in_past`, `not_flying` (landed or docked), `no_window` (nothing under the cap), `unsupported_orbit` (the planner's limits), `too_fast_to_join` (only in a `check` that previews a frame join) and `not_over_cell`. |
+| 7, State view | Per body, frame and unit: one of `orbit`, `frame` with `local_mm`, or `cell`. Planned burns per unit. Operations gain `burning` and `waiting`, each with their ticks. |
+| 8, Canonical serialization | The new fields above. Derived positions are not saved. **A save version bump:** older saves fail to load with `data_mismatch`, as already accepted for the parts-drone change. |
+
+**Other pages:**
+- **networks.md section 6** is rewritten by me in A10 to A13. Inside a frame it stays word for word. Outside a frame it gains burns, transfers, frames and landing.
+- **schemas.md:**
+  - The thruster capability gains `exhaust_m_s` and `thrust_kn`, and `speed_m_s` goes. A burn's per-tick delta-v is thrust over mass, so it needs thrust.
+  - Bodies gain `gm_m3_s2`, `soi_m` and an orbit, and planets also gain a seed.
+  - Scenarios gain frames.
+  - All of these are B's data. I need them before A10's loader and A11's burns.
+- **accounting.md:**
+  - Propellant still leaves only through `propellant_exhaust`.
+  - A player's burn pays per tick while it runs, and an autopilot transfer reserves at departure and pays per tick as its burns run.
+  - A trip under way can't run short, because the reservation covers it. A player's burn can, which fires `burn_short`.
+- **autonomy.md** (C): the `waiting` operation, atomic transfers, and the lap-gate propellant check C proposed.
+
+### 11.5 Save format and state hash
+
+- **New saved fields:**
+  - per body, its orbit, or its frame and local position;
+  - per frame, its orbit;
+  - per unit, `orbit`, `frame` with `pos_mm`, or `cell`;
+  - per unit, planned burns, and the running burn with its delivered delta-v and remainder;
+  - the transfer record of [orbital_automation.md](orbital_automation.md).
+
+  All are integers, encoded by today's `Canon`, so the hash rule doesn't change.
+- **Not saved:** the sine table, derived positions, planet cells and the neighbour table. They are rebuilt on load, as the proof did.
+- **Data hash:** body figures and thruster figures are read by the simulation, so they join the data hash. A planet's visual settings stay out, like `visual` today.
+- **Tests:** in every task from A10, a save and load midway through a burn, a transfer, a frame join and a sphere-of-influence change must give a byte-identical save and the same hash as an unbroken run. 8x adds nothing to test, because it runs the same ticks.
+
+### 11.6 What C and D need from me, and when
+
+| Who | Needs | When |
+| --- | ----- | ---- |
+| C | The signatures of `quote` and `next_window`, and the `waiting` operation's fields | With the contract approval, before A10. C can write against a stub from then on. |
+| C | The working planner | A13. C's cycle and tier 3 work on planets starts then. Cycles inside the cluster need nothing new, because the frame keeps them as they are. |
+| C | A test helper that puts a unit on a given orbit or in a frame | A10 |
+| D | The view shape: orbit elements, frame and cell, planned burns, `burning` and `waiting` | With the contract approval, before A10, so the map can start on a stub |
+| D | A float reference for drawing an orbit from its elements, with test vectors the client must match within 1 m | A9 |
+| D | `check` of a planned burn and `predict` for path lines, which the manual flight screen is built on | A11. **This is the critical handover.** Manual flight is D's largest new screen, and the player can't fly without it. |
+| D | `PlanetGrid` and the integer height function, called from the client for hex centres | A14, early, beside A10 |
+| D | Sphere-of-influence and landing events for the map and camera | A12 and A15 |
+| B | The schema fields in 11.4, before A10. The +Y north fix in planets.md. Body figures for B10's start. | Before A10 |
+
+### 11.7 Risks
+
+- **Elements to position and velocity and back** is the one piece of maths the proof didn't run. Near-circular and near-equatorial orbits make some angles undefined, so A9 has to handle those cases explicitly, by measuring angles from the reference axis when they degenerate. If its round-trip error can't be bounded to metres, finite burns fall back to one impulse at the burn's midpoint.
+- **A burn runs one conversion per tick,** about 50 µs by estimate. That is cheap for a few ships, but A17 must check many cores burning at once.
+- **Time warp.** The player flying a 20 to 40 minute transfer by hand will want more than 8x. The slice's real size should allow far more than the 11x limit at 20 times the slice, but that's unmeasured until A17.

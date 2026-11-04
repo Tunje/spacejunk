@@ -101,7 +101,7 @@ Rules:
 
 **Faults.**
 - A fault is set in phase 7 and takes effect from phase 1 of the next tick. Work completed in phase 5 of the fault tick stands.
-- Commands aimed at a faulted module are rejected, except `cancel_job`, `stop`, `detach_part` and `set_priority`. The module gets no power or new work. Its running job pauses with inputs held.
+- Commands aimed at a faulted module are rejected, except `cancel_job`, `move_job`, `stop`, `detach_part` and `set_priority`. The module gets no power or new work. Its running job pauses with inputs held.
 - Limits fault only when strictly exceeded.
 - Faults clear automatically in phase 7, with effect from the next tick. A heat fault clears when loop heat is at or below a declared clear level, which stops flapping. A0 defines the level.
 - Shedding is not a fault. A shed job pauses and resumes when power returns.
@@ -125,8 +125,11 @@ Every command has this envelope. `submit` fills in `id` and `tick`.
 | `start_mining` | `deposit`, `module` | Begin mining with a laser |
 | `stop` | none | Stop the current operation |
 | `start_job` | `facility`, `recipe`, `count` | Begin a recipe at a facility part |
-| `cancel_job` | `job` | Cancel and return held matter |
+| `cancel_job` | `job` | Cancel and return held matter. A queued job ends at once with nothing to return |
+| `queue_job` | `facility`, `recipe`, `count` | Add a job to the end of the facility's queue. On an idle facility it is the same as `start_job` |
+| `move_job` | `job`, `position` | Move a job to a position in its facility's queue |
 | `attach_part` | `item`, `from`, `parent_part`, `parent_connector`, `part_connector` | Install a part |
+| `copy_fit` | `source`, `from` | Fit this unit like `source`, with parts from `from` |
 | `detach_part` | `part`, `to` | Remove a part and everything below it |
 | `assign_core` | `core` | Set a core installed on this unit |
 | `set_cycle` | `steps` | Set the repeating cycle for tier 2 |
@@ -160,6 +163,20 @@ Running shortfalls are still handled by shedding and faults.
 
 **Jobs.** With `count` above 1, inputs are taken at the start of each run and `job_finished` fires per run.
 
+**Job queue.**
+- A facility holds up to 16 jobs in order, by `queue_pos`. The job at 0 is active and has the statuses of [autonomy.md](autonomy.md) section 9. The rest are `queued` at 1 to n, hold no matter and reserve nothing. Positions stay contiguous.
+- When the active job ends, by finishing or by cancelling, the next job becomes active at once and can start its first run in the next phase 4. So the next job starts on the tick after the last one finishes, the same gap as between two runs of one job, and on the same tick when the active job is cancelled in phase 1.
+- `queue_job` makes the same checks as `start_job`, except that a busy facility is not refused. It is refused with `queue_full` when the facility holds 16 jobs. `start_job` still gives `facility_busy` on a facility with any job.
+- `move_job` is refused with `job_busy` for a job with a run in progress (`running`, `paused` or `cancelling`), because it holds matter. A run in progress is never overtaken, so the lowest position then is 1. An active job that is `waiting` can be moved back, and becomes `queued`. Positions outside the queue are clamped to it.
+- `detach_part` counts queued jobs as jobs in the subtree.
+
+**Copying a fit.** `copy_fit` installs parts from `from`, which is this unit or a unit docked to it, as for `attach_part`. `source` can be any other unit with the same root module. It is instant in phase 1.
+- It is refused with `fit_mismatch` if the root modules differ, `invalid_target` if `source` is this unit, and `unknown_unit` or `not_docked` as for `attach_part`.
+- The source's parts are taken in ascending part ID, which puts each parent before its children and repeats the order they were fitted in. A part already in place on the matching connector is kept. Every other part is an ordinary `attach_part`, validated and applied by the same rules, with no bypass. Refused parts are retried in more passes until a pass fits nothing. A part whose parent did not fit is not tried.
+- One `fit_copied` event reports the result. There is no `attach_failed` per part. `missing` counts whole parts still needed beyond what `from` holds, and `refused` gives each unfitted source part with its reason, which is `parent_not_fitted` when its parent did not fit.
+- Core assignment, priorities, cycles, cargo and dock state are not copied.
+- `check` dry-runs the copy and returns `detail` as `{ attach, missing, refused }` counts.
+
 New command types go through the Lead. C0 may refine autonomy commands, events, reason codes and task view fields without a separate change, and tells the Lead what changed.
 
 ## 6. Events
@@ -187,8 +204,11 @@ Events are ordered by phase, then the event's `unit`, then emission order. Unit 
 | `job_started` | `job`, `command` |
 | `job_finished`, `job_cancelled` | `job`, `recipe`, `facility` |
 | `job_paused`, `job_resumed` | `job`, `reason` |
+| `job_queued` | `job`, `command`, `position` |
+| `job_moved` | `job`, `position` |
 | `unit_created` | `unit`, `def`, `job` |
 | `part_attached`, `part_detached` | `part` |
+| `fit_copied` | `source`, `attached` (new part IDs), `missing` (`{ item: count }`), `refused` (list of `{ source_part, item, reason }`) |
 | `power_shed` | `module`, `reason` |
 | `power_restored` | `module` |
 | `fault` | `module`, `reason` |
@@ -198,7 +218,7 @@ Each failure emits exactly one event. Fitting failures emit `attach_failed`, and
 
 `reason` is a stable lowercase code, with display text held in the client. `detail` is an optional Dictionary of integers, such as `{ need_w, have_w }`, so the player sees numbers as well as a code.
 
-Known reason codes: `over_mass_limit`, `over_power_budget`, `over_heat_budget`, `over_heat_limit`, `over_load_limit`, `connector_type_mismatch`, `connector_size_mismatch`, `connector_occupied`, `not_whole_unit`, `no_free_port`, `no_propellant`, `cargo_full`, `deposit_exhausted`, `root_part`, `part_busy`, `float_in_command`, `unknown_unit`, `unknown_part`, `invalid_target`, `unknown_command`, `malformed_command`. Autonomy adds its own codes, job statuses and view fields in `docs/design/autonomy.md` sections 3, 8, 9 and 10. `connector_size_mismatch` means a `core` connector met a non-core one.
+Known reason codes: `over_mass_limit`, `over_power_budget`, `over_heat_budget`, `over_heat_limit`, `over_load_limit`, `connector_type_mismatch`, `connector_size_mismatch`, `connector_occupied`, `not_whole_unit`, `no_free_port`, `no_propellant`, `cargo_full`, `deposit_exhausted`, `root_part`, `part_busy`, `float_in_command`, `unknown_unit`, `unknown_part`, `invalid_target`, `unknown_command`, `malformed_command`, `queue_full`, `job_busy`, `fit_mismatch`, `parent_not_fitted`. Autonomy adds its own codes, job statuses and view fields in `docs/design/autonomy.md` sections 3, 8, 9 and 10. `connector_size_mismatch` means a `core` connector met a non-core one.
 
 ## 7. State view
 
@@ -228,13 +248,14 @@ This shape is frozen. Fields may be added, but changes or removals go through th
   bodies = { 3: { kind = "asteroid", pos_mm = [], radius_mm = 0, visual_seed = 0, scanned = false } },
   deposits = { 12: { body = 3, item = "hematite", remaining_g = 0, hardness = 0 } },
   jobs = { 30: { unit = 2, facility = 8, recipe = "...", count_left = 1, status = "running",
-                 reason = "", start_tick = 0, end_tick = 0 } },
+                 reason = "", start_tick = 0, end_tick = 0, queue_pos = 0 } },
   tasks = {},
 }
 ```
 
 - `op.type`: `idle`, `moving`, `docking`, `undocking`, `loading`, `unloading`, `mining` or `scanning`.
 - A part's `state`: `on`, `shed` or `fault`.
+- A job's `status`: `queued`, `waiting`, `running`, `paused` or `cancelling`. `queue_pos` is its place in its facility's queue, 0 for the active job.
 - Each unit has one inventory, keyed by item. Capacity is by cargo class, summed across its storage modules.
 - Unfound deposits stay out of the view. Decorative asteroids are client-only, generated from `seed`; only targetable bodies appear here.
 

@@ -12,5 +12,5 @@ static func record(
 		"id": 40, "unit": state["parts"][facility]["unit"], "facility": facility, "recipe": recipe,
 		"count_left": 1, "status": status, "reason": reason, "start_tick": 0, "end_tick": 0,
 		"remaining_tick": LONG_TICKS, "since_tick": 0, "command": 0, "started": true,
-		"held": {}, "reserved": {}, "port": 0,
+		"held": {}, "reserved": {}, "port": 0, "queue_pos": 0,
 	}
