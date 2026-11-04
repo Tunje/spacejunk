@@ -519,3 +519,31 @@ perf_budget.md section 5a has the figures.
 - **Before two fixes it was 26 ms:** the frame-join check now tests positions before velocities, and planet-shadow casters are worked out once per tick.
 - **Burn previews:** a burn's flown preview costs about 0.2 ms per burn tick in `check`, so the client calls it on an edit, not every frame. Phase 1 no longer runs it, which removed 185 ms spikes when a burn was applied.
 - **Time warp:** at the slice's real size a tick costs 0.23 ms, so one core can run about 440x. At 20 times the slice it is about 7x.
+
+### 11.16 A18 results: trips across spheres of influence
+
+- **`SoiTransfer`** (sim/networks/soi_transfer.gd) plans `move_to` trips one level across spheres, as patched conics. That covers out from an orbit around a body to a ring around its child, and back. A trip two levels apart is refused with `unsupported_orbit`.
+  - The ship's and target's orbits must be near-circular, as for A13. A planet's own orbit may be eccentric up to 0.1.
+  - All the orbits must be in one plane with the planet's.
+- **Out:**
+  - A Hohmann ellipse around the parent, timed by A13's window to meet the planet.
+  - The tick it enters the planet's sphere, found by a coarse walk back from the expected arrival, then integer bisection.
+  - From there, a hyperbola around the planet that keeps the speed at the sphere's edge but is shaped to reach the target's ring at periapsis. The small change of direction stands for a correction burn.
+  - A capture burn at periapsis onto that ring, then A13's phasing to the target.
+- **Back:**
+  - An escape hyperbola from the parking orbit. Its asymptote lies along the planet's motion, or against it for an inward trip, on the Hohmann window. It is burned when the ship passes the periapsis direction nearest that window, and the exit time from the sphere is closed form.
+  - At the sphere's edge, a small correction sets the coast's far side at exactly the target's radius.
+  - There it circles and phases round to the target, because the wait for the parking orbit puts the exit up to half a parking orbit off the window.
+- **How it runs:** the trip is a list of legs, each an orbit and the tick it starts, kept in `transfer.legs` and ridden on rails by `RailSystem`. While waiting, the op keeps the whole plan, so the departure flies exactly the quoted legs, including after a save. All burns are paid at departure, by the rocket equation on their sum.
+- **Measured** on a compact test system: a central body of 1e17 m³/s², a home frame at 20,000 km, and a moon of 1e13 m³/s² at 30,000 km with a sphere of about 750 km.
+  - Out to a 300 km ring around the moon: 27,098 ticks and 10.1 km/s. The largest step between ticks is 7 km, with no jump at the leg changes, and the arrival parks 78 km from where the path ends.
+  - Back: 31,510 ticks and 14.7 km/s, with the same smoothness, parking 31 km away.
+  - A save mid-flight is byte-exact and runs on identically. Quotes are deterministic.
+  - The speeds here are high because the test system is compact. At the game's scale the same shapes cost what section 5's table gives.
+- **Costs to know:**
+  - Phasing at the far end is expensive on a fast ring: it adds up to a fifth of the orbital speed. Lambert transfers would remove most of it, and they are still not planned.
+  - The arrival parks the ship within about a hundred kilometres of where its path ends. That is a visible but small jump at star scale.
+- **Not done:**
+  - Trips two levels apart, such as a moon of another planet.
+  - Inclined targets.
+  - Lambert transfers.

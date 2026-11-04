@@ -37,11 +37,15 @@ static func plan(ctx: SimContext, unit_id: int, target: int, from_tick: int) -> 
 static func plan_from(ctx: SimContext, unit_id: int, mine: Dictionary, target: int, mass_g: int,
 		from_tick: int) -> Dictionary:
 	var theirs := target_orbit(ctx, target)
-	if mine.is_empty() or theirs.is_empty() or not _compatible(mine, theirs):
+	if mine.is_empty() or theirs.is_empty():
 		return { "reason": REASON_UNSUPPORTED }
 	var found := BurnSystem.thruster(ctx, unit_id)
 	if found.is_empty():
 		return { "reason": REASON_NO_THRUSTER }
+	if mine["parent"] != theirs["parent"]:
+		return SoiTransfer.plan(ctx, unit_id, mine, theirs, target, mass_g, from_tick, found)
+	if not _compatible(mine, theirs):
+		return { "reason": REASON_UNSUPPORTED }
 	var gm: int = ctx.state["bodies"][mine["parent"]]["gm"]
 	var r1: int = mine["a_mm"]
 	var r2: int = theirs["a_mm"]
