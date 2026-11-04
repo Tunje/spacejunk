@@ -5,7 +5,7 @@ extends GutTest
 const SIM_SCRIPT := "res://sim/kernel/sim.gd"
 const UNIT_FIELDS: Array[String] = [
 	"def", "kind", "name", "pos_mm", "at_target", "core", "core_tier", "task", "cycle_task", "last_cycle",
-	"op", "route", "dock",
+	"op", "route", "dock", "frame", "orbit", "world_mm", "vel_um_s", "burns", "burn",
 	"parts", "inventory", "mass_g", "cargo", "fit", "power", "heat",
 ]
 const OP_FIELDS: Array[String] = ["type", "target", "part", "start_tick", "end_tick"]
@@ -23,7 +23,10 @@ const TASK_FIELDS: Array[String] = [
 	"id", "owner", "kind", "state", "reason", "hold", "steps", "step", "cycle", "since_tick", "command",
 ]
 const DEFS_SECTIONS: Array[String] = ["modules", "items", "recipes", "templates", "sinks"]
-const BODY_FIELDS: Array[String] = ["kind", "name", "pos_mm", "radius_mm", "visual_seed", "scanned"]
+const BODY_FIELDS: Array[String] = [
+	"kind", "name", "pos_mm", "radius_mm", "visual_seed", "scanned", "frame", "orbit", "gm", "world_mm",
+]
+const FRAME_FIELDS: Array[String] = ["name", "radius_mm", "orbit", "pos_mm", "world_mm"]
 const DEPOSIT_FIELDS: Array[String] = ["body", "item", "remaining_g", "hardness"]
 const JOB_FIELDS: Array[String] = [
 	"unit", "facility", "recipe", "count_left", "status", "reason", "start_tick", "end_tick", "queue_pos",
@@ -88,8 +91,10 @@ func _assert_unit(unit: Dictionary) -> void:
 
 
 func _assert_view(view: Dictionary) -> void:
-	for field: String in ["tick", "seed", "units", "bodies", "deposits", "jobs", "tasks"]:
+	for field: String in ["tick", "seed", "units", "bodies", "frames", "deposits", "jobs", "tasks"]:
 		assert_true(view.has(field), "view has %s" % field)
+	for id: int in view["frames"]:
+		_assert_fields(view["frames"][id], FRAME_FIELDS, "frame")
 	_assert_no_floats(view, "view")
 	for section: String in ["units", "bodies", "deposits", "jobs", "tasks"]:
 		_assert_int_keys(view[section], section)

@@ -1,10 +1,12 @@
 class_name BodyNode extends StaticBody3D
-## A star or targetable asteroid. Selection uses a plain sphere, never the mesh.
+## A star, planet or targetable asteroid. Selection uses a plain sphere, never the mesh.
+## A planet is a plain sphere until the planet renderer, from PlanetGrid, arrives.
 
 ## The star is drawn larger than life so it reads as the scene's light source.
 const STAR_DRAWN_SCALE := 5.0
 const STAR_EMISSION := Color(1.0, 0.93, 0.78)
 const STAR_ENERGY := 14.0
+const PLANET_COLOUR := Color(0.42, 0.40, 0.37)
 
 var body_id := 0
 var radius_m := 1.0
@@ -20,6 +22,8 @@ func build(id: int, body: Dictionary) -> void:
 	var mesh := MeshInstance3D.new()
 	if kind == "star":
 		_build_star(mesh)
+	elif kind == "planet":
+		_build_planet(mesh)
 	else:
 		mesh.mesh = RockMesh.get_mesh(RockMesh.variant_of(body["visual_seed"]), RockMesh.DETAILED)
 		mesh.material_override = RockMesh.material()
@@ -35,6 +39,19 @@ func build(id: int, body: Dictionary) -> void:
 	collision.radius = 1.0
 	shape.shape = collision
 	add_child(shape)
+
+
+func _build_planet(mesh: MeshInstance3D) -> void:
+	var sphere := SphereMesh.new()
+	sphere.radius = 1.0
+	sphere.height = 2.0
+	sphere.radial_segments = 96
+	sphere.rings = 48
+	var material := StandardMaterial3D.new()
+	material.albedo_color = PLANET_COLOUR
+	material.roughness = 0.95
+	mesh.mesh = sphere
+	mesh.material_override = material
 
 
 func _build_star(mesh: MeshInstance3D) -> void:

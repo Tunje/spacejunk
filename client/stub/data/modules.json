@@ -35,7 +35,7 @@
   {
     "id": "stub_thruster", "name": "Chemical Thruster", "mass_kg": 500, "volume_m3": 3, "power_kw": 5, "heat_kw": 4,
     "priority": 8, "durability": 900, "min_ai_tier": 1, "realism": "established",
-    "capabilities": { "thruster": { "speed_m_s": 500, "propellant_kg_per_s": 1, "rated_mass_kg": 5000 } },
+    "capabilities": { "thruster": { "speed_m_s": 500, "propellant_kg_per_s": 1, "rated_mass_kg": 5000, "thrust_kn": 20, "exhaust_m_s": 3000 } },
     "fabrication": { "recipe": "stub_thruster" },
     "connectors": [
       { "id": "mount", "type": "stack", "size": "medium", "pos_mm": [0, 0, 0], "facing": "+y", "up": "+z", "load_limit_kg": 3000 }
