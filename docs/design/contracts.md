@@ -32,7 +32,9 @@ Valid ranges are asserted at commit in test runs.
 - **Neither:** `frame` is 0 and `orbit` is `{}`. This is the old world, in which nothing moves on its own. A scenario without frames is entirely here, and behaves as in contract version 2.
 - A docked unit is wherever its host is, and its own `frame` and `orbit` are not read.
 
-An orbit record holds `parent`, `a_mm`, `b_mm`, `e_q30`, `p_q30` and `q_q30` (the directions towards periapsis and 90 degrees ahead), `period_subticks`, `m0_angle` and `epoch_tick`. `OrbitMath` (sim/kernel/orbit_math.gd) is the only code that interprets it. The reference plane's normal is +Y, so a planet's north pole and an uninclined orbit's angular momentum point along +Y.
+An orbit record holds `parent`, `a_mm`, `b_mm`, `e_q30`, `p_q30` and `q_q30` (the directions towards periapsis and 90 degrees ahead), `period_subticks`, `m0_angle` and `epoch_tick`. A hyperbolic record (from A12) has `hyperbolic = true`, with `a_mm` as its positive semi-axis, `m0_rad` (mean anomaly in Q30 radians, which does not wrap) and `motion_q60` (mean motion in radians per tick, Q60) in place of `period_subticks` and `m0_angle`.
+
+**Spheres of influence** (from A12). A body on an orbit with gravity has `soi_mm` = a (GM / GM of its parent)^(2/5), worked out at scenario load, and 0 if it has none. A unit on an orbit changes `orbit.parent` in phase 5 of the first tick it is past its parent's `soi_mm`, going up to the parent's parent, or inside a child body's, going down. Its orbit is re-expressed around the new parent from its position and velocity, and `soi_changed` fires. `OrbitMath` (sim/kernel/orbit_math.gd) is the only code that interprets it. The reference plane's normal is +Y, so a planet's north pole and an uninclined orbit's angular momentum point along +Y.
 
 **Coordinates.** Simulation axes match Godot: right-handed, +Y up. Connector and collision positions are relative to the module origin. Orientation is not simulation state: the client derives heading from the route, and places docked craft from connector geometry.
 
@@ -89,7 +91,7 @@ Rules:
 - `current_tick()` is the number of completed ticks and is 0 in a new game. `step` runs tick `current_tick() + 1`. `step` with `tick_count < 1` does nothing.
 - `submit` deep-copies its argument and stamps `current_tick() + 1`. A float in a command is rejected in phase 1.
 - `check` runs phase 1 validation without effects and returns `{ ok, reason, detail }`. For `attach_part` and `detach_part`, `detail` gives projected mass, power and heat against limits. For `move_to`, it gives ticks and propellant. It is advisory: `submit` can still be rejected if the state changes.
-- `check` of `plan_burn` previews the burn as one impulse at its tick. `detail` is `{ dv_um_s, propellant_g, burn_ticks, orbit, vel_um_s, leaves_frame }`:
+- `check` of `plan_burn` previews the burn. On an orbit it flies the burn tick by tick from its tick, through the same steps as the real burn and assuming the thruster has power throughout, so `orbit`, `propellant_g` and `burn_ticks` are what the burn will give. A burn of over 20,000 ticks, or one in a frame, is previewed as one impulse, and an impulse preview on an orbit carries `approximate = true`. `detail` is `{ dv_um_s, propellant_g, burn_ticks, orbit, vel_um_s, leaves_frame }`:
   - `orbit` is the orbit record after the burn, with `parent`, or `{}` if the unit isn't on an orbit or would escape.
   - `vel_um_s` is the local velocity after the burn, for a unit in a frame.
   - `leaves_frame` is true for any drift in a frame.
@@ -204,7 +206,7 @@ Running shortfalls are still handled by shedding and faults.
 | `plan_burn` | `tick`, `prograde_um_s`, `normal_um_s`, `radial_um_s` | Places a burn. `tick` must be after the current tick, so "burn now" is `current_tick() + 1`. At its tick (phase 2) the burn fixes its direction from the unit's orbit, or from its frame's orbit, or from fixed axes (+X, +Y, +Z) in the old world. It then delivers thrust / mass each tick from phase 5 until done. The burn's ID comes from the entity counter. Refused with `not_flying` when docked, `burn_in_past`, `module_missing` with no thruster that has `thrust_n` and `exhaust_mm_s`, or `malformed_command`. |
 | `cancel_burn` | `burn` | Removes a planned burn, or ends a running one with `burn_short` reason `cancelled`. `invalid_target` if the unit has no such burn. |
 
-A burn whose tick comes while the unit has another operation, a route or a task is dropped with `burn_short` reason `part_busy`. An order that replaces `burning` ends the burn the same way. **Coming with orbits:** `land { body, cell }` and `take_off {}` in A15.
+A burn whose tick comes while the unit has another operation, a route or a task is dropped with `burn_short` reason `part_busy`. A burn crossing the narrow band of orbits just below escape speed, which an orbit record cannot hold, carries each tick's change forward until the sum is past it, so a finite burn flies through escape without stopping. An order that replaces `burning` ends the burn the same way. **Coming with orbits:** `land { body, cell }` and `take_off {}` in A15.
 
 New command types go through the Lead. C0 may refine autonomy commands, events, reason codes and task view fields without a separate change, and tells the Lead what changed.
 
@@ -250,7 +252,7 @@ Each failure emits exactly one event. Fitting failures emit `attach_failed`, and
 Known reason codes: `over_mass_limit`, `over_power_budget`, `over_heat_budget`, `over_heat_limit`, `over_load_limit`, `connector_type_mismatch`, `connector_size_mismatch`, `connector_occupied`, `not_whole_unit`, `no_free_port`, `no_propellant`, `cargo_full`, `deposit_exhausted`, `root_part`, `part_busy`, `float_in_command`, `unknown_unit`, `unknown_part`, `invalid_target`, `unknown_command`, `malformed_command`, `queue_full`, `job_busy`, `fit_mismatch`, `parent_not_fitted`. Autonomy adds its own codes, job statuses and view fields in `docs/design/autonomy.md` sections 3, 8, 9 and 10. `connector_size_mismatch` means a `core` connector met a non-core one.
 
 Orbit reason codes:
-- `unsupported_orbit`: a `move_to` target that is on an orbit or in another frame, a burn whose result would escape (until A12), and later the planner's limits.
+- `unsupported_orbit`: a `move_to` target that is on an orbit or in another frame, a burn whose result is exactly parabolic (which neither orbit form can hold, and which rounding makes vanishingly rare), and later the planner's limits.
 - `burn_in_past`, `not_flying`, and `cancelled` (a burn's end only).
 - Coming: `no_window` (A13) and `not_over_cell` (A15). `too_fast_to_join` was dropped. A unit arriving too fast simply doesn't join, and the view shows it.
 
@@ -259,7 +261,8 @@ Orbit events:
 - `burn_done { burn, dv_um_s, propellant_g }`.
 - `burn_short { burn, reason, dv_um_s, propellant_g }`, with reason `no_propellant`, `part_busy`, `module_missing`, `unsupported_orbit` or `cancelled`.
 - `frame_left { frame }` and `frame_joined { frame }`.
-- Coming: `soi_changed` (A12), and `landed` and `took_off` (A15).
+- `soi_changed { from, to }`, with the old and new parent bodies.
+- Coming: `landed` and `took_off` (A15).
 
 ## 7. State view
 
@@ -288,7 +291,7 @@ This shape is frozen. Fields may be added, but changes or removals go through th
     heat = { stored_j = 0, limit_j = 0, reject_w = 0, input_w = 0 },
   } },
   bodies = { 3: { kind = "asteroid", pos_mm = [], radius_mm = 0, visual_seed = 0, scanned = false,
-                   frame = 0, orbit = {}, gm = 0, world_mm = [] } },
+                   frame = 0, orbit = {}, gm = 0, soi_mm = 0, world_mm = [] } },
   frames = { 6: { name = "...", radius_mm = 0, orbit = {}, pos_mm = [], world_mm = [] } },
   deposits = { 12: { body = 3, item = "hematite", remaining_g = 0, hardness = 0 } },
   jobs = { 30: { unit = 2, facility = 8, recipe = "...", count_left = 1, status = "running",
