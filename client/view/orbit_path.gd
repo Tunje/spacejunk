@@ -150,6 +150,21 @@ static func ticks_to_reach(orbit: Dictionary, tick: int, reach_mm: float) -> int
 	return maxi(1, ceili((m_end - OrbitPath.mean_anomaly(orbit, float(tick))) / OrbitPath.motion(orbit)))
 
 
+## A body's world position at a tick, in 64-bit mm: its orbit's position at that
+## tick plus its parent's, up the chain. A body not on an orbit stays where the
+## view has it. For drawing paths that run into the future, when moons have moved.
+static func body_world_at(view: Dictionary, body_id: int, tick: float) -> PackedFloat64Array:
+	var body: Dictionary = view["bodies"].get(body_id, {})
+	if body.is_empty():
+		return PackedFloat64Array([0.0, 0.0, 0.0])
+	var orbit: Dictionary = body.get("orbit", {})
+	if orbit.is_empty():
+		return OrbitPath.shifted(WorldPosition.of(body), [0, 0, 0])
+	var parent := OrbitPath.body_world_at(view, orbit["parent"], tick)
+	var here := OrbitPath.position(orbit, tick)
+	return PackedFloat64Array([here[0] + parent[0], here[1] + parent[1], here[2] + parent[2]])
+
+
 ## A point in some place's coordinates moved into the world by that place's world_mm.
 static func shifted(point: Variant, base_world: Array) -> PackedFloat64Array:
 	var out := PackedFloat64Array()
