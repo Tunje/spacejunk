@@ -5,9 +5,17 @@ extends SimSystem
 ## and need no core. A run takes its inputs and reserves its outputs in phase 4, counts down in
 ## phase 5 and delivers in phase 6, all at once. A run that builds a unit claims a port only on its
 ## last tick, so a long build never shuts other craft out.
+##
+## A facility holds an ordered queue of jobs. The job at queue_pos 0 is active and has the states
+## above. The rest are queued at 1..n, hold nothing, and wait their turn. When the active job ends,
+## the next one becomes active straight away and can start its first run in the next phase 4.
 
 const START := "start_job"
 const CANCEL := "cancel_job"
+const QUEUE := "queue_job"
+const MOVE := "move_job"
+const QUEUE_LIMIT := 16
+const STATUS_QUEUED := "queued"
 const STATUS_WAITING := "waiting"
 const STATUS_RUNNING := "running"
 const STATUS_PAUSED := "paused"
@@ -24,17 +32,20 @@ const REASON_MISSING_INPUTS := "missing_inputs"
 const REASON_OUTPUT_FULL := "output_full"
 const REASON_NO_FREE_PORT := "no_free_port"
 const REASON_CARGO_FULL := "cargo_full"
+const REASON_QUEUE_FULL := "queue_full"
+const REASON_JOB_BUSY := "job_busy"
 const VIEW_FIELDS: Array[String] = [
 	"unit", "facility", "recipe", "count_left", "status", "reason", "start_tick", "end_tick",
+	"queue_pos",
 ]
 
 
 func commands() -> PackedStringArray:
-	return PackedStringArray([START, CANCEL])
+	return PackedStringArray([START, CANCEL, QUEUE, MOVE])
 
 
 func validate(ctx: SimContext, command: Dictionary) -> Dictionary:
-	if command["type"] == START:
+	if command["type"] == START or command["type"] == QUEUE:
 		return _validate_start(ctx, command)
 	var job_id: Variant = command["args"].get("job")
 	if typeof(job_id) != TYPE_INT:
@@ -42,14 +53,22 @@ func validate(ctx: SimContext, command: Dictionary) -> Dictionary:
 	var jobs: Dictionary = ctx.state["jobs"]
 	if not jobs.has(job_id) or jobs[job_id]["unit"] != command["unit"]:
 		return SimSystem.reject(REASON_UNKNOWN_JOB)
+	if command["type"] == MOVE:
+		if typeof(command["args"].get("position")) != TYPE_INT:
+			return SimSystem.reject(REASON_MALFORMED)
+		if _has_run(jobs[job_id]):
+			return SimSystem.reject(REASON_JOB_BUSY)
 	return SimSystem.ok()
 
 
 func apply(ctx: SimContext, command: Dictionary) -> void:
-	if command["type"] == START:
-		_create(ctx, command)
-	else:
-		_cancel(ctx, ctx.state["jobs"][command["args"]["job"]])
+	match command["type"]:
+		START, QUEUE:
+			_create(ctx, command)
+		MOVE:
+			_move(ctx, ctx.state["jobs"][command["args"]["job"]], command["args"]["position"])
+		_:
+			_cancel(ctx, ctx.state["jobs"][command["args"]["job"]])
 
 
 ## Runs straight after phase 1, so cancelled inputs are retried after that tick's commands.
@@ -102,7 +121,7 @@ func apply_delta(ctx: SimContext, payload: Dictionary) -> void:
 	_emit_ended(ctx, job, "job_finished")
 	job["count_left"] -= 1
 	if job["count_left"] == 0:
-		ctx.state["jobs"].erase(job["id"])
+		_remove(ctx, job)
 	else:
 		job["status"] = STATUS_WAITING
 		job["start_tick"] = 0
@@ -135,22 +154,84 @@ func _validate_start(ctx: SimContext, command: Dictionary) -> Dictionary:
 		return SimSystem.reject(REASON_WRONG_FACILITY)
 	if parts[part_id]["fault"] != "":
 		return SimSystem.reject(REASON_MODULE_FAULT)
-	var jobs: Dictionary = ctx.state["jobs"]
-	for id: int in jobs:
-		if jobs[id]["facility"] == part_id:
-			return SimSystem.reject(REASON_FACILITY_BUSY)
+	var queued := _queue_of(ctx, part_id).size()
+	if command["type"] == START and queued > 0:
+		return SimSystem.reject(REASON_FACILITY_BUSY)
+	if queued >= QUEUE_LIMIT:
+		return SimSystem.reject(REASON_QUEUE_FULL, { "need": queued + 1, "have": QUEUE_LIMIT })
 	return SimSystem.ok()
 
 
 func _create(ctx: SimContext, command: Dictionary) -> void:
 	var args: Dictionary = command["args"]
 	var id := ctx.new_id()
+	var position := _queue_of(ctx, args["facility"]).size()
 	ctx.state["jobs"][id] = {
 		"id": id, "unit": command["unit"], "facility": args["facility"], "recipe": args["recipe"],
-		"count_left": args["count"], "status": STATUS_WAITING, "reason": "",
-		"start_tick": 0, "end_tick": 0, "remaining_tick": 0, "since_tick": ctx.tick,
+		"count_left": args["count"], "status": STATUS_WAITING if position == 0 else STATUS_QUEUED,
+		"reason": "", "start_tick": 0, "end_tick": 0, "remaining_tick": 0, "since_tick": ctx.tick,
 		"command": command["id"], "started": false, "held": {}, "reserved": {}, "port": 0,
+		"queue_pos": position,
 	}
+	if command["type"] == QUEUE:
+		ctx.emit_event("job_queued", command["unit"], {
+			"job": id, "command": command["id"], "position": position,
+		})
+
+
+## A facility's job IDs in queue order. The active job, if any, comes first.
+func _queue_of(ctx: SimContext, facility: int) -> Array[int]:
+	var jobs: Dictionary = ctx.state["jobs"]
+	var queue: Array[int] = []
+	for id: int in _sorted(jobs):
+		if jobs[id]["facility"] == facility:
+			queue.append(id)
+	queue.sort_custom(func(a: int, b: int) -> bool:
+		return jobs[a]["queue_pos"] < jobs[b]["queue_pos"])
+	return queue
+
+
+## True for a job with a run in progress, which holds matter and cannot be moved or overtaken.
+func _has_run(job: Dictionary) -> bool:
+	var status: String = job["status"]
+	return status == STATUS_RUNNING or status == STATUS_PAUSED or status == STATUS_CANCELLING
+
+
+## Moves a job to a queue position, clamped so it never passes a run in progress.
+func _move(ctx: SimContext, job: Dictionary, position: int) -> void:
+	var jobs: Dictionary = ctx.state["jobs"]
+	var queue := _queue_of(ctx, job["facility"])
+	var first := 1 if _has_run(jobs[queue[0]]) else 0
+	var target := clampi(position, first, queue.size() - 1)
+	if target == job["queue_pos"]:
+		return
+	queue.erase(job["id"])
+	queue.insert(target, job["id"])
+	_renumber(ctx, queue)
+	ctx.emit_event("job_moved", job["unit"], { "job": job["id"], "position": target })
+
+
+## Ends a job and moves the rest of its facility's queue up.
+func _remove(ctx: SimContext, job: Dictionary) -> void:
+	ctx.state["jobs"].erase(job["id"])
+	_renumber(ctx, _queue_of(ctx, job["facility"]))
+
+
+## Numbers a queue 0..n-1 in the given order. The job at 0 becomes active, and an active job moved
+## back becomes queued, leaving waiting as job_resumed says.
+func _renumber(ctx: SimContext, queue: Array[int]) -> void:
+	var jobs: Dictionary = ctx.state["jobs"]
+	for position in queue.size():
+		var job: Dictionary = jobs[queue[position]]
+		job["queue_pos"] = position
+		if position == 0 and job["status"] == STATUS_QUEUED:
+			job["status"] = STATUS_WAITING
+			job["since_tick"] = ctx.tick
+		elif position > 0 and job["status"] == STATUS_WAITING:
+			if job["reason"] != "":
+				ctx.emit_event("job_resumed", job["unit"], { "job": job["id"], "reason": job["reason"] })
+			job["status"] = STATUS_QUEUED
+			job["reason"] = ""
 
 
 ## Why a run cannot start now, or "".
@@ -310,7 +391,7 @@ func _try_return(ctx: SimContext, job: Dictionary) -> void:
 	for item: String in _sorted(held):
 		Units.add_stock(inventory, item, held[item])
 	_emit_ended(ctx, job, "job_cancelled")
-	ctx.state["jobs"].erase(job["id"])
+	_remove(ctx, job)
 
 
 func _emit_ended(ctx: SimContext, job: Dictionary, type: String) -> void:

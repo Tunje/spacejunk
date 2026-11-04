@@ -92,7 +92,7 @@ func test_a_run_turns_inputs_into_outputs_in_its_ticks() -> void:
 	assert_eq(sim.ledger()["matter"]["jobs_g"], COPPER_RUN_G)
 	assert_eq(sim.view()["jobs"][job], {
 		"unit": STATION, "facility": FABRICATOR, "recipe": "wiring", "count_left": 1,
-		"status": "running", "reason": "", "start_tick": 1, "end_tick": RUN_TICKS,
+		"status": "running", "reason": "", "start_tick": 1, "end_tick": RUN_TICKS, "queue_pos": 0,
 	})
 	_step_balanced(RUN_TICKS - 2)
 	assert_eq(_stock("wiring"), 0)
