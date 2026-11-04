@@ -3,6 +3,7 @@ class_name TimeControls extends PanelContainer
 ## pick a speed. These are raw keys so project.godot needs no input map.
 
 signal map_pressed
+signal fly_pressed
 signal policy_pressed
 signal fit_pressed
 signal jobs_pressed
@@ -40,6 +41,11 @@ func _ready() -> void:
 	map_button.focus_mode = Control.FOCUS_NONE
 	map_button.pressed.connect(func() -> void: map_pressed.emit())
 	row.add_child(map_button)
+	var fly_button := Button.new()
+	fly_button.text = "Fly"
+	fly_button.focus_mode = Control.FOCUS_NONE
+	fly_button.pressed.connect(func() -> void: fly_pressed.emit())
+	row.add_child(fly_button)
 	var fit_button := Button.new()
 	fit_button.text = "Fit"
 	fit_button.focus_mode = Control.FOCUS_NONE
