@@ -20,6 +20,8 @@ class_name ScreenshotDriver extends Node
 ##                                   sent to the far one's rock, run that long past departure
 ##   --landing-demo=pick|landed      (reference) a small planet on the real Sim with the probe in
 ##                                   orbit: choosing a hex with Land's cost, or after landing on it
+##   --soi-demo=<fraction>           (reference) A18's compact system on the real Sim, the ship sent
+##                                   to the moon's ring; -1 shows it waiting, else that far through
 ##   --copy=1                        (stub_load) strips two parts off the first ship and
 ##                                   opens fitting there, to show "Fit like this one"
 ##   --fit=<item>  --fit-slot=<connector>  opens fitting after the orders and picks both
@@ -63,6 +65,8 @@ func _run() -> void:
 	var view: LocalView = main.local_view
 	if parsed.has("transfer-demo"):
 		_transfer_demo(float(parsed["transfer-demo"]))
+	if parsed.has("soi-demo"):
+		_soi_demo(float(parsed["soi-demo"]))
 	if parsed.has("landing-demo"):
 		await _landing_demo(parsed["landing-demo"])
 	if parsed.has("planet-wait"):
@@ -279,6 +283,48 @@ func _open_jobs() -> void:
 	ScreenshotDriver._step(main.bridge)
 	main.bridge.set_paused(true)
 	screen.refresh()
+
+
+## A18's test world: a heavy central body, a home frame at 20,000 km, and a moon at
+## 30,000 km with a ring frame round it. The ship is sent to the ring's rock.
+func _soi_demo(fraction: float) -> void:
+	var defs := DataLoader.load_defs()
+	var sim := Sim.new()
+	sim._setup(Sim._new_state("reference", 7, defs), defs)
+	ScenarioBuilder.populate(sim._ctx, {
+		"bodies": [
+			{ "key": "root", "name": "Root", "kind": "star", "pos_mm": [0, 0, 0], "radius_mm": 5_000_000_000,
+				"visual_seed": 1, "deposits": [], "gm": 100_000_000_000_000 },
+			{ "key": "moon", "name": "Moon", "kind": "planet", "radius_mm": 100_000_000, "visual_seed": 2,
+				"deposits": [], "gm": 10_000_000_000, "orbit": { "parent": "root", "a_mm": 30_000_000_000, "mean_anomaly_mdeg": 40_000 } },
+			{ "key": "moon_rock", "name": "Moon Rock", "kind": "asteroid", "frame": "ring", "pos_mm": [20_000_000, 0, 0],
+				"radius_mm": 300_000, "visual_seed": 4, "deposits": [] },
+		],
+		"frames": [
+			{ "key": "home", "name": "Home", "radius_mm": 1_000_000, "orbit": { "parent": "root", "a_mm": 20_000_000_000 } },
+			{ "key": "ring", "name": "Ring", "radius_mm": 1_000_000,
+				"orbit": { "parent": "moon", "a_mm": 300_000_000, "mean_anomaly_mdeg": 200_000 } },
+		],
+		"units": [{ "key": "ship", "template": "starter_ship", "name": "Ship", "pos_mm": [150_000, 0, 0], "frame": "home",
+			"inventory": [{ "item": "propellant", "grams": 4_000_000_000 }], "dock": null }],
+	}, {})
+	var ship := 0
+	var rock := 0
+	for id: int in sim._state["units"]:
+		ship = id
+	for id: int in sim._state["bodies"]:
+		if sim._state["bodies"][id]["name"] == "Moon Rock":
+			rock = id
+	sim.submit({ "type": "move_to", "unit": ship, "args": { "target": rock } })
+	sim.step(2)
+	var plan: Dictionary = sim._state["units"][ship]["op"].get("plan", {})
+	if fraction >= 0.0 and not plan.is_empty():
+		var span: int = plan["arrive_tick"] - plan["depart_tick"]
+		sim.step(plan["depart_tick"] - sim.current_tick() + roundi(span * fraction))
+	main.bridge.start(sim)
+	main.bridge.set_paused(true)
+	main.local_view.rebuild()
+	main.local_view.select("body", rock, 0)
 
 
 ## A13's test world, built on the real Sim: a planet with frames at 700 and 900 km.
