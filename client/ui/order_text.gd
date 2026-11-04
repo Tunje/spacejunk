@@ -18,6 +18,8 @@ const REASONS: Dictionary = {
 	"deposit_exhausted": "Deposit is exhausted",
 	"docked": "Undock first",
 	"facility_busy": "Facility is busy",
+	"fit_mismatch": "Only a craft on the same hull can be copied",
+	"job_busy": "That job has already started",
 	"float_in_command": "Invalid order",
 	"invalid_target": "Not a valid target",
 	"missing_inputs": "Missing inputs",
@@ -38,10 +40,12 @@ const REASONS: Dictionary = {
 	"over_load_limit": "Too much mass on that connector",
 	"over_mass_limit": "Over the mass limit",
 	"over_power_budget": "Over the power budget",
+	"parent_not_fitted": "The part it sits on was not fitted",
 	"part_busy": "That part is in use",
 	"player_order": "Replaced by a new order",
 	"player_stop": "Stopped",
 	"port_busy": "Docking port is busy",
+	"queue_full": "The queue is full",
 	"root_part": "The root part cannot be removed",
 	"tier_too_low": "AI core tier is too low",
 	"too_hard": "Too hard for this laser",
@@ -123,6 +127,8 @@ static func event(entry: Dictionary, unit_name: String, items: Dictionary) -> St
 			return "%s: cancelled %s" % [unit_name, data["recipe"].replace("_", " ").capitalize()]
 		"job_paused":
 			return "%s: job held. %s" % [unit_name, reason(data["reason"])]
+		"fit_copied":
+			return OrderText.fit_copied(data, unit_name, items)
 		"transfer_done":
 			var moved: String = items.get(data["item"], {}).get("name", data["item"])
 			return "%s: moved %s of %s" % [unit_name, tonnes(data["grams"]), moved]
@@ -139,3 +145,20 @@ static func event(entry: Dictionary, unit_name: String, items: Dictionary) -> St
 			var item: String = items.get(data["item"], {}).get("name", data["item"])
 			return "%s: found %s, %s" % [unit_name, item, tonnes(data["grams"])]
 	return ""
+
+
+## "Probe: fitted 5 parts. Missing Solar Slab x1. Mining Laser: Over the power budget"
+static func fit_copied(data: Dictionary, unit_name: String, items: Dictionary) -> String:
+	var attached: int = data["attached"].size()
+	var text := "%s: fitted %d part%s" % [unit_name, attached, "" if attached == 1 else "s"]
+	var missing: Array = data["missing"].keys()
+	missing.sort()
+	if not missing.is_empty():
+		var names: PackedStringArray = []
+		for item: String in missing:
+			names.append("%s x%d" % [items.get(item, {}).get("name", item), data["missing"][item]])
+		text += ". Missing %s" % ", ".join(names)
+	for refused: Dictionary in data["refused"]:
+		if refused["reason"] != "missing_inputs":
+			text += ". %s: %s" % [items.get(refused["item"], {}).get("name", refused["item"]), reason(refused["reason"])]
+	return text

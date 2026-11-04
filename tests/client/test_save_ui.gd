@@ -427,3 +427,43 @@ func test_a_manual_save_without_a_stamp_still_loads_and_counts_as_oldest() -> vo
 	DirAccess.remove_absolute(AUTO_PATH)
 	main.load_game()
 	assert_eq(_last_log(), "Game loaded")
+
+
+## CONTRACT_VERSION went to 2 with C9. A save from version 1 is otherwise the
+## same shape, so a real save with its version set back stands in for one.
+func _write_version_1(at: String) -> void:
+	var text: String = bridge.sim.to_save()
+	var field := "\"s:contract_version\":\"%d\""
+	assert_string_contains(text, field % Sim.CONTRACT_VERSION)
+	var old := text.replace(field % Sim.CONTRACT_VERSION, field % 1)
+	assert_true(SaveStore.write(old, {}, at))
+
+
+func test_version_1_saves_on_disk_explain_and_change_nothing() -> void:
+	_write_version_1(TEST_PATH)
+	_write_version_1(AUTO_PATH)
+	var hash_before: String = bridge.sim.state_hash()
+	main.load_game()
+	assert_eq(Sim.last_error(), "version_mismatch")
+	assert_eq(Array(main.event_log.lines.slice(-2)), [
+		"Autosave failed to load: The save is from a different version",
+		"Load failed: The save is from a different version",
+	])
+	assert_eq(bridge.sim.state_hash(), hash_before)
+
+
+func test_a_version_1_autosave_falls_back_to_a_current_manual_save() -> void:
+	main.save_game()
+	_write_version_1(AUTO_PATH)
+	main.load_game()
+	assert_eq(_last_log(), "Game loaded")
+
+
+func test_startup_with_version_1_saves_on_disk_is_quiet() -> void:
+	_write_version_1(TEST_PATH)
+	_write_version_1(AUTO_PATH)
+	var second: Node = load("res://client/main.tscn").instantiate()
+	add_child_autofree(second)
+	assert_true(second._started, "the game starts; saves are only read on a load")
+	for line: String in second.event_log.lines:
+		assert_false(line.to_lower().contains("load"), "nothing is loaded at startup: %s" % line)
