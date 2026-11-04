@@ -80,6 +80,7 @@ func take_events() -> Array[Dictionary]      # events since the last call, oldes
 func to_save() -> String                     # canonical form; see section 8
 func state_hash() -> String                  # SHA-256 of to_save()
 func ledger() -> Dictionary                  # tests only; see section 9
+func predict(unit: int, from_tick: int, ticks: int, step: int) -> Dictionary  # path for drawing
 ```
 
 Rules:
@@ -88,10 +89,16 @@ Rules:
 - `current_tick()` is the number of completed ticks and is 0 in a new game. `step` runs tick `current_tick() + 1`. `step` with `tick_count < 1` does nothing.
 - `submit` deep-copies its argument and stamps `current_tick() + 1`. A float in a command is rejected in phase 1.
 - `check` runs phase 1 validation without effects and returns `{ ok, reason, detail }`. For `attach_part` and `detach_part`, `detail` gives projected mass, power and heat against limits. For `move_to`, it gives ticks and propellant. It is advisory: `submit` can still be rejected if the state changes.
-- **Coming with orbits** (orbital_flight.md section 11.4, by task):
-  - A11: `check` of `plan_burn` returns the orbit after the burn in `detail`.
-  - A11: `predict(unit, from_tick, ticks, step) -> Array` returns derived positions for drawing a path. It is read-only, like `view()`.
-  - A13: `quote` gains a departure tick, and `next_window(unit, target, from_tick, cap)` is added.
+- `check` of `plan_burn` previews the burn as one impulse at its tick. `detail` is `{ dv_um_s, propellant_g, burn_ticks, orbit, vel_um_s, leaves_frame }`:
+  - `orbit` is the orbit record after the burn, with `parent`, or `{}` if the unit isn't on an orbit or would escape.
+  - `vel_um_s` is the local velocity after the burn, for a unit in a frame.
+  - `leaves_frame` is true for any drift in a frame.
+- `predict(unit, from_tick, ticks, step) -> Dictionary` gives `{ place, points }` along the unit's current path, ignoring planned burns. It is read-only, like `view()`.
+  - `place` is `{ orbit_parent }` or `{ frame }`.
+  - `points` are in that place's coordinates, from `from_tick` every `step` ticks up to `from_tick + ticks`.
+  - It returns `{}` for an unknown unit, or for 10,000 points or more.
+  - A docked unit predicts as its host.
+- **Coming with orbits:** in A13, `quote` gains a departure tick, and `next_window(unit, target, from_tick, cap)` is added.
 - `defs()` returns `{ modules, items, recipes, templates, sinks }`, each keyed by definition ID, including connectors, collision and visual, so clients never parse data units. Fields are renamed to their sim unit: `mass_kg` to `mass_g`, `power_kw` to `power_w`, `heat_kw` to `heat_w`, `volume_m3` to `volume_l`, `load_limit_kg` to `load_limit_g`, `density_kg_m3` to `density_g_l`, `seconds` to `ticks`, and likewise for any other unit-suffixed field (`docs/design/schemas.md` section 2).
 - Scenario `"empty"` is built into the kernel for tests that precede `data/`.
 - The event queue is bounded (A1 sets the bound) and starts empty on load.
@@ -194,7 +201,10 @@ Running shortfalls are still handled by shedding and faults.
 - Core assignment, priorities, cycles, cargo and dock state are not copied.
 - `check` dry-runs the copy and returns `detail` as `{ attach, missing, refused }` counts.
 
-**Coming with orbits** (orbital_flight.md section 11.4): `plan_burn { tick, prograde_um_s, normal_um_s, radial_um_s }` and `cancel_burn { burn }` in A11, and `land { body, cell }` and `take_off {}` in A15.
+| `plan_burn` | `tick`, `prograde_um_s`, `normal_um_s`, `radial_um_s` | Places a burn. `tick` must be after the current tick, so "burn now" is `current_tick() + 1`. At its tick (phase 2) the burn fixes its direction from the unit's orbit, or from its frame's orbit, or from fixed axes (+X, +Y, +Z) in the old world. It then delivers thrust / mass each tick from phase 5 until done. The burn's ID comes from the entity counter. Refused with `not_flying` when docked, `burn_in_past`, `module_missing` with no thruster that has `thrust_n` and `exhaust_mm_s`, or `malformed_command`. |
+| `cancel_burn` | `burn` | Removes a planned burn, or ends a running one with `burn_short` reason `cancelled`. `invalid_target` if the unit has no such burn. |
+
+A burn whose tick comes while the unit has another operation, a route or a task is dropped with `burn_short` reason `part_busy`. An order that replaces `burning` ends the burn the same way. **Coming with orbits:** `land { body, cell }` and `take_off {}` in A15.
 
 New command types go through the Lead. C0 may refine autonomy commands, events, reason codes and task view fields without a separate change, and tells the Lead what changed.
 
@@ -239,7 +249,17 @@ Each failure emits exactly one event. Fitting failures emit `attach_failed`, and
 
 Known reason codes: `over_mass_limit`, `over_power_budget`, `over_heat_budget`, `over_heat_limit`, `over_load_limit`, `connector_type_mismatch`, `connector_size_mismatch`, `connector_occupied`, `not_whole_unit`, `no_free_port`, `no_propellant`, `cargo_full`, `deposit_exhausted`, `root_part`, `part_busy`, `float_in_command`, `unknown_unit`, `unknown_part`, `invalid_target`, `unknown_command`, `malformed_command`, `queue_full`, `job_busy`, `fit_mismatch`, `parent_not_fitted`. Autonomy adds its own codes, job statuses and view fields in `docs/design/autonomy.md` sections 3, 8, 9 and 10. `connector_size_mismatch` means a `core` connector met a non-core one.
 
-Orbit reason codes: `unsupported_orbit` (from A10: a `move_to` target that is on an orbit or in another frame, and later the planner's limits). Coming: `burn_in_past` and `not_flying` (A11), `no_window` (A13), `too_fast_to_join` (A11), `not_over_cell` (A15). Coming events: `burn_started`, `burn_done`, `burn_short`, `frame_joined` and `frame_left` (A11), `soi_changed` (A12), `landed` and `took_off` (A15).
+Orbit reason codes:
+- `unsupported_orbit`: a `move_to` target that is on an orbit or in another frame, a burn whose result would escape (until A12), and later the planner's limits.
+- `burn_in_past`, `not_flying`, and `cancelled` (a burn's end only).
+- Coming: `no_window` (A13) and `not_over_cell` (A15). `too_fast_to_join` was dropped. A unit arriving too fast simply doesn't join, and the view shows it.
+
+Orbit events:
+- `burn_started { burn }`.
+- `burn_done { burn, dv_um_s, propellant_g }`.
+- `burn_short { burn, reason, dv_um_s, propellant_g }`, with reason `no_propellant`, `part_busy`, `module_missing`, `unsupported_orbit` or `cancelled`.
+- `frame_left { frame }` and `frame_joined { frame }`.
+- Coming: `soi_changed` (A12), and `landed` and `took_off` (A15).
 
 ## 7. State view
 
@@ -277,7 +297,8 @@ This shape is frozen. Fields may be added, but changes or removals go through th
 }
 ```
 
-- `op.type`: `idle`, `moving`, `docking`, `undocking`, `loading`, `unloading`, `mining` or `scanning`.
+- `op.type`: `idle`, `moving`, `docking`, `undocking`, `loading`, `unloading`, `mining`, `scanning` or `burning`. While `burning`, `part` is the thruster, which draws power and gives heat like any running load. A shed thruster gives no thrust that tick.
+- A unit also shows `vel_um_s`, its local velocity in a frame. It shows `burns`, its planned burns in tick order as `{ id, tick, prograde_um_s, normal_um_s, radial_um_s }`. And it shows `burn`, the running burn as `{ id, dv_um_s, done_um_s, start_tick }`, or `{}`.
 - A part's `state`: `on`, `shed` or `fault`.
 - A job's `status`: `queued`, `waiting`, `running`, `paused` or `cancelling`. `queue_pos` is its place in its facility's queue, 0 for the active job.
 - Each unit has one inventory, keyed by item. Capacity is by cargo class, summed across its storage modules.

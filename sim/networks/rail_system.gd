@@ -22,6 +22,10 @@ func update_tasks(ctx: SimContext) -> void:
 	var frames: Dictionary = ctx.state["frames"]
 	for id: int in _sorted(frames):
 		frames[id]["pos_mm"] = OrbitMath.position_at(frames[id]["orbit"], ctx.tick)
+	var units: Dictionary = ctx.state["units"]
+	for id: int in _sorted(units):
+		if not units[id]["orbit"].is_empty() and units[id]["dock"].is_empty():
+			units[id]["pos_mm"] = OrbitMath.position_at(units[id]["orbit"], ctx.tick)
 
 
 func fill_view(ctx: SimContext, view: Dictionary) -> void:
