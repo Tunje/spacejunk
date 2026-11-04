@@ -109,7 +109,7 @@ func run(ctx: SimContext) -> void:
 			_thrust(ctx, id)
 	for id: int in _sorted(units):
 		var unit: Dictionary = units[id]
-		if not unit["dock"].is_empty() or not unit["route"].is_empty():
+		if not unit["dock"].is_empty() or not unit["route"].is_empty() or not unit["transfer"].is_empty():
 			continue
 		if unit["orbit"].is_empty():
 			_drift(ctx, id)

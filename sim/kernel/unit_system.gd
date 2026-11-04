@@ -65,6 +65,7 @@ func _unit_view(ctx: SimContext, id: int) -> Dictionary:
 		"def": unit["def"], "kind": unit["kind"], "name": unit["name"],
 		"pos_mm": unit["pos_mm"].duplicate(), "at_target": unit["at_target"],
 		"frame": maxi(0, RailSystem.unit_place(state, id)), "orbit": unit["orbit"].duplicate(true),
+		"transfer": unit["transfer"].duplicate(),
 		"world_mm": RailSystem.world_mm(state, "units", id),
 		"core": core, "core_tier": tier, "task": unit["task"], "cycle_task": unit["cycle_task"],
 		"last_cycle": unit["last_cycle"].duplicate(true),
