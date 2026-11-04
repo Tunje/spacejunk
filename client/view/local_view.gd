@@ -35,6 +35,8 @@ var field: AsteroidField
 var beams: Dictionary = {}
 ## Asked with each click's hit, which may be {}. A false answer ignores the click.
 var click_filter: Callable
+## Close-up terrain on the planet the camera is near (planets.md section 7).
+var detail: PlanetDetail
 
 var _modules: Dictionary = {}
 var _pivot_offset := Vector3.ZERO
@@ -69,6 +71,9 @@ func bind(new_bridge: SimBridge) -> void:
 	field = AsteroidField.new()
 	add_child(field)
 	field.build(bridge.current_view)
+	if detail == null:
+		detail = PlanetDetail.new()
+		add_child(detail)
 	var first_ship := _first_unit("ship")
 	commanded_unit = first_ship
 	focus_on("unit", first_ship)
@@ -259,7 +264,9 @@ func refresh(delta: float) -> void:
 	camera.pivot = _node_of(focus_kind, focus_id).position + _pivot_offset
 	for id: int in crafts:
 		_update_effects(crafts[id], id, after, delta)
+	_settle_camera(delta)
 	camera.update_view(delta)
+	_update_detail(after)
 	sun.directional_shadow_max_distance = clampf(
 		camera.distance_m * SHADOW_RANGE_FACTOR, MIN_SHADOW_RANGE_M, MAX_SHADOW_RANGE_M)
 	markers.update_entities()
@@ -396,6 +403,46 @@ func _sync_entities() -> void:
 			if beams.has(id):
 				beams[id].queue_free()
 				beams.erase(id)
+
+
+## Near a planet drawn at true scale, the camera's up is the local vertical and its
+## far plane reaches the planet's far side; elsewhere world +Y and the usual far.
+func _settle_camera(delta: float) -> void:
+	var wanted := Vector3.UP
+	var far_m := 0.0
+	for id: int in bodies:
+		var body: BodyNode = bodies[id]
+		var from_focus := body.position - camera.pivot
+		if body.is_true_scale(from_focus.length()):
+			wanted = -from_focus
+			far_m = maxf(far_m, from_focus.length() + body.radius_m * 1.1)
+	camera.settle_up(wanted, far_m, delta)
+
+
+## Close-up terrain under the camera when near a planet drawn at true scale.
+func _update_detail(view: Dictionary) -> void:
+	if detail == null:
+		return
+	var body := near_planet()
+	if body == null:
+		detail.update(null, {}, Vector3.ZERO, [])
+		return
+	var landed: Array[Dictionary] = []
+	var radius_mm: float = view["bodies"][body.body_id]["radius_mm"]
+	for id: int in view["units"]:
+		var unit: Dictionary = view["units"][id]
+		if unit.get("landed", {}).get("body", 0) == body.body_id:
+			var pos := Vector3(unit["pos_mm"][0], unit["pos_mm"][1], unit["pos_mm"][2])
+			landed.append({ "dir": pos.normalized(), "height_m": roundi((pos.length() - radius_mm) / 1000.0) })
+	detail.update(body, view["bodies"][body.body_id], camera.global_position - body.position, landed)
+
+
+func near_planet() -> BodyNode:
+	for id: int in bodies:
+		var body: BodyNode = bodies[id]
+		if body.is_true_scale((body.position - camera.pivot).length()):
+			return body
+	return null
 
 
 func _position_in(view: Dictionary, fallback: Dictionary, kind: String, id: int) -> Array:
