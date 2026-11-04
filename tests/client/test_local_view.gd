@@ -78,6 +78,8 @@ func test_click_ray_picks_an_asteroid() -> void:
 	var node: BodyNode = view.bodies[rock]
 	var from: Vector3 = node.position + Vector3(0, 0, node.radius_m + 100.0)
 	var hit := view.pick_ray(from, Vector3(0, 0, -1))
+	assert_true(hit.get("point") is Vector3, "the hit point, for picking a hex")
+	hit.erase("point")
 	assert_eq(hit, { "kind": "body", "id": rock, "part": 0 })
 
 

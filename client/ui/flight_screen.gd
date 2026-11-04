@@ -22,6 +22,7 @@ const PATH_REFRESH_MS := 250
 ## Typing waits this long after the last edit before asking; an unchanged burn on
 ## an unchanged craft is asked again at most every PATH_REFRESH_MS.
 const EDIT_SETTLE_MS := 150
+const TAKEOFF_KM := 100.0
 const MARKER_LOCAL_FRACTION := 0.03
 const MARKER_MAP := 0.35
 const PATH_COLOUR := Color(0.62, 0.65, 0.7)
@@ -63,6 +64,22 @@ var _plan_button: Button
 var _clear_button: Button
 var _message: Label
 var _local_mesh: MeshInstance3D
+## Landing (A15): the chosen cell on the body being orbited, -1 for none.
+var land_cell := -1
+var picking := false
+var land_preview: Dictionary = {}
+var takeoff_preview: Dictionary = {}
+var _land_key := ""
+var _land_ms := -PATH_REFRESH_MS
+var _passed_filter: Callable
+var _land_box: VBoxContainer
+var _land_title: Label
+var _pick_button: Button
+var _land_text: Label
+var _land_button: Button
+var _takeoff_row: HBoxContainer
+var _altitude: SpinBox
+var _takeoff_button: Button
 var _map_mesh: MeshInstance3D
 
 
@@ -121,6 +138,37 @@ func _ready() -> void:
 	_clear_button.pressed.connect(clear)
 	_message = _add_label(column)
 	_message.modulate = ClientTheme.ORANGE
+	_build_landing(column)
+	# Landing sits under the place and diagram, where it is seen first near a planet.
+	column.move_child(_land_box, _diagram.get_index() + 1)
+
+
+## Landing and takeoff, the atomic autopilot of A15: shown on an orbit round a
+## planet, or on the ground.
+func _build_landing(column: VBoxContainer) -> void:
+	_land_box = VBoxContainer.new()
+	column.add_child(_land_box)
+	_land_box.add_child(HSeparator.new())
+	_land_title = _add_label(_land_box)
+	_land_title.modulate = ClientTheme.MID_GREY.lightened(0.35)
+	var buttons := HBoxContainer.new()
+	_land_box.add_child(buttons)
+	_pick_button = _add_button(buttons, "Choose landing site")
+	_pick_button.toggle_mode = true
+	_pick_button.toggled.connect(set_picking)
+	_land_button = _add_button(buttons, "Land")
+	_land_button.pressed.connect(land)
+	_takeoff_row = HBoxContainer.new()
+	_land_box.add_child(_takeoff_row)
+	var label := _add_label(_takeoff_row)
+	label.text = "To orbit at (km)"
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_altitude = _add_spin(_takeoff_row, 10.0, 5000.0, 10.0)
+	_altitude.value = TAKEOFF_KM
+	_altitude.value_changed.connect(func(_value: float) -> void: _edited())
+	_takeoff_button = _add_button(_takeoff_row, "Take off")
+	_takeoff_button.pressed.connect(take_off)
+	_land_text = _add_label(_land_box)
 
 
 func bind(new_bridge: SimBridge, view: LocalView, map: SystemMap) -> void:
@@ -144,6 +192,7 @@ func toggle() -> void:
 		_message.text = ""
 		refresh()
 	else:
+		set_picking(false)
 		closed.emit()
 
 
@@ -227,7 +276,7 @@ func refresh() -> void:
 	_title.text = "Flight: %s" % shown["name"]
 	_place.text = FlightLogic.place_text(view, unit_id())
 	_when.set_value_no_signal(float(burn_tick - tick - 1) / bridge.ticks_per_second())
-	var flying: bool = shown["dock"].is_empty()
+	var flying: bool = shown["dock"].is_empty() and shown.get("landed", {}).is_empty()
 	var orbit: Dictionary = shown.get("orbit", {})
 	_peri_button.disabled = orbit.is_empty() or OrbitPath.ticks_until(orbit, tick, 0.0) < 0
 	_apo_button.disabled = orbit.is_empty() or OrbitPath.is_open(orbit)
@@ -237,6 +286,7 @@ func refresh() -> void:
 	_show_preview(view, flying)
 	_plan_button.disabled = not preview.get("ok", false)
 	_update_paths(view, command)
+	_show_landing(view, shown)
 
 
 func _on_when_changed(seconds: float) -> void:
@@ -273,7 +323,7 @@ func _update_preview(shown: Dictionary, command: Dictionary, flying: bool) -> vo
 func _show_preview(view: Dictionary, flying: bool) -> void:
 	_cost.modulate = ClientTheme.OFF_WHITE
 	if not flying:
-		_cost.text = "Undock to plan a burn."
+		_cost.text = "Take off to plan a burn." if not unit().get("landed", {}).is_empty() else "Undock to plan a burn."
 		_after.text = ""
 	elif preview.is_empty():
 		_cost.text = "Set prograde, normal or radial to plan a burn."
@@ -497,3 +547,130 @@ func _add_spin(parent: Control, low: float, high: float, step: float) -> SpinBox
 	spin.custom_minimum_size = Vector2(110, 0)
 	parent.add_child(spin)
 	return spin
+
+
+# --- Landing and takeoff (A15) ---
+
+## The body a land order would go to: the planet this craft orbits, or 0.
+func land_body() -> int:
+	var orbit: Dictionary = unit().get("orbit", {})
+	if orbit.is_empty() or not unit()["dock"].is_empty():
+		return 0
+	var body: Dictionary = bridge.current_view["bodies"].get(orbit["parent"], {})
+	return orbit["parent"] if body.get("kind", "") == "planet" else 0
+
+
+## While on, a click on the orbited planet chooses the cell under it, and that
+## planet's hex outlines show. Other clicks pass to the view as usual.
+func set_picking(on: bool) -> void:
+	if on == picking:
+		return
+	picking = on
+	if _pick_button != null:
+		_pick_button.set_pressed_no_signal(on)
+	if on:
+		_passed_filter = local_view.click_filter
+		local_view.click_filter = _land_click
+	else:
+		local_view.click_filter = _passed_filter
+	var body := _land_body_node()
+	if body != null:
+		body.set_outlines(on or BodyNode.show_outlines)
+	refresh()
+
+
+func _land_body_node() -> BodyNode:
+	var body := land_body()
+	return local_view.bodies.get(body) if body != 0 else null
+
+
+func _land_click(hit: Dictionary) -> bool:
+	var body := _land_body_node()
+	if hit.get("kind", "") == "body" and body != null and hit["id"] == body.body_id:
+		var cell := body.cell_at_point(hit["point"])
+		if cell >= 0:
+			choose_cell(cell)
+		return false
+	return not _passed_filter.is_valid() or _passed_filter.call(hit)
+
+
+func choose_cell(cell: int) -> void:
+	land_cell = cell
+	var body := _land_body_node()
+	if body != null:
+		body.show_site(cell)
+	_land_ms = -PATH_REFRESH_MS
+	refresh()
+
+
+func land_command() -> Dictionary:
+	return { "type": "land", "unit": unit_id(), "args": { "body": land_body(), "cell": land_cell } }
+
+
+func takeoff_command() -> Dictionary:
+	return { "type": "take_off", "unit": unit_id(), "args": { "altitude_mm": roundi(_altitude.value * 1_000_000.0) } }
+
+
+func land() -> void:
+	var command := land_command()
+	var result: Dictionary = bridge.check(command)
+	if not result["ok"]:
+		_land_text.text = OrderText.reason(result["reason"], result["detail"])
+		return
+	bridge.submit(command)
+	set_picking(false)
+	var body := _land_body_node()
+	if body != null:
+		body.show_site(-1)
+	land_cell = -1
+
+
+func take_off() -> void:
+	var command := takeoff_command()
+	var result: Dictionary = bridge.check(command)
+	if not result["ok"]:
+		_land_text.text = OrderText.reason(result["reason"], result["detail"])
+		return
+	bridge.submit(command)
+
+
+func _show_landing(view: Dictionary, shown: Dictionary) -> void:
+	var landed: Dictionary = shown.get("landed", {})
+	var body := land_body()
+	_land_box.visible = body != 0 or not landed.is_empty()
+	if not _land_box.visible:
+		if picking:
+			set_picking(false)
+		return
+	var on_ground := not landed.is_empty()
+	_pick_button.visible = not on_ground
+	_land_button.visible = not on_ground
+	_takeoff_row.visible = on_ground
+	var now := Time.get_ticks_msec()
+	var key := "%s|%d|%s|%s" % [str(landed), land_cell, str(shown.get("orbit", {})), str(_altitude.value)]
+	var due := (key != _land_key or now - _land_ms >= PATH_REFRESH_MS) and now >= _settle_until
+	if due:
+		_land_key = key
+		_land_ms = now
+	if on_ground:
+		_land_title.text = "On the ground"
+		if due:
+			takeoff_preview = bridge.check(takeoff_command())
+		_land_text.text = FlightLogic.trip_cost_text(takeoff_preview, "Climb", bridge.ticks_per_second())
+		_takeoff_button.disabled = not takeoff_preview.get("ok", false)
+		return
+	var planet_name := FlightLogic.body_name(view, body)
+	_land_title.text = "Landing on %s" % planet_name
+	if land_cell < 0:
+		land_preview = {}
+		if picking:
+			_land_text.text = "Click a hex on %s." % planet_name
+		else:
+			_land_text.text = "Choose a landing site to see the cost."
+		_land_button.disabled = true
+		return
+	if due:
+		land_preview = bridge.check(land_command())
+	_land_text.text = "Hex %d. %s" % [land_cell, FlightLogic.trip_cost_text(land_preview, "Descent", bridge.ticks_per_second())]
+	_land_button.disabled = not land_preview.get("ok", false)
+

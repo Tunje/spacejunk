@@ -231,8 +231,8 @@ func pick_ray(from: Vector3, direction: Vector3) -> Dictionary:
 		return {}
 	var collider: Object = hit["collider"]
 	if collider.has_meta("unit"):
-		return { "kind": "unit", "id": collider.get_meta("unit"), "part": collider.get_meta("part") }
-	return { "kind": "body", "id": collider.get_meta("body"), "part": 0 }
+		return { "kind": "unit", "id": collider.get_meta("unit"), "part": collider.get_meta("part"), "point": hit["position"] }
+	return { "kind": "body", "id": collider.get_meta("body"), "part": 0, "point": hit["position"] }
 
 
 func refresh(delta: float) -> void:
@@ -275,7 +275,12 @@ func _place_craft(craft: CraftNode, id: int, before: Dictionary, after: Dictiona
 		if aim.length_squared() > 0.0:
 			craft.heading = craft.heading.slerp(CraftLayout.heading_towards(aim), 1.0 - exp(-HEADING_RATE * delta))
 	var wanted := Vector3.ZERO
-	if _is_crowded(unit, id, after):
+	if not unit.get("landed", {}).is_empty():
+		# Upright on its cell, with its lowest part on the ground.
+		var up := Vector3(unit["pos_mm"][0], unit["pos_mm"][1], unit["pos_mm"][2]).normalized()
+		craft.heading = Quaternion(Vector3.UP, up)
+		relative += up * -craft.bottom_m
+	elif _is_crowded(unit, id, after):
 		wanted = LocalView.spread_offset(id)
 	craft.display_offset = craft.display_offset.lerp(wanted, 1.0 - exp(-SPREAD_RATE * delta))
 	var free := Transform3D(Basis(craft.heading), relative + craft.display_offset)

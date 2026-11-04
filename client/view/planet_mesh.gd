@@ -34,15 +34,22 @@ static var _cache: Dictionary = {}
 static var _cache_lock := Mutex.new()
 
 
-## The settings a planet's look is built from, from a view body. Fields the view
-## does not carry yet fall back to defaults.
+## The settings a planet's look is built from, from a view body. Since A15 a body
+## carries `planet { seed, height_range_m }`, the same settings the simulation's
+## heights come from; an empty `planet` is a smooth sphere. A body from before A15
+## falls back to its own fields, then to defaults.
 static func settings_of(body: Dictionary) -> Dictionary:
+	var source: Dictionary = body
+	var range_default := DEFAULT_RANGE_M
+	if body.has("planet"):
+		source = body["planet"]
+		range_default = 0
 	return {
-		"seed": int(body.get("seed", body.get("visual_seed", 0))),
+		"seed": int(source.get("seed", body.get("visual_seed", 0))),
 		"radius_mm": int(body["radius_mm"]),
-		"range_m": mini(int(body.get("height_range_m", DEFAULT_RANGE_M)), PlanetGrid.MAX_HEIGHT_M),
+		"range_m": mini(int(source.get("height_range_m", range_default)), PlanetGrid.MAX_HEIGHT_M),
 		"sea_level_m": body.get("sea_level_m", null),
-		"weights": body.get("weights", DEFAULT_WEIGHTS),
+		"weights": source.get("weights", body.get("weights", DEFAULT_WEIGHTS)),
 		"n": PlanetGrid.n_for_radius(int(body["radius_mm"])),
 	}
 
@@ -118,10 +125,48 @@ static func build(settings: Dictionary, parallel := false) -> Dictionary:
 	var outline := []
 	outline.resize(Mesh.ARRAY_MAX)
 	outline[Mesh.ARRAY_VERTEX] = PlanetMesh.outline_segments(triangles, vertices)
+	var directions := PackedVector3Array()
+	directions.resize(count)
+	for cell in count:
+		directions[cell] = vertices[cell].normalized()
 	return {
 		"surface": surface, "outline": outline, "cells": count, "triangles": triangles.size() / 3,
-		"heights": heights, "ms": Time.get_ticks_msec() - started,
+		"heights": heights, "directions": directions, "n": n, "ms": Time.get_ticks_msec() - started,
 	}
+
+
+## The cell whose centre is nearest a direction from the planet's centre, for
+## picking a landing site. A plain scan: about 100,000 dot products, once per click.
+static func nearest_cell(built: Dictionary, direction: Vector3) -> int:
+	var directions: PackedVector3Array = built["directions"]
+	var best := 0
+	var best_dot := -2.0
+	for cell in directions.size():
+		var dot := directions[cell].dot(direction)
+		if dot > best_dot:
+			best_dot = dot
+			best = cell
+	return best
+
+
+## A cell's hex (or pentagon) outline, in the mesh's units: its corners are the
+## centres of the triangles it shares with each pair of neighbours, in turn round it.
+static func cell_outline(built: Dictionary, cell: int) -> PackedVector3Array:
+	var vertices: PackedVector3Array = built["surface"][Mesh.ARRAY_VERTEX]
+	var centre := vertices[cell]
+	var up := centre.normalized()
+	var east := up.cross(Vector3.UP if absf(up.y) < 0.9 else Vector3.RIGHT).normalized()
+	var north := east.cross(up)
+	var around: Array[int] = PlanetGrid.neighbours(cell, built["n"])
+	around.sort_custom(func(a: int, b: int) -> bool:
+		var da := vertices[a] - centre
+		var db := vertices[b] - centre
+		return atan2(da.dot(north), da.dot(east)) < atan2(db.dot(north), db.dot(east)))
+	var corners := PackedVector3Array()
+	for index in around.size():
+		var corner := (centre + vertices[around[index]] + vertices[around[(index + 1) % around.size()]]) / 3.0
+		corners.append(corner * (1.0 + OUTLINE_LIFT * 2.0))
+	return corners
 
 
 ## Direction, height, moisture and colour for cells from..to-1: the slow part, as

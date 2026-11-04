@@ -56,6 +56,13 @@ static func place_text(view: Dictionary, unit_id: int) -> String:
 		return ""
 	if not unit["dock"].is_empty():
 		return "Docked at %s: undock to fly" % view["units"][unit["dock"]["target_unit"]]["name"]
+	var landed: Dictionary = unit.get("landed", {})
+	if not landed.is_empty():
+		var radius: float = float(view["bodies"].get(landed["body"], {}).get("radius_mm", 0))
+		var height := roundi(Vector3(unit["pos_mm"][0], unit["pos_mm"][1], unit["pos_mm"][2]).length() - radius)
+		var side := "above" if height >= 0 else "below"
+		return "Landed on %s, hex %d, %s %s datum" % [FlightLogic.body_name(view, landed["body"]), landed["cell"],
+			OrderText.metres(absi(height)), side]
 	if not unit.get("orbit", {}).is_empty():
 		var parent := FlightLogic.body_name(view, unit["orbit"]["parent"])
 		if OrbitPath.is_open(unit["orbit"]):
@@ -123,6 +130,18 @@ static func busy_note(unit: Dictionary) -> String:
 	if not unit["route"].is_empty() or unit["task"] != 0:
 		return "Busy with an order: a burn that starts before it ends is dropped."
 	return ""
+
+
+## A land or take_off check as one line: "Descent: delta-v 1.20 km/s, 640 kg
+## propellant, about 31 min", or the refusal.
+static func trip_cost_text(result: Dictionary, what: String, ticks_per_second: int) -> String:
+	if result.is_empty():
+		return ""
+	if not result["ok"]:
+		return OrderText.reason(result["reason"], result["detail"])
+	var detail: Dictionary = result["detail"]
+	return "%s: delta-v %s, %s propellant, about %s" % [what, FlightLogic.speed(detail["dv_um_s"]),
+		OrderText.tonnes(detail["propellant_g"]), OrderText.duration(float(detail["ticks"]) / ticks_per_second)]
 
 
 ## A planned burn's row: "In 12 s: 20.0 m/s prograde".

@@ -248,7 +248,7 @@ static func _build_state(module_defs: Dictionary, seed_value: int, extra_ships: 
 			"kind": entry["kind"], "name": "Star" if entry["kind"] == "star" else "Asteroid %d" % id,
 			"pos_mm": entry["pos_mm"], "radius_mm": entry["radius_mm"],
 			"visual_seed": absi(seed_value * 31 + id * 2654435761) % 2147483647, "scanned": false,
-			"frame": 0, "orbit": {}, "gm": entry.get("gm", 0), "soi_mm": 0,
+			"frame": 0, "orbit": {}, "gm": entry.get("gm", 0), "soi_mm": 0, "planet": {},
 		}
 	for entry: Dictionary in scenario["deposits"]:
 		state["hidden_deposits"][_next_id(state)] = {
@@ -265,7 +265,7 @@ static func _build_state(module_defs: Dictionary, seed_value: int, extra_ships: 
 			"parts": _build_part(state, module_defs, entry["parts"]),
 			"inventory": entry["inventory"],
 			"frame": 0, "orbit": {}, "vel_um_s": [0, 0, 0], "burns": [], "burn": {},
-			"drift_rem": [0, 0, 0], "burn_dir": [], "transfer": {},
+			"drift_rem": [0, 0, 0], "burn_dir": [], "transfer": {}, "landed": {},
 		}
 	_add_cluster_frame(state)
 	return state
@@ -1286,7 +1286,7 @@ func _put_probe_in_orbit() -> void:
 	_state["bodies"][moon] = {
 		"kind": "planet", "name": "Cairn", "pos_mm": PLANET_POS_MM.duplicate(), "radius_mm": PLANET_RADIUS_MM,
 		"visual_seed": 7, "scanned": true, "frame": 0, "orbit": {}, "gm": PLANET_GM, "soi_mm": 0,
-		"seed": PLANET_SEED, "height_range_m": PLANET_RANGE_M, "sea_level_m": PLANET_SEA_LEVEL_M,
+		"planet": { "seed": PLANET_SEED, "height_range_m": PLANET_RANGE_M }, "sea_level_m": PLANET_SEA_LEVEL_M,
 	}
 	for id: int in _state["units"]:
 		var unit: Dictionary = _state["units"][id]
