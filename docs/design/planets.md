@@ -191,7 +191,7 @@ The base mesh has a vertex every 7 km, which is flat cardboard from a lander's c
 
 ## 9. Cost
 
-None of this is in the slice. The slice has one asteroid field and no planets, and the M4 judgement is on that loop. The station and the slice's rocks stay one cluster sharing a solar orbit, so this page adds no transfer windows to the slice's automation. Windows arrive only with a later planet scenario, where a station in orbit trades with a surface or a separate ring. Radii and periods are in [orbital_flight.md](orbital_flight.md).
+None of this is in the slice. The slice has one asteroid field and no planets, and the M4 judgement is on that loop. The station and the slice's rocks stay one cluster sharing a solar orbit, so this page adds no transfer windows to the slice's automation. This holds only if each rock's orbit is the same size as the station's: a rock 50 km nearer the star drifts about 54 m an hour, shifting a trip by 5 to 9 ticks over a 4-hour session (Agent C, [orbital_automation.md](orbital_automation.md)). Rocks therefore sit ahead of, behind, above or below the station on its orbit, never nearer to or farther from the star. Windows arrive only with a later planet scenario, where a station in orbit trades with a surface or a separate ring. Radii and periods are in [orbital_flight.md](orbital_flight.md).
 
 | Who | Work | Rough size |
 | --- | ---- | ---------- |
