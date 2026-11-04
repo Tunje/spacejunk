@@ -1,6 +1,6 @@
 # Orbital Flight and Automation
 
-Status: proposal for the owner, written by Agent C (gameplay). Nothing here is decided, and order-based flight in [workplan.md](../../plan/workplan.md) stands until the owner rules. It is the automation part of the orbital flight question. [orbital_flight.md](orbital_flight.md) (Agent A) owns the flight model, and [planets.md](planets.md) (Agent B) owns where things orbit. Figures marked *illustrative* are worked examples for a Kerbin-sized planet, not data.
+Status: proposal for the owner, written by Agent C (gameplay). Nothing here is decided, and order-based flight in [workplan.md](../../plan/workplan.md) stands until the owner rules. It is the automation part of the orbital flight question. [orbital_flight.md](orbital_flight.md) (Agent A) owns the flight model, and [planets.md](planets.md) (Agent B) owns where things orbit. Orbit figures are in A's table, [orbital_flight.md section 5, "Orbit figures"](orbital_flight.md#orbit-figures).
 
 ## 1. The plain answer
 
@@ -20,19 +20,12 @@ The same rules behave very differently depending on what orbits what. B's [plane
 | Layout | What changes for a drone | Lap figures |
 | ------ | ------------------------ | ----------- |
 | **A. A cluster in solar orbit**: station and rocks 30 to 50 km apart, all circling the star | Nothing. The cluster is one co-moving frame, and trips inside it stay straight-line, as today. | Exact, as today. |
-| **B. One ring around a planet**: station and rocks in the same orbit, at different points along it | No windows: every departure is as good as any other. But a hop takes about one orbit, and the 3-minute trip becomes about 32 minutes. | Fixed, but longer. |
-| **C. Different orbits around a planet** | Transfer windows open and close. A drone waits, sometimes for hours, or pays a lot more propellant. | Vary with orbital phase. Most of this page is about this layout. |
+| **B. One ring around a planet**: station and rocks in the same orbit, at different points along it | No windows: every departure is as good as any other. But a hop takes about one orbit, so today's 3-minute trip takes over half an hour. | Fixed, but longer. |
+| **C. Different orbits around a planet** | Transfer windows open and close. A drone waits, sometimes for hours. | Vary with orbital phase. Most of this page is about this layout. |
 
-How the figures were worked out, *illustrative*, from the standard formulas. Real radii and periods are A's to set in [orbital_flight.md](orbital_flight.md):
+Trip times, propellant and window spacing for layouts B and C, with the orbits behind each figure, are in A's table, [orbital_flight.md section 5, "Orbit figures"](orbital_flight.md#orbit-figures). This page doesn't repeat them.
 
-| Case | Result |
-| ---- | ------ |
-| Layout B: rock 50 km ahead in a 100 km orbit, one-orbit phasing hop | 32.3 minutes, 17 m/s |
-| Layout B: the same hop over 2 orbits | 64.9 minutes, 9 m/s |
-| Layout C: station at 100 km, rock at 150 km | Window every 5.5 hours, 76 m/s, 17 minutes in flight |
-| Layout C: station at 100 km, rock at 300 km | Window every 1.7 hours, 264 m/s, 20 minutes in flight |
-
-So in layout C, rocks close to the station's orbit have the rarest windows. A drone that laps in 9 minutes today could spend most of a session waiting.
+The table shows that in layout C, rocks close to the station's orbit have the rarest windows. A drone that laps in 9 minutes today could spend most of a session waiting.
 
 **Layout A gives no Kerbal feel.** Gravity is present, but nothing visible changes, because over minutes a star's pull on a 50 km cluster is almost the same at every point. The Kerbal look and feel needs a planet, and so layout B or C.
 
@@ -129,7 +122,7 @@ A (newmanprobe-db) agrees all five assumptions, with these details:
 4. **Atomic after departure.** This fits the autopilot. A paid trip runs to arrival, unaffected by faults or power, and a stop while waiting for a window cancels with nothing paid.
 5. **Scale.** Real drift between the rocks would be negligible over a slice run but would add up over a long game. The Lead ruled for A's co-moving frame, so the slice has none.
 
-A also adds the pacing fact in section 1. With a 600 km planet at Kerbin gravity, a low orbit takes about 33 minutes, so a planet trip takes 15 to 20 minutes of game time. Even with the orbit compressed to 10 minutes, A measured a 5.3-minute trip from 700 to 760 km, with an 86-minute synodic period.
+A also adds the pacing fact in section 1: a planet trip takes about half an orbit, and windows between close orbits are hours apart. The figures are in [A's "Orbit figures" table](orbital_flight.md#orbit-figures).
 
 **From B**, as B's recommendation and not a decision: in the slice, the station and the three rocks stay one cluster in a shared solar orbit, with no planet near them, so the fixed laps hold. Planets come only after M4.
 
