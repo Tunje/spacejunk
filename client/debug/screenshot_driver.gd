@@ -16,6 +16,8 @@ class_name ScreenshotDriver extends Node
 ##   --fly-plan=<frames>             plans the burn, then runs that many frames
 ##   --outlines=1                    shows the hex outlines on planets
 ##   --planet-wait=1                 waits for every planet's terrain before the rest
+##   --transfer-demo=<seconds>       (reference) a planet with two frames on the real Sim, the ship
+##                                   sent to the far one's rock, run that long past departure
 ##   --copy=1                        (stub_load) strips two parts off the first ship and
 ##                                   opens fitting there, to show "Fit like this one"
 ##   --fit=<item>  --fit-slot=<connector>  opens fitting after the orders and picks both
@@ -57,6 +59,8 @@ func _ready() -> void:
 
 func _run() -> void:
 	var view: LocalView = main.local_view
+	if parsed.has("transfer-demo"):
+		_transfer_demo(float(parsed["transfer-demo"]))
 	if parsed.has("planet-wait"):
 		while PlanetMesh.busy():
 			await get_tree().process_frame
@@ -271,6 +275,44 @@ func _open_jobs() -> void:
 	ScreenshotDriver._step(main.bridge)
 	main.bridge.set_paused(true)
 	screen.refresh()
+
+
+## A13's test world, built on the real Sim: a planet with frames at 700 and 900 km.
+func _transfer_demo(seconds_after_departure: float) -> void:
+	var defs := DataLoader.load_defs()
+	var sim := Sim.new()
+	sim._setup(Sim._new_state("reference", 7, defs), defs)
+	var frame := func(key: String, a_mm: int, mean_mdeg: int) -> Dictionary:
+		return { "key": key, "name": key.capitalize(), "radius_mm": 1_000_000,
+			"orbit": { "parent": "planet", "a_mm": a_mm, "mean_anomaly_mdeg": mean_mdeg } }
+	ScenarioBuilder.populate(sim._ctx, {
+		"bodies": [
+			{ "key": "star", "name": "Star", "kind": "star", "pos_mm": [0, 0, 0], "radius_mm": 696_000_000_000,
+				"visual_seed": 1, "deposits": [], "gm": 132_712_440_018_000_000 },
+			{ "key": "planet", "name": "Planet", "kind": "planet", "radius_mm": 600_000_000, "visual_seed": 2,
+				"deposits": [], "gm": 3_531_600_000, "orbit": { "parent": "star", "a_mm": 149_597_870_700_000 } },
+			{ "key": "rock", "name": "Rock", "kind": "asteroid", "frame": "far", "pos_mm": [20_000_000, 0, 0],
+				"radius_mm": 500_000, "visual_seed": 3, "deposits": [] },
+		],
+		"frames": [frame.call("home", 700_000_000, 0), frame.call("far", 900_000_000, 123_000)],
+		"units": [{ "key": "ship", "template": "starter_ship", "name": "Ship", "pos_mm": [150_000, 0, 0],
+			"frame": "home", "inventory": [{ "item": "propellant", "grams": 1_000_000 }], "dock": null }],
+	}, {})
+	var ship := 0
+	var rock := 0
+	for id: int in sim._state["units"]:
+		ship = id
+	for id: int in sim._state["bodies"]:
+		if sim._state["bodies"][id]["name"] == "Rock":
+			rock = id
+	sim.submit({ "type": "move_to", "unit": ship, "args": { "target": rock } })
+	sim.step(2)
+	var depart: int = sim._state["units"][ship]["op"].get("depart_tick", 2)
+	sim.step(depart - sim.current_tick() + roundi(seconds_after_departure * Sim.TICKS_PER_SECOND))
+	main.bridge.start(sim)
+	main.bridge.set_paused(true)
+	main.local_view.rebuild()
+	main.local_view.select("body", rock, 0)
 
 
 func _open_flight() -> void:

@@ -12,6 +12,8 @@ const RING_SEGMENTS := 96
 const RING_COLOUR := Color(0.2, 0.22, 0.27)
 const ROUTE_SEGMENTS := 24
 const CLICK_SLOP_PX := 5.0
+## quote() may search for a window, so the selection's trip is asked at most this often.
+const QUOTE_REFRESH_MS := 250
 
 var bridge: SimBridge
 var local_view: LocalView
@@ -20,6 +22,8 @@ var eta_text := ""
 var _press_position := Vector2.ZERO
 var _pressed := false
 var _orbiting := false
+var _eta_key := ""
+var _eta_ms := -QUOTE_REFRESH_MS
 
 @onready var camera: OrbitCamera = $Camera
 @onready var routes: MeshInstance3D = $Routes
@@ -126,6 +130,8 @@ func _draw_routes(view: Dictionary, centre: Array) -> void:
 		if not unit["route"].is_empty():
 			_add_line(mesh, _relative(WorldPosition.of(unit), centre),
 				_relative(WorldPosition.local_to_world(unit, unit["route"]["to_mm"]), centre), ClientTheme.ORANGE)
+		elif not unit.get("transfer", {}).is_empty() and not unit.get("orbit", {}).is_empty():
+			_add_arc(mesh, SystemMap.transfer_arc(view, unit, ROUTE_SEGMENTS), centre, ClientTheme.ORANGE)
 	var target := _selected_position(view)
 	if not target.is_empty() and view["units"].has(local_view.commanded_unit):
 		var unit: Dictionary = view["units"][local_view.commanded_unit]
@@ -141,6 +147,27 @@ func _add_line(mesh: ImmediateMesh, from: Vector3, to: Vector3, colour: Color) -
 	mesh.surface_end()
 
 
+## An autopilot transfer (A13) rides its orbit on rails from now to arrival, so its
+## arc comes straight from the orbit record, in 64-bit world mm.
+static func transfer_arc(view: Dictionary, unit: Dictionary, segments: int) -> Array[PackedFloat64Array]:
+	var orbit: Dictionary = unit["orbit"]
+	var parent := WorldPosition.of(view["bodies"][orbit["parent"]])
+	var from: int = view["tick"]
+	var to: int = maxi(from, unit["transfer"]["arrive_tick"])
+	var points: Array[PackedFloat64Array] = []
+	for index in segments + 1:
+		points.append(OrbitPath.shifted(OrbitPath.position(orbit, lerpf(from, to, float(index) / segments)), parent))
+	return points
+
+
+func _add_arc(mesh: ImmediateMesh, points: Array[PackedFloat64Array], centre: Array, colour: Color) -> void:
+	mesh.surface_begin(Mesh.PRIMITIVE_LINE_STRIP)
+	for point: PackedFloat64Array in points:
+		mesh.surface_set_color(colour)
+		mesh.surface_add_vertex(SystemMap.project(OrbitPath.relative_m(point, centre)))
+	mesh.surface_end()
+
+
 func _selected_position(view: Dictionary) -> Array:
 	match local_view.selected_kind:
 		"body":
@@ -152,16 +179,39 @@ func _selected_position(view: Dictionary) -> Array:
 	return []
 
 
-## Travel time from check(), so the client never prices a route itself.
+## Travel time from the Sim, so the client never prices a trip itself: quote() where
+## the Sim has it (A13), which gives a transfer's window, otherwise check().
 func _eta_for_selection(view: Dictionary) -> String:
 	if _selected_position(view).is_empty():
 		return ""
+	if bridge.sim.has_method("quote"):
+		var key := "%d:%d" % [local_view.commanded_unit, local_view.selected_id]
+		var now := Time.get_ticks_msec()
+		if key == _eta_key and now - _eta_ms < QUOTE_REFRESH_MS:
+			return eta_text
+		_eta_key = key
+		_eta_ms = now
+		return SystemMap.trip_text(bridge.sim.quote(local_view.commanded_unit, local_view.selected_id, view["tick"]),
+			view["tick"], bridge.ticks_per_second())
 	var result: Dictionary = bridge.check({
 		"type": "move_to", "unit": local_view.commanded_unit, "args": { "target": local_view.selected_id },
 	})
 	if not result["ok"]:
 		return ""
 	return OrderText.duration(float(result["detail"]["ticks"]) / bridge.ticks_per_second())
+
+
+## "12 min", or for a transfer "Departs in 40 min, 31 min trip". "" if refused.
+static func trip_text(quote: Dictionary, tick: int, ticks_per_second: int) -> String:
+	if quote.is_empty() or quote.has("reason"):
+		return ""
+	var trip := OrderText.duration(float(quote["ticks"]) / ticks_per_second)
+	if quote.get("kind", "") != "transfer":
+		return trip
+	var wait: int = quote["depart_tick"] - tick
+	if wait <= 0:
+		return "%s trip" % trip
+	return "Departs in %s, %s trip" % [OrderText.duration(float(wait) / ticks_per_second), trip]
 
 
 func _unhandled_input(event: InputEvent) -> void:

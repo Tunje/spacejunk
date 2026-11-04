@@ -128,9 +128,9 @@ func _progress_text(order: Dictionary) -> String:
 	var op_type: String = OrderList.ATOMIC_OPS.get(order["command"]["type"], "")
 	if op_type.is_empty():
 		return ""
-	var op: Dictionary = bridge.current_view["units"][local_view.commanded_unit]["op"]
-	if op["type"] == op_type:
-		return _op_text(op)
+	var unit: Dictionary = bridge.current_view["units"][local_view.commanded_unit]
+	if unit["op"]["type"] == op_type:
+		return _op_text(unit)
 	return "%s 0%%" % OrderText.operation(op_type) if order["key"] == _clicked_key else ""
 
 
@@ -166,19 +166,14 @@ func _add_label(parent: Control) -> Label:
 func _status_of(unit: Dictionary) -> String:
 	if unit.is_empty():
 		return ""
-	var text := _op_text(unit["op"])
+	var text := _op_text(unit)
 	if not unit["dock"].is_empty():
 		text += ", docked"
 	return text
 
 
-func _op_text(op: Dictionary) -> String:
-	var text := OrderText.operation(op["type"])
-	if op["end_tick"] > op["start_tick"]:
-		var total: int = op["end_tick"] - op["start_tick"]
-		var done: int = clampi(bridge.current_view["tick"] - op["start_tick"], 0, total)
-		text += " %d%%" % (done * 100 / total)
-	return text
+func _op_text(unit: Dictionary) -> String:
+	return InspectText.op_line(unit, bridge.current_view["tick"], bridge.ticks_per_second())
 
 
 func _selection_title(view: Dictionary) -> String:

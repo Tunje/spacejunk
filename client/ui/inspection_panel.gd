@@ -85,7 +85,7 @@ func refresh() -> void:
 	if unit.is_empty():
 		return
 	_title.text = unit["name"]
-	_status.text = InspectText.status(unit, view)
+	_status.text = InspectText.status(unit, view, bridge.ticks_per_second())
 	_core.text = InspectText.core(unit)
 	_refresh_cargo(unit)
 	_refresh_power(unit)
