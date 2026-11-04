@@ -38,6 +38,17 @@ The scenario holds the star, the three rocks and one unit: the probe. There's no
 
 With all 12 sides used, the probe cannot grow by fitting more parts. To get more capability, the player has to build another craft or a station, which is the point. The thruster is rated for 10000 kg, so a loaded probe pays a little more per trip: that is the existing trip formula, and nothing is refused.
 
+**Where the probe can land.** The probe carries about 775 m/s on a full 2 t tank, at 3000 m/s exhaust speed. That is less than today's 4.58 t ship, which has about 1090 m/s. By A's landing model ([orbital_flight.md](orbital_flight.md) section 11.13), a round trip from an orbit a tenth of the radius up costs, at Kerbin's density:
+
+| Body | Round trip | Probe on a full tank |
+| ---- | ---------- | -------------------- |
+| 60 km moon | About 370 m/s | Lands and returns |
+| About 89 km moon | About 775 m/s | The limit |
+| 200 km moon | About 1230 m/s | Can't return |
+| 600 km planet | About 5.2 km/s | Can't return without refuelling on the surface |
+
+Those figures leave out the trip from the cluster to the moon and back. So a first scenario that wants the probe to land should put a small moon of 60 km or less within reach. Anything bigger needs propellant made on the surface, which is decision 1 option A, or a purpose-built lander.
+
 ### 1.2 Refining and fabricating with no station
 
 The compact facilities have the same facility types as today's, `refinery` and `fabricator`, so they run every existing recipe. The sim's rule is that a job draws from and delivers to its facility's own unit, so the probe:

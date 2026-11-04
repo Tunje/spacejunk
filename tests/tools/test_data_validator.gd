@@ -779,6 +779,70 @@ func test_thruster_needs_burn_figures() -> void:
 	_assert_error("missing_field")
 
 
+## The rock becomes a planet with terrain settings.
+func _make_planet() -> Dictionary:
+	var rock: Dictionary = _scenario()["bodies"][1]
+	rock["kind"] = "planet"
+	rock["planet"] = { "seed": 48213, "height_range_m": 8000 }
+	return rock["planet"]
+
+
+func test_planet_passes() -> void:
+	_make_planet().merge({ "sea_level_m": -200, "weights": [4, 2, 1] })
+	assert_eq(DataValidator.validate(data), [] as Array[String])
+
+
+func test_planet_kind_without_terrain_is_a_smooth_sphere() -> void:
+	_scenario()["bodies"][1]["kind"] = "planet"
+	assert_eq(DataValidator.validate(data), [] as Array[String])
+
+
+func test_planet_object_only_on_a_planet() -> void:
+	_make_planet()
+	_scenario()["bodies"][1]["kind"] = "asteroid"
+	_assert_error("bad_planet")
+
+
+func test_planet_needs_a_seed() -> void:
+	_make_planet().erase("seed")
+	_assert_error("missing_field")
+
+
+func test_planet_height_range_within_the_proven_limit() -> void:
+	_make_planet()["height_range_m"] = 8001
+	_assert_error("out_of_range")
+
+
+func test_planet_sea_level_within_range() -> void:
+	_make_planet()["sea_level_m"] = -8001
+	_assert_error("out_of_range")
+
+
+func test_planet_unknown_field() -> void:
+	_make_planet()["roughness"] = 500
+	_assert_error("unknown_field")
+
+
+func test_planet_weights_are_whole() -> void:
+	_make_planet()["weights"] = [4, 2.5, 1]
+	_assert_error("not_whole")
+
+
+func test_planet_weights_need_one_above_zero() -> void:
+	_make_planet()["weights"] = [0, 0]
+	_assert_error("bad_planet")
+
+
+func test_planet_weights_at_most_twelve_octaves() -> void:
+	_make_planet()["weights"] = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+	_assert_error("bad_planet")
+
+
+func test_planet_weight_within_range() -> void:
+	_make_planet()["weights"] = [1001]
+	_assert_error("out_of_range")
+
+
 func test_load_dir_reads_scenarios() -> void:
 	var loaded := DataValidator.load_dir()
 	assert_gt(loaded["scenarios"].size(), 0)

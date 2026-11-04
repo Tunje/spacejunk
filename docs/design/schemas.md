@@ -308,6 +308,7 @@ B4 enforces these on top of section 3 of the accounting spec.
 - A body on an `orbit` has neither `pos_mm` nor `frame`. A body without an orbit has `pos_mm`.
 - Orbits are whole numbers: `a_mm` from 1 to 10^15, `e_ppm` from 0 to 999999, and each angle from 0 to 359999 millidegrees. `gm_km3_s2` stays within the contract range of `gm` once converted.
 - Frame keys share the one key space with bodies and units.
+- A `planet` object appears only on a body of kind `planet`, within the ranges of section 14.
 
 **Coverage**
 - A source is a deposit, a recipe or scenario stock. A use is a recipe input, a fitted part, propellant burn or a sink (spec section 10).
@@ -336,13 +337,14 @@ A scenario places bodies, deposits and units in the world and sets starting inve
 | `frames` | array, optional | Co-moving frames, such as the rock cluster |
 | `units` | array | Listed in entity ID order |
 
-A body has `key`, `name`, `kind` (`star` or `asteroid`), `pos_mm`, `radius_mm`, `visual_seed` and `deposits`, a list of deposit definition IDs. It may also have:
+A body has `key`, `name`, `kind` (`star`, `asteroid` or `planet`), `pos_mm`, `radius_mm`, `visual_seed` and `deposits`, a list of deposit definition IDs. It may also have:
 
 | Field | Type | Meaning |
 | ----- | ---- | ------- |
 | `gm_km3_s2` | number, optional | Gravitational parameter. Loads as `gm` in 1000 m³/s². A body that others orbit must have it |
 | `orbit` | object, optional | Its orbit, below. A body on an orbit needs no `pos_mm`, because its position is derived from the orbit and the tick |
 | `frame` | frame key, optional | The frame it belongs to. Its `pos_mm` is then local to the frame |
+| `planet` | object, optional | Terrain, below. Only on a body of kind `planet`. A planet without it is a smooth sphere |
 
 A frame has `key`, `name`, `radius_mm` and `orbit`. It is not a body, and it never appears where bodies are listed as targets. Its `radius_mm` is the sphere within which a unit can join it ([orbital_flight.md](orbital_flight.md) section 11.2).
 
@@ -364,7 +366,16 @@ A unit has `key`, `template`, `name`, `pos_mm`, `inventory` and `dock`, and an o
 
 **Entity IDs.** The counter starts at 1 and issues IDs in file order: each body, then that body's deposits, then each frame, then each unit, then that unit's parts in template order. This makes IDs known in advance.
 
-**Planned, not read yet.** A planet body will gain `seed`, `kind` and the settings of [planets.md](planets.md) section 1 (A15), with body kind `planet`. They are listed here so content can be planned, but no loader reads them, and the validator rejects them until that task lands.
+A `planet` object holds the terrain settings that both the simulation and the client read, so a hex's height is the same in both ([planets.md](planets.md) section 4):
+
+| Field | Type | Meaning |
+| ----- | ---- | ------- |
+| `seed` | whole | Lays out the terrain through `PlanetGrid` |
+| `height_range_m` | whole, 0 to 8000 | Highest peak and deepest basin either side of the datum radius. 8000 is the proven limit |
+| `sea_level_m` | whole, -8000 to 8000, optional | Cells below it are sea. Absent means a dry world |
+| `weights` | list of 1 to 12 whole numbers, each 0 to 1000, optional | Octave weights for the height and moisture noise, broadest first, with at least one above 0. Default `[4, 2, 1]` |
+
+The other settings in [planets.md](planets.md) section 1 (`kind`, `temperature`, `moisture_bias` and the palette) are not data yet. They arrive with the surface rule tables. `roughness` is not a scenario field. It is a planet-kind idea for a later generator that writes `weights`, so there is one source of truth for the noise.
 
 **No sphere-of-influence field.** A body's sphere of influence is not data. A12 works it out at scenario load from Laplace's formula, a × (GM / parent GM)^(2/5), and stores it as `soi_mm` in the state. So it always agrees with the GMs and orbits.
 
