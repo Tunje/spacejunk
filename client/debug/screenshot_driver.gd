@@ -18,6 +18,8 @@ class_name ScreenshotDriver extends Node
 ##   --planet-wait=1                 waits for every planet's terrain before the rest
 ##   --transfer-demo=<seconds>       (reference) a planet with two frames on the real Sim, the ship
 ##                                   sent to the far one's rock, run that long past departure
+##   --landing-demo=pick|landed      (reference) a small planet on the real Sim with the probe in
+##                                   orbit: choosing a hex with Land's cost, or after landing on it
 ##   --copy=1                        (stub_load) strips two parts off the first ship and
 ##                                   opens fitting there, to show "Fit like this one"
 ##   --fit=<item>  --fit-slot=<connector>  opens fitting after the orders and picks both
@@ -61,6 +63,8 @@ func _run() -> void:
 	var view: LocalView = main.local_view
 	if parsed.has("transfer-demo"):
 		_transfer_demo(float(parsed["transfer-demo"]))
+	if parsed.has("landing-demo"):
+		await _landing_demo(parsed["landing-demo"])
 	if parsed.has("planet-wait"):
 		while PlanetMesh.busy():
 			await get_tree().process_frame
@@ -313,6 +317,55 @@ func _transfer_demo(seconds_after_departure: float) -> void:
 	main.bridge.set_paused(true)
 	main.local_view.rebuild()
 	main.local_view.select("body", rock, 0)
+
+
+## A 250 km airless planet with terrain and the ship 50 km up, as test_landing_ui has.
+func _landing_demo(stage: String) -> void:
+	var defs := DataLoader.load_defs()
+	var sim := Sim.new()
+	sim._setup(Sim._new_state("reference", 7, defs), defs)
+	ScenarioBuilder.populate(sim._ctx, {
+		"bodies": [
+			{ "key": "star", "name": "Star", "kind": "star", "pos_mm": [0, 0, 0], "radius_mm": 696_000_000_000,
+				"visual_seed": 1, "deposits": [], "gm": 132_712_440_018_000_000 },
+			{ "key": "planet", "name": "Grit", "kind": "planet", "radius_mm": 250_000_000, "visual_seed": 2,
+				"deposits": [], "gm": 65_138_398, "orbit": { "parent": "star", "a_mm": 149_597_870_700_000 },
+				"planet": { "seed": 48213, "height_range_m": 6000 } },
+		],
+		"units": [{ "key": "ship", "template": "starter_ship", "name": "Probe", "pos_mm": [0, 0, 0],
+			"inventory": [{ "item": "propellant", "grams": 1_000_000 }], "dock": null }],
+	}, {})
+	var ship := 0
+	var planet := 0
+	for id: int in sim._state["units"]:
+		ship = id
+	for id: int in sim._state["bodies"]:
+		if sim._state["bodies"][id]["kind"] == "planet":
+			planet = id
+	var orbit := OrbitMath.from_state([300_000_000, 0, 0], [0, 0, -466_000_000], 65_138_398, 0)
+	orbit["parent"] = planet
+	sim._state["units"][ship]["orbit"] = orbit
+	sim._state["units"][ship]["pos_mm"] = OrbitMath.position_at(orbit, 0)
+	sim._ctx.index.clear()
+	# Near the north pole when landed, so the ground lies flat for the camera, which
+	# keeps world +Y up; under the ship when choosing.
+	var cell := 2 if stage == "landed" else PlanetGrid.cell_count(PlanetGrid.n_for_radius(250_000_000)) / 2
+	if stage == "landed":
+		var plan: Dictionary = sim.check({ "type": "land", "unit": ship, "args": { "body": planet, "cell": cell } })
+		sim.submit({ "type": "land", "unit": ship, "args": { "body": planet, "cell": cell } })
+		sim.step(plan["detail"]["ticks"] + 3)
+	main.bridge.start(sim)
+	main.bridge.set_paused(true)
+	main.local_view.rebuild()
+	main.local_view.focus_on("unit", ship)
+	while PlanetMesh.busy():
+		await get_tree().process_frame
+	main.toggle_flight()
+	if stage == "pick":
+		var screen: FlightScreen = main.flight_screen
+		screen.set_picking(true)
+		var body: BodyNode = main.local_view.bodies[planet]
+		screen.choose_cell(PlanetMesh.nearest_cell(body.planet, Vector3(1, 0, 0)))
 
 
 func _open_flight() -> void:
