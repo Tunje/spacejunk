@@ -9,7 +9,9 @@ class_name ScreenshotDriver extends Node
 ##   --then=<order key>              pressed --then-delay frames after --order
 ##   --last=<order key>              pressed --last-delay frames after --then
 ##   --cycle=1                       fits a tier 2 core and starts a short cycle at once
-##   --jobs=<recipe id>              opens the jobs screen and starts that recipe
+##   --jobs=<recipe id>[,<id>...]    opens the jobs screen and starts or queues each recipe
+##   --copy=1                        (stub_load) strips two parts off the first ship and
+##                                   opens fitting there, to show "Fit like this one"
 ##   --fit=<item>  --fit-slot=<connector>  opens fitting after the orders and picks both
 ##   --drone=<0 to 6>                builds a small craft with that many parts fitted, and selects it
 ##   --drone-fly=1                   then gives it a core and propellant, and sends it to a rock
@@ -89,6 +91,8 @@ func _run() -> void:
 		await _open_jobs()
 	if parsed.has("cycle"):
 		await _start_demo_cycle()
+	if parsed.has("copy"):
+		_open_copy_fit()
 	if parsed.has("drone"):
 		_show_demo_drone()
 	if parsed.has("goals-done"):
@@ -246,10 +250,27 @@ func _open_jobs() -> void:
 	main.toggle_industry()
 	var screen: IndustryScreen = main.industry_screen
 	for entry: Dictionary in IndustryLogic.facilities(main.bridge.current_view["units"][screen.unit_id], screen._defs["modules"]):
-		for recipe: Dictionary in IndustryLogic.recipes_for(entry["type"], screen._defs["recipes"]):
-			if recipe["id"] == parsed["jobs"]:
-				screen.choose_facility(entry)
-				screen.start(recipe)
+		for wanted: String in parsed["jobs"].split(","):
+			for recipe: Dictionary in IndustryLogic.recipes_for(entry["type"], screen._defs["recipes"]):
+				if recipe["id"] == wanted:
+					screen.choose_facility(entry)
+					screen.start(recipe)
+	ScreenshotDriver._step(main.bridge)
+	main.bridge.set_paused(true)
+	screen.refresh()
+
+
+## Takes the laser and solar slab off the first ship into its own hold, so another
+## ship's fit has something to give back, then opens fitting on it.
+func _open_copy_fit() -> void:
+	var bridge: SimBridge = main.bridge
+	var ship := ScreenshotDriver._unit_of_kind(bridge.current_view, "ship")
+	for part: Dictionary in InspectText.flatten(bridge.current_view["units"][ship]["parts"]):
+		if part["def"] in ["stub_laser", "stub_solar"]:
+			bridge.submit(FittingLogic.detach_command(ship, part["id"], ship))
+	ScreenshotDriver._step(bridge)
+	main.local_view.select("unit", ship, 0)
+	main.toggle_fitting()
 
 
 func _open_fitting() -> void:

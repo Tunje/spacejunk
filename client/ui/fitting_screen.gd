@@ -1,11 +1,14 @@
 class_name FittingScreen extends PanelContainer
 ## Fit parts to the commanded craft on its 3D hull: pick a part, pick a connector
 ## on the craft, read what the fit would do, then attach. Every verdict is from
-## Sim.check, and limits come from the view's `fit`.
+## Sim.check, and limits come from the view's `fit`. "Fit like this one" copies
+## another craft's fit on the same hull in one order (C9 copy_fit).
 
 const WIDTH_PX := 340
 const SLOT_RADIUS_PX := 8.0
 const OVER_RATIO := 1.0
+const COPY_ROW_PX := 38
+const COPY_ROWS_SHOWN := 4
 
 signal closed
 signal fit_blocked(item: String, reason: String)
@@ -30,6 +33,11 @@ var _stock_box: VBoxContainer
 var _verdict: Label
 var _attach_button: Button
 var _remove_button: Button
+var _copy_heading: Label
+var _copy_scroll: ScrollContainer
+var _copy_box: VBoxContainer
+var _copy_key := ""
+var _copy_rows: Array[Dictionary] = []
 
 
 func _ready() -> void:
@@ -68,6 +76,17 @@ func _ready() -> void:
 	_attach_button.pressed.connect(attach)
 	_remove_button = _add_button(column, "Remove selected part")
 	_remove_button.pressed.connect(remove_selected)
+	column.add_child(HSeparator.new())
+	_copy_heading = _add_label(column)
+	_copy_heading.text = "Fit like another craft"
+	_copy_heading.modulate = ClientTheme.MID_GREY.lightened(0.35)
+	_copy_scroll = ScrollContainer.new()
+	_copy_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	column.add_child(_copy_scroll)
+	_copy_box = VBoxContainer.new()
+	_copy_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_copy_box.add_theme_constant_override("separation", 4)
+	_copy_scroll.add_child(_copy_box)
 
 
 func bind(new_bridge: SimBridge, view: LocalView, new_markers: FittingMarkers) -> void:
@@ -162,6 +181,61 @@ func refresh() -> void:
 	_attach_button.disabled = not result.get("ok", false)
 	var remove := _remove_command()
 	_remove_button.disabled = remove.is_empty() or not bridge.check(remove)["ok"]
+	_sync_copy()
+
+
+## The copy_fit order for one source, taking parts from the first stock that
+## gives a valid order, docked host first. {} if no stock gives one.
+func copy_command(source: int) -> Dictionary:
+	var fallback: Dictionary = {}
+	for from: int in FittingLogic.copy_stock_units(bridge.current_view, fit_unit()):
+		var command := FittingLogic.copy_command(fit_unit(), source, from)
+		var result: Dictionary = bridge.check(command)
+		if result["ok"] and result["detail"].get("attach", 0) > 0:
+			return command
+		if fallback.is_empty():
+			fallback = command
+	return fallback
+
+
+## Copies the fit of `source` onto this craft. Parts not in stock stay missing,
+## and the log lists them.
+func copy_from(source: int) -> void:
+	var command := copy_command(source)
+	if command.is_empty() or not bridge.check(command)["ok"]:
+		return
+	bridge.submit(command)
+	chosen = {}
+	slot = {}
+	refresh()
+
+
+func _sync_copy() -> void:
+	var sources := FittingLogic.copy_sources(bridge.current_view, fit_unit())
+	var key := "%d:%s" % [fit_unit(), str(sources)]
+	if key != _copy_key:
+		_copy_key = key
+		for child: Node in _copy_box.get_children():
+			_copy_box.remove_child(child)
+			child.queue_free()
+		_copy_rows.clear()
+		for source: int in sources:
+			var button := _add_button(_copy_box, "")
+			button.pressed.connect(copy_from.bind(source))
+			_copy_rows.append({ "source": source, "button": button })
+	_copy_heading.visible = not sources.is_empty()
+	_copy_scroll.visible = not sources.is_empty()
+	_copy_scroll.custom_minimum_size = Vector2(0, mini(sources.size(), COPY_ROWS_SHOWN) * COPY_ROW_PX)
+	for row: Dictionary in _copy_rows:
+		var source_name: String = bridge.current_view["units"][row["source"]]["name"]
+		var result: Dictionary = bridge.check(copy_command(row["source"]))
+		var button: Button = row["button"]
+		if result["ok"]:
+			button.text = "Fit like %s: %s" % [source_name, FittingLogic.copy_summary(result["detail"])]
+			button.disabled = result["detail"].get("attach", 0) == 0
+		else:
+			button.text = "Fit like %s: %s" % [source_name, OrderText.reason(result["reason"])]
+			button.disabled = true
 
 
 func _check_pending() -> Dictionary:

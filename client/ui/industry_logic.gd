@@ -2,7 +2,10 @@ class_name IndustryLogic extends RefCounted
 ## Works out facilities, recipes and job text from the view and defs. Starting
 ## and cancelling stay Sim commands; nothing here decides what is allowed.
 
+## C9: jobs on one facility, counting the active one.
+const QUEUE_LIMIT := 16
 const STATUS_TEXT: Dictionary = {
+	"queued": "Queued",
 	"waiting": "Waiting",
 	"running": "Running",
 	"paused": "Paused",
@@ -50,19 +53,37 @@ static func recipes_for(facility_type: String, recipes: Dictionary) -> Array[Dic
 	return found
 
 
+## The facility's active job, at queue position 0, or {} when it is idle.
 static func job_on(view: Dictionary, facility_part: int) -> Dictionary:
+	var jobs := IndustryLogic.queue_on(view, facility_part)
+	return jobs[0] if not jobs.is_empty() and jobs[0].get("queue_pos", 0) == 0 else {}
+
+
+## Every job on the facility with its `id`, the active one first, then the queue
+## in order. A view from before C9 has no `queue_pos`, and only ever one job.
+static func queue_on(view: Dictionary, facility_part: int) -> Array[Dictionary]:
 	var ids: Array = view["jobs"].keys()
 	ids.sort()
+	var jobs: Array[Dictionary] = []
 	for id: int in ids:
 		if view["jobs"][id]["facility"] == facility_part:
 			var job: Dictionary = view["jobs"][id].duplicate()
 			job["id"] = id
-			return job
-	return {}
+			jobs.append(job)
+	jobs.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.get("queue_pos", 0) < b.get("queue_pos", 0))
+	return jobs
 
 
-static func start_command(unit_id: int, facility_part: int, recipe: Dictionary, count: int) -> Dictionary:
-	return { "type": "start_job", "unit": unit_id, "args": { "facility": facility_part, "recipe": recipe["id"], "count": count } }
+## queue_job adds to the end of the queue and starts an idle facility.
+## start_job is the pre-C9 order, kept for a Sim without the queue.
+static func start_command(unit_id: int, facility_part: int, recipe: Dictionary, count: int, idle := true) -> Dictionary:
+	var args := { "facility": facility_part, "recipe": recipe["id"], "count": count }
+	return { "type": "start_job" if idle else "queue_job", "unit": unit_id, "args": args }
+
+
+## Moves a job to a 1-based place among the queued jobs. Out of range is clamped.
+static func move_command(unit_id: int, job_id: int, position: int) -> Dictionary:
+	return { "type": "move_job", "unit": unit_id, "args": { "job": job_id, "position": position } }
 
 
 static func cancel_command(unit_id: int, job_id: int) -> Dictionary:
@@ -101,6 +122,11 @@ static func outputs_line(recipe: Dictionary, defs: Dictionary) -> String:
 		else:
 			lines.append(IndustryLogic.name_of(output.get("item", output.get("unit", "")), defs))
 	return ", ".join(lines)
+
+
+## Whether a job may move: a queued one, or an active one still waiting to begin.
+static func can_move(job: Dictionary) -> bool:
+	return job.get("queue_pos", 0) > 0 or job["status"] == "waiting"
 
 
 static func job_line(job: Dictionary, defs: Dictionary) -> String:

@@ -240,7 +240,7 @@ func test_float_in_command_is_rejected() -> void:
 
 
 func test_unmodelled_commands_are_rejected_clearly() -> void:
-	assert_eq(sim.check({ "type": "start_job", "unit": station, "args": {} })["reason"], "not_in_stub")
+	assert_eq(sim.check({ "type": "assign_core", "unit": station, "args": {} })["reason"], "not_in_stub")
 
 
 func test_set_priority_shows_in_view() -> void:

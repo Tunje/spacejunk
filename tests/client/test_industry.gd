@@ -131,12 +131,19 @@ func test_a_job_without_stock_waits_and_says_why() -> void:
 	assert_false(screen._cancel_button.disabled)
 
 
-func test_a_busy_facility_refuses_a_second_job_with_a_reason() -> void:
+## C9: on a busy facility, Start queues the job instead of refusing it.
+func test_a_busy_facility_queues_a_second_job() -> void:
 	_open_on("refinery")
 	screen.start(_refinery_recipe())
 	_run_ticks(8)
+	var queue_check: Dictionary = bridge.check(IndustryLogic.start_command(screen.unit_id, screen.facility["part"], _refinery_recipe(), 1, false))
+	if queue_check["reason"] == "unknown_command":
+		pending("The real Sim has no queue_job until C9 lands")
+		return
 	screen.start(_refinery_recipe())
-	assert_eq(screen._message.text, "Facility is busy")
+	_run_ticks(8)
+	assert_eq(screen._message.text, "")
+	assert_eq(IndustryLogic.queue_on(bridge.current_view, screen.facility["part"]).size(), 2)
 
 
 func test_cancelling_clears_the_job() -> void:

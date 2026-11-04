@@ -59,3 +59,42 @@ static func limit_line(label: String, now: String, limit: String, projected: Str
 	if projected.is_empty():
 		return "%s: %s of %s" % [label, now, limit]
 	return "%s: %s, then %s, of %s" % [label, now, projected, limit]
+
+
+## C9 "Fit like this one": other craft built on the same root module, which are
+## the only ones a fit can be copied from.
+static func copy_sources(view: Dictionary, unit_id: int) -> Array[int]:
+	var found: Array[int] = []
+	var units: Dictionary = view["units"]
+	if not units.has(unit_id):
+		return found
+	var ids: Array = units.keys()
+	ids.sort()
+	for id: int in ids:
+		if id != unit_id and units[id]["parts"]["def"] == units[unit_id]["parts"]["def"]:
+			found.append(id)
+	return found
+
+
+## Where copied parts come from: the docked host's stock first, then this craft's own.
+static func copy_stock_units(view: Dictionary, unit_id: int) -> Array[int]:
+	var found: Array[int] = []
+	var dock: Dictionary = view["units"][unit_id]["dock"]
+	if not dock.is_empty():
+		found.append(dock["target_unit"])
+	found.append(unit_id)
+	return found
+
+
+static func copy_command(unit_id: int, source: int, from: int) -> Dictionary:
+	return { "type": "copy_fit", "unit": unit_id, "args": { "source": source, "from": from } }
+
+
+## "Will fit 5, missing 1" from a copy_fit check's detail counts.
+static func copy_summary(detail: Dictionary) -> String:
+	var text := "Will fit %d" % detail.get("attach", 0)
+	if detail.get("missing", 0) > 0:
+		text += ", missing %d" % detail["missing"]
+	if detail.get("refused", 0) > 0:
+		text += ", %d won't fit" % detail["refused"]
+	return text

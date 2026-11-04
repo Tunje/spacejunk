@@ -1,0 +1,8 @@
+[
+  { "id": "stub_laser", "facility": "refinery", "seconds": 3, "power_kw": 0, "abstract": true,
+    "inputs": [{ "item": "hematite", "grams": 400000 }], "outputs": [{ "item": "stub_laser", "grams": 400000 }] },
+  { "id": "stub_radiator", "facility": "refinery", "seconds": 2, "power_kw": 0, "abstract": true,
+    "inputs": [{ "item": "hematite", "grams": 260000 }], "outputs": [{ "item": "stub_radiator", "grams": 260000 }] },
+  { "id": "stub_solar", "facility": "refinery", "seconds": 2, "power_kw": 0, "abstract": true,
+    "inputs": [{ "item": "hematite", "grams": 220000 }], "outputs": [{ "item": "stub_solar", "grams": 220000 }] }
+]
