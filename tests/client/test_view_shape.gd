@@ -5,12 +5,13 @@ extends GutTest
 const SIM_SCRIPT := "res://sim/kernel/sim.gd"
 const UNIT_FIELDS: Array[String] = [
 	"def", "kind", "name", "pos_mm", "at_target", "core", "core_tier", "task", "cycle_task", "last_cycle",
-	"op", "route", "dock", "frame", "orbit", "world_mm", "vel_um_s", "burns", "burn", "transfer",
+	"op", "route", "dock", "frame", "orbit", "world_mm", "vel_um_s", "burns", "burn", "transfer", "landed",
 	"parts", "inventory", "mass_g", "cargo", "fit", "power", "heat",
 ]
 const OP_FIELDS: Array[String] = ["type", "target", "part", "start_tick", "end_tick"]
 const OP_TYPES: Array[String] = [
 	"idle", "moving", "waiting", "docking", "undocking", "loading", "unloading", "mining", "scanning", "burning",
+	"landing", "taking_off",
 ]
 const PART_FIELDS: Array[String] = [
 	"id", "def", "parent_connector", "connector", "state", "fault", "draw_w", "priority", "children",
@@ -26,7 +27,7 @@ const TASK_FIELDS: Array[String] = [
 ]
 const DEFS_SECTIONS: Array[String] = ["modules", "items", "recipes", "templates", "sinks"]
 const BODY_FIELDS: Array[String] = [
-	"kind", "name", "pos_mm", "radius_mm", "visual_seed", "scanned", "frame", "orbit", "gm", "soi_mm", "world_mm",
+	"kind", "name", "pos_mm", "radius_mm", "visual_seed", "scanned", "frame", "orbit", "gm", "soi_mm", "planet", "world_mm",
 ]
 const FRAME_FIELDS: Array[String] = ["name", "radius_mm", "orbit", "pos_mm", "world_mm"]
 const DEPOSIT_FIELDS: Array[String] = ["body", "item", "remaining_g", "hardness"]

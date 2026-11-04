@@ -9,6 +9,7 @@ const STAR_EMISSION := Color(1.0, 0.93, 0.78)
 const STAR_ENERGY := 14.0
 const PLANET_COLOUR := Color(0.42, 0.40, 0.37)
 const OUTLINE_COLOUR := Color(1.0, 1.0, 1.0, 0.35)
+const SITE_COLOUR := Color(1.0, 0.55, 0.1)
 
 ## Hex outlines on every planet, toggled from the client (key O).
 static var show_outlines := false
@@ -19,6 +20,9 @@ var kind := ""
 var surface: MeshInstance3D
 var outline: MeshInstance3D
 var planet_cells := 0
+## The built planet, once ready: what a click is matched against.
+var planet: Dictionary = {}
+var _site: MeshInstance3D
 
 
 func build(id: int, body: Dictionary) -> void:
@@ -85,6 +89,38 @@ func planet_built(built: Dictionary) -> void:
 	surface.material_override = material
 	outline.mesh = meshes[1]
 	planet_cells = built["cells"]
+	planet = built
+
+
+## The cell under a point in the local view, from its direction off this body's
+## centre; -1 until the terrain is built. Planets don't turn, so the planet's frame
+## and the view's axes agree.
+func cell_at_point(point: Vector3) -> int:
+	if planet.is_empty():
+		return -1
+	return PlanetMesh.nearest_cell(planet, (point - position).normalized())
+
+
+## Rings one cell, such as a chosen landing site; -1 clears it.
+func show_site(cell: int) -> void:
+	if _site == null:
+		_site = MeshInstance3D.new()
+		var lines := StandardMaterial3D.new()
+		lines.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		lines.albedo_color = SITE_COLOUR
+		_site.material_override = lines
+		_site.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(_site)
+	_site.visible = cell >= 0 and not planet.is_empty()
+	if not _site.visible:
+		return
+	var corners := PlanetMesh.cell_outline(planet, cell)
+	var mesh := ImmediateMesh.new()
+	mesh.surface_begin(Mesh.PRIMITIVE_LINE_STRIP)
+	for index in corners.size() + 1:
+		mesh.surface_add_vertex(corners[index % corners.size()])
+	mesh.surface_end()
+	_site.mesh = mesh
 
 
 func set_outlines(on: bool) -> void:
