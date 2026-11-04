@@ -290,6 +290,82 @@ func test_predict_follows_the_orbit_and_the_drift() -> void:
 	assert_eq(sim.predict(999, 0, 10, 1), {})
 
 
+## A burn planned the moment the view shows a ship undocked starts on time: the undock step ends
+## in phase 2 of the next tick, before the burn looks at whether the ship is free.
+func test_a_burn_right_after_undocking_starts() -> void:
+	var game := Sim.new_game("reference", 12345)
+	var probe := 23
+	game.submit({ "type": "undock", "unit": probe, "args": {} })
+	while not game.view()["units"][probe]["dock"].is_empty():
+		game.step()
+	game.take_events()
+	game.submit({ "type": "plan_burn", "unit": probe, "args": {
+		"tick": game.current_tick() + 1, "prograde_um_s": 1_000_000, "normal_um_s": 0, "radial_um_s": 0 } })
+	game.step()
+	var types := game.take_events().map(func(e: Dictionary) -> String: return e["type"])
+	assert_true(types.has("burn_started"), str(types))
+	assert_false(types.has("burn_short"), str(types))
+
+
+## A12: a prograde burn past escape speed leaves the planet on a hyperbola, and the unit moves
+## into the star's sphere of influence on the tick it crosses the planet's.
+func test_escaping_a_planet_crosses_into_the_stars_sphere() -> void:
+	var planet: Dictionary = sim._state["bodies"][keys["Planet"]]
+	assert_gt(planet["soi_mm"], 0)
+	var orbiter := _unit("Orbiter")
+	# Start on a hyperbola 1000 km inside the sphere, heading out at 5 km/s, so the crossing comes soon.
+	var inside: int = planet["soi_mm"] - 1_000_000_000
+	var escape := OrbitMath.from_state([inside, 0, 0], [5_000_000_000, 0, -300_000_000], GM_PLANET, 0)
+	assert_true(escape["hyperbolic"])
+	escape["parent"] = keys["Planet"]
+	orbiter["orbit"] = escape
+	var before: Array[int] = []
+	var seen: Dictionary = {}
+	for i in 5000:
+		before = RailSystem.world_mm(sim._state, "units", keys["Orbiter"])
+		sim.step()
+		var crossed := _of_type(sim.take_events(), "soi_changed")
+		if not crossed.is_empty():
+			seen = crossed
+			break
+	assert_eq(seen.get("data", {}), { "from": keys["Planet"], "to": keys["Star"] })
+	assert_eq(orbiter["orbit"]["parent"], keys["Star"])
+	var after := RailSystem.world_mm(sim._state, "units", keys["Orbiter"])
+	var step_mm := IntMath.dist(before, after)
+	print("BURN escape: crossed the %d km sphere at tick %d, world step %d km" % [
+		planet["soi_mm"] / 1_000_000, sim.current_tick(), step_mm / 1_000_000])
+	assert_lt(step_mm, 10_000_000, "a tick's motion of a few km, with no jump")
+
+
+func test_a_unit_falling_into_a_planets_sphere_changes_parent() -> void:
+	var planet: Dictionary = sim._state["bodies"][keys["Planet"]]
+	var around_star := OrbitMath.state_at(planet["orbit"], GM_STAR, 0)
+	var offset: int = planet["soi_mm"] + 1_000_000
+	var r: Array = around_star["r"]
+	var v: Array = around_star["v"]
+	var orbiter := _unit("Orbiter")
+	orbiter["orbit"] = OrbitMath.from_state([r[0] + offset, r[1], r[2]], [v[0] - 5_000_000_000, v[1], v[2]], GM_STAR, 0)
+	orbiter["orbit"]["parent"] = keys["Star"]
+	var crossed := _of_type(_until("soi_changed", 20_000), "soi_changed")
+	assert_eq(crossed.get("data", {}), { "from": keys["Star"], "to": keys["Planet"] })
+	assert_eq(orbiter["orbit"]["parent"], keys["Planet"])
+	assert_lt(IntMath.dist(orbiter["pos_mm"], [0, 0, 0]), planet["soi_mm"])
+
+
+func test_save_and_load_on_a_hyperbola_is_byte_exact() -> void:
+	var orbiter := _unit("Orbiter")
+	orbiter["orbit"] = OrbitMath.from_state(orbiter["pos_mm"], [0, 0, -3_400_000_000], GM_PLANET, 0)
+	orbiter["orbit"]["parent"] = keys["Planet"]
+	sim.step(500)
+	var saved := sim.to_save()
+	var loaded := Sim.from_save(saved)
+	assert_eq(loaded.to_save(), saved)
+	sim.step(1000)
+	loaded.step(1000)
+	assert_eq(loaded.state_hash(), sim.state_hash())
+	assert_eq(sim.ledger()["violations"], PackedStringArray())
+
+
 func test_the_view_shows_burns() -> void:
 	sim.submit(_burn("Orbiter", 1, 50_000_000))
 	sim.submit(_burn("Orbiter", 900, 1_000_000))

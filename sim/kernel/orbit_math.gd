@@ -12,6 +12,10 @@ extends RefCounted
 ##
 ## Orbits are relative to the parent body. The reference plane's normal is +Y, so an orbit with no
 ## inclination has angular momentum along +Y.
+##
+## An orbit record is elliptic, or hyperbolic with `"hyperbolic": true` (A12). A hyperbolic record
+## keeps `a_mm` as the positive semi-axis, its mean anomaly in Q30 radians as `m0_rad`, because it
+## does not wrap, and its mean motion as `motion_q60`, in radians per tick in Q60.
 
 const TURN := 1 << 48
 const ANGLE_MASK := TURN - 1
@@ -61,6 +65,24 @@ const ATAN_INPUT_BITS := 58
 const SQRT_FILL_BITS := 60
 const EXP_HALVINGS := 10
 const EXP_TERMS := 6
+## e^n in Q30 for n = 0..20, so exp splits off its whole part exactly.
+const EXP_INT := [1073741824, 2918732889, 7933938573, 21566681052, 58624317204, 159357416160,
+	433178368579, 1177500887790, 3200779266274, 8700620116420, 23650737558789, 64289370135711,
+	174756626602981, 475037762497685, 1291286517629302, 3510080676205891, 9541388518555713,
+	25936183028257763, 70501855025300970, 191643911387929646, 520942161860624641]
+const EXP_FRACTION_TERMS := 14
+## ln 2 in Q30.
+const LN2 := 744261118
+const LN_TERMS := 14
+## The largest hyperbolic anomaly kept, 20 in Q30. Past it a unit is millions of radii out, so its
+## position stops there rather than overflow.
+const MAX_HYPERBOLIC_ANOMALY := 20 << 30
+const HYPERBOLIC_TOLERANCE := 16
+## Q60 for mean motion, which can be a few millionths of a radian per tick.
+const MOTION_SHIFT := 60
+## Laplace's sphere of influence: a (m / M)^(2/5).
+const SOI_POWER_NUMERATOR := 2
+const SOI_POWER_DENOMINATOR := 5
 
 static var _sine := PackedInt64Array()
 
@@ -294,6 +316,8 @@ static func eccentric_anomaly(m: int, e: int) -> int:
 
 ## Position in mm relative to the parent at a tick.
 static func position_at(orbit: Dictionary, tick: int) -> Array[int]:
+	if orbit.get("hyperbolic", false):
+		return _hyperbolic_state(orbit, 0, tick, false)["r"]
 	var sc := sin_cos(eccentric_anomaly(mean_anomaly(orbit, tick), orbit["e_q30"]))
 	var x := smul_div(orbit["a_mm"], sc[1] - int(orbit["e_q30"]), ONE)
 	var y := smul_div(orbit["b_mm"], sc[0], ONE)
@@ -302,6 +326,8 @@ static func position_at(orbit: Dictionary, tick: int) -> Array[int]:
 
 ## Position in mm and velocity in um/s relative to the parent at a tick, as { r, v }.
 static func state_at(orbit: Dictionary, gm: int, tick: int) -> Dictionary:
+	if orbit.get("hyperbolic", false):
+		return _hyperbolic_state(orbit, gm, tick, true)
 	var a: int = orbit["a_mm"]
 	var e: int = orbit["e_q30"]
 	var sc := sin_cos(eccentric_anomaly(mean_anomaly(orbit, tick), e))
@@ -328,7 +354,8 @@ static func _place(orbit: Dictionary, x: int, y: int) -> Array[int]:
 
 
 ## The orbit through position r (mm) with velocity v (um/s) at a tick: the burn-to-new-orbit
-## function. Returns {} if the orbit is not elliptic (escape, or straight up and down).
+## function. Returns an elliptic or hyperbolic record, or {} for the cases it cannot hold: straight
+## up and down, exactly parabolic, or an ellipse far outside any sphere of influence.
 ##
 ## Works in units where r is 1 and the circular speed at r is 1, so every quantity is near 1 in
 ## Q30 and no product can overflow. The periapsis angle is measured in the orbit's own plane from
@@ -343,7 +370,8 @@ static func from_state(r: Array, v: Array, gm: int, tick: int) -> Dictionary:
 	for axis in 3:
 		u.append(smul_div(v[axis], ONE << speed[1], speed[0] * UM_PER_MM))
 	var u2 := dot(u, u)
-	if u2 >= 2 * ONE:
+	# Within a few units of escape speed the orbit is parabolic, which neither form can hold.
+	if absi(u2 - 2 * ONE) <= 2:
 		return {}
 	var h := cross(x_axis, u)
 	var w_axis := unit(h)
@@ -355,8 +383,9 @@ static func from_state(r: Array, v: Array, gm: int, tick: int) -> Dictionary:
 		ecc[axis] -= x_axis[axis]
 	var ex := dot(ecc, x_axis)
 	var ey := dot(ecc, y_axis)
-	var e := root(ex * ex + ey * ey)
-	if e >= ONE:
+	var e := IntMath.dist([ex, ey, 0], [0, 0, 0])
+	# Rounding can put e on the wrong side of 1 for an orbit within a hair of parabolic.
+	if (u2 > 2 * ONE and e <= ONE) or (u2 < 2 * ONE and e >= ONE):
 		return {}
 	var periapsis: int = angle_of(ey, ex) if e > 0 else 0
 	var sc_w := sin_cos(periapsis)
@@ -367,12 +396,129 @@ static func from_state(r: Array, v: Array, gm: int, tick: int) -> Dictionary:
 		q.append(smul_div(sc_w[1], y_axis[axis], ONE) - smul_div(sc_w[0], x_axis[axis], ONE))
 	var true_anomaly := (-periapsis) & ANGLE_MASK
 	var sc_nu := sin_cos(true_anomaly)
+	if u2 > 2 * ONE:
+		return _hyperbola(gm, smul_div(r_mm, ONE, u2 - 2 * ONE), e, p, q, sc_nu, tick)
 	var big_e := angle_of(smul_div(root(ONE * ONE - e * e), sc_nu[0], ONE), e + sc_nu[1])
 	var m := big_e - to_angle(smul_div(e, sin_cos(big_e)[0], ONE))
 	var a_mm := smul_div(r_mm, ONE, 2 * ONE - u2)
 	if a_mm > MAX_A_MM or a_mm > r_mm * MAX_A_PER_R:
 		return {}
 	return make_orbit(gm, a_mm, e, p, q, m, tick)
+
+
+# ------------------------------------------------------------------------------ hyperbolic orbits
+
+## A hyperbolic orbit from its semi-axis A (positive), e > 1, directions, and the sine and cosine of
+## its true anomaly at tick epoch.
+static func _hyperbola(gm: int, a_mm: int, e: int, p: Array, q: Array, sc_nu: Array, epoch: int) -> Dictionary:
+	if a_mm <= 0 or a_mm > MAX_A_MM:
+		return {}
+	var root_e := sqrt_e2_minus_1(e)
+	# sinh H = sqrt(e^2 - 1) sin nu / (1 + e cos nu), and H = asinh of that. Taking asinh of |sinh H|
+	# avoids the cancellation that cosh H + sinh H suffers on the way in, where H is large and negative.
+	var below := ONE + smul_div(e, sc_nu[1], ONE)
+	if below <= 0:
+		return {}
+	var sinh_h := smul_div(smul_div(root_e, sc_nu[0], ONE), ONE, below)
+	var size := ln(absi(sinh_h) + IntMath.dist([sinh_h, ONE, 0], [0, 0, 0])) - 30 * LN2
+	var big_h := size if sinh_h >= 0 else -size
+	var sh := sinh_cosh(big_h)
+	var m := smul_div(e, sh[0], ONE) - big_h
+	var speed := circular_speed(gm, a_mm)
+	return {
+		"hyperbolic": true,
+		"a_mm": a_mm,
+		"e_q30": e,
+		"b_mm": smul_div(a_mm, root_e, ONE),
+		"p_q30": [p[0], p[1], p[2]],
+		"q_q30": [q[0], q[1], q[2]],
+		"m0_rad": m,
+		"motion_q60": smul_div(speed[0], 1 << (MOTION_SHIFT - speed[1]), a_mm * Sim.TICKS_PER_SECOND),
+		"epoch_tick": epoch,
+	}
+
+
+## sqrt(e^2 - 1) in Q30 for e > 1, without squaring e, which may be large.
+static func sqrt_e2_minus_1(e: int) -> int:
+	var inverse := smul_div(ONE, ONE, e)
+	return smul_div(e, root((ONE - smul_div(inverse, inverse, ONE)) * ONE), ONE)
+
+
+## Position, and if wanted velocity, on a hyperbolic orbit at a tick.
+static func _hyperbolic_state(orbit: Dictionary, gm: int, tick: int, with_velocity: bool) -> Dictionary:
+	var a: int = orbit["a_mm"]
+	var e: int = orbit["e_q30"]
+	var m: int = orbit["m0_rad"] + smul_div(tick - int(orbit["epoch_tick"]), orbit["motion_q60"], 1 << MOTION_SHIFT - 30)
+	var sh := sinh_cosh(hyperbolic_anomaly(m, e))
+	var result := { "r": _place(orbit, smul_div(a, e - sh[1], ONE), smul_div(orbit["b_mm"], sh[0], ONE)) }
+	if with_velocity:
+		var r_mm := smul_div(a, smul_div(e, sh[1], ONE) - ONE, ONE)
+		var speed := circular_speed(gm, a)
+		var scale := smul_div(speed[0], a, r_mm)
+		var shift_div := 1 << speed[1]
+		var vx := -smul_div(smul_div(scale, sh[0], ONE), UM_PER_MM, shift_div)
+		var vy := smul_div(smul_div(smul_div(scale, sh[1], ONE), smul_div(orbit["b_mm"], ONE, a), ONE),
+			UM_PER_MM, shift_div)
+		result["v"] = _place(orbit, vx, vy)
+	return result
+
+
+## The hyperbolic anomaly H for mean anomaly m, both Q30 radians: e sinh H - H = m, by Newton's
+## method from Danby's start, stopping on the residual as the elliptic solve does.
+static func hyperbolic_anomaly(m: int, e: int) -> int:
+	var sign := 1 if m >= 0 else -1
+	var big_h := sign * ln(smul_div(2 * absi(m), ONE, e) + ONE * 18 / 10) - sign * 30 * LN2
+	for i in KEPLER_STEPS:
+		big_h = clampi(big_h, -MAX_HYPERBOLIC_ANOMALY, MAX_HYPERBOLIC_ANOMALY)
+		var sh := sinh_cosh(big_h)
+		var error := smul_div(e, sh[0], ONE) - big_h - m
+		if absi(error) <= HYPERBOLIC_TOLERANCE:
+			break
+		big_h -= smul_div(error, ONE, smul_div(e, sh[1], ONE) - ONE)
+	return clampi(big_h, -MAX_HYPERBOLIC_ANOMALY, MAX_HYPERBOLIC_ANOMALY)
+
+
+## [sinh, cosh] of x in Q30.
+static func sinh_cosh(x: int) -> Array[int]:
+	var up := exp_q30(absi(x))
+	var down := smul_div(ONE, ONE, up)
+	var s := (up - down) / 2
+	return [s if x >= 0 else -s, (up + down) / 2]
+
+
+## e^x in Q30 for 0 <= x <= 20, from an exact table for the whole part and a series for the rest.
+## Not named exp, because the built-in float exp would shadow it inside this class.
+static func exp_q30(x: int) -> int:
+	var whole := mini(x >> 30, EXP_INT.size() - 1)
+	var part := x - (whole << 30)
+	var term := ONE
+	var total := ONE
+	for n in range(1, EXP_FRACTION_TERMS + 1):
+		term = smul_div(term, part, ONE * n)
+		total += term
+	return smul_div(EXP_INT[whole], total, ONE)
+
+
+## The natural log, in Q30, of a positive whole number. ln of a Q30 value is this minus 30 ln 2.
+static func ln(value: int) -> int:
+	assert(value > 0, "ln of a positive number")
+	var k := IntMath._bit_length(value) - 1
+	var m := value >> (k - 30) if k >= 30 else value << (30 - k)
+	# ln m for m in [1, 2) is 2 atanh(z), z = (m - 1) / (m + 1), which is at most 1/3.
+	var z := smul_div(m - ONE, ONE, m + ONE)
+	var z2 := smul_div(z, z, ONE)
+	var power := z
+	var total := 0
+	for n in LN_TERMS:
+		total += power / (2 * n + 1)
+		power = smul_div(power, z2, ONE)
+	return k * LN2 + 2 * total
+
+
+## The radius of a body's sphere of influence, from its orbit's semi-major axis and the two GMs.
+static func soi_mm(a_mm: int, gm: int, gm_parent: int) -> int:
+	var exponent := smul_div(ln(gm_parent) - ln(gm), SOI_POWER_NUMERATOR, SOI_POWER_DENOMINATOR)
+	return smul_div(a_mm, exp_neg(exponent), ONE)
 
 
 # ------------------------------------------------------------------------------ propellant
