@@ -190,6 +190,25 @@
       "abstract": true
     },
     {
+      "id": "landing_legs_mk1",
+      "facility": "fabricator",
+      "seconds": 60,
+      "power_kw": 60,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 2
+        }
+      ],
+      "outputs": [
+        {
+          "item": "landing_legs_mk1",
+          "count": 1
+        }
+      ],
+      "abstract": true
+    },
+    {
       "id": "lidar_mk1",
       "facility": "fabricator",
       "seconds": 120,
@@ -504,6 +523,25 @@
       "outputs": [
         {
           "item": "small_heat_radiator_mk1",
+          "count": 1
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "small_landing_legs_mk1",
+      "facility": "fabricator",
+      "seconds": 30,
+      "power_kw": 40,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 1
+        }
+      ],
+      "outputs": [
+        {
+          "item": "small_landing_legs_mk1",
           "count": 1
         }
       ],
