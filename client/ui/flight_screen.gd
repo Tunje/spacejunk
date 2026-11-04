@@ -242,6 +242,10 @@ func _show_preview(view: Dictionary, flying: bool) -> void:
 		var lines := FlightLogic.preview_lines(preview["detail"], view, unit_id(), bridge.ticks_per_second())
 		_cost.text = lines[0]
 		_after.text = lines[1]
+		var busy := FlightLogic.busy_note(unit())
+		if not busy.is_empty():
+			_after.text += "
+" + busy
 
 
 ## Rows for the running burn and each planned one, each with a button to drop it.

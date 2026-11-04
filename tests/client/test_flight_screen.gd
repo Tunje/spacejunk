@@ -343,3 +343,37 @@ func test_a_finished_burn_is_logged_with_its_delta_v() -> void:
 	screen.plan()
 	_ticks(burn_ticks + 5)
 	assert_eq(main.event_log.lines[-1], "First Probe: burn done, 10.0 m/s")
+
+
+## Once A11 is in: a real burn on the reference probe, which is in the old world
+## with no frames, flown from the screen.
+func test_a_real_burn_from_the_screen() -> void:
+	_start("reference")
+	if bridge.check(FlightLogic.burn_command(ship, 5, [1, 0, 0]))["reason"] == "unknown_command":
+		pending("The real Sim has no plan_burn until A11")
+		return
+	assert_true(main.order_panel.press("Undock"))
+	var waited := 0
+	while not _unit()["dock"].is_empty() and waited < 600:
+		_ticks(10)
+		waited += 10
+	_open()
+	screen.burn_now()
+	screen.set_components(2.0)
+	if _unit()["op"]["type"] != "idle":
+		assert_string_contains(screen._after.text, "a burn that starts before that ends is dropped")
+	while (_unit()["op"]["type"] != "idle" or _unit()["task"] != 0) and waited < 900:
+		_ticks(1)
+		waited += 1
+	screen.burn_now()
+	screen.set_components(2.0)
+	assert_false(screen._after.text.contains("dropped"), "free to burn now")
+	assert_string_starts_with(screen._cost.text, "Delta-v 2.0 m/s")
+	assert_string_starts_with(screen._after.text, "Then drifting 2.0 m/s")
+	var burn_ticks: int = screen.preview["detail"]["burn_ticks"]
+	screen.plan()
+	_ticks(burn_ticks + 10)
+	assert_eq(FlightLogic.speed_of(_unit()["vel_um_s"]), 2_000_000)
+	assert_string_ends_with(screen._place.text, "drifting 2.0 m/s")
+	assert_gt(screen.current_path.size(), 2, "predict draws the drift")
+	assert_eq(main.event_log.lines[-1], "Probe: burn done, 2.0 m/s")

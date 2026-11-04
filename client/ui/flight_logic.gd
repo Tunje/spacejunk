@@ -99,6 +99,17 @@ static func preview_lines(detail: Dictionary, view: Dictionary, unit_id: int, ti
 	return PackedStringArray([cost, after])
 
 
+## A burn whose tick finds the craft on another order is dropped (A11), so say so
+## while it is busy. "" when it is free, or already burning.
+static func busy_note(unit: Dictionary) -> String:
+	var op: String = unit["op"]["type"]
+	if op != "idle" and op != "burning":
+		return "%s now: a burn that starts before that ends is dropped." % OrderText.operation(op)
+	if not unit["route"].is_empty() or unit["task"] != 0:
+		return "Busy with an order: a burn that starts before it ends is dropped."
+	return ""
+
+
 ## A planned burn's row: "In 12 s: 20.0 m/s prograde".
 static func planned_text(burn: Dictionary, tick: int, ticks_per_second: int) -> String:
 	return "In %s: %s" % [OrderText.duration(float(burn["tick"] - tick) / ticks_per_second), FlightLogic.components_text(burn)]

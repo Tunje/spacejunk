@@ -12,6 +12,8 @@ class_name ScreenshotDriver extends Node
 ##   --jobs=<recipe id>[,<id>...]    opens the jobs screen and starts or queues each recipe
 ##   --fly=<m/s>[,<normal>,<radial>]  opens flight on the commanded craft with that burn typed in
 ##   --fly-at=peri|apo|<seconds>     places it at an apsis or so many seconds ahead
+##   --fly-delay=<frames>            waits first, such as for an undock to finish
+##   --fly-plan=<frames>             plans the burn, then runs that many frames
 ##   --copy=1                        (stub_load) strips two parts off the first ship and
 ##                                   opens fitting there, to show "Fit like this one"
 ##   --fit=<item>  --fit-slot=<connector>  opens fitting after the orders and picks both
@@ -96,7 +98,7 @@ func _run() -> void:
 	if parsed.has("copy"):
 		_open_copy_fit()
 	if parsed.has("fly"):
-		_open_flight()
+		await _open_flight()
 	if parsed.has("drone"):
 		_show_demo_drone()
 	if parsed.has("goals-done"):
@@ -265,6 +267,8 @@ func _open_jobs() -> void:
 
 
 func _open_flight() -> void:
+	for i in range(int(parsed.get("fly-delay", "0"))):
+		await get_tree().process_frame
 	main.toggle_flight()
 	var screen: FlightScreen = main.flight_screen
 	var values: PackedFloat64Array = []
@@ -282,6 +286,11 @@ func _open_flight() -> void:
 		var seconds:
 			screen.burn_tick = main.bridge.current_view["tick"] + 1 + roundi(float(seconds) * main.bridge.ticks_per_second())
 	screen.set_components(values[0], values[1], values[2])
+	if parsed.has("fly-plan"):
+		screen.plan()
+		for i in range(int(parsed["fly-plan"])):
+			await get_tree().process_frame
+		screen.set_components(values[0], values[1], values[2])
 
 
 ## Takes the laser and solar slab off the first ship into its own hold, so another
