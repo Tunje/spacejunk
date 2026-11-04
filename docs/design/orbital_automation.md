@@ -8,6 +8,7 @@ Status: proposal for the owner, written by Agent C (gameplay). Nothing here is d
 - **Where things orbit matters more than how flight works.** If the station and rocks stay a cluster in orbit around the star, distances barely change, and the cycle, the lap figures and the tests all stay as they are. If the station orbits a planet and the rocks are elsewhere, transfer windows appear, laps vary, and most of the cost in this page applies.
 - **B recommends the cluster for the slice.** [planets.md](planets.md) keeps the station and the three rocks in one shared solar orbit, and proposes planets only after M4. So for the slice, automation needs no change. The window cost in sections 3 to 7 starts with a later planet scenario.
 - **Tier 2 should wait for the window.** A lap leaves on the next transfer window, then follows its steps as today. It never takes a costlier path and never plans ahead. That keeps tier 2 a fixed cycle, as [spec.md](spec.md) section 5 defines it.
+- **Planet trips are expeditions, not laps.** Inside a planet's gravity a transfer takes about half an orbit, and windows recur only once per synodic period, often hours apart. A repeating mining lap fits the rock cluster. Around a planet, a cycle is closer to an expedition, unless time warp goes well beyond 8x.
 - **Orbits give tier 3 its first real job.** Choosing between waiting and paying more, cutting mining short to catch a window, and spacing drones so they don't queue at a port are real decisions. Today tier 3 would have little to do beyond picking deposits.
 - **The fixed lap figures survive only in the cluster layout.** Around a planet, a test asserts the schedule the window rule gives, which a person can still work out by hand, and not one number per lap.
 - **Recommendation: change nothing before the M4 judgement.** If the owner wants orbits afterwards, the cheapest version that keeps automation intact is real orbits with the autopilot, with each mining route in one orbit around the planet (section 2, layout B). Tier 3 waits until after that.
@@ -38,12 +39,12 @@ So in layout C, rocks close to the station's orbit have the rarest windows. A dr
 
 ## 3. Tier 2 cycles when things orbit
 
-**Rule: each `move_to` leaves on the next window, and the cycle is otherwise unchanged.** A's flight model defines what a window is. For circular orbits in one plane, the cheapest transfer comes round once per synodic period, the time for the two orbits to line up again. A tier 2 drone takes that one.
+**Rule: each `move_to` leaves on the next window, and the cycle is otherwise unchanged.** A's flight model defines what a window is. For circular orbits in one plane, a Hohmann transfer comes round once per synodic period, the time for the two orbits to line up again, and the next one is worked out in closed form. A tier 2 drone takes that one. Inside the rock cluster there are no windows, and a `move_to` leaves at once, as today.
 
 | Question | Answer |
 | -------- | ------ |
 | Does a lap wait for a window? | Yes. The `move_to` step waits in place, then flies. |
-| Does it take a costlier path to go now? | No. That is a choice, and tier 2 makes none. The player can still order "go now" as a single order, at the quoted cost. |
+| Does it take a costlier path to go now? | No. In A's first step there is no costlier path to take: with Hohmann transfers only, every window costs the same, and no transfer leaves between windows. A paid early departure needs Lambert transfers, which A leaves for later. Even then, choosing to pay is a decision, so tier 2 still waits. |
 | Does the cycle plan its windows? | No. Each move looks only at its own next window when it becomes current. Planning across a whole lap is tier 3. |
 | Where does it wait? | After undocking, parked at the standoff beside the station. Waiting docked would hold the port for hours. |
 
@@ -59,7 +60,7 @@ Today tier 3 is defined as "chooses and re-plans a whole operation". Straight-li
 
 Orbits give it real decisions:
 
-- **Wait or pay.** Go now at a higher cost, or wait for the cheaper window, given the propellant aboard and stocked at the station.
+- **Wait or pay.** Go now at a higher cost, or wait for the cheaper window, given the propellant aboard and stocked at the station. This needs A's later Lambert transfers, because with Hohmann transfers alone every departure costs the same.
 - **Cut mining short.** Leave with 80 % of a hold to catch a window rather than wait a full synodic period with 100 %.
 - **Choose the route by window.** Mine the rock whose window opens first, not always the same one.
 - **Stagger drones.** Spread the drones on one route over different windows, so they don't queue at the port together.
@@ -73,13 +74,13 @@ Section numbers are those of [autonomy.md](autonomy.md).
 
 | Rule today | Change | Size |
 | ---------- | ------ | ---- |
-| `move_to` is priced from straight-line distance by `Travel.quote`, and leaves at once | Priced by the flight model at a departure tick. Tier 2 waits for the next window. An order can choose "now" or "next window". | Medium: `MoveStep`, `CargoSystem` routes, the flight model |
+| `move_to` is priced from straight-line distance by `Travel.quote`, and leaves at once | Inside the cluster, unchanged. Into or around a planet, priced by the flight model at a departure tick, and both orders and cycles leave on the next window. | Medium: `MoveStep`, `CargoSystem` routes, the flight model |
 | `stop` or a new order halts a moving unit in open space, with no refund | Once a transfer has departed, it is atomic, as docking is today: the task ends, but the unit coasts on to arrive. A stop during a wait cancels freely. | Small: the `is_atomic` hook exists |
 | Re-entry, section 5: "halted in open space" re-enters at the `move_to` | Can't happen any more, because no unit is left floating. Re-entry otherwise works as it does now. | Removes cases |
 | The standoff is a fixed point short of the target, and `at_target` is stored | `at_target` becomes "parked with": the unit's position follows the target's, plus the standoff offset, with no propellant spent holding station. Docked units already move with the station. | Small, if A agrees the position is derived |
 | Cycle closure, section 5 | Unchanged. Placement (docked, or at a target) means the same thing. | None |
 | Port queue, section 8 | The rule is unchanged, but it matters more, because arrivals bunch (section 3). | Tests only |
-| `no_propellant` is checked per trip, as the trip starts | Add one check at the lap gate: the propellant aboard must cover every `move_to` in the lap at its window cost. A drone then can't be stranded at a rock whose window home costs more than the window out. Windows can be predicted, so the check is exact. | Small |
+| `no_propellant` is checked per trip, as the trip starts | Add one check at the lap gate: the propellant aboard must cover every `move_to` in the lap. A drone then can't be stranded at a rock whose trip home costs more than the trip out. With Hohmann transfers a leg's cost doesn't depend on the window taken, so the check is exact. | Small |
 | Mining, transfers, docking and undocking | Unchanged, since they are relative to the target. | None |
 | A solar-powered drone has constant power | Around a planet it passes through the planet's shadow every orbit. A mining laser on solar power alone is shed, and the step is held with `no_power` until the drone leaves the shadow. That is today's rule working as written, but laps stretch, and batteries start to matter. | None in autonomy. B's balance, A's power model. |
 
@@ -87,7 +88,7 @@ Commands, events and the view gain one operation, `waiting`, with its departure 
 
 ## 6. Lap figures, tests and saves
 
-**Layout A or B.** The lap figures survive. In layout A, each rock needs the same orbit size as the station, otherwise the slow drift moves laps by a few ticks over a session. In layout B the figures change once, because trips take about an orbit, and stay fixed after that.
+**Layout A or B.** The lap figures survive. In layout A the drift is slow but never stops: a rock 50 km nearer the star drifts about 100 m over a slice run, but about 5 km over a 100-hour game. A's page proposes one of two fixes, and either keeps today's laps exact. Either the cluster is one co-moving frame, with today's straight trips exact inside it, or every rock gets the station's orbit period, which [planets.md](planets.md) section 9 now requires. In layout B the figures change once, because trips take about an orbit, and stay fixed after that.
 
 **Layout C.** Fixed per-lap numbers go, but the tests stay exact. The window rule is deterministic, so for circular orbits in one plane every departure tick can be worked out by hand from the orbit periods. The golden test then asserts:
 
@@ -98,9 +99,9 @@ Commands, events and the view gain one operation, `waiting`, with its departure 
 
 [reference_scenario.md](reference_scenario.md) would then list a schedule of departures and arrivals in place of a single lap figure. It stays checkable with a calculator, as now.
 
-**Determinism.** This holds if positions are a pure function of the tick and stored orbit elements, computed in integers or fixed point, with no floating-point maths in the sim. That is A's choice to make. Autonomy itself still uses no RNG and reads no events, so it adds no new risk.
+**Determinism.** A has proved this holds. A body's position is a pure function of the tick, taken mod an integer period in ticks, so it can't drift. A's throwaway proof gave identical positions stepped, after a save and load, at 8x, and evaluated directly, and still identical after 1000 periods in game year 30. Autonomy itself still uses no RNG and reads no events, so it adds no new risk.
 
-**Saves.** A transfer in progress is stored as a record (departure tick, arrival tick and the transfer's parameters), as today's route is. Loading recomputes the position from the record and the tick. Three new save tests would cover this: mid-transfer, mid-wait, and parked at a rock. The determinism replay would also add a save during a wait and one mid-transfer.
+**Saves.** A transfer in progress is stored as {depart_tick, arrive_tick, parent body, transfer orbit elements}, as today's route is stored. Loading recomputes the coast position from those elements and the tick. The arrival point is fixed at departure: the target's position at `arrive_tick`, plus the standoff. Three new save tests would cover this: mid-transfer, mid-wait, and parked at a rock. The determinism replay would also add a save during a wait and one mid-transfer.
 
 ## 7. Cost, and what can wait
 
@@ -114,25 +115,27 @@ Keep today's straight-line flight as one flight model behind the same quote func
 | A test flight model with windows every N ticks, for fast cycle tests | C | Small | After, with the above |
 | Save, replay and window-schedule tests | C | Medium | After |
 | Reference scenario Part A and Part E as departure schedules | B, with C | Medium | After |
-| Client: show the wait and its countdown, and a "go now or wait" choice on the order | D | Medium | After |
+| Client: show the wait and its countdown on the order and the cycle | D | Medium | After |
 | Tier 3 planning (section 4) | C | Large | After the above has been played |
 
 **Before M4, I'd change nothing.** M4 judges the slice as it stands, and every row above moves figures that M2 and M3 rest on. With B's cluster layout, the slice wouldn't need any of these rows anyway, so they are all post-M4 cost, for a planet scenario.
 
 ## 8. Agreed with A
 
-Not yet agreed. I've asked A to confirm five assumptions this page rests on, and this section records their answers:
+A (newmanprobe-db) agrees all five assumptions, with these details:
 
-1. Bodies and units in transfer move on rails, as a pure function of the tick, in integer or fixed-point maths.
-2. The flight model offers `quote(unit, target, depart_tick)` and `next_window(unit, target, from_tick)`, cheaply, in closed form for circular orbits in one plane.
-3. A parked, mining or docked unit's position is derived from its target's, with no propellant spent holding station.
-4. A departed transfer is atomic. Before departure, a stop cancels freely.
-5. In layout A the relative drift is negligible.
+1. **Rails**, for A's options 2 and 3. A body's position is a pure function of the tick, from stored elements and an integer period in ticks. A transfer is a stored record, and its coast position comes from that record.
+2. **The two queries.** `quote(unit, target, depart_tick)` gives `{ arrive_tick, cost_g }` in closed form for a Hohmann transfer between circular orbits in one plane. Time of flight is half the transfer orbit's period, fixed for each pair of orbits, and `cost_g` comes from the rocket equation in integers. `next_window` is also closed form, because the phase gap closes at a constant rate. Eccentric orbits need a bounded search. Inside the rock cluster, today's straight-line quote stays.
+3. **Parking.** Co-moving: the target's position plus a fixed offset, in a frame that doesn't rotate, with no propellant spent holding station. A landed unit's position comes from its planet cell, and planets don't rotate in the proposal.
+4. **Atomic after departure.** This fits the autopilot. A paid trip runs to arrival, unaffected by faults or power, and a stop while waiting for a window cancels with nothing paid.
+5. **Scale.** The cluster's drift is negligible over a slice run but adds up over a long game, and A's page proposes the two fixes in section 6.
 
-**From B**, as B's recommendation and not a decision: in the slice, the station and the three rocks stay one cluster in a shared solar orbit, with no planet near them, so the fixed laps hold. Planets come only after M4. For the laps to stay exact, each rock should share the station's orbit size (section 6).
+A also adds the pacing fact in section 1. With a 600 km planet at Kerbin gravity, a low orbit takes about 33 minutes, so a planet trip takes 15 to 20 minutes of game time. Even with the orbit compressed to 10 minutes, A measured a 5.3-minute trip from 700 to 760 km, with an 86-minute synodic period.
+
+**From B**, as B's recommendation and not a decision: in the slice, the station and the three rocks stay one cluster in a shared solar orbit, with no planet near them, so the fixed laps hold. Planets come only after M4. [planets.md](planets.md) section 9 now places the rocks ahead of, behind, above or below the station, never nearer the star or farther from it.
 
 ## 9. Questions for the owner
 
 1. **Layout after M4.** The slice stays a cluster around the star, as B recommends. For a later planet scenario: one ring around a planet (fixed but slower laps), or different orbits (windows, waiting and a real job for tier 3)?
-2. **Tier 2 waiting.** Is a drone that sits for an hour of game time waiting for a window acceptable for tier 2, given that tier 3 is the answer to it?
+2. **Tier 2 waiting.** Is a drone that sits for an hour of game time waiting for a window acceptable for tier 2, given that tier 3 is the answer to it? Or should planet trips stay player-run expeditions, with automated laps kept to the cluster?
 3. **Timing.** May this all wait until after the M4 judgement, as recommended?
