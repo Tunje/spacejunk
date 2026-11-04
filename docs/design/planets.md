@@ -97,6 +97,8 @@ Today a deposit is an entity on a body. A scenario lists bodies (`star` or `aste
 
 **Landing.** A craft lands on a hex, not on a point. Landing is allowed on a landable type with slope below the craft's limit. The landed position is the cell's centre at its integer height. The planet does not rotate in this proposal, so a landed unit never moves. Landing and takeoff are autopilot operations with an integer delta-v cost, set out in [orbital_flight.md](orbital_flight.md). No descent is simulated. This page only fixes where a craft may end up.
 
+Landing is expensive. On a 600 km airless planet, landing from low orbit or taking off to it costs about 2.3 to 2.6 km/s each way. That is 54 to 58% of the ship's mass in propellant at 3000 m/s exhaust speed (Agent A's figures). A craft cannot carry enough for the round trip as well as useful cargo, so a return from the surface needs propellant made there. This gives polar and highland ice hexes their main job: water is the post-slice propellant chain, so a base on an ice hex is what makes a planet worth landing on.
+
 ### 3.3 What changes
 
 | Today | With planets |
