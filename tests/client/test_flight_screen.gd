@@ -41,7 +41,7 @@ func _unit() -> Dictionary:
 # --- Drawing maths ---
 
 func _sample_orbits() -> Array[Dictionary]:
-	var gm := StubSim.MOON_GM
+	var gm := StubSim.PLANET_GM
 	var orbits: Array[Dictionary] = [
 		OrbitMath.make_orbit(gm, 400_000_000, 0, [OrbitMath.ONE, 0, 0], [0, 0, -OrbitMath.ONE], 0, 0),
 	]
@@ -135,7 +135,7 @@ func test_it_says_where_the_craft_is() -> void:
 	_start(StubSim.SCENARIO_ORBIT)
 	_open()
 	assert_eq(screen._title.text, "Flight: First Probe")
-	assert_eq(screen._place.text, "Orbiting Pebble: 150.0 km x 150.0 km")
+	assert_eq(screen._place.text, "Orbiting Cairn: 100.0 km x 100.0 km")
 	assert_true(screen._diagram.visible)
 	assert_gt(screen.current_path.size(), 50, "the current orbit from predict")
 
@@ -146,8 +146,8 @@ func test_a_prograde_burn_previews_the_higher_orbit() -> void:
 	assert_true(screen._plan_button.disabled, "nothing to plan yet")
 	screen.set_components(60.0)
 	assert_string_starts_with(screen._cost.text, "Delta-v 60.0 m/s")
-	assert_string_starts_with(screen._after.text, "Then 150.0 km x ")
-	assert_string_ends_with(screen._after.text, "above Pebble")
+	assert_string_starts_with(screen._after.text, "Then 100.0 km x ")
+	assert_string_ends_with(screen._after.text, "above Cairn")
 	assert_false(screen._plan_button.disabled)
 	assert_gt(screen.planned_path.size(), 100)
 	assert_false(screen.marker.is_empty())
@@ -219,8 +219,8 @@ func test_a_burn_raises_the_orbit_the_screen_reports() -> void:
 	_ticks(burn_ticks + 10)
 	assert_true(_unit()["burn"].is_empty())
 	var high := OrbitPath.apsides_mm(_unit()["orbit"])[1]
-	assert_gt(high, StubSim.PROBE_ORBIT_MM * 1.2)
-	assert_ne(screen._place.text, "Orbiting Pebble: 150.0 km x 150.0 km")
+	assert_gt(high, StubSim.PROBE_ORBIT_MM * 1.05)
+	assert_ne(screen._place.text, "Orbiting Cairn: 100.0 km x 100.0 km")
 	assert_ne(promised, "")
 
 
