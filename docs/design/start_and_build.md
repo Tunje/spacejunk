@@ -251,7 +251,7 @@ Research (section 5) can be split off and done after the new start works. Withou
 4. **Display names.** Rename `starter_hull` to "Medium Hull" and `command_hub` to "Large Hub" by `name` only, keeping their IDs to avoid churn in tests.
 5. **The fixture.** Keep today's scenario as `station_fixture.json` for tests (recommended), or move every test to the new start.
 6. **Where the cluster orbits.** A leaves this to B10 ([orbital_flight.md](orbital_flight.md) section 11.2).
-   - **The star (recommended):** a circular orbit at 1 AU, which is where today's star position already puts the cluster. There's no planet shadow, so every power figure and lap stays as it is, in line with "leave the pacing figures as they are". The cost is that the first planet is an interplanetary trip, which needs spheres of influence (A12) and the planner (A13) first.
+   - **The star (recommended, and A agrees):** a circular orbit at 1 AU, which is where today's star position already puts the cluster. A's integer trig keeps the frame's absolute position within about 150 m at that distance, with no drift, and nothing inside the frame sees even that. There's no planet shadow, so every power figure and lap stays as it is, in line with "leave the pacing figures as they are". The cost is that the first planet is an interplanetary trip, which needs spheres of influence (A12) and the planner (A13) first.
    - **A 600 km planet, at a 1000 km orbit:** the planet is the first place to explore, with trips of about 22 minutes, 364 m/s each way and a window every 79 minutes (A's section 5 table). But the cluster would spend about a fifth of each 56-minute orbit in the planet's shadow (A16), which changes every solar figure in the start and the drone's laps.
 
 ## 9. Schema fields for orbits (for the Lead's single pass)
@@ -266,13 +266,13 @@ A needs these before A10 ([orbital_flight.md](orbital_flight.md) section 11.4). 
 | `thrust_kn` | 3 | 0.15 | Today's propellant flow times exhaust speed: 1 kg/s and 0.05 kg/s. Propellant per second therefore stays as it is |
 
 - **Burn times.** The loaded probe, about 8.8 t with a full tank, accelerates at about 0.34 m/s², so a 100 m/s burn takes about 5 minutes. The drone, at about 0.68 t, accelerates at about 0.22 m/s². These are first figures for B6.
-- **Removing `speed_m_s` and `propellant_kg_per_s`.** A's plan removes `speed_m_s`, and flow follows from thrust over exhaust speed. But A also keeps in-frame travel "word for word", and today's in-frame trips read `speed_m_s`, `propellant_kg_per_s` and `rated_mass_kg` ([networks.md](networks.md) section 6). **Open with A:** keep the three fields for in-frame trips until A10 replaces them, or derive the in-frame speed from thrust. Until A says which, I'd keep them, since they hold every reference figure.
+- **The old fields stay.** Agreed with A: `speed_m_s`, `propellant_kg_per_s` and `rated_mass_kg` are kept, because in-frame trips still read them ([networks.md](networks.md) section 6). Burns outside a frame read only `exhaust_m_s` and `thrust_kn`. A is correcting orbital_flight.md section 11.4, which said `speed_m_s` goes.
 
 ### 9.2 Bodies, frames and scenarios
 
 | Field | On | Star | Planet (600 km) | Rocks |
 | ----- | -- | ---- | --------------- | ----- |
-| `gm_m3_s2` | Star, planet | 132712440018000000000 | 3531600000000 | None: rocks have no gravity in the frame |
+| `gm_km3_s2` | Star, planet | 132712440018 | 3531.6 | None: rocks have no gravity in the frame |
 | `soi_m` | Planet | None: the root body has no sphere of influence | About 1.5 × 10^11 if it orbits at 1 AU | None |
 | `orbit` | Planet, frame | None | Parent, plus elements in A's units, which A9 fixes | None: members of the frame |
 | `seed`, `kind` and settings | Planet | | As in [planets.md](planets.md) section 1 | |
@@ -280,6 +280,9 @@ A needs these before A10 ([orbital_flight.md](orbital_flight.md) section 11.4). 
 
 Scenarios gain a `frames` list: `key`, `orbit` and `radius_m`. Body kinds gain `planet`.
 
-**One problem for the Lead:** Godot reads JSON numbers as floats, so [schemas.md](schemas.md) keeps whole numbers within 2^53. The star's GM, about 1.3 × 10^20, is beyond that, while the planet's 3.5 × 10^12 fits. Proposal: write `gm_m3_s2` as a decimal string in `data/`, which the loader parses exactly and the validator checks. A smaller unit doesn't work, because the planet's GM is not a whole number of km³/s².
+**GM units, agreed with A.** The star's GM is 1.327 × 10^20 m³/s², which fits neither JSON's 2^53 nor a 64-bit integer. So:
+- **Data** states `gm_km3_s2` as a plain JSON number: the star is 132712440018, exact under 2^53, and the planet is 3531.6.
+- **The simulation unit** is 1000 m³/s². The loader multiplies by 10^6 under the usual exact-conversion rule, so the star becomes 1.327 × 10^17, the planet 3,531,600,000, and a moon of about 200 km roughly 65,000,000.
+- A is correcting the range row in orbital_flight.md section 11.4 with the Lead.
 
 The new start's propellant gets tighter under the rocket equation. A's figures put a round trip between orbits at 5 to 44% of a ship's mass, and landing at 54 to 58%. That adds weight to decision 1, option A: making propellant from ice.
