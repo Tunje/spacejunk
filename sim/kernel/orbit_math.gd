@@ -249,6 +249,13 @@ static func circular_speed(gm: int, r_mm: int) -> Array[int]:
 	return scaled_sqrt(smul_div(gm, MM3_PER_GM_UNIT, r_mm))
 
 
+## Speed in um/s at radius r on an orbit with semi-major axis a, by vis-viva.
+static func speed_um_s(gm: int, r_mm: int, a_mm: int) -> int:
+	var squared := smul_div(gm, 2 * MM3_PER_GM_UNIT, r_mm) - smul_div(gm, MM3_PER_GM_UNIT, a_mm)
+	var scaled := scaled_sqrt(maxi(0, squared))
+	return smul_div(scaled[0], UM_PER_MM, 1 << scaled[1])
+
+
 ## The period in 1/SUB_TICKS ticks of an orbit with semi-major axis a.
 static func period_sub(gm: int, a_mm: int) -> int:
 	var speed := circular_speed(gm, a_mm)
