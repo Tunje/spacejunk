@@ -37,7 +37,7 @@ static func _add_body(ctx: SimContext, entry: Dictionary, deposits: Dictionary, 
 	var body := {
 		"id": id, "name": entry["name"], "kind": entry["kind"], "pos_mm": entry.get("pos_mm", [0, 0, 0]).duplicate(),
 		"radius_mm": entry["radius_mm"], "visual_seed": entry["visual_seed"], "scanned": false,
-		"frame": 0, "orbit": {}, "gm": entry.get("gm", 0),
+		"frame": 0, "orbit": {}, "gm": entry.get("gm", 0), "soi_mm": 0,
 	}
 	ctx.state["bodies"][id] = body
 	for def: String in entry["deposits"]:
@@ -69,6 +69,9 @@ static func _place_bodies(ctx: SimContext, scenario: Dictionary, keys: Dictionar
 			if body["orbit"].is_empty():
 				return "body %s orbits nothing with gravity" % entry["key"]
 			body["pos_mm"] = OrbitMath.position_at(body["orbit"], ctx.state["tick"])
+			if body["gm"] > 0:
+				var parent_gm: int = ctx.state["bodies"][body["orbit"]["parent"]]["gm"]
+				body["soi_mm"] = OrbitMath.soi_mm(body["orbit"]["a_mm"], body["gm"], parent_gm)
 		if entry.has("frame"):
 			if not ctx.state["frames"].has(keys.get(entry["frame"], 0)):
 				return "body %s is in an unknown frame" % entry["key"]

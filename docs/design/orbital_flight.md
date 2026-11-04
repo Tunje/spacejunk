@@ -408,3 +408,29 @@ Sizes compare with earlier kernel tasks: **S** is about A7's size, **M** about A
   - Leaving the cluster frame at 1 AU puts the unit 304 m from where the frame plus its drift would have, which is the integer precision at 1 AU that A9 predicted.
   - A save and load midway through two burns, one on an orbit and one in a frame, is byte-exact and runs on identically.
 - **Tests:** tests/sim/networks/test_burns.gd, 13 tests. They patch B13's thruster figures (3 kN, 3000 m/s) into the cached data until B13 is on main.
+
+### 11.11 A12 results: hyperbolic orbits and spheres of influence
+
+- **Hyperbolic orbits** are a second kind of record in `OrbitMath`, as contracts.md section 1 describes.
+  - `from_state` now returns one for anything past escape speed. Only an exactly parabolic state is refused, which rounding makes vanishingly rare.
+  - Kepler's equation for a hyperbola, e sinh H − H = M, is solved by Newton's method in integers.
+  - The hyperbolic anomaly is clamped at 20, by which point a unit is millions of radii out.
+- **New integer functions:**
+  - `exp_q30`: an exact table of e^0 to e^20, plus a series for the fraction.
+  - `ln`: by powers of 2, then 2 atanh.
+  - `sinh_cosh`.
+  - `soi_mm`: Laplace's a (m / M)^(2/5), checked against Kerbin's public sphere of influence of about 84,159 km to within 1e-5.
+- **Spheres of influence:**
+  - The scenario builder gives each orbiting body with gravity a `soi_mm`.
+  - In phase 5, `BurnSystem` moves a unit's orbit up to its parent's parent when it passes its parent's sphere, or down into a child body's.
+  - It is checked every tick, so the change comes on the first tick past the boundary at any speed, with no search.
+- **The A11 follow-up D found:** `BurnSystem` now runs after `TaskSystem`, so a burn planned for the tick after an undock starts on time instead of being dropped as `part_busy`.
+- **Measured:**
+  - Hyperbolic positions are within 100 parts per billion of the distance, against a float reference.
+  - The state-to-orbit round trip on a hyperbola is within 40 mm over 1000 s.
+  - A unit leaving a planet at 5 km/s crosses the 279,240 km sphere with a world-position step of one tick's motion and no jump. One falling in changes parent the same way.
+  - A save and load on a hyperbola is byte-exact.
+- **For D:** `position_float` in tests/sim/kernel/test_orbit_math.gd now draws hyperbolic records too. The view gives each body its `soi_mm`, for drawing spheres on the map.
+- **Not done:**
+  - Crashing into a body. A unit whose path goes through a planet passes through it until landing exists in A15.
+  - Predicting a sphere change ahead of time. `predict` still follows the current orbit only. A13's planner will need the crossing tick, found by bounded integer search on the rails function.

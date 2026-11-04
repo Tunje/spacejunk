@@ -14,7 +14,8 @@ const MAX_TICK := 1_000_000_000_000_000
 const MAX_POSITION_MM := 4_000_000_000_000_000_000
 ## Orbit fields (orbital_flight.md section 11.4): Q30 ratios and directions, binary angles, periods
 ## in sub-ticks, and GM in units of 1000 m^3/s^2.
-const MAX_Q30 := 2 << 30
+## Q30 values reach 2^40, so a hyperbola's eccentricity can be up to 1024.
+const MAX_Q30 := 1 << 40
 const MAX_SUBTICKS := 1 << 55
 const MAX_GM := 9_000_000_000_000_000_000
 const GM_KEY := "gm"

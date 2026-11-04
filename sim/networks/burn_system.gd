@@ -12,6 +12,8 @@ extends SimSystem
 ##   drifting unit leaves the frame for an orbit past LEAVE_MARGIN_MM beyond the frame's radius.
 ## - A unit on an orbit joins a frame within JOIN_MARGIN_MM of its radius at under JOIN_SPEED_UM_S.
 ##   The two margins differ so a slow unit at the edge cannot flap in and out.
+## - A unit on an orbit changes parent on the tick it crosses a sphere of influence (A12): up to the
+##   parent's parent when it passes its parent's `soi_mm`, or down to a child body inside the child's.
 ##
 ## Register after UnitSystem, whose unit views this adds to, and after TaskSystem, so a step that
 ## ends in phase 2 has freed the unit before a burn on the same tick looks. Register before
@@ -105,6 +107,7 @@ func run(ctx: SimContext) -> void:
 		if unit["orbit"].is_empty():
 			_drift(ctx, id)
 		else:
+			_cross_soi(ctx, id)
 			_try_join(ctx, id)
 
 
@@ -418,6 +421,51 @@ func _try_join(ctx: SimContext, unit_id: int) -> void:
 		unit["drift_carry"] = [0, 0, 0]
 		ctx.emit_event("frame_joined", unit_id, { "frame": frame_id })
 		return
+
+
+## Moves a unit's orbit to a new parent body if it has crossed a sphere of influence this tick.
+## Checked every tick, so the change happens on the first tick past the boundary, whatever the speed.
+func _cross_soi(ctx: SimContext, unit_id: int) -> void:
+	var unit: Dictionary = ctx.state["units"][unit_id]
+	var bodies: Dictionary = ctx.state["bodies"]
+	var parent_id: int = unit["orbit"]["parent"]
+	var parent: Dictionary = bodies[parent_id]
+	var pos: Array = unit["pos_mm"]
+	if parent.get("soi_mm", 0) > 0 and not parent["orbit"].is_empty() \
+			and IntMath.dist(pos, [0, 0, 0]) > parent.get("soi_mm", 0):
+		var up: int = parent["orbit"]["parent"]
+		var carried := OrbitMath.state_at(parent["orbit"], bodies[up]["gm"], ctx.tick)
+		_rebase(ctx, unit_id, up, carried, 1)
+		return
+	for child_id: int in _sorted(bodies):
+		var child: Dictionary = bodies[child_id]
+		if child.get("soi_mm", 0) <= 0 or child["orbit"].get("parent", 0) != parent_id:
+			continue
+		var gap: Array = child["pos_mm"]
+		if IntMath.dist([pos[0] - gap[0], pos[1] - gap[1], pos[2] - gap[2]], [0, 0, 0]) < child["soi_mm"]:
+			_rebase(ctx, unit_id, child_id, OrbitMath.state_at(child["orbit"], parent["gm"], ctx.tick), -1)
+			return
+
+
+## Re-expresses the unit's orbit around new_parent, given the old and new parents' relative state.
+## sign is 1 going up a level (add the old parent's motion) and -1 going down (take the child's away).
+func _rebase(ctx: SimContext, unit_id: int, new_parent: int, between: Dictionary, sign: int) -> void:
+	var unit: Dictionary = ctx.state["units"][unit_id]
+	var old_parent: int = unit["orbit"]["parent"]
+	var gm_old: int = ctx.state["bodies"][old_parent]["gm"]
+	var mine := OrbitMath.state_at(unit["orbit"], gm_old, ctx.tick)
+	var r: Array[int] = []
+	var v: Array[int] = []
+	for axis in 3:
+		r.append(int(mine["r"][axis]) + sign * int(between["r"][axis]))
+		v.append(int(mine["v"][axis]) + sign * int(between["v"][axis]))
+	var orbit := OrbitMath.from_state(r, v, ctx.state["bodies"][new_parent]["gm"], ctx.tick)
+	if orbit.is_empty():
+		return
+	orbit["parent"] = new_parent
+	unit["orbit"] = orbit
+	unit["pos_mm"] = r
+	ctx.emit_event("soi_changed", unit_id, { "from": old_parent, "to": new_parent })
 
 
 ## Division rounding towards minus infinity, so drift steps the same either way along an axis.
