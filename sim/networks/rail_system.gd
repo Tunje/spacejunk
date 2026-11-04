@@ -12,6 +12,7 @@ extends SimSystem
 
 ## Place of anything on an orbit. Only frames are travelled within, so this matches nothing.
 const ON_ORBIT := -1
+const STAR_KIND := "star"
 
 
 func update_tasks(ctx: SimContext) -> void:
@@ -70,6 +71,63 @@ static func world_mm(state: Dictionary, table: String, id: int) -> Array[int]:
 	elif table != "frames" and entry["frame"] != 0:
 		base = world_mm(state, "frames", entry["frame"])
 	return [base[0] + pos[0], base[1] + pos[1], base[2] + pos[2]]
+
+
+## True if a body with gravity stands between the unit and the star, by a cylinder test: the
+## unit is behind the body, seen from the star, and closer to the body's line than its radius
+## (task A16). Integers only. A world without a body of kind "star" has no shadows. Pass the
+## casters from shadow_casters when testing many units in one tick.
+static func in_shadow(state: Dictionary, unit_id: int, casters: Array = []) -> bool:
+	if casters.is_empty():
+		casters = shadow_casters(state)
+	var unit_mm := world_mm(state, "units", unit_id)
+	for caster: Array in casters:
+		var body_mm: Array = caster[0]
+		var direction: Array = caster[1]
+		var offset: Array[int] = []
+		for axis in 3:
+			offset.append(unit_mm[axis] - int(body_mm[axis]))
+		var along := OrbitMath.dot(offset, direction)
+		if along <= 0:
+			continue
+		var across: Array[int] = []
+		for axis in 3:
+			across.append(offset[axis] - OrbitMath.smul_div(direction[axis], along, OrbitMath.ONE))
+		if IntMath.dist(across, [0, 0, 0]) < caster[2]:
+			return true
+	return false
+
+
+## Each body that can cast a shadow this tick, as [world_mm, direction from the star in Q30,
+## radius_mm]. Working the directions out once per tick keeps the slow wide distance at AU scale
+## out of the per-unit test.
+static func shadow_casters(state: Dictionary) -> Array:
+	var bodies: Dictionary = state["bodies"]
+	var star := 0
+	for id: int in _keys(bodies):
+		if bodies[id]["kind"] == STAR_KIND:
+			star = id
+			break
+	var casters := []
+	if star == 0:
+		return casters
+	var star_mm := world_mm(state, "bodies", star)
+	for id: int in _keys(bodies):
+		var body: Dictionary = bodies[id]
+		if id == star or body["gm"] <= 0 or body["orbit"].is_empty():
+			continue
+		var body_mm := world_mm(state, "bodies", id)
+		var away: Array[int] = []
+		for axis in 3:
+			away.append(body_mm[axis] - star_mm[axis])
+		casters.append([body_mm, OrbitMath.unit(away), body["radius_mm"]])
+	return casters
+
+
+static func _keys(table: Dictionary) -> Array:
+	var ids: Array = table.keys()
+	ids.sort()
+	return ids
 
 
 func _sorted(table: Dictionary) -> Array:

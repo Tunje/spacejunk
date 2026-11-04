@@ -252,6 +252,7 @@ Sizes compare with earlier kernel tasks: **S** is about A7's size, **M** about A
 | A15 | **Landing and takeoff** | Autopilot operations between an orbit and a cell, with an integer delta-v cost from the body's figures, as in B's planets.md section 3.2. The landed state, and leaving it. The player's ship uses the same operations, because a hand-flown descent isn't proposed. | A10, A11, A14 | M |
 | A16 | **Planet shadow** | A solar generator gives nothing while its unit is in a planet's shadow. This is an integer cylinder test from the star direction, in phase 3. C found that this is what stretches laps around a planet. | A10 | S |
 | A18 | **Trips across spheres of influence** | Added after A13 by the Lead. The cluster orbits the star, so no core can fly to a planet until the planner handles a trip that changes parent body. That needs patched-conic transfers: from one orbit to an escape or capture hyperbola, with the sphere-crossing tick found by bounded integer search on the rails, and a window from both bodies' positions. Planned after A15. | A12, A13 | L |
+| A19 | **Hand-flown landing for the player's own ship** | Added after A15 by the Lead, under the owner's ruling that the player flies their own ship. Atomic `land` stays as the autopilot for cores. A hand-flown descent uses A11's finite burns; it doesn't replace them. The kernel needs: contact with the ground at the height of the cell below, not the datum radius; a touchdown rule, landed below a speed limit and crashed above it; that limit from a landing-gear capability (B's data); and lift-off by burns from the landed place. D builds the descent screen on `predict` and the cell heights. Not built yet. | A15 | M |
 | A17 | **Performance and limits** | Re-measure [perf_budget.md](perf_budget.md) with rails, burns and window searches at 20 times the slice, measure the top speed of time warp at slice size, and update the budget's rules. | A13 | S |
 
 **Order and why:**
@@ -484,8 +485,37 @@ Sizes compare with earlier kernel tasks: **S** is about A7's size, **M** about A
   - Its burn or transfer ends, and `crashed` fires. Damage isn't modelled.
   - This also catches transfers that pass through a planet, which A13 left open.
 - **Measured:** landing from a 700 km orbit on the 600 km planet costs 2681 m/s, about 9.8 t of propellant for the starter ship, over 8760 ticks. That is just above section 7's 2.3 to 2.6 km/s, because a ship on the descent ellipse meets the surface at 2.5 km/s, not at circular speed.
+- **What the starter ship can land on and return from.** This assumes 4.58 t dry and 2 t of propellant at 3000 m/s exhaust speed, which is about 1090 m/s in all. Each case lands from, and returns to, an orbit at a tenth of the radius up, by this model:
+  - At Kerbin's density, a body up to about **120 km** radius. Surface gravity there is about 2 m/s², and the trip costs about 1045 m/s.
+  - A Minmus-sized moon, 60 km, uses about 370 m/s, leaving about 1.2 t of propellant.
+  - A Mun-sized moon, 200 km, needs about 1230 m/s, so it's short by about 210 kg.
+  - The 600 km planet needs about 5.2 km/s for the round trip, beyond any single ship without refuelling.
+  - None of these include the trip from the cluster to the moon. B has these figures for the new start.
+  - B10's probe is heavier, at 6.78 t dry, so it has about 775 m/s. At a fixed density the round trip scales with the radius, so it can land on and return from a body of about **90 km** at Kerbin's density, and still from a Minmus-sized one.
 - **Not done:**
   - Surface types and slope limits on landing, which need planets.md's rule tables in `data/`.
   - Damage on a crash.
   - Planet rotation.
   - Planetary deposits and scanning a patch of cells, which are B's and C's.
+
+### 11.14 A16 results: planet shadow
+
+- **`RailSystem.in_shadow(state, unit)`** is an integer cylinder test.
+  - The unit is in shadow if a body with gravity on an orbit is between it and the body of kind `star`.
+  - That means the unit is behind the body as seen from the star, and closer to the star-to-body line than the body's radius.
+  - It uses world positions, so it works for units on orbits, in frames, landed and docked.
+- **In phase 3 `PowerSystem` gives a shadowed unit no supply,** because every generator in the data is solar. A later non-solar generator, such as a reactor, needs a field saying so.
+  - Batteries then carry the loads, and anything left is shed by the existing rules, which is what C described for laps around a planet.
+  - The power view's `supply_w` follows, and `in_shadow` shows why.
+- **Tests** (in test_landing.gd):
+  - behind the planet, in front, behind but beside the shadow;
+  - landed on the day and night sides;
+  - supply 0 in shadow after a tick.
+
+### 11.15 A17 results: performance and limits
+
+perf_budget.md section 5a has the figures.
+- **Orbital load at 20 times the slice:** 14.9 ms mean and 30.8 ms at the 99th percentile for step and view, inside the 16 and 33 ms budget.
+- **Before two fixes it was 26 ms:** the frame-join check now tests positions before velocities, and planet-shadow casters are worked out once per tick.
+- **Burn previews:** a burn's flown preview costs about 0.2 ms per burn tick in `check`, so the client calls it on an edit, not every frame. Phase 1 no longer runs it, which removed 185 ms spikes when a burn was applied.
+- **Time warp:** at the slice's real size a tick costs 0.23 ms, so one core can run about 440x. At 20 times the slice it is about 7x.

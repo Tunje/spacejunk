@@ -173,3 +173,32 @@ func test_save_and_load_while_landing_and_landed_is_byte_exact() -> void:
 		sim.step(5000)
 		assert_eq(loaded.state_hash(), sim.state_hash())
 	assert_false(_ship()["landed"].is_empty())
+
+
+# ------------------------------------------------------------------------------ A16: planet shadow
+
+## On the far side of the planet from the star, solar panels give nothing; on the near side, full.
+func test_solar_power_stops_in_a_planets_shadow() -> void:
+	var planet_mm := RailSystem.world_mm(sim._state, "bodies", keys["Planet"])
+	var away := OrbitMath.unit(planet_mm)
+	var behind: Array[int] = []
+	var ahead: Array[int] = []
+	for axis in 3:
+		behind.append(OrbitMath.smul_div(away[axis], 700_000_000, ONE))
+		ahead.append(-behind[axis])
+	_ship()["orbit"] = {}
+	_ship()["pos_mm"] = behind
+	_ship()["orbit"] = OrbitMath.from_state(behind, [0, 1_000_000_000, 0], GM_PLANET, sim.current_tick())
+	_ship()["orbit"]["parent"] = keys["Planet"]
+	_ship()["inventory"]["propellant"] = PROPELLANT_G
+	assert_true(RailSystem.in_shadow(sim._state, keys["Ship"]), "behind the planet")
+	sim.step()
+	assert_eq(sim.view()["units"][keys["Ship"]]["power"]["supply_w"], 0)
+	_ship()["pos_mm"] = ahead
+	assert_false(RailSystem.in_shadow(sim._state, keys["Ship"]), "between the star and the planet")
+	_ship()["pos_mm"] = [behind[0], behind[1] + 700_000_000, behind[2]]
+	assert_false(RailSystem.in_shadow(sim._state, keys["Ship"]), "behind, but beside the shadow")
+	LandingSystem._set_down(sim._ctx, keys["Ship"], keys["Planet"], LandingSystem.cell_below(sim._ctx, keys["Planet"], ahead))
+	assert_false(RailSystem.in_shadow(sim._state, keys["Ship"]), "landed on the day side")
+	LandingSystem._set_down(sim._ctx, keys["Ship"], keys["Planet"], LandingSystem.cell_below(sim._ctx, keys["Planet"], behind))
+	assert_true(RailSystem.in_shadow(sim._state, keys["Ship"]), "landed on the night side")

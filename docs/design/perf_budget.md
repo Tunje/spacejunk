@@ -50,8 +50,37 @@ In order of cost:
 3. Run units far from the player as aggregate rates, as the workplan plans for remote sites.
 4. Move the hot loops to a GDExtension.
 
+## 5a. With orbits (A17)
+
+`tests/sim/kernel/test_perf_orbits.gd` runs the same 20-times-slice size around a planet. There are 76 starter ships in four frames on orbits 100 km apart, and a quarter of the ships do each kind of work:
+- routes inside a frame;
+- transfers between frames, waiting for windows and then flying;
+- repeated small burns on orbits;
+- coasting on orbits.
+
+There is one `view()` per tick, and the scenario has a star, so the planet casts a shadow.
+
+| Measure | Mean | 99th percentile |
+| ------- | ---- | --------------- |
+| `step` | 10.4 ms | 21.5 ms |
+| `view` | 4.4 ms | 9.0 ms |
+| Step and view | 14.9 ms | 30.8 ms |
+
+That is inside the budget of section 3, though closer to it than the flat load's 8.4 ms. Two fixes were needed to get there:
+- **A frame-join check computed velocities for every orbiting unit against every frame each tick.** It now tests the stored positions first.
+- **The planet-shadow test normalised star-scale vectors per unit,** which takes `IntMath`'s slow wide distance. The casting bodies are now worked out once per tick, and once per view.
+
+**Queries, which are not per-tick work:**
+- `quote` with a window costs about 0.26 ms.
+- `check` of `plan_burn` flies the whole burn, as orbital_flight.md 11.12 sets out, at about 0.2 ms per burn tick: 183 ms for a 923-tick burn. Call it when the player edits a burn, not every frame. Phase 1 validation of the same command skips the preview, so applying a burn costs nothing extra in the tick.
+- A burning unit costs about 0.2 ms per tick while it burns.
+
+**Time warp at the slice's real size:** the reference scenario with the ship on a trip and one `view()` every 8 ticks costs about 0.23 ms a tick. One core can therefore run about **440x** real time, far more than the 8x the client offers. At 20 times the slice, the same figure is about 7x, so very large fleets would need the coast-skip mode of orbital_flight.md section 11.3, which isn't planned.
+
 ## 6. Rules that keep this true
 
 - Anything derived from a unit's fitted parts goes in `UnitIndex`, not a fresh walk of the part tree. Attach and detach clear a unit's entry, and it is never saved.
 - Hot paths read a unit's entry once per unit, not once per part.
+- Anything a unit tests against every frame or body each tick tests stored positions first, and does orbit maths only for the few that pass.
+- Vectors at star scale, around 10^14 mm, take the slow wide path in `IntMath.dist`, so normalise them once per tick, never once per unit.
 - `Sim.to_save` takes about 35 ms at this load, so saves are not per-tick work. Strict checks and `ledger()` are for tests only.

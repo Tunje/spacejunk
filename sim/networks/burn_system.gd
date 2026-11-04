@@ -44,6 +44,8 @@ const MAX_PREVIEW_TICKS := 20_000
 const JOIN_MARGIN_MM := 1_000_000_000
 const LEAVE_MARGIN_MM := 2_000_000_000
 const JOIN_SPEED_UM_S := 1_000_000
+## Room for the stored positions to differ from freshly computed ones by rounding.
+const JOIN_SLACK_MM := 1_000_000
 ## Drift is carried in tenths of a micrometre: velocity in um/s over a tenth of a second.
 const DRIFT_PER_MM := 10_000
 const MAX_PREDICT_POINTS := 10_000
@@ -74,7 +76,10 @@ func validate(ctx: SimContext, command: Dictionary) -> Dictionary:
 	if found.is_empty():
 		return SimSystem.reject(REASON_NO_THRUSTER)
 	var result := SimSystem.ok()
-	result["detail"] = _preview(ctx, unit_id, args, found)
+	# Only check needs the flown preview. Phase 1 validation skips it: a long burn's preview costs
+	# a fifth of a millisecond per burn tick, which would land inside the tick (A17).
+	if ctx.phase != 1:
+		result["detail"] = _preview(ctx, unit_id, args, found)
 	return result
 
 
@@ -478,6 +483,13 @@ func _try_join(ctx: SimContext, unit_id: int) -> void:
 	for frame_id: int in _sorted(frames):
 		var frame: Dictionary = frames[frame_id]
 		if frame["orbit"]["parent"] != orbit["parent"]:
+			continue
+		# Positions are already this tick's, so test distance first and leave the dearer velocities
+		# to the rare unit that is close (A17).
+		var unit_mm: Array = unit["pos_mm"]
+		var frame_mm: Array = frame["pos_mm"]
+		var near := [unit_mm[0] - frame_mm[0], unit_mm[1] - frame_mm[1], unit_mm[2] - frame_mm[2]]
+		if IntMath.dist(near, [0, 0, 0]) > frame["radius_mm"] + JOIN_MARGIN_MM + JOIN_SLACK_MM:
 			continue
 		var gm: int = ctx.state["bodies"][orbit["parent"]]["gm"]
 		var mine := OrbitMath.state_at(orbit, gm, ctx.tick)
