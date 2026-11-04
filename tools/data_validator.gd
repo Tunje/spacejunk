@@ -42,7 +42,13 @@ const SCENARIO_DIR := "scenarios/"
 const SCENARIO_FIELDS := ["schema_version", "id", "name", "seed", "bodies", "units"]
 const SCENARIO_OPTIONAL := ["frames"]
 const BODY_FIELDS := ["key", "name", "kind", "radius_mm", "visual_seed", "deposits"]
-const BODY_OPTIONAL := ["pos_mm", "gm_km3_s2", "orbit", "frame"]
+const BODY_OPTIONAL := ["pos_mm", "gm_km3_s2", "orbit", "frame", "planet"]
+const PLANET_FIELDS := ["seed", "height_range_m"]
+const PLANET_OPTIONAL := ["sea_level_m", "weights"]
+## PlanetGrid.MAX_HEIGHT_M, and the octave count its FIRST_OCTAVE_SHIFT of 27 allows.
+const MAX_HEIGHT_M := 8000
+const MAX_OCTAVES := 12
+const MAX_WEIGHT := 1000
 const FRAME_FIELDS := ["key", "name", "radius_mm", "orbit"]
 const ORBIT_FIELDS := ["parent", "a_mm"]
 const ORBIT_ANGLES := ["inclination_mdeg", "node_mdeg", "periapsis_mdeg", "mean_anomaly_mdeg"]
@@ -55,7 +61,7 @@ const MAX_GM := 9_000_000_000_000_000_000
 const MAX_A_MM := 1_000_000_000_000_000
 const MDEG_PER_TURN := 360_000
 const DOCK_FIELDS := ["host", "port", "host_port"]
-const BODY_KINDS := ["star", "asteroid"]
+const BODY_KINDS := ["star", "asteroid", "planet"]
 
 ## Capability fields as field -> [factor, whole number only].
 const CAPABILITIES := {
@@ -945,10 +951,40 @@ func _shape_body(where: String, body: Variant, keys: Dictionary) -> void:
 		_check_positive(at, "gm_km3_s2", body["gm_km3_s2"], GM_FACTOR, MAX_GM)
 	if body.has("frame") and not body["frame"] is String:
 		_err("bad_place", at, "frame is not a frame key")
+	if body.has("planet"):
+		if body["kind"] != "planet":
+			_err("bad_planet", at, "only a body of kind planet has a planet object")
+		_shape_planet(at, body["planet"])
 	_check_whole(where, "radius_mm", body["radius_mm"], 1, MAX_JSON_WHOLE)
 	_check_whole(where, "visual_seed", body["visual_seed"], 0, MAX_JSON_WHOLE)
 	if not body["deposits"] is Array:
 		_err("bad_scenario", where, "deposits is not an array")
+
+
+## Terrain settings that both the simulation and the client read (schemas.md section 14).
+func _shape_planet(where: String, planet: Variant) -> void:
+	if not planet is Dictionary:
+		_err("bad_planet", where, "planet is not an object")
+		return
+	if not _has_fields(where, planet, PLANET_FIELDS, PLANET_OPTIONAL):
+		return
+	_check_whole(where, "seed", planet["seed"], 0, MAX_JSON_WHOLE)
+	_check_whole(where, "height_range_m", planet["height_range_m"], 0, MAX_HEIGHT_M)
+	if planet.has("sea_level_m"):
+		_check_whole(where, "sea_level_m", planet["sea_level_m"], -MAX_HEIGHT_M, MAX_HEIGHT_M)
+	if not planet.has("weights"):
+		return
+	var weights: Variant = planet["weights"]
+	if not weights is Array or weights.is_empty() or weights.size() > MAX_OCTAVES:
+		_err("bad_planet", where, "weights is a list of 1 to %d octaves" % MAX_OCTAVES)
+		return
+	var total := 0.0
+	for weight: Variant in weights:
+		_check_whole(where, "weights", weight, 0, MAX_WEIGHT)
+		if _is_number(weight):
+			total += float(weight)
+	if total <= 0.0:
+		_err("bad_planet", where, "at least one weight is above 0")
 
 
 func _shape_frame(where: String, frame: Variant, keys: Dictionary) -> void:
