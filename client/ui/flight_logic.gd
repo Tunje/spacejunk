@@ -57,7 +57,10 @@ static func place_text(view: Dictionary, unit_id: int) -> String:
 	if not unit["dock"].is_empty():
 		return "Docked at %s: undock to fly" % view["units"][unit["dock"]["target_unit"]]["name"]
 	if not unit.get("orbit", {}).is_empty():
-		return "Orbiting %s: %s" % [FlightLogic.body_name(view, unit["orbit"]["parent"]), FlightLogic.orbit_text(view, unit["orbit"])]
+		var parent := FlightLogic.body_name(view, unit["orbit"]["parent"])
+		if OrbitPath.is_open(unit["orbit"]):
+			return "Escaping %s: %s" % [parent, FlightLogic.orbit_text(view, unit["orbit"])]
+		return "Orbiting %s: %s" % [parent, FlightLogic.orbit_text(view, unit["orbit"])]
 	var frame: Dictionary = view.get("frames", {}).get(unit.get("frame", 0), {})
 	var where: String = "In %s" % frame["name"] if not frame.is_empty() else "In open space"
 	var moving := FlightLogic.speed_of(unit.get("vel_um_s", [0, 0, 0]))
@@ -69,9 +72,12 @@ static func body_name(view: Dictionary, body_id: int) -> String:
 
 
 ## "150 km x 220 km": periapsis and apoapsis heights above the parent's surface.
+## An escape path has no apoapsis: "periapsis 150 km, escaping".
 static func orbit_text(view: Dictionary, orbit: Dictionary) -> String:
 	var radius: float = float(view["bodies"].get(orbit.get("parent", 0), {}).get("radius_mm", 0))
 	var apsides := OrbitPath.apsides_mm(orbit)
+	if OrbitPath.is_open(orbit):
+		return "periapsis %s, escaping" % OrderText.metres(roundi(apsides[0] - radius))
 	return "%s x %s" % [OrderText.metres(roundi(apsides[0] - radius)), OrderText.metres(roundi(apsides[1] - radius))]
 
 
@@ -82,13 +88,22 @@ static func preview_lines(detail: Dictionary, view: Dictionary, unit_id: int, ti
 		FlightLogic.speed(detail["dv_um_s"]), OrderText.tonnes(detail["propellant_g"]),
 		OrderText.duration(float(detail["burn_ticks"]) / ticks_per_second),
 	]
+	if detail.get("approximate", false):
+		cost += " (estimated: too long to fly through ahead)"
+	var aboard: int = unit["inventory"].get("propellant", 0)
+	if detail["propellant_g"] > aboard:
+		cost += ". Only %s aboard, so it will stop short" % OrderText.tonnes(aboard)
 	var after := ""
 	if not unit.get("orbit", {}).is_empty():
 		var orbit: Dictionary = detail.get("orbit", {})
+		var parent := FlightLogic.body_name(view, orbit.get("parent", unit["orbit"]["parent"]))
 		if orbit.is_empty():
-			after = "That leaves the orbit, which is not flown yet"
+			after = "That path is not flown yet"
+		elif OrbitPath.is_open(orbit):
+			var radius: float = float(view["bodies"].get(orbit.get("parent", 0), {}).get("radius_mm", 0))
+			after = "Then escaping %s, periapsis %s" % [parent, OrderText.metres(roundi(OrbitPath.apsides_mm(orbit)[0] - radius))]
 		else:
-			after = "Then %s above %s" % [FlightLogic.orbit_text(view, orbit), FlightLogic.body_name(view, orbit.get("parent", unit["orbit"]["parent"]))]
+			after = "Then %s above %s" % [FlightLogic.orbit_text(view, orbit), parent]
 	else:
 		var moving := FlightLogic.speed_of(detail.get("vel_um_s", [0, 0, 0]))
 		after = "Then drifting %s" % FlightLogic.speed(moving) if moving > 0 else "Then holding still"

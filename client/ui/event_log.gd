@@ -32,7 +32,7 @@ func add_line(line: String) -> void:
 func _on_events(events: Array[Dictionary]) -> void:
 	for entry: Dictionary in events:
 		var unit: Dictionary = bridge.current_view["units"].get(entry["unit"], {})
-		var line := OrderText.event(entry, unit.get("name", "Order"), _items)
+		var line := OrderText.event(entry, unit.get("name", "Order"), _items, bridge.current_view["bodies"])
 		if not line.is_empty():
 			lines.append(line)
 	_show()

@@ -248,7 +248,7 @@ static func _build_state(module_defs: Dictionary, seed_value: int, extra_ships: 
 			"kind": entry["kind"], "name": "Star" if entry["kind"] == "star" else "Asteroid %d" % id,
 			"pos_mm": entry["pos_mm"], "radius_mm": entry["radius_mm"],
 			"visual_seed": absi(seed_value * 31 + id * 2654435761) % 2147483647, "scanned": false,
-			"frame": 0, "orbit": {}, "gm": entry.get("gm", 0),
+			"frame": 0, "orbit": {}, "gm": entry.get("gm", 0), "soi_mm": 0,
 		}
 	for entry: Dictionary in scenario["deposits"]:
 		state["hidden_deposits"][_next_id(state)] = {
@@ -1285,7 +1285,7 @@ func _put_probe_in_orbit() -> void:
 	var moon := _next_id(_state)
 	_state["bodies"][moon] = {
 		"kind": "planet", "name": "Cairn", "pos_mm": PLANET_POS_MM.duplicate(), "radius_mm": PLANET_RADIUS_MM,
-		"visual_seed": 7, "scanned": true, "frame": 0, "orbit": {}, "gm": PLANET_GM,
+		"visual_seed": 7, "scanned": true, "frame": 0, "orbit": {}, "gm": PLANET_GM, "soi_mm": 0,
 		"seed": PLANET_SEED, "height_range_m": PLANET_RANGE_M, "sea_level_m": PLANET_SEA_LEVEL_M,
 	}
 	for id: int in _state["units"]:

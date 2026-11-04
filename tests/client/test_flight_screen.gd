@@ -377,3 +377,43 @@ func test_a_real_burn_from_the_screen() -> void:
 	assert_string_ends_with(screen._place.text, "drifting 2.0 m/s")
 	assert_gt(screen.current_path.size(), 2, "predict draws the drift")
 	assert_eq(main.event_log.lines[-1], "Probe: burn done, 2.0 m/s")
+
+
+func test_a_burn_bigger_than_the_tank_says_it_will_stop_short() -> void:
+	_start(StubSim.SCENARIO_ORBIT)
+	_open()
+	screen.set_components(1500.0)
+	assert_string_contains(screen._cost.text, "Only 1.8 t aboard, so it will stop short")
+	assert_string_starts_with(screen._after.text, "Then escaping Cairn, periapsis ")
+	assert_eq(screen._after.text.count("escaping"), 1, "said once")
+
+
+func test_typing_waits_to_ask_for_the_preview() -> void:
+	_start(StubSim.SCENARIO_ORBIT)
+	_open()
+	var before := screen.checks
+	for value: float in [1.0, 12.0, 123.0, 50.0]:
+		screen._axes[0].value = value
+	assert_eq(screen.checks, before, "nothing asked while typing")
+	await wait_seconds(0.3)
+	assert_eq(screen.checks, before + 1, "asked once typing settled")
+	assert_string_starts_with(screen._cost.text, "Delta-v 50.0 m/s")
+
+
+func test_ticks_with_an_unchanged_burn_do_not_ask_every_time() -> void:
+	_start(StubSim.SCENARIO_ORBIT)
+	_open()
+	screen._when.value = 60.0
+	await wait_seconds(0.3)
+	screen.set_components(20.0)
+	var before := screen.checks
+	_ticks(10)
+	assert_lt(screen.checks - before, 3, "at most every 250 ms, not every view")
+
+
+func test_an_approximate_preview_says_so() -> void:
+	var lines := FlightLogic.preview_lines({ "dv_um_s": 1_000_000, "propellant_g": 10, "burn_ticks": 30_000, "approximate": true,
+		"orbit": {}, "vel_um_s": [0, 0, 0], "leaves_frame": false },
+		{ "units": { 1: { "orbit": {}, "frame": 0, "pos_mm": [0, 0, 0], "inventory": {} } }, "bodies": {}, "frames": {} }, 1, 10)
+	assert_string_contains(lines[0], "(estimated")
+

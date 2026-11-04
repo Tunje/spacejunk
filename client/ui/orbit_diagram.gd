@@ -13,6 +13,9 @@ const PATH_COLOUR := Color(0.62, 0.65, 0.7)
 const PLAN_COLOUR := Color(0.95, 0.42, 0.08)
 const SHIP_COLOUR := Color(1.0, 1.0, 1.0)
 const MARK_PX := 6.0
+## An escape branch can run far out. The scale follows the current orbit, and the
+## branch may widen it at most this much; the rest runs off the edge.
+const PLAN_REACH_LIMIT := 3.0
 
 var body_radius_mm := 0.0
 var body_name := ""
@@ -27,6 +30,7 @@ var _scale := 1.0
 
 func _init() -> void:
 	custom_minimum_size = Vector2(0, HEIGHT_PX)
+	clip_contents = true
 
 
 ## Projects world-mm points onto the plane of `orbit` (its P and Q directions),
@@ -73,11 +77,12 @@ static func project(points: Array, parent_world: Array, axes: Array[PackedFloat6
 
 func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), BACKGROUND)
-	var reach := body_radius_mm
-	for points: PackedVector2Array in [current, planned]:
-		for point: Vector2 in points:
-			reach = maxf(reach, point.length())
-	reach = maxf(reach, ship.length())
+	var reach := maxf(body_radius_mm, ship.length())
+	for point: Vector2 in current:
+		reach = maxf(reach, point.length())
+	var own := reach
+	for point: Vector2 in planned:
+		reach = maxf(reach, minf(point.length(), own * PLAN_REACH_LIMIT))
 	if reach <= 0.0:
 		return
 	_scale = minf(size.x, size.y) * (0.5 - MARGIN) / reach
