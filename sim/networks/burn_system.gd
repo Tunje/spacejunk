@@ -13,7 +13,9 @@ extends SimSystem
 ## - A unit on an orbit joins a frame within JOIN_MARGIN_MM of its radius at under JOIN_SPEED_UM_S.
 ##   The two margins differ so a slow unit at the edge cannot flap in and out.
 ##
-## Register after RailSystem and UnitSystem, whose unit views this adds to, and before PowerSystem.
+## Register after UnitSystem, whose unit views this adds to, and after TaskSystem, so a step that
+## ends in phase 2 has freed the unit before a burn on the same tick looks. Register before
+## PowerSystem, so a starting burn's thruster is a load in phase 4.
 
 const PLAN := "plan_burn"
 const CANCEL := "cancel_burn"

@@ -290,6 +290,23 @@ func test_predict_follows_the_orbit_and_the_drift() -> void:
 	assert_eq(sim.predict(999, 0, 10, 1), {})
 
 
+## A burn planned the moment the view shows a ship undocked starts on time: the undock step ends
+## in phase 2 of the next tick, before the burn looks at whether the ship is free.
+func test_a_burn_right_after_undocking_starts() -> void:
+	var game := Sim.new_game("reference", 12345)
+	var probe := 23
+	game.submit({ "type": "undock", "unit": probe, "args": {} })
+	while not game.view()["units"][probe]["dock"].is_empty():
+		game.step()
+	game.take_events()
+	game.submit({ "type": "plan_burn", "unit": probe, "args": {
+		"tick": game.current_tick() + 1, "prograde_um_s": 1_000_000, "normal_um_s": 0, "radial_um_s": 0 } })
+	game.step()
+	var types := game.take_events().map(func(e: Dictionary) -> String: return e["type"])
+	assert_true(types.has("burn_started"), str(types))
+	assert_false(types.has("burn_short"), str(types))
+
+
 func test_the_view_shows_burns() -> void:
 	sim.submit(_burn("Orbiter", 1, 50_000_000))
 	sim.submit(_burn("Orbiter", 900, 1_000_000))
