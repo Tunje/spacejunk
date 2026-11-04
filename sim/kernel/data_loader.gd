@@ -9,12 +9,17 @@ const SCHEMA_VERSION := 1
 const EXACT_TOLERANCE := 1e-9
 const GRAMS_PER_KG := 1000
 const UNITS_PER_KILO := 1000
+## GM is stated in km^3/s^2 and held in units of 1000 m^3/s^2 (orbital_flight.md section 11.4).
+const GM_FACTOR := 1_000_000
+## Whole numbers below this convert by integer multiplication, so a large one stays exact.
+const WHOLE_LIMIT := 9007199254740992.0
 ## Fields the simulation never reads after load. They stay in defs() for the client, but do not
 ## count toward the data hash, so changing them does not invalidate a save.
 const UNREAD_FIELDS: Array[String] = ["visual", "collision", "fabrication", "name", "realism"]
 ## Suffix rules, longest first, as [data suffix, sim suffix, factor].
 const SUFFIX_RULES := [
 	["_kg_per_s", "_g_per_s", UNITS_PER_KILO],
+	["_kn", "_n", UNITS_PER_KILO],
 	["_m_s", "_mm_s", UNITS_PER_KILO],
 	["_seconds", "_ticks", Sim.TICKS_PER_SECOND],
 	["_kg", "_g", UNITS_PER_KILO],
@@ -154,6 +159,8 @@ static func _rule(key: String) -> Array:
 			return ["grams", GRAMS_PER_KG]
 		"seconds":
 			return ["ticks", Sim.TICKS_PER_SECOND]
+		"gm_km3_s2":
+			return ["gm", GM_FACTOR]
 	for rule: Array in SUFFIX_RULES:
 		if key.ends_with(rule[0]):
 			return [key.trim_suffix(rule[0]) + rule[1], rule[2]]
@@ -161,6 +168,8 @@ static func _rule(key: String) -> Array:
 
 
 static func _exact(value: float, factor: int, where: String) -> int:
+	if value == floorf(value) and absf(value) < WHOLE_LIMIT:
+		return IntMath.mul_div(absi(int(value)), factor, 1) * (1 if value >= 0.0 else -1)
 	var scaled := value * factor
 	var rounded := roundi(scaled)
 	if absf(scaled - rounded) > EXACT_TOLERANCE * maxf(1.0, absf(scaled)):

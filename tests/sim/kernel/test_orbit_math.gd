@@ -22,17 +22,17 @@ func before_each() -> void:
 ## The client's reference: position in mm of an orbit record at a tick, in double-precision floats.
 ## Godot's Vector3 is single precision, too coarse for this, so positions are float arrays.
 static func position_float(orbit: Dictionary, tick: int) -> Array[float]:
-	var period := float(orbit["period_sub"]) / OrbitMath.SUB_TICKS
-	var e := float(orbit["e"]) / ONE
-	var dt := float(tick - int(orbit["epoch"]))
-	var m := float(orbit["m0"]) / TURN * TAU + TAU * fposmod(dt, period) / period
+	var period := float(orbit["period_subticks"]) / OrbitMath.SUB_TICKS
+	var e := float(orbit["e_q30"]) / ONE
+	var dt := float(tick - int(orbit["epoch_tick"]))
+	var m := float(orbit["m0_angle"]) / TURN * TAU + TAU * fposmod(dt, period) / period
 	var big_e := m + 0.85 * e * signf(sin(m))
 	for i in 50:
 		big_e -= (big_e - e * sin(big_e) - m) / (1.0 - e * cos(big_e))
 	var x := float(orbit["a_mm"]) * (cos(big_e) - e)
 	var y := float(orbit["b_mm"]) * sin(big_e)
-	var p: Array = orbit["p"]
-	var q: Array = orbit["q"]
+	var p: Array = orbit["p_q30"]
+	var q: Array = orbit["q_q30"]
 	var out: Array[float] = []
 	for axis in 3:
 		out.append((x * p[axis] + y * q[axis]) / ONE)
@@ -66,7 +66,7 @@ func _random_orbit(gm: int, a_mm: int, e: int, inclination: int = -1) -> Diction
 
 ## The worst distance in mm between two orbits over one period of the first, at 48 ticks.
 func _worst_gap(first: Dictionary, second: Dictionary, from_tick: int) -> int:
-	var period: int = first["period_sub"] / OrbitMath.SUB_TICKS
+	var period: int = first["period_subticks"] / OrbitMath.SUB_TICKS
 	var worst := 0
 	for k in 49:
 		var tick := from_tick + period * k / 48
@@ -137,17 +137,17 @@ func test_positions_match_the_float_reference() -> void:
 func test_a_circular_period_matches_the_formula() -> void:
 	var orbit := OrbitMath.make_orbit(GM_PLANET, 700_000_000, 0, [ONE, 0, 0], [0, 0, -ONE], 0, 0)
 	var exact := TAU * sqrt(pow(700_000.0, 3) / 3.5316e12) * Sim.TICKS_PER_SECOND * OrbitMath.SUB_TICKS
-	assert_almost_eq(float(orbit["period_sub"]), exact, exact * 1e-8)
+	assert_almost_eq(float(orbit["period_subticks"]), exact, exact * 1e-8)
 
 
 func test_an_orbit_has_no_drift() -> void:
 	var orbit := _random_orbit(GM_PLANET, 900_000_000, ONE / 5)
-	var start: int = orbit["epoch"]
-	var whole: int = orbit["period_sub"]
+	var start: int = orbit["epoch_tick"]
+	var whole: int = orbit["period_subticks"]
 	# period_sub ticks is exactly SUB_TICKS whole periods, so the orbit is exactly back where it began.
 	for k in [1, 7, 1000]:
 		assert_eq(OrbitMath.position_at(orbit, start + whole * k), OrbitMath.position_at(orbit, start))
-	assert_eq(OrbitMath.mean_anomaly(orbit, start + whole * 1000), orbit["m0"])
+	assert_eq(OrbitMath.mean_anomaly(orbit, start + whole * 1000), orbit["m0_angle"])
 
 
 func test_an_orbit_record_saves_byte_exact() -> void:
@@ -256,11 +256,11 @@ func test_a_prograde_burn_raises_apoapsis_as_hohmann_predicts() -> void:
 	for axis in 3:
 		boosted.append(v[axis] + roundi(v[axis] / speed * dv1_m_s * 1e6))
 	var after := OrbitMath.from_state(state["r"], boosted, GM_PLANET, 100)
-	var apoapsis := float(after["a_mm"]) * (1.0 + float(after["e"]) / ONE)
-	var periapsis := float(after["a_mm"]) * (1.0 - float(after["e"]) / ONE)
+	var apoapsis := float(after["a_mm"]) * (1.0 + float(after["e_q30"]) / ONE)
+	var periapsis := float(after["a_mm"]) * (1.0 - float(after["e_q30"]) / ONE)
 	assert_almost_eq(apoapsis, r2 * 1000.0, 1000.0, "apoapsis within 1 m of 760 km")
 	assert_almost_eq(periapsis, r1 * 1000.0, 1000.0, "periapsis stays at 700 km")
-	var half := int(after["period_sub"]) / OrbitMath.SUB_TICKS / 2
+	var half := int(after["period_subticks"]) / OrbitMath.SUB_TICKS / 2
 	var far := _length(OrbitMath.position_at(after, 100 + half))
 	assert_almost_eq(far, r2 * 1000.0, 20_000.0, "half an orbit later it is at the apoapsis")
 

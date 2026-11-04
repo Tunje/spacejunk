@@ -1,6 +1,6 @@
 # Simulation Contracts
 
-Contract version: 1. Signed off by the Lead (task L7) after review by Agents A, C and D. Changes go through the Lead.
+Contract version: 3. Signed off by the Lead (task L7) after review by Agents A, C and D. Version 2 added the job queue (C9). Version 3 adds orbits and frames ([orbital_flight.md](orbital_flight.md) section 11, task A10). Changes go through the Lead.
 
 These contracts expand section 5 of `plan/workplan.md`. If the two disagree, raise it with the Lead.
 
@@ -18,8 +18,21 @@ All simulation state is plain data: Dictionary, Array, 64-bit `int`, String and 
 | Volume | litre | m3 | 0 to 10^12 per store |
 | Time | tick | whole seconds | 0 to 10^15 |
 | Any per-second rate | sim unit per second | data unit per second | 0 to 10^12 |
+| Angle (`_angle`) | binary angle, 2^48 to a turn | millidegrees (`_mdeg`) | 0 to 2^48 - 1 |
+| Ratio or direction (`_q30`) | Q30, where 2^30 is 1.0 | parts per million (`_ppm`) for eccentricity | -2^31 to 2^31 |
+| Speed and delta-v inside orbits (`_um_s`) | micrometre per second | m/s | -10^12 to 10^12 |
+| Gravitational parameter (`gm`) | 1000 m³/s² | km³/s² (`gm_km3_s2`) | 0 to 9 x 10^18 |
+| Orbit period (`_subticks`) | 1/65536 tick | none, derived | 1 to 2^55 |
 
 Valid ranges are asserted at commit in test runs.
+
+**Places.** Every body, frame and unit is in one place at a time ([orbital_flight.md](orbital_flight.md) section 11.1):
+- **On an orbit:** `orbit` is an orbit record around the body `orbit.parent`, and `pos_mm` is relative to that parent, derived from the tick in phase 2.
+- **In a frame:** `frame` is a frame's ID, and `pos_mm` is local to it. A frame is a co-moving region, such as the rock cluster, with an orbit and a `radius_mm`, and no gravity inside it. Travel inside one frame works exactly as networks.md section 6 says.
+- **Neither:** `frame` is 0 and `orbit` is `{}`. This is the old world, in which nothing moves on its own. A scenario without frames is entirely here, and behaves as in contract version 2.
+- A docked unit is wherever its host is, and its own `frame` and `orbit` are not read.
+
+An orbit record holds `parent`, `a_mm`, `b_mm`, `e_q30`, `p_q30` and `q_q30` (the directions towards periapsis and 90 degrees ahead), `period_subticks`, `m0_angle` and `epoch_tick`. `OrbitMath` (sim/kernel/orbit_math.gd) is the only code that interprets it. The reference plane's normal is +Y, so a planet's north pole and an uninclined orbit's angular momentum point along +Y.
 
 **Coordinates.** Simulation axes match Godot: right-handed, +Y up. Connector and collision positions are relative to the module origin. Orientation is not simulation state: the client derives heading from the route, and places docked craft from connector geometry.
 
@@ -75,6 +88,10 @@ Rules:
 - `current_tick()` is the number of completed ticks and is 0 in a new game. `step` runs tick `current_tick() + 1`. `step` with `tick_count < 1` does nothing.
 - `submit` deep-copies its argument and stamps `current_tick() + 1`. A float in a command is rejected in phase 1.
 - `check` runs phase 1 validation without effects and returns `{ ok, reason, detail }`. For `attach_part` and `detach_part`, `detail` gives projected mass, power and heat against limits. For `move_to`, it gives ticks and propellant. It is advisory: `submit` can still be rejected if the state changes.
+- **Coming with orbits** (orbital_flight.md section 11.4, by task):
+  - A11: `check` of `plan_burn` returns the orbit after the burn in `detail`.
+  - A11: `predict(unit, from_tick, ticks, step) -> Array` returns derived positions for drawing a path. It is read-only, like `view()`.
+  - A13: `quote` gains a departure tick, and `next_window(unit, target, from_tick, cap)` is added.
 - `defs()` returns `{ modules, items, recipes, templates, sinks }`, each keyed by definition ID, including connectors, collision and visual, so clients never parse data units. Fields are renamed to their sim unit: `mass_kg` to `mass_g`, `power_kw` to `power_w`, `heat_kw` to `heat_w`, `volume_m3` to `volume_l`, `load_limit_kg` to `load_limit_g`, `density_kg_m3` to `density_g_l`, `seconds` to `ticks`, and likewise for any other unit-suffixed field (`docs/design/schemas.md` section 2).
 - Scenario `"empty"` is built into the kernel for tests that precede `data/`.
 - The event queue is bounded (A1 sets the bound) and starts empty on load.
@@ -85,7 +102,7 @@ Rules:
 Each tick runs these phases in order.
 
 1. Apply commands stamped for this tick, in ascending command ID. Reject invalid ones.
-2. Update tasks and unit instructions.
+2. Move everything on rails to this tick (`RailSystem`, registered first). Then update tasks and unit instructions.
 3. Calculate available power on each network.
 4. Determine active operations and allocate power by priority. Move the inputs of starting jobs into the job, and reserve cargo space and ports.
 5. Run propulsion, mining, scanning, transfers, docking and industry. Record deltas without touching inventories.
@@ -117,7 +134,7 @@ Every command has this envelope. `submit` fills in `id` and `tick`.
 | Type | Args | Meaning |
 | ---- | ---- | ------- |
 | `scan` | `target` | Scan a body for deposits |
-| `move_to` | `target` | Travel to an entity along a route |
+| `move_to` | `target` | Travel to an entity along a route. Inside the unit's frame, or in the old world, as today. A target on an orbit or in another frame is refused with `unsupported_orbit` until A13's planner, which waits for a window and flies an atomic transfer. |
 | `dock` | `port`, `target_port` | Dock at a port |
 | `undock` | none | Leave the current port |
 | `load_cargo` | `from`, `item`, `grams` (optional) | Transfer into this unit |
@@ -177,6 +194,8 @@ Running shortfalls are still handled by shedding and faults.
 - Core assignment, priorities, cycles, cargo and dock state are not copied.
 - `check` dry-runs the copy and returns `detail` as `{ attach, missing, refused }` counts.
 
+**Coming with orbits** (orbital_flight.md section 11.4): `plan_burn { tick, prograde_um_s, normal_um_s, radial_um_s }` and `cancel_burn { burn }` in A11, and `land { body, cell }` and `take_off {}` in A15.
+
 New command types go through the Lead. C0 may refine autonomy commands, events, reason codes and task view fields without a separate change, and tells the Lead what changed.
 
 ## 6. Events
@@ -220,6 +239,8 @@ Each failure emits exactly one event. Fitting failures emit `attach_failed`, and
 
 Known reason codes: `over_mass_limit`, `over_power_budget`, `over_heat_budget`, `over_heat_limit`, `over_load_limit`, `connector_type_mismatch`, `connector_size_mismatch`, `connector_occupied`, `not_whole_unit`, `no_free_port`, `no_propellant`, `cargo_full`, `deposit_exhausted`, `root_part`, `part_busy`, `float_in_command`, `unknown_unit`, `unknown_part`, `invalid_target`, `unknown_command`, `malformed_command`, `queue_full`, `job_busy`, `fit_mismatch`, `parent_not_fitted`. Autonomy adds its own codes, job statuses and view fields in `docs/design/autonomy.md` sections 3, 8, 9 and 10. `connector_size_mismatch` means a `core` connector met a non-core one.
 
+Orbit reason codes: `unsupported_orbit` (from A10: a `move_to` target that is on an orbit or in another frame, and later the planner's limits). Coming: `burn_in_past` and `not_flying` (A11), `no_window` (A13), `too_fast_to_join` (A11), `not_over_cell` (A15). Coming events: `burn_started`, `burn_done`, `burn_short`, `frame_joined` and `frame_left` (A11), `soi_changed` (A12), `landed` and `took_off` (A15).
+
 ## 7. State view
 
 `view()` returns native GDScript values, not JSON. Entity-ID keys are `int`, all numbers are `int`, and positions are 3-element Arrays of `int`, never `Vector3i`, which is 32-bit.
@@ -231,6 +252,7 @@ This shape is frozen. Fields may be added, but changes or removals go through th
   tick = 120, seed = 12345,
   units = { 7: {
     def = "...", kind = "ship", name = "...", pos_mm = [0, 0, 0], at_target = 3,   # 0 means at nothing
+    frame = 6, orbit = {}, world_mm = [0, 0, 0],   # a docked unit shows its host's frame
     core = 21, core_tier = 1, task = 4,   # core 0 and tier 0 mean no core
     op = { type = "mining", target = 12, part = 9, start_tick = 100, end_tick = 0 },
     route = { target = 3, from_mm = [], to_mm = [], eta_tick = 180 },  # {} when not moving
@@ -245,7 +267,9 @@ This shape is frozen. Fields may be added, but changes or removals go through th
     power = { supply_w = 0, demand_w = 0, stored_j = 0, capacity_j = 0, max_discharge_w = 0 },
     heat = { stored_j = 0, limit_j = 0, reject_w = 0, input_w = 0 },
   } },
-  bodies = { 3: { kind = "asteroid", pos_mm = [], radius_mm = 0, visual_seed = 0, scanned = false } },
+  bodies = { 3: { kind = "asteroid", pos_mm = [], radius_mm = 0, visual_seed = 0, scanned = false,
+                   frame = 0, orbit = {}, gm = 0, world_mm = [] } },
+  frames = { 6: { name = "...", radius_mm = 0, orbit = {}, pos_mm = [], world_mm = [] } },
   deposits = { 12: { body = 3, item = "hematite", remaining_g = 0, hardness = 0 } },
   jobs = { 30: { unit = 2, facility = 8, recipe = "...", count_left = 1, status = "running",
                  reason = "", start_tick = 0, end_tick = 0, queue_pos = 0 } },
@@ -257,6 +281,7 @@ This shape is frozen. Fields may be added, but changes or removals go through th
 - A part's `state`: `on`, `shed` or `fault`.
 - A job's `status`: `queued`, `waiting`, `running`, `paused` or `cancelling`. `queue_pos` is its place in its facility's queue, 0 for the active job.
 - Each unit has one inventory, keyed by item. Capacity is by cargo class, summed across its storage modules.
+- `pos_mm` is in the object's own place (section 1): relative to its orbit's parent, local to its frame, or in the old world. `world_mm` adds up the chain to the root body, for drawing a system map. Floats are for drawing only: an orbit is drawn from its record with 64-bit floats as `position_float` in tests/sim/kernel/test_orbit_math.gd does, never Godot's 32-bit `Vector3`.
 - Unfound deposits stay out of the view. Decorative asteroids are client-only, generated from `seed`; only targetable bodies appear here.
 
 ## 8. Canonical serialization
@@ -267,12 +292,12 @@ Save text comes from one kernel codec. `JSON.stringify` is not used for output.
 - Maps are written as key/value pairs, sorted with integers numerically first, then strings by code point.
 - Lists whose order has no meaning are sorted by ID before writing. Lists whose order has meaning, such as task steps, keep it.
 - Parsing rejects out-of-range integers.
-- Derived caches are not saved. `to_save(from_save(x)) == x`, byte for byte.
+- Derived caches are not saved. `to_save(from_save(x)) == x`, byte for byte. The one exception is `pos_mm` of a body or frame on an orbit: it is a pure function of the stored orbit and the tick, recomputed in phase 2 of every tick, so saving it changes nothing.
 - `state_hash` is the SHA-256 of that text. It is the only accepted way to compare states.
 
 The save includes the contract version, `TICKS_PER_SECOND`, a hash of every definition the simulation reads after load (so not `visual` or scenarios, since a scenario is read once and its results are in the state), all RNG streams, all remainders, both ID counters, the pending command queue, `matter_start_g` and the running totals in `sinks`. The view may omit the last two.
 
-The save excludes undrained events and the command log. Replay harnesses step to the tick before, then submit. A version or data mismatch makes `from_save` return null with a reason code.
+The save excludes undrained events and the command log. Replay harnesses step to the tick before, then submit. A version or data mismatch makes `from_save` return null with a reason code. The contract version is checked before the state's shape, so a save from an older version is `version_mismatch`, not `corrupt`.
 
 **RNG.** One named stream per system, saved as a map, so an extra draw in one system does not shift another. Restore uses `RandomNumberGenerator.state`.
 

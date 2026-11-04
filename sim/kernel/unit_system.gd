@@ -13,6 +13,8 @@ func fill_view(ctx: SimContext, view: Dictionary) -> void:
 		view["bodies"][id] = {
 			"name": body["name"], "kind": body["kind"], "pos_mm": body["pos_mm"].duplicate(),
 			"radius_mm": body["radius_mm"], "visual_seed": body["visual_seed"], "scanned": body["scanned"],
+			"frame": body["frame"], "orbit": body["orbit"].duplicate(true), "gm": body["gm"],
+			"world_mm": RailSystem.world_mm(ctx.state, "bodies", id),
 		}
 	var deposits: Dictionary = ctx.state["deposits"]
 	for id: int in _sorted(deposits):
@@ -61,6 +63,8 @@ func _unit_view(ctx: SimContext, id: int) -> Dictionary:
 	var result := {
 		"def": unit["def"], "kind": unit["kind"], "name": unit["name"],
 		"pos_mm": unit["pos_mm"].duplicate(), "at_target": unit["at_target"],
+		"frame": maxi(0, RailSystem.unit_place(state, id)), "orbit": unit["orbit"].duplicate(true),
+		"world_mm": RailSystem.world_mm(state, "units", id),
 		"core": core, "core_tier": tier, "task": unit["task"], "cycle_task": unit["cycle_task"],
 		"last_cycle": unit["last_cycle"].duplicate(true),
 		"op": unit["op"].duplicate(), "route": shown_route, "dock": unit["dock"].duplicate(),
