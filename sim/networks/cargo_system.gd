@@ -76,19 +76,20 @@ func apply_delta(ctx: SimContext, payload: Dictionary) -> void:
 func _depart(ctx: SimContext, id: int) -> void:
 	var unit: Dictionary = ctx.state["units"][id]
 	var op: Dictionary = unit["op"]
-	var quoted := Travel.quote(ctx, id, op["target"])
+	# A wait that has reached its window flies the plan it stored. Quoting afresh could move the
+	# window by a tick through rounding, and the unit would never go. A wait that missed its window,
+	# held by its task, quotes the next one: leaving late would miss the target.
+	var quoted: Dictionary
+	if op["type"] == MoveStep.OP_WAITING and op["depart_tick"] == ctx.tick and op.has("plan"):
+		quoted = op["plan"].duplicate(true)
+	else:
+		quoted = Travel.quote(ctx, id, op["target"])
 	if quoted.has("reason"):
 		op["reason"] = quoted["reason"]
 		return
 	if quoted["kind"] == Transfer.KIND:
-		# A wait that has reached its stored window leaves now. Quoting afresh could put the window
-		# a tick later through rounding, and the unit would never go. A wait that missed its window,
-		# held by its task, takes the next one: leaving late would miss the target.
-		if op["type"] == MoveStep.OP_WAITING and op["depart_tick"] == ctx.tick:
-			quoted["depart_tick"] = ctx.tick
-			quoted["arrive_tick"] = ctx.tick + quoted["ticks"] - 1
 		if quoted["depart_tick"] > ctx.tick:
-			MoveStep.wait_for(ctx, id, quoted["depart_tick"])
+			MoveStep.wait_for(ctx, id, quoted["depart_tick"], quoted)
 		else:
 			_depart_transfer(ctx, id, quoted)
 		return
@@ -121,14 +122,16 @@ func _depart_transfer(ctx: SimContext, id: int, quoted: Dictionary) -> void:
 		MoveStep.wait_for(ctx, id, ctx.tick)
 		unit["op"]["reason"] = MoveStep.REASON_NO_PROPELLANT
 		return
-	var orbit := Transfer.departure_orbit(ctx, id, quoted, ctx.tick)
+	var legs: Array = quoted.get("legs", []).duplicate(true)
+	var orbit: Dictionary = legs.pop_front()["orbit"] if not legs.is_empty() 		else Transfer.departure_orbit(ctx, id, quoted, ctx.tick)
 	if orbit.is_empty():
 		unit["op"]["reason"] = Travel.REASON_OTHER_PLACE
 		return
 	if quoted["cost_g"] > 0:
 		Reservations.claim_stock(ctx, id, Travel.PROPELLANT, quoted["cost_g"])
 		ctx.record_delta(id, self, { "kind": DELTA_BURN, "unit": id, "grams": quoted["cost_g"] })
-	unit["transfer"] = { "target": target, "depart_tick": ctx.tick, "arrive_tick": quoted["arrive_tick"] }
+	unit["transfer"] = { "target": target, "depart_tick": ctx.tick, "arrive_tick": quoted["arrive_tick"],
+		"legs": legs }
 	unit["orbit"] = orbit
 	unit["frame"] = 0
 	unit["pos_mm"] = OrbitMath.position_at(orbit, ctx.tick)

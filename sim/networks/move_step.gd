@@ -13,12 +13,15 @@ const REASON_NO_PROPELLANT := "no_propellant"
 
 
 ## Holds the unit at op `waiting` until depart_tick.
-static func wait_for(ctx: SimContext, unit_id: int, depart_tick: int) -> void:
+## The plan it will fly is kept in the op, so a save mid-wait departs on exactly the same legs.
+static func wait_for(ctx: SimContext, unit_id: int, depart_tick: int, plan: Dictionary = {}) -> void:
 	var op: Dictionary = ctx.state["units"][unit_id]["op"]
 	ctx.state["units"][unit_id]["op"] = {
 		"type": OP_WAITING, "target": op["target"], "part": 0, "start_tick": op["start_tick"],
 		"end_tick": maxi(op["start_tick"], depart_tick - 1), "depart_tick": depart_tick,
 	}
+	if not plan.is_empty():
+		ctx.state["units"][unit_id]["op"]["plan"] = plan.duplicate(true)
 
 
 func type() -> String:
@@ -99,5 +102,6 @@ func retry(ctx: SimContext, unit_id: int) -> void:
 	if quoted.has("reason") or quoted["cost_g"] > Reservations.free_stock(ctx, unit_id, Travel.PROPELLANT):
 		return
 	op.erase("reason")
+	op["plan"] = quoted.duplicate(true)
 	op["depart_tick"] = quoted["depart_tick"]
 	op["end_tick"] = maxi(op["start_tick"], quoted["depart_tick"] - 1)

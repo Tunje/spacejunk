@@ -25,6 +25,10 @@ func update_tasks(ctx: SimContext) -> void:
 		frames[id]["pos_mm"] = OrbitMath.position_at(frames[id]["orbit"], ctx.tick)
 	var units: Dictionary = ctx.state["units"]
 	for id: int in _sorted(units):
+		# A transfer across spheres of influence rides its legs in turn (A18).
+		var legs: Array = units[id]["transfer"].get("legs", [])
+		while not legs.is_empty() and legs[0]["from_tick"] <= ctx.tick:
+			units[id]["orbit"] = legs.pop_front()["orbit"]
 		if not units[id]["orbit"].is_empty() and units[id]["dock"].is_empty():
 			units[id]["pos_mm"] = OrbitMath.position_at(units[id]["orbit"], ctx.tick)
 
