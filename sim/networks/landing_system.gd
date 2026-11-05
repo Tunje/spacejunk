@@ -26,6 +26,8 @@ const REASON_BUSY := "part_busy"
 const REASON_NO_PROPELLANT := "no_propellant"
 const REASON_NO_THRUSTER := "module_missing"
 const REASON_NOT_LANDED := "not_landed"
+## The autopilot lands only on gear, as a hand-flown landing does (A19).
+const REASON_NO_GEAR := "no_landing_gear"
 ## Landing and takeoff lose 3% more than the ideal burns to gravity: on an airless body the craft
 ## kills its speed close to the ground, so the loss is small.
 const GRAVITY_LOSS_PERMILLE := 1030
@@ -122,6 +124,8 @@ static func _plan(ctx: SimContext, unit_id: int, type: String, args: Dictionary)
 		cell = args["cell"]
 		if cell < 0 or cell >= PlanetGrid.cell_count(_grid_n(ctx, body_id)):
 			return { "reason": REASON_INVALID }
+		if LowFlight.touchdown_mm_s(ctx, unit_id) <= 0:
+			return { "reason": REASON_NO_GEAR }
 		low_mm = ctx.state["bodies"][body_id]["radius_mm"]
 		high_mm = IntMath.dist(unit["pos_mm"], [0, 0, 0])
 	else:
@@ -170,18 +174,26 @@ static func cell_mm(ctx: SimContext, body_id: int, cell: int) -> Array[int]:
 
 
 ## The cell under a point, by its nearest centre among a short walk of neighbours from a good guess.
-static func cell_below(ctx: SimContext, body_id: int, pos: Array) -> int:
+## A `hint`, such as the cell under the point a tick ago, starts the walk there instead of at the
+## nearest icosahedron corner; the walk ends at the same nearest cell either way.
+static func cell_below(ctx: SimContext, body_id: int, pos: Array, hint: int = -1) -> int:
 	var n := _grid_n(ctx, body_id)
 	var dir := OrbitMath.unit(pos)
-	var best := PlanetGrid.NORTH if dir[1] >= 0 else PlanetGrid.SOUTH
-	var best_dot := OrbitMath.dot(PlanetGrid.direction(best, n), dir)
-	# Start from the nearer of the twelve icosahedron corners' cells, then walk downhill.
-	for d in PlanetGrid.DIAMONDS:
-		var corner := PlanetGrid.cell_at(d, n, 0, n)
-		var closeness := OrbitMath.dot(PlanetGrid.direction(corner, n), dir)
-		if closeness > best_dot:
-			best = corner
-			best_dot = closeness
+	var best: int
+	var best_dot: int
+	if hint >= 0:
+		best = hint
+		best_dot = OrbitMath.dot(PlanetGrid.direction(best, n), dir)
+	else:
+		best = PlanetGrid.NORTH if dir[1] >= 0 else PlanetGrid.SOUTH
+		best_dot = OrbitMath.dot(PlanetGrid.direction(best, n), dir)
+		# Start from the nearer of the twelve icosahedron corners' cells, then walk downhill.
+		for d in PlanetGrid.DIAMONDS:
+			var corner := PlanetGrid.cell_at(d, n, 0, n)
+			var closeness := OrbitMath.dot(PlanetGrid.direction(corner, n), dir)
+			if closeness > best_dot:
+				best = corner
+				best_dot = closeness
 	var improved := true
 	while improved:
 		improved = false

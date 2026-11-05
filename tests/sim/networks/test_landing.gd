@@ -1,5 +1,6 @@
 extends GutTest
-## Landing, takeoff and collisions (task A15, orbital_flight.md section 11, planets.md section 3.2).
+## Landing, takeoff and collisions (task A15, orbital_flight.md section 11, planets.md section 3.2),
+## and the player's hand-flown landing in low flight (task A19).
 
 const GM_STAR := 132_712_440_018_000_000
 const GM_PLANET := 3_531_600_000
@@ -8,8 +9,25 @@ const RADIUS_MM := 600_000_000
 const ONE := OrbitMath.ONE
 const PROPELLANT_G := 12_000_000
 
+const GEAR_MM_S := 6000
+
 var sim: Sim
 var keys := {}
+## The hull this file fitted with landing gear in the cached data, to take it off afterwards.
+var _geared: Dictionary = {}
+
+
+## Landing needs gear (A19), and B15's legs aren't in data yet, so the starter hull carries some.
+## It is patched in the cached definitions so a loaded save sees the same data hash.
+func before_all() -> void:
+	var hull: Dictionary = DataLoader.load_defs()["modules"]["starter_hull"]["capabilities"]
+	if not hull.has(LowFlight.GEAR):
+		hull[LowFlight.GEAR] = { "max_touchdown_mm_s": GEAR_MM_S }
+		_geared = hull
+
+
+func after_all() -> void:
+	_geared.erase(LowFlight.GEAR)
 
 
 func before_each() -> void:
@@ -120,7 +138,7 @@ func test_landing_and_takeoff_refusals() -> void:
 	LandingSystem._set_down(sim._ctx, keys["Ship"], keys["Planet"], 5)
 	var burn := { "type": "plan_burn", "unit": keys["Ship"], "args": {
 		"tick": 5, "prograde_um_s": 1_000_000, "normal_um_s": 0, "radial_um_s": 0 } }
-	assert_eq(sim.check(burn)["reason"], "not_flying", "no burns on the ground")
+	assert_true(sim.check(burn)["ok"], "a burn on the ground is a lift-off (A19)")
 	assert_eq(sim.check({ "type": "take_off", "unit": keys["Ship"], "args": { "altitude_mm": 0 } })["reason"],
 		"malformed_command")
 
@@ -215,3 +233,165 @@ func test_solar_power_stops_in_a_planets_shadow() -> void:
 	assert_false(RailSystem.in_shadow(sim._state, keys["Ship"]), "landed on the day side")
 	LandingSystem._set_down(sim._ctx, keys["Ship"], keys["Planet"], LandingSystem.cell_below(sim._ctx, keys["Planet"], behind))
 	assert_true(RailSystem.in_shadow(sim._state, keys["Ship"]), "landed on the night side")
+
+
+# ------------------------------------------------------------------------------ A19: hand-flown landing
+
+## Puts the ship in low flight a height above the ground of a cell, still.
+func _hover(cell: int, height_mm: int) -> void:
+	var ground := LandingSystem.cell_mm(sim._ctx, keys["Planet"], cell)
+	var up := OrbitMath.unit(ground)
+	var ship := _ship()
+	ship["orbit"] = {}
+	ship["low_flight"] = keys["Planet"]
+	ship["pos_mm"] = [ground[0] + OrbitMath.smul_div(up[0], height_mm, ONE),
+		ground[1] + OrbitMath.smul_div(up[1], height_mm, ONE), ground[2] + OrbitMath.smul_div(up[2], height_mm, ONE)]
+	ship["vel_um_s"] = [0, 0, 0]
+	ship["drift_carry"] = [0, 0, 0]
+
+
+func _until_any(types: Array, limit: int) -> Dictionary:
+	for i in limit:
+		sim.step()
+		for event in sim.take_events():
+			if types.has(event["type"]):
+				return event
+	return {}
+
+
+func test_a_gentle_touchdown_lands() -> void:
+	_hover(4242, 1000)  # 1 m up: about 4.4 m/s at the ground, under the 6 m/s legs
+	var event := _until_any(["landed", "crashed"], 100)
+	assert_eq(event.get("type", ""), "landed", str(event))
+	assert_lt(event["data"]["speed_um_s"], GEAR_MM_S * 1000)
+	assert_eq(_ship()["landed"], { "body": keys["Planet"], "cell": 4242 })
+	assert_eq(_ship()["low_flight"], 0)
+
+
+func test_a_hard_touchdown_crashes() -> void:
+	_hover(4242, 100_000)  # 100 m up: about 44 m/s at the ground
+	var event := _until_any(["landed", "crashed"], 200)
+	assert_eq(event.get("type", ""), "crashed", str(event))
+	assert_gt(event["data"]["speed_um_s"], GEAR_MM_S * 1000)
+	assert_false(_ship()["landed"].is_empty())
+
+
+func test_ground_contact_is_at_the_cells_real_height() -> void:
+	var cell := 4242
+	var ground := IntMath.dist(LandingSystem.cell_mm(sim._ctx, keys["Planet"], cell), [0, 0, 0])
+	assert_ne(ground, RADIUS_MM, "this cell is not at the datum")
+	_hover(cell, 1000)
+	_until_any(["landed", "crashed"], 100)
+	assert_eq(IntMath.dist(_ship()["pos_mm"], [0, 0, 0]), ground)
+
+
+func test_predict_shows_the_contact_the_flight_meets() -> void:
+	_hover(4242, 100_000)
+	var ahead := sim.predict(keys["Ship"], sim.current_tick(), 500, 10)
+	assert_eq(ahead["place"], { "low_flight": keys["Planet"] })
+	var contact: Dictionary = ahead["contact"]
+	assert_false(contact.is_empty())
+	var event := _until_any(["crashed"], 500)
+	assert_eq(sim.current_tick(), contact["tick"], "the predicted tick")
+	assert_eq(event["data"]["speed_um_s"], contact["speed_um_s"], "the predicted speed")
+	assert_eq(event["data"]["cell"], contact["cell"])
+
+
+func test_an_orbit_dipping_low_enters_low_flight_and_climbing_leaves_it() -> void:
+	# An ellipse from 700 km down to a 15 km periapsis.
+	var periapsis := RADIUS_MM + 15_000_000
+	var a := (700_000_000 + periapsis) / 2
+	var apo_speed := OrbitMath.speed_um_s(GM_PLANET, 700_000_000, a)
+	_put_in_orbit(OrbitMath.from_state([700_000_000, 0, 0], [0, 0, -apo_speed], GM_PLANET, sim.current_tick()))
+	var entered := _until_any(["low_flight_entered"], 20_000)
+	assert_eq(entered.get("data", {}), { "body": keys["Planet"] })
+	assert_eq(_ship()["orbit"], {})
+	var left := _until_any(["low_flight_left", "crashed", "landed"], 20_000)
+	assert_eq(left.get("type", ""), "low_flight_left", "it skims past periapsis and climbs out")
+	assert_eq(_ship()["orbit"]["parent"], keys["Planet"])
+
+
+func test_lift_off_needs_thrust_over_weight() -> void:
+	LandingSystem._set_down(sim._ctx, keys["Ship"], keys["Planet"], 4242)
+	# On this planet the starter ship's thrust is under its weight: it lifts, settles and lands again.
+	sim.submit({ "type": "plan_burn", "unit": keys["Ship"], "args": {
+		"tick": sim.current_tick() + 1, "prograde_um_s": 0, "normal_um_s": 0, "radial_um_s": 20_000_000 } })
+	var event := _until_any(["landed", "crashed"], 200)
+	assert_eq(event.get("type", ""), "landed", "settles back gently")
+	# With almost no gravity the same burn climbs away.
+	sim._state["bodies"][keys["Planet"]]["gm"] = 1000
+	sim.submit({ "type": "plan_burn", "unit": keys["Ship"], "args": {
+		"tick": sim.current_tick() + 1, "prograde_um_s": 0, "normal_um_s": 0, "radial_um_s": 20_000_000 } })
+	sim.step(200)
+	assert_eq(_ship()["low_flight"], keys["Planet"])
+	assert_gt(LowFlight.altitude_mm(sim._ctx, keys["Planet"], _ship()["pos_mm"]), 10_000)
+
+
+func test_atomic_land_needs_gear() -> void:
+	_geared_off()
+	assert_eq(sim.check(_land(4242))["reason"], "no_landing_gear")
+
+
+func _geared_off() -> void:
+	var defs: Dictionary = sim._ctx.defs.duplicate(true)
+	defs["modules"]["starter_hull"]["capabilities"].erase(LowFlight.GEAR)
+	sim._ctx.defs = defs
+	assert_eq(LowFlight.touchdown_mm_s(sim._ctx, keys["Ship"]), 0)
+
+
+func test_save_and_load_in_low_flight_is_byte_exact() -> void:
+	_hover(4242, 2_000_000)
+	sim.step(5)
+	var saved := sim.to_save()
+	var loaded := Sim.from_save(saved)
+	assert_eq(loaded.to_save(), saved)
+	sim.step(300)
+	loaded.step(300)
+	assert_eq(loaded.state_hash(), sim.state_hash())
+	assert_eq(sim.ledger()["violations"], PackedStringArray())
+
+
+## The walk from a hint, near or far, ends at the same cell as the walk from the corners, so a path
+## that remembers its last cell meets the ground where the flight does.
+func test_a_hinted_search_finds_the_same_cell() -> void:
+	var planet: int = keys["Planet"]
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var far_misses := 0
+	for i in 300:
+		var pos: Array[int] = [rng.randi_range(-ONE, ONE), rng.randi_range(-ONE, ONE), rng.randi_range(-ONE, ONE)]
+		if pos == [0, 0, 0]:
+			continue
+		var cold := LandingSystem.cell_below(sim._ctx, planet, pos)
+		var near_pos: Array[int] = [pos[0] + ONE / 100, pos[1], pos[2]]
+		var near := LandingSystem.cell_below(sim._ctx, planet, near_pos)
+		assert_eq(LandingSystem.cell_below(sim._ctx, planet, pos, near), cold, "from a nearby cell")
+		if LandingSystem.cell_below(sim._ctx, planet, pos, rng.randi_range(0, 4000)) != cold:
+			far_misses += 1
+	assert_eq(far_misses, 0, "from anywhere at all")
+
+
+## D's finding on A19: a path skimming the ground looked up its cell from scratch every tick, about
+## 2 s for this hop before the fix. A 300 m/s hop from 2 km up stays under the contact gate for
+## about 670 ticks and crosses about 200 km of cells; predict must stay quick and still meet the
+## ground where the flight does.
+func test_predict_skimming_the_ground_is_quick_and_matches_the_flight() -> void:
+	_hover(4242, 2_000_000)
+	var up := OrbitMath.unit(_ship()["pos_mm"])
+	var east := OrbitMath.unit(OrbitMath.cross(up, [0, ONE, 0]))
+	var vel: Array[int] = []
+	for axis in 3:
+		vel.append(OrbitMath.smul_div(east[axis], 300_000_000, ONE) + OrbitMath.smul_div(up[axis], 300_000_000, ONE))
+	_ship()["vel_um_s"] = vel
+	var started := Time.get_ticks_usec()
+	var ahead := sim.predict(keys["Ship"], sim.current_tick(), 3000, 10)
+	var took_ms := (Time.get_ticks_usec() - started) / 1000.0
+	print("PREDICT near the ground: %.1f ms to contact at +%d ticks" % [took_ms, ahead["contact"].get("tick", 0) - sim.current_tick()])
+	var contact: Dictionary = ahead["contact"]
+	assert_false(contact.is_empty())
+	assert_gt(contact["tick"] - sim.current_tick(), 500, "a long hop under the gate")
+	assert_lt(took_ms, 500.0, "a quarter of the old cost at most, with room for a loaded machine")
+	var event := _until_any(["crashed", "landed"], 3000)
+	assert_eq(sim.current_tick(), contact["tick"], "the predicted tick")
+	assert_eq(event["data"]["cell"], contact["cell"], "the predicted cell")
+	assert_eq(event["data"]["speed_um_s"], contact["speed_um_s"], "the predicted speed")

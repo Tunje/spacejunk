@@ -65,7 +65,7 @@ func validate(ctx: SimContext, command: Dictionary) -> Dictionary:
 		if typeof(args.get(key)) != TYPE_INT:
 			return SimSystem.reject(REASON_MALFORMED)
 	var unit_id: int = command["unit"]
-	if not ctx.state["units"][unit_id]["dock"].is_empty() or not ctx.state["units"][unit_id]["landed"].is_empty():
+	if not ctx.state["units"][unit_id]["dock"].is_empty():
 		return SimSystem.reject(REASON_NOT_FLYING)
 	if args["tick"] <= ctx.state["tick"]:
 		return SimSystem.reject(REASON_IN_PAST)
@@ -116,8 +116,14 @@ func run(ctx: SimContext) -> void:
 		var unit: Dictionary = units[id]
 		if not unit["dock"].is_empty() or not unit["route"].is_empty() or not unit["transfer"].is_empty():
 			continue
-		if unit["orbit"].is_empty():
+		if unit["low_flight"] != 0:
+			LowFlight.step(ctx, id)
+		elif not unit["landed"].is_empty():
+			continue
+		elif unit["orbit"].is_empty():
 			_drift(ctx, id)
+		elif _is_low(ctx, unit):
+			LowFlight.enter(ctx, id)
 		else:
 			_cross_soi(ctx, id)
 			_try_join(ctx, id)
@@ -135,6 +141,8 @@ func fill_view(ctx: SimContext, view: Dictionary) -> void:
 		var unit: Dictionary = units[id]
 		var shown: Dictionary = view["units"][id]
 		shown["vel_um_s"] = unit["vel_um_s"].duplicate()
+		shown["low_flight"] = unit["low_flight"]
+		shown["touchdown_mm_s"] = LowFlight.touchdown_mm_s(ctx, id)
 		shown["burns"] = unit["burns"].duplicate(true)
 		var burn: Dictionary = unit["burn"]
 		shown["burn"] = {} if burn.is_empty() else {
@@ -166,6 +174,9 @@ static func predict(ctx: SimContext, unit_id: int, from_tick: int, ticks: int, s
 	var unit: Dictionary = ctx.state["units"][unit_id]
 	if not unit["dock"].is_empty():
 		return predict(ctx, unit["dock"]["target_unit"], from_tick, ticks, step)
+	if unit["low_flight"] != 0:
+		var ahead := LowFlight.path(ctx, unit, ticks, step)
+		return { "place": { "low_flight": unit["low_flight"] }, "points": ahead["points"], "contact": ahead["contact"] }
 	var points: Array = []
 	var orbit: Dictionary = unit["orbit"]
 	for t in range(from_tick, from_tick + ticks + 1, step):
@@ -210,7 +221,7 @@ func _start(ctx: SimContext, unit_id: int, planned: Dictionary) -> void:
 	var found := thruster(ctx, unit_id)
 	if found.is_empty():
 		reason = REASON_NO_THRUSTER
-	elif not unit["dock"].is_empty() or not unit["landed"].is_empty():
+	elif not unit["dock"].is_empty():
 		reason = REASON_NOT_FLYING
 	elif unit["op"]["type"] != Units.IDLE_OP or not unit["route"].is_empty() or unit["task"] != 0:
 		reason = REASON_BUSY
@@ -218,6 +229,8 @@ func _start(ctx: SimContext, unit_id: int, planned: Dictionary) -> void:
 		ctx.emit_event("burn_short", unit_id, {
 			"burn": planned["id"], "reason": reason, "dv_um_s": 0, "propellant_g": 0 })
 		return
+	if not unit["landed"].is_empty():
+		LowFlight.lift(ctx, unit_id)  # a burn on the ground is a lift-off (A19)
 	var vector := _burn_vector(ctx, unit_id, planned, ctx.tick)
 	var dv := IntMath.dist(vector, [0, 0, 0])
 	unit["burn"] = {
@@ -355,6 +368,8 @@ static func _burn_vector(ctx: SimContext, unit_id: int, planned: Dictionary, tic
 ## [prograde, normal, radial out] unit vectors in Q30.
 static func _basis(ctx: SimContext, unit_id: int, tick: int) -> Array:
 	var unit: Dictionary = ctx.state["units"][unit_id]
+	if unit["low_flight"] != 0 or not unit["landed"].is_empty():
+		return LowFlight.basis(unit)
 	var orbit: Dictionary = unit["orbit"]
 	if orbit.is_empty() and unit["frame"] != 0:
 		orbit = ctx.state["frames"][unit["frame"]]["orbit"]
@@ -385,6 +400,8 @@ static func _preview(ctx: SimContext, unit_id: int, args: Dictionary, found: Dic
 		for axis in 3:
 			detail["vel_um_s"][axis] += vector[axis]
 		detail["leaves_frame"] = unit["frame"] != 0 and detail["vel_um_s"] != [0, 0, 0]
+		if unit["low_flight"] != 0 or not unit["landed"].is_empty():
+			detail["approximate"] = true
 		return detail
 	if detail["burn_ticks"] <= MAX_PREVIEW_TICKS:
 		return _fly_preview(ctx, orbit, vector, dv, mass_g, args["tick"], found, detail)
@@ -555,6 +572,12 @@ func _rebase(ctx: SimContext, unit_id: int, new_parent: int, between: Dictionary
 	unit["orbit"] = orbit
 	unit["pos_mm"] = r
 	ctx.emit_event("soi_changed", unit_id, { "from": old_parent, "to": new_parent })
+
+
+## True if an orbiting unit is below LowFlight.ENTER_MM over a body with gravity (A19).
+static func _is_low(ctx: SimContext, unit: Dictionary) -> bool:
+	var body: Dictionary = ctx.state["bodies"][unit["orbit"]["parent"]]
+	return body["gm"] > 0 and IntMath.dist(unit["pos_mm"], [0, 0, 0]) - int(body["radius_mm"]) < LowFlight.ENTER_MM
 
 
 ## Division rounding towards minus infinity, so drift steps the same either way along an axis.
