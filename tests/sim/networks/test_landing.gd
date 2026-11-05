@@ -158,9 +158,12 @@ func test_an_orbit_into_the_ground_crashes_on_the_cell_below() -> void:
 	assert_eq(sim.ledger()["violations"], PackedStringArray())
 
 
+## A burn still running when the ship hits the ground ends with the crash. The ship starts on a
+## path that already falls, so the test needn't fly a long deorbit burn first (A20).
 func test_a_burn_into_the_ground_ends_with_the_crash() -> void:
+	_put_in_orbit(OrbitMath.from_state([700_000_000, 0, 0], [0, 0, -1_000_000_000], GM_PLANET, 0))
 	sim.submit({ "type": "plan_burn", "unit": keys["Ship"], "args": {
-		"tick": 1, "prograde_um_s": -1_500_000_000, "normal_um_s": 0, "radial_um_s": 0 } })
+		"tick": 1, "prograde_um_s": -1_000_000_000, "normal_um_s": 0, "radial_um_s": 0 } })
 	var seen: Array[Dictionary] = []
 	for i in 30_000:
 		sim.step()
@@ -180,16 +183,26 @@ func test_a_landed_ship_cannot_move_to_or_burn() -> void:
 	assert_eq(sim.view()["bodies"][keys["Planet"]]["planet"], { "seed": 48213, "height_range_m": 8000 })
 
 
+## Mid-landing and landed. The landing itself is checked elsewhere, so this saves part-way through
+## it, and again once set down, rather than flying the whole descent twice (A20).
 func test_save_and_load_while_landing_and_landed_is_byte_exact() -> void:
 	sim.submit(_land(4242))
 	sim.step(200)
-	for i in 2:
-		var saved := sim.to_save()
-		var loaded := Sim.from_save(saved)
-		assert_eq(loaded.to_save(), saved)
-		loaded.step(5000)
-		sim.step(5000)
-		assert_eq(loaded.state_hash(), sim.state_hash())
+	var saved := sim.to_save()
+	var loaded := Sim.from_save(saved)
+	assert_eq(loaded.to_save(), saved)
+	loaded.step(1500)
+	sim.step(1500)
+	assert_eq(loaded.state_hash(), sim.state_hash())
+	assert_eq(_ship()["op"]["type"], LandingSystem.OP_LANDING, "still on the way down")
+	_ship()["op"] = { "type": Units.IDLE_OP, "target": 0, "part": 0, "start_tick": 0, "end_tick": 0 }
+	LandingSystem._set_down(sim._ctx, keys["Ship"], keys["Planet"], 4242)
+	saved = sim.to_save()
+	loaded = Sim.from_save(saved)
+	assert_eq(loaded.to_save(), saved)
+	loaded.step(300)
+	sim.step(300)
+	assert_eq(loaded.state_hash(), sim.state_hash())
 	assert_false(_ship()["landed"].is_empty())
 
 

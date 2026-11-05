@@ -132,6 +132,8 @@ func _draw_routes(view: Dictionary, centre: Array) -> void:
 				_relative(WorldPosition.local_to_world(unit, unit["route"]["to_mm"]), centre), ClientTheme.ORANGE)
 		elif not unit.get("transfer", {}).is_empty() and not unit.get("orbit", {}).is_empty():
 			_add_arc(mesh, SystemMap.transfer_arc(view, unit, ROUTE_SEGMENTS), centre, ClientTheme.ORANGE)
+		elif unit["op"]["type"] == "waiting" and not unit["op"].get("plan", {}).get("legs", []).is_empty():
+			_add_arc(mesh, SystemMap.plan_arc(view, unit["op"]["plan"], ROUTE_SEGMENTS), centre, ClientTheme.GOLD)
 	var target := _selected_position(view)
 	if not target.is_empty() and view["units"].has(local_view.commanded_unit):
 		var unit: Dictionary = view["units"][local_view.commanded_unit]
@@ -149,14 +151,40 @@ func _add_line(mesh: ImmediateMesh, from: Vector3, to: Vector3, colour: Color) -
 
 ## An autopilot transfer (A13) rides its orbit on rails from now to arrival, so its
 ## arc comes straight from the orbit record, in 64-bit world mm.
+## A trip across a sphere of influence (A18) is a chain of legs, each an orbit
+## from its tick to the next leg's: the current orbit until the first leg still to
+## come, then each in turn up to arrival.
 static func transfer_arc(view: Dictionary, unit: Dictionary, segments: int) -> Array[PackedFloat64Array]:
-	var orbit: Dictionary = unit["orbit"]
-	var parent := WorldPosition.of(view["bodies"][orbit["parent"]])
-	var from: int = view["tick"]
-	var to: int = maxi(from, unit["transfer"]["arrive_tick"])
+	var transfer: Dictionary = unit["transfer"]
+	var pieces: Array[Dictionary] = [{ "orbit": unit["orbit"], "from_tick": view["tick"] }]
+	for leg: Dictionary in transfer.get("legs", []):
+		pieces.append(leg)
+	return SystemMap.chain_arc(view, pieces, transfer["arrive_tick"], segments)
+
+
+## Before departure, the waiting op's plan (the trip quote() gives) as the same chain.
+static func plan_arc(view: Dictionary, plan: Dictionary, segments: int) -> Array[PackedFloat64Array]:
+	var pieces: Array[Dictionary] = []
+	for leg: Dictionary in plan.get("legs", []):
+		pieces.append(leg)
+	return SystemMap.chain_arc(view, pieces, plan["arrive_tick"], segments)
+
+
+## Points along a chain of { orbit, from_tick }, each piece up to the next piece's
+## tick and the last up to `end_tick`, each placed by its own parent body.
+static func chain_arc(view: Dictionary, pieces: Array[Dictionary], end_tick: int, segments: int) -> Array[PackedFloat64Array]:
 	var points: Array[PackedFloat64Array] = []
-	for index in segments + 1:
-		points.append(OrbitPath.shifted(OrbitPath.position(orbit, lerpf(from, to, float(index) / segments)), parent))
+	for index in pieces.size():
+		var orbit: Dictionary = pieces[index]["orbit"]
+		var from: int = maxi(pieces[index]["from_tick"], view["tick"])
+		var to: int = pieces[index + 1]["from_tick"] if index + 1 < pieces.size() else end_tick
+		if to <= from or not view["bodies"].has(orbit.get("parent", 0)):
+			continue
+		for step in segments + 1:
+			var tick := lerpf(from, to, float(step) / segments)
+			# The parent where it will be then: a moon moves a long way in a trip.
+			var parent := OrbitPath.body_world_at(view, orbit["parent"], tick)
+			points.append(OrbitPath.shifted(OrbitPath.position(orbit, tick), parent))
 	return points
 
 

@@ -139,6 +139,7 @@ A whole number converts by integer multiplication, so a value such as the star's
 | `heat_capacity` | `limit_kj` | Summed to give the unit's heat limit |
 | `port` | `transfer_kg_per_s`, `dock_seconds` (whole), `undock_seconds` (whole) | Docking ports |
 | `thruster` | `speed_m_s`, `propellant_kg_per_s`, `rated_mass_kg`, `exhaust_m_s`, `thrust_kn` | Thrusters |
+| `landing_gear` | `max_touchdown_m_s` | Landing legs |
 | `facility` | `type`: `refinery` or `fabricator` | Station facilities |
 | `always_on` | `true` | A load that runs whenever healthy, such as a command hub |
 
@@ -155,6 +156,8 @@ A multi-role part has one `power_kw` and one `heat_kw`, which apply whenever it 
 A trip's cost is its travel time at `propellant_kg_per_s`, scaled by the unit's mass at departure over `rated_mass_kg`, and paid in one lump at departure ([autonomy.md](autonomy.md) section 4). The network spec holds the exact formula.
 
 **Two kinds of thruster figure.** Trips inside a frame read `speed_m_s`, `propellant_kg_per_s` and `rated_mass_kg`, exactly as above. Burns outside a frame read only `exhaust_m_s` (loaded as `exhaust_mm_s`) and `thrust_kn` (loaded as `thrust_n`), through the rocket equation of [orbital_flight.md](orbital_flight.md) section 7. For today's thrusters, `thrust_kn` is `propellant_kg_per_s` times `exhaust_m_s`, so both kinds of figure give the same propellant flow: 3 kN for `chemical_thruster_mk1` and 0.15 kN for `small_chemical_thruster_mk1`, at 3000 m/s. All five fields are required, and the validator checks them (task B13). A thruster is not a power or heat load during a trip, so in the slice its `power_kw` and `heat_kw` count only toward fitting budgets.
+
+**Landing gear.** `max_touchdown_m_s` is the fastest touchdown the part survives, above 0, and it loads as `max_touchdown_mm_s` (task B15). A unit's touchdown limit is the highest figure among its healthy parts with landing gear, and 0 when it has none. A touchdown at or under the limit lands, and one over it crashes. Hand-flown landings and the core autopilot's `land` both obey this, so a unit with no gear cannot land. `max_slope_mdeg` is reserved on this object for a later slope limit. It is not part of the schema yet, and the validator rejects nothing for its absence. Today's parts are `landing_legs_mk1` (6 m/s, 100 kg, two structural frames) and `small_landing_legs_mk1` (4 m/s, 50 kg, one frame), both side-mounted.
 
 ## 6. Connectors
 
