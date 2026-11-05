@@ -11,6 +11,11 @@ extends RefCounted
 ## - Back: an escape hyperbola from the parking orbit, burned at the point that sends it out of C's
 ##   sphere along C's motion on the Hohmann window. Then the coast around P to the target's radius.
 ## Costs are the sum of the burns, by the rocket equation, which for one exhaust speed is exact.
+##
+## Two levels apart (A22), such as star to a moon of a planet, chains two crossings through a
+## parking circle around the middle body: in, capture onto the circle, coast to the next window,
+## then in again and phase to the target. The way back is the mirror. Every burn and every phasing
+## orbit is in the price.
 
 const REASON_UNSUPPORTED := "unsupported_orbit"
 ## A planet's own orbit may be this eccentric, 0.1 in Q30. The ship's and target's must still be
@@ -18,6 +23,9 @@ const REASON_UNSUPPORTED := "unsupported_orbit"
 const MAX_PLANET_E_Q30 := 107_374_182
 ## Coarse steps when searching for the tick a path enters a sphere.
 const SEARCH_STEPS := 64
+## A two-level trip's parking circle stays at least this high, above where flight near a surface
+## begins.
+const PARK_FLOOR_MM := 60_000_000
 const ONE := OrbitMath.ONE
 const UM_PER_MM := 1000
 
@@ -31,6 +39,10 @@ static func plan(ctx: SimContext, unit_id: int, mine: Dictionary, theirs: Dictio
 		trip = _outbound(ctx, mine, theirs, from_tick)
 	elif _parent_of(bodies, mine["parent"]) == theirs["parent"]:
 		trip = _return(ctx, mine, theirs, from_tick)
+	elif _parent_of(bodies, _parent_of(bodies, theirs["parent"])) == mine["parent"]:
+		trip = _two_levels(ctx, mine, theirs, from_tick, true)
+	elif _parent_of(bodies, _parent_of(bodies, mine["parent"])) == theirs["parent"]:
+		trip = _two_levels(ctx, mine, theirs, from_tick, false)
 	else:
 		return { "reason": REASON_UNSUPPORTED }
 	if trip.has("reason"):
@@ -78,14 +90,19 @@ static func _leg(orbit: Dictionary, parent: int, from_tick: int) -> Dictionary:
 	return { "orbit": orbit, "from_tick": from_tick }
 
 
-## Ticks from a hyperbolic record's epoch to its periapsis.
+## Ticks from an orbit's epoch to its next periapsis, hyperbolic or elliptic.
 static func _to_periapsis(orbit: Dictionary) -> int:
-	return OrbitMath.smul_div(-int(orbit["m0_rad"]), 1 << (OrbitMath.MOTION_SHIFT - 30), orbit["motion_q60"])
+	if orbit.get("hyperbolic", false):
+		return OrbitMath.smul_div(-int(orbit["m0_rad"]), 1 << (OrbitMath.MOTION_SHIFT - 30), orbit["motion_q60"])
+	var to_go := (-int(orbit["m0_angle"])) & OrbitMath.ANGLE_MASK
+	return IntMath.mul_div(to_go, orbit["period_subticks"], OrbitMath.TURN) / OrbitMath.SUB_TICKS
 
 
 # ------------------------------------------------------------------------------ out
 
-static func _outbound(ctx: SimContext, mine: Dictionary, theirs: Dictionary, from_tick: int) -> Dictionary:
+## With `phase` false it stops on the capture circle, for the first half of a two-level trip.
+static func _outbound(ctx: SimContext, mine: Dictionary, theirs: Dictionary, from_tick: int,
+		phase_to_target: bool = true) -> Dictionary:
 	var child: int = theirs["parent"]
 	var parent: int = mine["parent"]
 	var planet: Dictionary = ctx.state["bodies"][child]
@@ -115,11 +132,11 @@ static func _outbound(ctx: SimContext, mine: Dictionary, theirs: Dictionary, fro
 	var body := OrbitMath.state_at(planet_orbit, gm_p, entry)
 	var r_rel := _add(ship["r"], body["r"], -1)
 	var v_rel := _add(ship["v"], body["v"], -1)
-	var approach := _approach(r_rel, v_rel, gm_c, ring, planet_orbit)
+	var approach := _approach(r_rel, v_rel, gm_c, ring, theirs)
 	if approach.is_empty():
 		return { "reason": REASON_UNSUPPORTED }
 	var falling := OrbitMath.from_state(r_rel, approach, gm_c, entry)
-	if not falling.get("hyperbolic", false):
+	if falling.is_empty():
 		return { "reason": REASON_UNSUPPORTED }
 	var periapsis := entry + maxi(1, _to_periapsis(falling))
 	# Leg 2: capture onto a circle through the periapsis, then phasing to the target on that ring.
@@ -130,7 +147,15 @@ static func _outbound(ctx: SimContext, mine: Dictionary, theirs: Dictionary, fro
 	if captured.is_empty():
 		return { "reason": REASON_UNSUPPORTED }
 	captured["parent"] = child
-	var capture_dv := absi(IntMath.dist(low["v"], [0, 0, 0]) - circle_speed)
+	# The course change at the sphere's edge is a burn too, and counts.
+	var capture_dv := absi(IntMath.dist(low["v"], [0, 0, 0]) - circle_speed) \
+		+ IntMath.dist(_add(approach, v_rel, -1), [0, 0, 0])
+	if not phase_to_target:
+		return {
+			"depart_tick": depart, "arrive_tick": periapsis, "dv_um_s": hohmann["dv1_um_s"] + capture_dv,
+			"legs": [_leg(outward, parent, depart), _leg(falling, child, entry), _leg(captured, child, periapsis)],
+			"last_orbit": captured,
+		}
 	var phase := Transfer._phasing(ctx, captured, theirs, gm_c, periapsis)
 	var phasing_speed := OrbitMath.speed_um_s(gm_c, r_low, phase["orbit_a_mm"])
 	var phasing := OrbitMath.from_state(low["r"], _scaled(low["v"], phasing_speed), gm_c, periapsis)
@@ -168,23 +193,27 @@ static func _entry_tick(path: Dictionary, planet_orbit: Dictionary, soi: int, st
 
 ## A velocity at r_rel, inward, with the speed of v_rel, on the hyperbola around the child whose
 ## periapsis is `ring`. Worked in mm and mm/s, so every square stays inside 63 bits.
-static func _approach(r_rel: Array, v_rel: Array, gm: int, ring: int, planet_orbit: Dictionary) -> Array:
+static func _approach(r_rel: Array, v_rel: Array, gm: int, ring: int, target_orbit: Dictionary) -> Array:
 	var r := IntMath.dist(r_rel, [0, 0, 0])
 	var v_mm := IntMath.dist(v_rel, [0, 0, 0]) / UM_PER_MM
 	var circular_sq := IntMath.mul_div(gm, OrbitMath.MM3_PER_GM_UNIT, r)
 	var excess := v_mm * v_mm - 2 * circular_sq
-	if excess <= 0:
+	if excess == 0:
 		return []
-	var a := IntMath.mul_div(gm, OrbitMath.MM3_PER_GM_UNIT, excess)
-	var e := ONE + IntMath.mul_div(ring, ONE, a)
-	var e2m1 := IntMath.mul_div(e, e, ONE) - ONE
-	# Angular momentum squared over r^2: GM a (e^2 - 1) / r^2, the tangential speed squared at r.
-	var tangential_sq := IntMath.mul_div(IntMath.mul_div(circular_sq, a, r), e2m1, ONE)
+	# Faster than escape there, a hyperbola: e = 1 + ring / a. Slower, the child has already caught
+	# it, an ellipse with the same periapsis: e = 1 - ring / a, which needs ring < a (A22).
+	var a := IntMath.mul_div(gm, OrbitMath.MM3_PER_GM_UNIT, absi(excess))
+	if excess < 0 and ring >= a:
+		return []
+	var e := ONE + IntMath.mul_div(ring, ONE, a) if excess > 0 else ONE - IntMath.mul_div(ring, ONE, a)
+	var e_term := absi(IntMath.mul_div(e, e, ONE) - ONE)
+	# Angular momentum squared over r^2: GM a |e^2 - 1| / r^2, the tangential speed squared at r.
+	var tangential_sq := IntMath.mul_div(IntMath.mul_div(circular_sq, a, r), e_term, ONE)
 	var radial_sq := maxi(0, v_mm * v_mm - tangential_sq)
 	var outward := OrbitMath.unit(r_rel)
-	var normal := OrbitMath.unit(OrbitMath.cross(outward, OrbitMath.unit(v_rel)))
-	if normal == [0, 0, 0]:
-		normal = OrbitMath.unit(OrbitMath.cross(planet_orbit["p_q30"], planet_orbit["q_q30"]))
+	# Go round the child the same way the target does: a hyperbola in the other sense would leave the
+	# capture orbit and the target moving against each other, and phasing would mean nothing (A21).
+	var normal := OrbitMath.unit(OrbitMath.cross(target_orbit["p_q30"], target_orbit["q_q30"]))
 	var along := OrbitMath.cross(normal, outward)
 	var tangential := IntMath.isqrt(tangential_sq) * UM_PER_MM
 	var radial := IntMath.isqrt(radial_sq) * UM_PER_MM
@@ -196,7 +225,10 @@ static func _approach(r_rel: Array, v_rel: Array, gm: int, ring: int, planet_orb
 
 # ------------------------------------------------------------------------------ back
 
-static func _return(ctx: SimContext, mine: Dictionary, theirs: Dictionary, from_tick: int) -> Dictionary:
+## With `phase` false it stops on the circle at the target's radius, for the first half of a
+## two-level trip.
+static func _return(ctx: SimContext, mine: Dictionary, theirs: Dictionary, from_tick: int,
+		phase_to_target: bool = true) -> Dictionary:
 	var child: int = mine["parent"]
 	var parent: int = theirs["parent"]
 	var planet: Dictionary = ctx.state["bodies"][child]
@@ -279,6 +311,12 @@ static func _return(ctx: SimContext, mine: Dictionary, theirs: Dictionary, from_
 		return { "reason": REASON_UNSUPPORTED }
 	circle["parent"] = parent
 	var arrive_dv := absi(IntMath.dist(end["v"], [0, 0, 0]) - circle_speed)
+	if not phase_to_target:
+		return {
+			"depart_tick": burn, "arrive_tick": reach, "dv_um_s": escape_dv + arrive_dv,
+			"legs": [_leg(leaving, child, burn), _leg(coasting, parent, exit), _leg(circle, parent, reach)],
+			"last_orbit": circle,
+		}
 	var phase := Transfer._phasing(ctx, circle, theirs, gm_p, reach)
 	var phasing_speed := OrbitMath.speed_um_s(gm_p, r_end, phase["orbit_a_mm"])
 	var phasing := OrbitMath.from_state(end["r"], _scaled(end["v"], phasing_speed), gm_p, reach)
@@ -288,6 +326,49 @@ static func _return(ctx: SimContext, mine: Dictionary, theirs: Dictionary, from_
 		"depart_tick": burn, "arrive_tick": reach + phase["ticks"] - 1,
 		"dv_um_s": escape_dv + arrive_dv + phase["dv1_um_s"] + phase["dv2_um_s"],
 		"legs": [_leg(leaving, child, burn), _leg(coasting, parent, exit), _leg(phasing, parent, reach)],
+	}
+
+
+# ------------------------------------------------------------------------------ two levels
+
+## Two crossings through a parking circle around the middle body: out from an orbit around a star
+## to one around a moon of its planet, or back. The circle is in the plane of the orbit the first
+## crossing meets, halfway between the middle body's surface and the inner edge of the moon's sphere.
+static func _two_levels(ctx: SimContext, mine: Dictionary, theirs: Dictionary, from_tick: int,
+		outward: bool) -> Dictionary:
+	var bodies: Dictionary = ctx.state["bodies"]
+	var moon: int = theirs["parent"] if outward else mine["parent"]
+	var middle := _parent_of(bodies, moon)
+	var moon_body: Dictionary = bodies[moon]
+	var middle_body: Dictionary = bodies[middle]
+	var inner_edge: int = moon_body["orbit"]["a_mm"] - moon_body.get("soi_mm", 0)
+	var floor_mm: int = middle_body["radius_mm"] + PARK_FLOOR_MM
+	var park_r := maxi((middle_body["radius_mm"] + inner_edge) / 2, floor_mm)
+	if park_r >= inner_edge:
+		return { "reason": REASON_UNSUPPORTED }
+	# Going out, the first crossing meets the middle body's own orbit; coming back, the moon's.
+	var plane: Dictionary = middle_body["orbit"] if outward else moon_body["orbit"]
+	var park := OrbitMath.make_orbit(_gm(ctx, middle), park_r, 0, plane["p_q30"], plane["q_q30"], 0, from_tick)
+	park["parent"] = middle
+	var first: Dictionary
+	if outward:
+		first = _outbound(ctx, mine, park, from_tick, false)
+	else:
+		first = _return(ctx, mine, park, from_tick, false)
+	if first.has("reason"):
+		return first
+	var second: Dictionary
+	if outward:
+		second = _outbound(ctx, first["last_orbit"], theirs, first["arrive_tick"])
+	else:
+		second = _return(ctx, first["last_orbit"], theirs, first["arrive_tick"])
+	if second.has("reason"):
+		return second
+	var legs: Array = first["legs"].duplicate()
+	legs.append_array(second["legs"])
+	return {
+		"depart_tick": first["depart_tick"], "arrive_tick": second["arrive_tick"],
+		"dv_um_s": first["dv_um_s"] + second["dv_um_s"], "legs": legs,
 	}
 
 

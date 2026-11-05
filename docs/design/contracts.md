@@ -195,7 +195,7 @@ Every command has this envelope. `submit` fills in `id` and `tick`.
 
 Running shortfalls are still handled by shedding and faults.
 
-**Building units.** A recipe output may name a unit template. When the job finishes, the unit appears docked at a free port of the facility's station. The port is reserved in phase 4, and the job blocks with `no_free_port` if none is free. B4 checks that template part mass equals recipe input mass, and that the template holds a port.
+**Building units.** A recipe output may name a unit template. When the job finishes, the unit appears docked at a free port of the facility's unit, or failing that of the unit it is docked to, and takes that unit's place (frame, orbit or landed cell). The port is reserved in phase 4, and the job blocks with `no_free_port` if none is free. B4 checks that template part mass equals recipe input mass, and that the template holds a port.
 
 **Jobs.** With `count` above 1, inputs are taken at the start of each run and `job_finished` fires per run.
 
@@ -325,7 +325,7 @@ This shape is frozen. Fields may be added, but changes or removals go through th
 
 - `power.supply_w` is what the generators give this tick. Generators are solar, so it is 0 while `in_shadow`: a body with gravity stands between the unit and the star, by a cylinder test (from A16).
 - `op.type`: `idle`, `moving`, `waiting`, `docking`, `undocking`, `loading`, `unloading`, `mining`, `scanning` or `burning`. A `move_to` between places is `waiting` until its window. Its op carries `depart_tick`, and `end_tick` is `depart_tick - 1`. Nothing is paid while waiting, and `stop` cancels it freely. From departure it is `moving`, with the unit's `transfer` set to `{ target, depart_tick, arrive_tick, legs }` and `route` left `{}`. A paid transfer is atomic and runs to arrival.
-- A trip across a sphere of influence (from A18) is a chain of orbits. `transfer.legs` lists the legs still to come, each `{ orbit, from_tick }`, and the unit's `orbit` switches to each in turn in phase 2 of its tick. That is a Hohmann ellipse, then a hyperbola around the moon or planet, then a phasing orbit, or the reverse. A trip within one sphere has `legs = []`.
+- A trip across a sphere of influence (from A18) is a chain of orbits. `transfer.legs` lists the legs still to come, each `{ orbit, from_tick }`, and the unit's `orbit` switches to each in turn in phase 2 of its tick. That is a Hohmann ellipse, then a hyperbola around the moon or planet, then a phasing orbit, or the reverse. A trip within one sphere has `legs = []`. A trip two levels apart (from A22), such as from a star orbit to a moon of its planet, is two such chains joined at a parking circle around the planet, six legs in all. Its approach to the moon may be an ellipse rather than a hyperbola.
 - While waiting, the op keeps the trip it will fly as `plan`. It is the same dictionary `quote` gives, so a save mid-wait leaves on exactly the same legs. While `burning`, `part` is the thruster, which draws power and gives heat like any running load. A shed thruster gives no thrust that tick.
 - A unit also shows `vel_um_s`, its local velocity in a frame. It shows `burns`, its planned burns in tick order as `{ id, tick, prograde_um_s, normal_um_s, radial_um_s }`. And it shows `burn`, the running burn as `{ id, dv_um_s, done_um_s, start_tick }`, or `{}`.
 - A part's `state`: `on`, `shed` or `fault`.
