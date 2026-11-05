@@ -94,8 +94,8 @@ func test_a_trip_out_to_a_moon_ring() -> void:
 	assert_eq(_ship()["frame"], keys["Ring"])
 	assert_eq(_ship()["at_target"], keys["Moon Rock"])
 	assert_lt(flown["largest_mm"], flown["typical_mm"] * 4, "no jump between legs")
-	# Parking is within 50 ticks of the trip's own motion of where the path ends.
-	assert_lt(flown["snap_mm"], flown["typical_mm"] * 50, "parks close to where the path ends")
+	# Parking is within 5 ticks of the trip's own motion of where the path ends (A21).
+	assert_lt(flown["snap_mm"], flown["typical_mm"] * 5, "parks where the path ends")
 	var ledger := sim.ledger()
 	assert_eq(ledger["matter"]["total_g"], ledger["matter"]["start_g"])
 	assert_eq(ledger["violations"], PackedStringArray())
@@ -116,8 +116,8 @@ func test_a_trip_back_from_the_moon_ring() -> void:
 	assert_true(flown["arrived"])
 	assert_eq(_ship()["frame"], keys["Home"])
 	assert_lt(flown["largest_mm"], flown["typical_mm"] * 4, "no jump between legs")
-	# Parking is within 50 ticks of the trip's own motion of where the path ends.
-	assert_lt(flown["snap_mm"], flown["typical_mm"] * 50, "parks close to where the path ends")
+	# Parking is within 5 ticks of the trip's own motion of where the path ends (A21).
+	assert_lt(flown["snap_mm"], flown["typical_mm"] * 5, "parks where the path ends")
 
 
 func test_quotes_across_spheres_are_stable_and_saved_mid_flight() -> void:

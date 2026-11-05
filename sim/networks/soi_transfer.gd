@@ -115,7 +115,7 @@ static func _outbound(ctx: SimContext, mine: Dictionary, theirs: Dictionary, fro
 	var body := OrbitMath.state_at(planet_orbit, gm_p, entry)
 	var r_rel := _add(ship["r"], body["r"], -1)
 	var v_rel := _add(ship["v"], body["v"], -1)
-	var approach := _approach(r_rel, v_rel, gm_c, ring, planet_orbit)
+	var approach := _approach(r_rel, v_rel, gm_c, ring, theirs)
 	if approach.is_empty():
 		return { "reason": REASON_UNSUPPORTED }
 	var falling := OrbitMath.from_state(r_rel, approach, gm_c, entry)
@@ -130,7 +130,8 @@ static func _outbound(ctx: SimContext, mine: Dictionary, theirs: Dictionary, fro
 	if captured.is_empty():
 		return { "reason": REASON_UNSUPPORTED }
 	captured["parent"] = child
-	var capture_dv := absi(IntMath.dist(low["v"], [0, 0, 0]) - circle_speed)
+	# The course change at the sphere's edge is a burn too, and counts.
+	var capture_dv := absi(IntMath.dist(low["v"], [0, 0, 0]) - circle_speed) 		+ IntMath.dist(_add(approach, v_rel, -1), [0, 0, 0])
 	var phase := Transfer._phasing(ctx, captured, theirs, gm_c, periapsis)
 	var phasing_speed := OrbitMath.speed_um_s(gm_c, r_low, phase["orbit_a_mm"])
 	var phasing := OrbitMath.from_state(low["r"], _scaled(low["v"], phasing_speed), gm_c, periapsis)
@@ -168,7 +169,7 @@ static func _entry_tick(path: Dictionary, planet_orbit: Dictionary, soi: int, st
 
 ## A velocity at r_rel, inward, with the speed of v_rel, on the hyperbola around the child whose
 ## periapsis is `ring`. Worked in mm and mm/s, so every square stays inside 63 bits.
-static func _approach(r_rel: Array, v_rel: Array, gm: int, ring: int, planet_orbit: Dictionary) -> Array:
+static func _approach(r_rel: Array, v_rel: Array, gm: int, ring: int, target_orbit: Dictionary) -> Array:
 	var r := IntMath.dist(r_rel, [0, 0, 0])
 	var v_mm := IntMath.dist(v_rel, [0, 0, 0]) / UM_PER_MM
 	var circular_sq := IntMath.mul_div(gm, OrbitMath.MM3_PER_GM_UNIT, r)
@@ -182,9 +183,9 @@ static func _approach(r_rel: Array, v_rel: Array, gm: int, ring: int, planet_orb
 	var tangential_sq := IntMath.mul_div(IntMath.mul_div(circular_sq, a, r), e2m1, ONE)
 	var radial_sq := maxi(0, v_mm * v_mm - tangential_sq)
 	var outward := OrbitMath.unit(r_rel)
-	var normal := OrbitMath.unit(OrbitMath.cross(outward, OrbitMath.unit(v_rel)))
-	if normal == [0, 0, 0]:
-		normal = OrbitMath.unit(OrbitMath.cross(planet_orbit["p_q30"], planet_orbit["q_q30"]))
+	# Go round the child the same way the target does: a hyperbola in the other sense would leave the
+	# capture orbit and the target moving against each other, and phasing would mean nothing (A21).
+	var normal := OrbitMath.unit(OrbitMath.cross(target_orbit["p_q30"], target_orbit["q_q30"]))
 	var along := OrbitMath.cross(normal, outward)
 	var tangential := IntMath.isqrt(tangential_sq) * UM_PER_MM
 	var radial := IntMath.isqrt(radial_sq) * UM_PER_MM
