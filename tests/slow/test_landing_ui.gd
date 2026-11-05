@@ -213,7 +213,10 @@ func test_a_crash_is_reported() -> void:
 			crashed = true
 			break
 	assert_true(crashed)
-	assert_has(main.event_log.lines, "Orbiter crashed on Planet")
+	var said := false
+	for line: String in main.event_log.lines:
+		said = said or line.begins_with("Orbiter crashed on Planet")
+	assert_true(said, "the crash is in the log, with its speed since A19")
 
 
 ## The height the mesh draws at a cell, and the sim's landed height there, in m.

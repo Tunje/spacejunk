@@ -427,9 +427,12 @@ func _add_burn_row(burn_id: int, action: String) -> void:
 ## Works the path data out again only when the tick or the burn changes.
 func _update_paths(view: Dictionary, command: Dictionary) -> void:
 	var shown := unit()
-	# Velocity changes every tick in low flight, so it is left out: the time limit
-	# below keeps a falling craft's path fresh without asking predict every tick.
-	var key := "%d:%s:%d:%s:%s:%s:%s" % [unit_id(), str(shown.get("orbit", {})), int(shown.get("low_flight", 0)),
+	# Velocity changes every tick in low flight, so there it is left out: the time
+	# limit below keeps a falling craft's path fresh without asking every tick. A
+	# drift's velocity only changes with a burn, so a new drift is drawn at once.
+	var low := int(shown.get("low_flight", 0))
+	var drift := "" if low != 0 else str(shown.get("vel_um_s", []))
+	var key := "%d:%s:%d:%s:%s:%s:%s:%s" % [unit_id(), str(shown.get("orbit", {})), low, drift,
 		str(shown.get("landed", {})), str(shown["dock"]), str(command), str(preview.get("ok", false))]
 	var now := Time.get_ticks_msec()
 	var every := DESCENT_REFRESH_MS if int(shown.get("low_flight", 0)) != 0 else PATH_REFRESH_MS

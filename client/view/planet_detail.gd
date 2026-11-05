@@ -52,6 +52,8 @@ var _lock := Mutex.new()
 var _finished: Array[Dictionary] = []
 ## Tasks of dropped tiles still running: waited on once done, so none leak.
 var _abandoned: Array[int] = []
+## Raised whenever tiles are dropped, so a build started before then is ignored.
+var _generation := 0
 
 
 func _init() -> void:
@@ -97,6 +99,7 @@ func clear() -> void:
 
 
 func _drop_all() -> void:
+	_generation += 1
 	for key: String in tiles:
 		var node: MeshInstance3D = tiles[key].get("node")
 		if node != null:
@@ -194,6 +197,7 @@ func _start(key: String) -> void:
 	var job := {
 		"key": key, "settings": settings, "seed": visual_seed, "sites": sites.duplicate(),
 		"centre": centre_dir, "east": east, "north": north, "anchor": PlanetMesh.key_of(settings) + str(centre_dir),
+		"generation": _generation,
 	}
 	tiles[key] = { "task": WorkerThreadPool.add_task(_build_task.bind(job), false, "planet tile") }
 
@@ -219,7 +223,8 @@ func _collect_finished() -> void:
 	_lock.unlock()
 	for built: Dictionary in done:
 		var key: String = built["key"]
-		if not tiles.has(key) or built["anchor"] != PlanetMesh.key_of(settings) + str(centre_dir):
+		# A build from before the last drop, or for a tile already built, is stale.
+		if built.get("generation", -1) != _generation or not tiles.has(key) or not tiles[key].has("task"):
 			continue
 		WorkerThreadPool.wait_for_task_completion(tiles[key]["task"])
 		var mesh := ArrayMesh.new()
@@ -332,7 +337,8 @@ static func build_tile(job: Dictionary) -> Dictionary:
 	arrays[Mesh.ARRAY_NORMAL] = normals
 	arrays[Mesh.ARRAY_COLOR] = colours
 	arrays[Mesh.ARRAY_INDEX] = indices
-	return { "key": job["key"], "anchor": job["anchor"], "arrays": arrays, "origin": origin, "heights": heights }
+	return { "key": job["key"], "anchor": job["anchor"], "generation": job.get("generation", 0), "arrays": arrays,
+		"origin": origin, "heights": heights }
 
 
 ## Two triangles for a quad, wound clockwise seen from outside, Godot's front face.
