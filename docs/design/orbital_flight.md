@@ -564,5 +564,10 @@ perf_budget.md section 5a has the figures.
   - The basis there is level prograde, normal, and radial straight up, so the axes stay steady on a vertical descent.
   - A lift-off whose thrust is under the ship's weight settles back and lands again at near-zero speed.
 - **`predict` in low flight** runs the same integration and reports where and how fast the path meets the ground. The test checks that the predicted contact tick, cell and speed equal what the flight then does.
+- **The ground test is cheap where it can be** (D's finding).
+  - Nothing is looked up above the body's own highest possible ground (its `height_range_m`, plus 1 km).
+  - Below that, each tick's search for the cell starts from the last tick's cell, and a path keeps each cell's ground height once found.
+  - A hinted search ends at the same cell as a cold one, so the drawn path still meets the ground where the flight does.
+  - A 670-tick hop skimming the ground used to take about 2 s to predict and now takes about 0.1 s.
 - **Tests:** in test_landing.gd: gentle and hard touchdowns, contact at the real height, prediction against the flight, entering and leaving low flight from a dipping orbit, lift-off with and without enough thrust, gear for the autopilot, and a byte-exact save in low flight. They give the starter hull landing gear in the cached data until B15's legs are on main.
 - **Not done:** crash damage, slope limits (B reserved `max_slope_mdeg` for later), and planet rotation.
