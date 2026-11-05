@@ -4,8 +4,11 @@ extends GutTest
 ## a heavy central body, a home frame at 20,000 km and a moon at 30,000 km. In tests/slow because
 ## the trips step about 250,000 ticks between them.
 
-const GM_ROOT := 100_000_000_000_000  # 1e17 m^3/s^2 in units of 1000 m^3/s^2
-const GM_MOON := 10_000_000_000       # 1e13 m^3/s^2
+## Both GMs are 4 times A18's figures, which halves every period and flight and keeps the sphere's
+## size, since that depends on their ratio. The moon starts 45 degrees on, where the outbound window
+## opens about 200 ticks in instead of 38,700: the angle a window needs doesn't depend on scale (A20b).
+const GM_ROOT := 400_000_000_000_000  # 4e17 m^3/s^2 in units of 1000 m^3/s^2
+const GM_MOON := 40_000_000_000       # 4e13 m^3/s^2
 const ONE := OrbitMath.ONE
 
 var sim: Sim
@@ -21,7 +24,7 @@ func before_each() -> void:
 			{ "key": "root", "name": "Root", "kind": "star", "pos_mm": [0, 0, 0], "radius_mm": 5_000_000_000,
 				"visual_seed": 1, "deposits": [], "gm": GM_ROOT },
 			{ "key": "moon", "name": "Moon", "kind": "planet", "radius_mm": 100_000_000, "visual_seed": 2,
-				"deposits": [], "gm": GM_MOON, "orbit": { "parent": "root", "a_mm": 30_000_000_000, "mean_anomaly_mdeg": 40_000 } },
+				"deposits": [], "gm": GM_MOON, "orbit": { "parent": "root", "a_mm": 30_000_000_000, "mean_anomaly_mdeg": 45_000 } },
 			{ "key": "home_rock", "name": "Home Rock", "kind": "asteroid", "frame": "home", "pos_mm": [20_000_000, 0, 0],
 				"radius_mm": 300_000, "visual_seed": 3, "deposits": [] },
 			{ "key": "moon_rock", "name": "Moon Rock", "kind": "asteroid", "frame": "ring", "pos_mm": [20_000_000, 0, 0],
@@ -34,7 +37,7 @@ func before_each() -> void:
 		],
 		"units": [
 			{ "key": "ship", "template": "starter_ship", "name": "Ship", "pos_mm": [150_000, 0, 0], "frame": "home",
-				"inventory": [{ "item": "propellant", "grams": 4_000_000_000 }], "dock": null },
+				"inventory": [{ "item": "propellant", "grams": 200_000_000_000 }], "dock": null },
 		],
 	}, {}), "")
 	sim._strict = true
@@ -91,7 +94,8 @@ func test_a_trip_out_to_a_moon_ring() -> void:
 	assert_eq(_ship()["frame"], keys["Ring"])
 	assert_eq(_ship()["at_target"], keys["Moon Rock"])
 	assert_lt(flown["largest_mm"], flown["typical_mm"] * 4, "no jump between legs")
-	assert_lt(flown["snap_mm"], 200_000_000, "parks within 200 km of where the path ends")
+	# Parking is within 50 ticks of the trip's own motion of where the path ends.
+	assert_lt(flown["snap_mm"], flown["typical_mm"] * 50, "parks close to where the path ends")
 	var ledger := sim.ledger()
 	assert_eq(ledger["matter"]["total_g"], ledger["matter"]["start_g"])
 	assert_eq(ledger["violations"], PackedStringArray())
@@ -102,8 +106,8 @@ func test_a_trip_back_from_the_moon_ring() -> void:
 	sim.step(3)
 	# Refill: the compact system's speeds make the way out cost most of the tank.
 	var inventory: Dictionary = _ship()["inventory"]
-	sim._state["matter_start_g"] += 4_000_000_000 - inventory["propellant"]
-	inventory["propellant"] = 4_000_000_000
+	sim._state["matter_start_g"] += 200_000_000_000 - inventory["propellant"]
+	inventory["propellant"] = 200_000_000_000
 	var flown := _fly("Home Rock")
 	var quoted: Dictionary = flown["quote"]
 	print("SOI back: depart %d, %d ticks, %d m/s, %d kg; largest tick step %d km (typical %d km), arrival snap %d km" % [
@@ -112,7 +116,8 @@ func test_a_trip_back_from_the_moon_ring() -> void:
 	assert_true(flown["arrived"])
 	assert_eq(_ship()["frame"], keys["Home"])
 	assert_lt(flown["largest_mm"], flown["typical_mm"] * 4, "no jump between legs")
-	assert_lt(flown["snap_mm"], 200_000_000, "parks within 200 km of where the path ends")
+	# Parking is within 50 ticks of the trip's own motion of where the path ends.
+	assert_lt(flown["snap_mm"], flown["typical_mm"] * 50, "parks close to where the path ends")
 
 
 func test_quotes_across_spheres_are_stable_and_saved_mid_flight() -> void:

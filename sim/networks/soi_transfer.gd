@@ -246,22 +246,31 @@ static func _return(ctx: SimContext, mine: Dictionary, theirs: Dictionary, from_
 	var exit := burn + exit_ticks
 	var ship := OrbitMath.state_at(leaving, gm_c, exit)
 	var carrier := OrbitMath.state_at(planet_orbit, gm_p, exit)
-	# At the sphere's edge, a small correction sets the speed so the coast's far side is exactly the
-	# target's radius. The exit is close to tangential, so this barely turns the path.
+	# At the sphere's edge, a small correction makes the exit point one apsis of the coast and the
+	# target's radius the other: level, in the planet's plane and its sense of motion, at the speed
+	# for that ellipse. Its cost is the whole change of velocity.
 	var r_exit := _add(ship["r"], carrier["r"], 1)
 	var v_exit := _add(ship["v"], carrier["v"], 1)
 	var r_exit_mm := IntMath.dist(r_exit, [0, 0, 0])
 	var coast_a: int = (r_exit_mm + theirs["a_mm"]) / 2
 	var coast_speed := OrbitMath.speed_um_s(gm_p, r_exit_mm, coast_a)
-	var correction := absi(IntMath.dist(v_exit, [0, 0, 0]) - coast_speed)
-	var coasting := OrbitMath.from_state(r_exit, _scaled(v_exit, coast_speed), gm_p, exit)
+	var plane := OrbitMath.unit(OrbitMath.cross(planet_orbit["p_q30"], planet_orbit["q_q30"]))
+	var level := OrbitMath.cross(plane, OrbitMath.unit(r_exit))
+	var v_coast := _scaled(level, coast_speed)
+	var correction := IntMath.dist(_add(v_coast, v_exit, -1), [0, 0, 0])
+	var coasting := OrbitMath.from_state(r_exit, v_coast, gm_p, exit)
 	if coasting.is_empty():
 		return { "reason": REASON_UNSUPPORTED }
 	var escape_dv := periapsis_speed - OrbitMath.speed_um_s(gm_c, r0, r0) + correction
 	# The escape burn waits for the ship to come round its parking orbit, so the exit can be up to
 	# half that orbit off the window. Rather than arrive beside a target that has moved on, it
 	# circles at the target's ring where the coast ends and phases round to it, as the way out does.
-	var reach: int = exit + OrbitMath.period_sub(gm_p, coast_a) / (2 * OrbitMath.SUB_TICKS)
+	# The coast ends at its far apsis, the periapsis going inward or the apoapsis going outward. The
+	# exit is part-way round the coast's orbit, not at an apsis, so this is found from the coast's
+	# mean anomaly rather than as half a period after the exit.
+	var apsis: int = 0 if theirs["a_mm"] < r_exit_mm else OrbitMath.HALF_TURN
+	var to_go := (apsis - OrbitMath.mean_anomaly(coasting, exit)) & OrbitMath.ANGLE_MASK
+	var reach: int = exit + maxi(1, IntMath.mul_div(to_go, coasting["period_subticks"], OrbitMath.TURN) / OrbitMath.SUB_TICKS)
 	var end := OrbitMath.state_at(coasting, gm_p, reach)
 	var r_end := IntMath.dist(end["r"], [0, 0, 0])
 	var circle_speed := OrbitMath.speed_um_s(gm_p, r_end, r_end)
