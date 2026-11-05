@@ -10,8 +10,8 @@ extends RefCounted
 
 const ENTER_MM := 20_000_000
 const LEAVE_MM := 30_000_000
-## Contact is only tested below the highest ground can be, plus a margin.
-const CONTACT_GATE_MM := PlanetGrid.MAX_HEIGHT_M * 1000 + 1_000_000
+## Contact is only tested below the highest the body's ground can be, plus this margin.
+const CONTACT_MARGIN_MM := 1_000_000
 const GEAR := "landing_gear"
 ## Gravity per tick: GM in units of 1000 m^3/s^2 is 10^15 um^3/s^2... per mm^2 of radius squared,
 ## so the acceleration in um/s^2 is gm * 10^15 / r_mm^2.
@@ -65,7 +65,7 @@ static func step(ctx: SimContext, unit_id: int) -> void:
 	unit["pos_mm"] = next["pos"]
 	unit["vel_um_s"] = next["vel"]
 	unit["drift_carry"] = next["carry"]
-	var contact := ground_contact(ctx, body, next["pos"])
+	var contact := ground_contact(ctx, body, next["pos"], {})
 	if contact >= 0:
 		_touch_down(ctx, unit_id, body, contact)
 		return
@@ -92,13 +92,26 @@ static func advance(ctx: SimContext, body: int, pos: Array, vel: Array, carry: A
 	return { "pos": new_pos, "vel": new_vel, "carry": new_carry }
 
 
-## The cell a point has met the ground of, or -1 if it is still above ground.
-static func ground_contact(ctx: SimContext, body: int, pos: Array) -> int:
-	if altitude_mm(ctx, body, pos) > CONTACT_GATE_MM:
+## The cell a point has met the ground of, or -1 if it is still above ground. Nothing is looked up
+## above the body's highest possible ground. A `memo` kept across the ticks of one path holds the
+## last cell found, to start the next search from, and each cell's ground radius; the answer is the
+## same with or without it, so a drawn path meets the ground where the flown one does.
+static func ground_contact(ctx: SimContext, body: int, pos: Array, memo: Dictionary) -> int:
+	if altitude_mm(ctx, body, pos) > contact_gate_mm(ctx, body):
 		return -1
-	var cell := LandingSystem.cell_below(ctx, body, pos)
-	var ground := IntMath.dist(LandingSystem.cell_mm(ctx, body, cell), [0, 0, 0])
-	return cell if IntMath.dist(pos, [0, 0, 0]) <= ground else -1
+	var cell := LandingSystem.cell_below(ctx, body, pos, memo.get("cell", -1))
+	memo["cell"] = cell
+	var grounds: Dictionary = memo.get_or_add("grounds", {})
+	if not grounds.has(cell):
+		grounds[cell] = IntMath.dist(LandingSystem.cell_mm(ctx, body, cell), [0, 0, 0])
+	return cell if IntMath.dist(pos, [0, 0, 0]) <= int(grounds[cell]) else -1
+
+
+## The height above the datum below which a point can meet a body's ground: its highest possible
+## ground (orbital_flight.md 8, PlanetGrid.height_m), plus a margin.
+static func contact_gate_mm(ctx: SimContext, body: int) -> int:
+	var planet: Dictionary = ctx.state["bodies"][body].get("planet", {})
+	return int(planet.get("height_range_m", 0)) * 1000 + CONTACT_MARGIN_MM
 
 
 static func _touch_down(ctx: SimContext, unit_id: int, body: int, cell: int) -> void:
@@ -156,6 +169,7 @@ static func path(ctx: SimContext, unit: Dictionary, ticks: int, step: int) -> Di
 	var carry: Array = unit["drift_carry"]
 	var points: Array = [pos.duplicate()]
 	var contact := {}
+	var memo := {}
 	for t in range(1, ticks + 1):
 		var next := advance(ctx, body, pos, vel, carry)
 		pos = next["pos"]
@@ -163,7 +177,7 @@ static func path(ctx: SimContext, unit: Dictionary, ticks: int, step: int) -> Di
 		carry = next["carry"]
 		if t % step == 0:
 			points.append(pos.duplicate())
-		var cell := ground_contact(ctx, body, pos)
+		var cell := ground_contact(ctx, body, pos, memo)
 		if cell >= 0:
 			contact = { "tick": ctx.state["tick"] + t, "cell": cell,
 				"speed_um_s": IntMath.dist(vel, [0, 0, 0]) }

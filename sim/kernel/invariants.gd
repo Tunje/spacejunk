@@ -32,25 +32,60 @@ static func violations(state: Dictionary) -> PackedStringArray:
 	return found
 
 
+## The fast path, run every tick in strict tests: integers are tested inline against their key's
+## cached range, so the common case makes no call per value (A20b).
 static func _is_clean(value: Variant, key: String) -> bool:
 	match typeof(value):
 		TYPE_INT:
 			return _in_range(value, key)
 		TYPE_ARRAY:
-			var values: Array = value
-			for item: Variant in values:
-				if not _is_clean(item, key):
-					return false
-			return true
+			return _clean_array(value, key)
 		TYPE_DICTIONARY:
-			var map: Dictionary = value
-			for child_key: Variant in map:
-				if not _is_clean(map[child_key], _child_key(child_key, key)):
-					return false
-			return true
+			return _clean_map(value, key)
 		TYPE_BOOL, TYPE_STRING:
 			return true
 	return false
+
+
+static func _clean_map(map: Dictionary, key: String) -> bool:
+	for child_key: Variant in map:
+		var child: Variant = map[child_key]
+		match typeof(child):
+			TYPE_INT:
+				var limits := _limits(_child_key(child_key, key))
+				if not limits.is_empty() and (child < limits[0] or child > limits[1]):
+					return false
+			TYPE_BOOL, TYPE_STRING:
+				pass
+			TYPE_DICTIONARY:
+				if not _clean_map(child, _child_key(child_key, key)):
+					return false
+			TYPE_ARRAY:
+				if not _clean_array(child, _child_key(child_key, key)):
+					return false
+			_:
+				return false
+	return true
+
+
+static func _clean_array(values: Array, key: String) -> bool:
+	var limits := _limits(key)
+	for item: Variant in values:
+		match typeof(item):
+			TYPE_INT:
+				if not limits.is_empty() and (item < limits[0] or item > limits[1]):
+					return false
+			TYPE_BOOL, TYPE_STRING:
+				pass
+			TYPE_DICTIONARY:
+				if not _clean_map(item, key):
+					return false
+			TYPE_ARRAY:
+				if not _clean_array(item, key):
+					return false
+			_:
+				return false
+	return true
 
 
 ## The key a child's value is ranged by.
@@ -91,8 +126,22 @@ static func _in_range(value: int, key: String) -> bool:
 	return limits.is_empty() or (value >= limits[0] and value <= limits[1])
 
 
+## Ranges by key, worked out once each: strict runs test every integer of the state every tick, and
+## the suffix comparisons were most of that cost (A20b).
+static var _limit_cache := {}
+
+
 ## The range for a key, as [low, high], or [] if the key has none.
 static func _limits(key: String) -> Array:
+	var cached: Variant = _limit_cache.get(key)
+	if cached != null:
+		return cached
+	var limits := _find_limits(key)
+	_limit_cache[key] = limits
+	return limits
+
+
+static func _find_limits(key: String) -> Array:
 	if key.is_empty():
 		return []
 	var low := 0

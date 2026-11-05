@@ -349,3 +349,49 @@ func test_save_and_load_in_low_flight_is_byte_exact() -> void:
 	loaded.step(300)
 	assert_eq(loaded.state_hash(), sim.state_hash())
 	assert_eq(sim.ledger()["violations"], PackedStringArray())
+
+
+## The walk from a hint, near or far, ends at the same cell as the walk from the corners, so a path
+## that remembers its last cell meets the ground where the flight does.
+func test_a_hinted_search_finds_the_same_cell() -> void:
+	var planet: int = keys["Planet"]
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var far_misses := 0
+	for i in 300:
+		var pos: Array[int] = [rng.randi_range(-ONE, ONE), rng.randi_range(-ONE, ONE), rng.randi_range(-ONE, ONE)]
+		if pos == [0, 0, 0]:
+			continue
+		var cold := LandingSystem.cell_below(sim._ctx, planet, pos)
+		var near_pos: Array[int] = [pos[0] + ONE / 100, pos[1], pos[2]]
+		var near := LandingSystem.cell_below(sim._ctx, planet, near_pos)
+		assert_eq(LandingSystem.cell_below(sim._ctx, planet, pos, near), cold, "from a nearby cell")
+		if LandingSystem.cell_below(sim._ctx, planet, pos, rng.randi_range(0, 4000)) != cold:
+			far_misses += 1
+	assert_eq(far_misses, 0, "from anywhere at all")
+
+
+## D's finding on A19: a path skimming the ground looked up its cell from scratch every tick, about
+## 2 s for this hop before the fix. A 300 m/s hop from 2 km up stays under the contact gate for
+## about 670 ticks and crosses about 200 km of cells; predict must stay quick and still meet the
+## ground where the flight does.
+func test_predict_skimming_the_ground_is_quick_and_matches_the_flight() -> void:
+	_hover(4242, 2_000_000)
+	var up := OrbitMath.unit(_ship()["pos_mm"])
+	var east := OrbitMath.unit(OrbitMath.cross(up, [0, ONE, 0]))
+	var vel: Array[int] = []
+	for axis in 3:
+		vel.append(OrbitMath.smul_div(east[axis], 300_000_000, ONE) + OrbitMath.smul_div(up[axis], 300_000_000, ONE))
+	_ship()["vel_um_s"] = vel
+	var started := Time.get_ticks_usec()
+	var ahead := sim.predict(keys["Ship"], sim.current_tick(), 3000, 10)
+	var took_ms := (Time.get_ticks_usec() - started) / 1000.0
+	print("PREDICT near the ground: %.1f ms to contact at +%d ticks" % [took_ms, ahead["contact"].get("tick", 0) - sim.current_tick()])
+	var contact: Dictionary = ahead["contact"]
+	assert_false(contact.is_empty())
+	assert_gt(contact["tick"] - sim.current_tick(), 500, "a long hop under the gate")
+	assert_lt(took_ms, 500.0, "a quarter of the old cost at most, with room for a loaded machine")
+	var event := _until_any(["crashed", "landed"], 3000)
+	assert_eq(sim.current_tick(), contact["tick"], "the predicted tick")
+	assert_eq(event["data"]["cell"], contact["cell"], "the predicted cell")
+	assert_eq(event["data"]["speed_um_s"], contact["speed_um_s"], "the predicted speed")

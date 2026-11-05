@@ -154,8 +154,12 @@ func test_mass_raises_the_price() -> void:
 
 
 func test_trip_1_back_matches_the_document() -> void:
+	# Start where trip 1 out ends, as test_trip_1_out_matches_the_document checks, rather than fly it
+	# again (A20b).
 	_undock()
-	_run_order(_order("move_to", { "target": RED_ROCK }))
+	state["units"][SHIP]["pos_mm"] = [49_350_000, 0, 0]
+	state["units"][SHIP]["at_target"] = RED_ROCK
+	_set_stock(SHIP, "propellant", 1_000_000 - TRIP_1_OUT_G)
 	_set_stock(SHIP, "hematite", 2_000_000)
 	assert_eq(_run_order(_order("move_to", { "target": STATION })), TRIP_TICKS)
 	assert_eq(_unit()["pos_mm"], UNDOCK_POINT)
