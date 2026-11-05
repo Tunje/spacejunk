@@ -192,7 +192,7 @@
           "id": "core",
           "type": "side",
           "size": "core",
-          "pos_mm": [2500, 3000, 2000],
+          "pos_mm": [2500, 4500, 0],
           "facing": "+x",
           "up": "+y",
           "load_limit_kg": 100
