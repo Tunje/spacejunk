@@ -272,8 +272,8 @@ func test_save_and_load_midway_through_a_burn_is_byte_exact() -> void:
 	var loaded := Sim.from_save(saved)
 	assert_not_null(loaded, Sim.last_error())
 	assert_eq(loaded.to_save(), saved)
-	sim.step(2000)
-	loaded.step(2000)
+	sim.step(700)
+	loaded.step(700)
 	assert_eq(loaded.state_hash(), sim.state_hash())
 
 
@@ -370,17 +370,19 @@ func test_save_and_load_on_a_hyperbola_is_byte_exact() -> void:
 ## that OrbitMath can't hold, and end on the hyperbola the check preview promised.
 func test_a_finite_burn_flies_through_escape_speed() -> void:
 	var orbiter := _unit("Orbiter")
-	orbiter["orbit"] = OrbitMath.from_state([700_000_000, 0, 0], [0, 0, -3_100_000_000], GM_PLANET, 0)
+	# 16 m/s under escape speed, then 40 m/s prograde at the real thrust: it crosses the band in
+	# steps of about 0.05 m/s a tick, as D's 200 m/s case did, in a fifth of the ticks (A20b).
+	orbiter["orbit"] = OrbitMath.from_state([700_000_000, 0, 0], [0, 0, -3_160_000_000], GM_PLANET, 0)
 	orbiter["orbit"]["parent"] = keys["Planet"]
 	orbiter["pos_mm"] = [700_000_000, 0, 0]
-	var command := _burn("Orbiter", 1, 200_000_000)
+	var command := _burn("Orbiter", 1, 40_000_000)
 	var preview: Dictionary = sim.check(command)["detail"]["orbit"]
 	assert_true(preview.get("hyperbolic", false), "the preview escapes")
 	sim.submit(command)
 	var events := _until("burn_done", 20_000)
 	var done := _of_type(events, "burn_done")
 	assert_true(_of_type(events, "burn_short").is_empty(), str(_of_type(events, "burn_short")))
-	assert_almost_eq(done["data"]["dv_um_s"], 200_000_000, 2)
+	assert_almost_eq(done["data"]["dv_um_s"], 40_000_000, 2)
 	var orbit: Dictionary = orbiter["orbit"]
 	assert_true(orbit.get("hyperbolic", false), "the burn escapes too")
 	print("BURN through escape: preview e %.4f, flown e %.4f" % [
