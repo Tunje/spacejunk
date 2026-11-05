@@ -1,9 +1,16 @@
 extends GutTest
 ## The autopilot's transfers (task A13, orbital_flight.md section 11): quote_trip, next_window and
 ## quote_leg, and a move_to between places that waits for its window, flies on rails and arrives.
+##
+## To keep the suite quick (A20) the planet has 100 times Kerbin's GM, so every period and flight is
+## 10 times shorter, and Far starts where its window opens a few seconds in. One trip at the real
+## scale, with its real wait, is in tests/slow/test_transfer_real_scale.gd.
 
 const GM_STAR := 132_712_440_018_000_000
-const GM_PLANET := 3_531_600_000
+const GM_PLANET := 353_160_000_000
+## The same GM in m^3/s^2, for the float formulas the tests check against.
+const MU_M3 := 3.5316e14
+const PROPELLANT_G := 100_000_000
 const AU_MM := 149_597_870_700_000
 const ONE := OrbitMath.ONE
 
@@ -35,11 +42,11 @@ func _build(extra: Dictionary = {}) -> Sim:
 			{ "key": "pebble", "name": "Pebble", "kind": "asteroid", "frame": "ahead", "pos_mm": [0, 0, 0],
 				"radius_mm": 100_000, "visual_seed": 4, "deposits": [] },
 		],
-		"frames": [frame.call("home", 700_000_000, 0), frame.call("far", 900_000_000, 123_000),
+		"frames": [frame.call("home", 700_000_000, 0), frame.call("far", 900_000_000, 31_100),
 			frame.call("ahead", 700_000_000, 20_000)],
 		"units": [
 			{ "key": "ship", "template": "starter_ship", "name": "Ship", "pos_mm": [150_000, 0, 0],
-				"frame": "home", "inventory": [{ "item": "propellant", "grams": 1_000_000 }], "dock": null },
+				"frame": "home", "inventory": [{ "item": "propellant", "grams": PROPELLANT_G }], "dock": null },
 		],
 	}
 	scenario.merge(extra, true)
@@ -67,7 +74,7 @@ func _types(events: Array[Dictionary]) -> Array:
 func test_a_hohmann_quote_leaves_on_the_window() -> void:
 	var quoted := Travel.quote_trip(sim._ctx, keys["Ship"], keys["Rock"], 0)
 	assert_eq(quoted["kind"], Transfer.KIND, str(quoted))
-	var expected := TAU * sqrt(pow(800_000.0, 3) / 3.5316e12) / 2.0 * Sim.TICKS_PER_SECOND
+	var expected := TAU * sqrt(pow(800_000.0, 3) / MU_M3) / 2.0 * Sim.TICKS_PER_SECOND
 	assert_almost_eq(float(quoted["ticks"]), expected, 2.0, "half the transfer orbit's period")
 	assert_eq(quoted["arrive_tick"], quoted["depart_tick"] + quoted["ticks"] - 1)
 	# At departure the target leads by half a turn less its motion during the flight.
@@ -80,7 +87,7 @@ func test_a_hohmann_quote_leaves_on_the_window() -> void:
 	off = mini(off, OrbitMath.TURN - off)
 	var per_tick := absi(Transfer.turn_in(home, 1) - Transfer.turn_in(far, 1))
 	assert_lte(off, per_tick * 2, "within two ticks of relative motion of the exact window")
-	var dv := 263_900_000.0  # 700 to 900 km at Kerbin gravity, both burns
+	var dv := 2_641_900_000.0  # 700 to 900 km at 100 times Kerbin's GM, both burns
 	assert_almost_eq(float(quoted["dv_um_s"]), dv, dv * 0.01)
 
 
@@ -155,7 +162,7 @@ func test_the_same_ring_uses_a_phasing_orbit_with_no_wait() -> void:
 	var quoted := sim.quote(keys["Ship"], keys["Pebble"], 50)
 	assert_eq(quoted["kind"], Transfer.KIND)
 	assert_eq(quoted["depart_tick"], 50, "no window to wait for")
-	var period := TAU * sqrt(pow(700_000.0, 3) / 3.5316e12) * Sim.TICKS_PER_SECOND
+	var period := TAU * sqrt(pow(700_000.0, 3) / MU_M3) * Sim.TICKS_PER_SECOND
 	print("TRANSFER phasing 20 degrees ahead in one ring: %d ticks (%.2f orbits), %d mm/s" % [
 		quoted["ticks"], quoted["ticks"] / period, quoted["dv_um_s"] / 1000])
 	assert_lt(quoted["ticks"], int(period * 2.0))
@@ -216,7 +223,7 @@ func test_missing_propellant_at_departure_ends_a_players_order() -> void:
 	sim.submit(_move("Rock"))
 	sim.step(first["depart_tick"] - 2)
 	_ship()["inventory"]["propellant"] = 10
-	sim._state["matter_start_g"] -= 1_000_000 - 10
+	sim._state["matter_start_g"] -= PROPELLANT_G - 10
 	sim.take_events()
 	sim.step(3)
 	var reasons := sim.take_events().map(func(e: Dictionary) -> String: return e["data"].get("reason", ""))
@@ -246,7 +253,7 @@ func test_a_missed_window_takes_the_next_one() -> void:
 func test_save_and_load_while_waiting_and_in_flight_is_byte_exact() -> void:
 	var quoted := sim.quote(keys["Ship"], keys["Rock"], 1)
 	sim.submit(_move("Rock"))
-	for at: int in [quoted["depart_tick"] - 100, quoted["depart_tick"] + 500]:
+	for at: int in [maxi(3, quoted["depart_tick"] - 10), quoted["depart_tick"] + 200]:
 		sim.step(at - sim.current_tick())
 		var saved := sim.to_save()
 		var loaded := Sim.from_save(saved)

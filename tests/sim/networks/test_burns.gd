@@ -313,8 +313,8 @@ func test_escaping_a_planet_crosses_into_the_stars_sphere() -> void:
 	var planet: Dictionary = sim._state["bodies"][keys["Planet"]]
 	assert_gt(planet["soi_mm"], 0)
 	var orbiter := _unit("Orbiter")
-	# Start on a hyperbola 1000 km inside the sphere, heading out at 5 km/s, so the crossing comes soon.
-	var inside: int = planet["soi_mm"] - 1_000_000_000
+	# Start on a hyperbola 100 km inside the sphere, heading out at 5 km/s, so the crossing comes soon.
+	var inside: int = planet["soi_mm"] - 100_000_000
 	var escape := OrbitMath.from_state([inside, 0, 0], [5_000_000_000, 0, -300_000_000], GM_PLANET, 0)
 	assert_true(escape["hyperbolic"])
 	escape["parent"] = keys["Planet"]
@@ -389,8 +389,11 @@ func test_a_finite_burn_flies_through_escape_speed() -> void:
 	assert_eq(sim.ledger()["violations"], PackedStringArray())
 
 
-## The same from a circular orbit at 5000 km, where escape is about 350 m/s away.
+## The same from a circular orbit at 5000 km, where escape is about 350 m/s away. Ten times the
+## thrust keeps the burn short (A20). The band near escape is still crossed in steps under a band's
+## width, since the test above keeps the real thrust for that.
 func test_a_finite_burn_from_a_circular_orbit_escapes() -> void:
+	_boost_thrust(10)
 	var orbiter := _unit("Orbiter")
 	orbiter["orbit"] = OrbitMath.make_orbit(GM_PLANET, 5_000_000_000, 0, [ONE, 0, 0], [0, 0, -ONE], 0, 0)
 	orbiter["orbit"]["parent"] = keys["Planet"]
@@ -399,6 +402,18 @@ func test_a_finite_burn_from_a_circular_orbit_escapes() -> void:
 	var events := _until("burn_done", 100_000)
 	assert_false(_of_type(events, "burn_done").is_empty(), str(_types_of(events)))
 	assert_true(_unit("Orbiter")["orbit"].get("hyperbolic", false))
+
+
+## A private copy of the definitions with every thruster's thrust multiplied, for a test that only
+## needs a long burn to be over sooner. Not for a test that saves, since the data hash would differ.
+func _boost_thrust(times: int) -> void:
+	var defs: Dictionary = sim._ctx.defs.duplicate(true)
+	for id: String in defs["modules"]:
+		var thruster: Dictionary = defs["modules"][id]["capabilities"].get("thruster", {})
+		if thruster.has("thrust_n"):
+			thruster["thrust_n"] *= times
+	sim._ctx.defs = defs
+	sim._ctx.index.clear()
 
 
 func _types_of(events: Array[Dictionary]) -> Array:

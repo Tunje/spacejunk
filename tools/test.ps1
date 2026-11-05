@@ -28,9 +28,27 @@ if (-not (Test-Path $godot)) {
 # GUT skips a test file it cannot parse and still reports success, so check for that here.
 $ErrorActionPreference = 'Continue'
 $config = if ($Quick) { ' -gconfig=res://.gutconfig.quick.json' } else { '' }
-$output = & cmd /c "`"$godot`" --headless --path `"$projectRoot`" -s addons/gut/gut_cmdln.gd$config 2>&1"
+# GUT's JUnit report gives each file's time, for the slow-file warning below.
+$junit = Join-Path ([System.IO.Path]::GetTempPath()) "newmanprobe-gut-$PID.xml"
+$output = & cmd /c "`"$godot`" --headless --path `"$projectRoot`" -s addons/gut/gut_cmdln.gd$config -gjunit_xml_file=`"$junit`" 2>&1"
 $gutExit = $LASTEXITCODE
 $output
+
+# A warning, never a failure: any test file over 20 s, so the gate's time doesn't creep up unseen.
+try {
+    if (Test-Path $junit) {
+        $report = [xml](Get-Content $junit -Raw)
+        foreach ($suite in $report.SelectNodes('//testsuite')) {
+            $seconds = [double]$suite.time
+            if ($seconds -gt 20) {
+                Write-Output ("SLOW: {0} took {1:N0} s, over the 20 s per file guide" -f $suite.name, $seconds)
+            }
+        }
+        Remove-Item $junit -ErrorAction SilentlyContinue
+    }
+} catch {
+    Write-Output "Note: could not read the test timing report: $_"
+}
 
 if ($gutExit -ne 0) {
     exit $gutExit
