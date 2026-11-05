@@ -41,6 +41,8 @@ This applies to every brief. Each brief also repeats what Codex needs, so it can
 - Moving parts, open doors, or visible interiors. A part that turns rotates as a whole, so each model is one solid mesh, and backs are simple closed shells.
 - Anything copied from an existing game, film or real spacecraft. All designs are original.
 
+**Connectors.** Every brief lists its connector spots from `data/modules.json`: position in metres from the origin and facing. TRELLIS bends flat faces, so image-to-3d flattens each mounting face onto an exact plane after generation, and Agent B checks in Godot that each face is flat and sits on its data connector. The list is generated from data, so rerun the brief generator if connectors change.
+
 ## Triangle budget
 
 The target must be set before generation, because reducing a model afterwards has shattered its textures.

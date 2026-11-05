@@ -7,6 +7,7 @@ Real size: 0.8 m wide (X), 2.0 m tall (Y), 0.8 m deep (Z) from the mounting face
 Placement (set after generation): origin at the centre of the mounting plate's flat back face. That face points along -Z, and the leg extends from Z = 0 to Z = +0.8 m. Up is +Y. The plate sits at the top: the part reaches 0.2 m above the origin and 1.8 m below it.
 Materials: satin painted metal; anything gold is satin gold, non-mirror: a soft painted sheen, never a polished reflective metal. Colours: mid grey #8a8d91 for the mounting plate, knee block and foot pad, off-white #e8e4d8 for the strut, safety orange #e8641b for the shock collar.
 Every collar, band, rib, rim and groove has crisp machined edges: true circles and straight lines, evenly thick all the way round, with no hand-moulded lumps, dents or wobble.
+Connectors (from data/modules.json, metres from the origin): mount at (0, 0, 0) facing -Z. Each is a flat spot square to its facing direction, flush with the surface there. If generation bends one, flatten it afterwards; core spots sit in the recessed core bay.
 View: 3/4 view from the side and slightly in front, so the strut's angle, the foot pad and the mounting plate's edge all show.
 Triangle target: 6000. Set this before generation; it cannot be reduced afterwards. One solid closed shape with no moving parts.
 

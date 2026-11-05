@@ -7,6 +7,7 @@ Real size: 3.0 m wide (X), 2.0 m tall (Y), 0.3 m deep (Z) from the mounting face
 Placement (set after generation): origin at the centre of the mounting plate's flat back face. That face points along -Z and the part extends from Z = 0 to Z = +0.3 m. Up is +Y.
 Materials: satin painted metal; anything gold is satin gold, non-mirror: a soft painted sheen, never a polished reflective metal. Colours: off-white #e8e4d8 for the panel face, mid grey #8a8d91 for the frame and back.
 Every collar, band, rib, rim and groove has crisp machined edges: true circles and straight lines, evenly thick all the way round, with no hand-moulded lumps, dents or wobble.
+Connectors (from data/modules.json, metres from the origin): mount at (0, 0, 0) facing -Z. Each is a flat spot square to its facing direction, flush with the surface there. If generation bends one, flatten it afterwards; core spots sit in the recessed core bay.
 View: 3/4 view from in front and slightly to the side, so the panel face and its thick edge both show.
 Triangle target: 6000. Set this before generation; it cannot be reduced afterwards. One solid closed shape with no moving parts.
 

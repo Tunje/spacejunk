@@ -9,6 +9,7 @@ Real size: 3.0 m tall (Y), 2.0 m in diameter (X and Z), the widest point. Scale 
 Placement (set after generation): origin at the centre of the flat top face, which points along +Y. The tank hangs below it, with its flat bottom face at Y = -3.0 m.
 Materials: satin painted metal; anything gold is satin gold, non-mirror: a soft painted sheen, never a polished reflective metal. Colours: off-white #e8e4d8 for the tank, mid grey #8a8d91 for the mounting rings and straps.
 Every collar, band, rib, rim and groove has crisp machined edges: true circles and straight lines, evenly thick all the way round, with no hand-moulded lumps, dents or wobble.
+Connectors (from data/modules.json, metres from the origin): mount at (0, 0, 0) facing +Y; stack_bottom at (0, -3, 0) facing -Y. Each is a flat spot square to its facing direction, flush with the surface there. If generation bends one, flatten it afterwards; core spots sit in the recessed core bay.
 View: 3/4 view from slightly above, standing upright, so the top mounting ring, the domed shoulder and the side of the tank all show.
 Triangle target: 6000. Set this before generation; it cannot be reduced afterwards. One solid closed shape with no moving parts.
 

@@ -7,6 +7,7 @@ Real size: 0.8 m tall (Y), 1.5 m in diameter (X and Z), the widest point. Scale 
 Placement (set after generation): origin at the centre of the flat bottom mounting face, which points along -Y. The docking face is the top, at Y = +0.8 m.
 Materials: satin painted metal; anything gold is satin gold, non-mirror: a soft painted sheen, never a polished reflective metal. Colours: mid grey #8a8d91 for the drum and rim, safety orange #e8641b for the three guide blocks.
 Every collar, band, rib, rim and groove has crisp machined edges: true circles and straight lines, evenly thick all the way round, with no hand-moulded lumps, dents or wobble.
+Connectors (from data/modules.json, metres from the origin): dock at (0, 0.8, 0) facing +Y; mount at (0, 0, 0) facing -Y. Each is a flat spot square to its facing direction, flush with the surface there. If generation bends one, flatten it afterwards; core spots sit in the recessed core bay.
 View: 3/4 view from slightly above, so the docking face on top and the side of the drum both show.
 Triangle target: 6000. Set this before generation; it cannot be reduced afterwards. One solid closed shape with no moving parts.
 
