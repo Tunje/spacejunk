@@ -1,13 +1,13 @@
 # Propellant tank
 Priority 6 (Newman Probe batch B12). Image: `newmanprobe_propellant_tank_mk1.png`. Model: `propellant_tank_mk1.glb`
 
-A fuel tank that stacks between a hull and a thruster: a smooth off-white painted cylinder 2.0 m across with straight sides. Thick mid-grey collars about 0.25 m tall at the top and bottom, exactly as wide as the tank, with flat end faces and slightly rounded outer edges. One mid-grey band about 0.25 m tall runs round the middle, flush with the surface, with a crisp shallow groove along each edge. Simple, sturdy and clean, a little toy-like.
+A fuel tank that stacks between a hull and a thruster: an off-white pressure vessel 2.0 m across, with straight sides and smoothly domed shoulders top and bottom, each about 0.5 m tall, curving in to a thick, flat mid-grey mounting ring about 1.2 m across at each end. A crisp weld-seam groove runs round the middle. Four flat mid-grey straps, each about 0.2 m wide and set flush, run straight down the sides from shoulder to shoulder, evenly spaced, as if holding the tank in its frame. Simple, sturdy and clean, clearly a rocket propellant tank with domed ends, never a drum or paint tin.
 
-Real size: 3.0 m tall (Y), 2.0 m in diameter (X and Z). 2.0 m is the widest point, collars included. Scale by the longest side.
+Real size: 3.0 m tall (Y), 2.0 m in diameter (X and Z), the widest point. Scale by the longest side.
 Placement (set after generation): origin at the centre of the flat top face, which points along +Y. The tank hangs below it, with its flat bottom face at Y = -3.0 m.
-Materials: satin painted metal; anything gold is satin gold, non-mirror: a soft painted sheen, never a polished reflective metal. Colours: off-white #e8e4d8 for the tank, mid grey #8a8d91 for the end collars and the middle band.
+Materials: satin painted metal; anything gold is satin gold, non-mirror: a soft painted sheen, never a polished reflective metal. Colours: off-white #e8e4d8 for the tank, mid grey #8a8d91 for the mounting rings and straps.
 Every collar, band, rib, rim and groove has crisp machined edges: true circles and straight lines, evenly thick all the way round, with no hand-moulded lumps, dents or wobble.
-View: 3/4 view from slightly above, standing upright, so the top end face and the curve of the tank both show.
+View: 3/4 view from slightly above, standing upright, so the top mounting ring, the domed shoulder and the side of the tank all show.
 Triangle target: 6000. Set this before generation; it cannot be reduced afterwards. One solid closed shape with no moving parts.
 
 Off-white on white: keep the off-white areas clearly darker than the pure white background everywhere, with a soft mid-tone shade towards their edges, so the outline stays easy to separate. No outline stroke.

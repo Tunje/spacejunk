@@ -1,7 +1,7 @@
 # Goods storage
 Priority 9 (Newman Probe batch B12). Image: `newmanprobe_goods_storage_mk1.png`. Model: `goods_storage_mk1.glb`
 
-A big storage module for finished goods that bolts onto a station: a large rounded box, square in section and a little longer than it is wide, with generously rounded edges. At the back, a thick flat square mid-grey mounting plate the full 3.5 m wide and tall. The body is mid grey, with two wide off-white bands, each about 0.6 m wide, wrapping round it from top to sides to bottom, flush with the surface and edged by crisp grooves. The front end face is plain and flat. Bulky, plain and clean, clearly a box rather than a drum.
+A big storage module for finished goods that bolts onto a station: a large box, square in section and a little longer than it is wide, with crisply bevelled edges. At the back, a thick flat square mid-grey mounting plate the full 3.5 m wide and tall. The body is mid grey, built from bolted plates: crisp panel-seam grooves divide each side into a 2 by 2 grid. Two wide off-white bands, each about 0.6 m wide, wrap round the body from top to sides to bottom, flush with the surface and edged by crisp grooves. On the front end face, a large recessed square mid-grey panel about 2.4 m across. Bulky, orderly and clean, clearly a cargo module.
 
 Real size: 3.5 m wide (X), 3.5 m tall (Y), 4.0 m deep (Z) from the mounting face. Scale by the longest side.
 Placement (set after generation): origin at the centre of the mounting plate's flat back face. That face points along -Z and the part extends from Z = 0 to Z = +4.0 m. Up is +Y.
