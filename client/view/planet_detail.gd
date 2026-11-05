@@ -29,6 +29,10 @@ const FINE_PERIOD_M := 30.0
 const FLAT_INNER_M := 60.0
 const FLAT_OUTER_M := 200.0
 const MAX_TILES := 400
+## The hex under a craft in low flight is levelled to its height across most of the
+## hex, since the simulation's ground there is flat at that height (A19).
+const HEX_INNER_M := 2500.0
+const HEX_OUTER_M := 3400.0
 
 var body_id := 0
 var settings: Dictionary = {}
@@ -250,8 +254,9 @@ static func height_at(dir: Vector3, settings: Dictionary, noise: Array[FastNoise
 		detail = noise[0].get_noise_3dv(at) * DETAIL_M + noise[1].get_noise_3dv(at) * FINE_M
 	for site: Dictionary in sites:
 		var away: float = (site["dir"] as Vector3).angle_to(dir) * radius
-		if away < FLAT_OUTER_M:
-			var keep := smoothstep(FLAT_INNER_M, FLAT_OUTER_M, away)
+		var outer: float = site.get("outer_m", FLAT_OUTER_M)
+		if away < outer:
+			var keep := smoothstep(site.get("inner_m", FLAT_INNER_M), outer, away)
 			return lerpf(float(site["height_m"]), base + detail, keep)
 	return base + detail
 

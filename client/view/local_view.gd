@@ -37,6 +37,9 @@ var beams: Dictionary = {}
 var click_filter: Callable
 ## Close-up terrain on the planet the camera is near (planets.md section 7).
 var detail: PlanetDetail
+## Per craft in low flight, the hex under it when last looked up: { dir, cell }.
+var _hex_cache: Dictionary = {}
+const HEX_RECHECK_M := 50.0
 
 var _modules: Dictionary = {}
 var _pivot_offset := Vector3.ZERO
@@ -287,6 +290,10 @@ func _place_craft(craft: CraftNode, id: int, before: Dictionary, after: Dictiona
 		var up := Vector3(unit["pos_mm"][0], unit["pos_mm"][1], unit["pos_mm"][2]).normalized()
 		craft.heading = Quaternion(Vector3.UP, up)
 		relative += up * -craft.bottom_m
+	elif int(unit.get("low_flight", 0)) != 0:
+		# Flying low over a body, a craft holds the local vertical, like a lander.
+		var up := Vector3(unit["pos_mm"][0], unit["pos_mm"][1], unit["pos_mm"][2]).normalized()
+		craft.heading = craft.heading.slerp(Quaternion(Vector3.UP, up), 1.0 - exp(-HEADING_RATE * delta))
 	elif _is_crowded(unit, id, after):
 		wanted = LocalView.spread_offset(id)
 	craft.display_offset = craft.display_offset.lerp(wanted, 1.0 - exp(-SPREAD_RATE * delta))
@@ -434,7 +441,28 @@ func _update_detail(view: Dictionary) -> void:
 		if unit.get("landed", {}).get("body", 0) == body.body_id:
 			var pos := Vector3(unit["pos_mm"][0], unit["pos_mm"][1], unit["pos_mm"][2])
 			landed.append({ "dir": pos.normalized(), "height_m": roundi((pos.length() - radius_mm) / 1000.0) })
+		elif int(unit.get("low_flight", 0)) == body.body_id:
+			var site := _hex_below(body, id, unit)
+			if not site.is_empty():
+				landed.append(site)
 	detail.update(body, view["bodies"][body.body_id], camera.global_position - body.position, landed)
+
+
+## The hex under a craft in low flight, levelled across most of the hex to its
+## height, which is the ground the simulation meets (A19). The hex is looked up again
+## only after the craft moves HEX_RECHECK_M, so tiles rebuild only on a new hex.
+func _hex_below(body: BodyNode, id: int, unit: Dictionary) -> Dictionary:
+	if body.planet.is_empty():
+		return {}
+	var dir := Vector3(unit["pos_mm"][0], unit["pos_mm"][1], unit["pos_mm"][2]).normalized()
+	var known: Dictionary = _hex_cache.get(id, {})
+	if known.is_empty() or known["dir"].angle_to(dir) * body.radius_m > HEX_RECHECK_M:
+		var cell := PlanetMesh.nearest_cell(body.planet, dir)
+		known = { "dir": dir, "cell": cell }
+		_hex_cache[id] = known
+	var cell: int = known["cell"]
+	return { "dir": body.planet["directions"][cell], "height_m": body.planet["heights"][cell],
+		"inner_m": PlanetDetail.HEX_INNER_M, "outer_m": PlanetDetail.HEX_OUTER_M }
 
 
 func near_planet() -> BodyNode:

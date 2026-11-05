@@ -3,6 +3,8 @@ class_name FlightLogic extends RefCounted
 ## from check(plan_burn); nothing here works out an orbit or a drift.
 
 const UM_PER_M := 1_000_000
+## How far ahead the flight screen follows a descent, matching FlightScreen.
+const PREDICT_HORIZON_TICKS := 3000
 const AXES: Array[String] = ["prograde_um_s", "normal_um_s", "radial_um_s"]
 ## Words for each axis, positive then negative.
 const AXIS_WORDS: Dictionary = {
@@ -56,6 +58,13 @@ static func place_text(view: Dictionary, unit_id: int) -> String:
 		return ""
 	if not unit["dock"].is_empty():
 		return "Docked at %s: undock to fly" % view["units"][unit["dock"]["target_unit"]]["name"]
+	var low: int = unit.get("low_flight", 0)
+	if low != 0:
+		var radius: float = float(view["bodies"].get(low, {}).get("radius_mm", 0))
+		var motion := FlightLogic.vertical_motion(unit["pos_mm"], unit["vel_um_s"])
+		var height := roundi(Vector3(unit["pos_mm"][0], unit["pos_mm"][1], unit["pos_mm"][2]).length() - radius)
+		return "Low over %s: %s above datum, %s" % [FlightLogic.body_name(view, low), OrderText.metres(height),
+			FlightLogic.motion_text(motion)]
 	var landed: Dictionary = unit.get("landed", {})
 	if not landed.is_empty():
 		var radius: float = float(view["bodies"].get(landed["body"], {}).get("radius_mm", 0))
@@ -101,7 +110,12 @@ static func preview_lines(detail: Dictionary, view: Dictionary, unit_id: int, ti
 	if detail["propellant_g"] > aboard:
 		cost += ". Only %s aboard, so it will stop short" % OrderText.tonnes(aboard)
 	var after := ""
-	if not unit.get("orbit", {}).is_empty():
+	if int(unit.get("low_flight", 0)) != 0 or not unit.get("landed", {}).is_empty():
+		var motion := FlightLogic.vertical_motion(unit["pos_mm"], detail.get("vel_um_s", [0, 0, 0]))
+		after = "Then %s" % FlightLogic.motion_text(motion)
+		if detail.get("approximate", false):
+			after += " (as one kick; gravity pulls back meanwhile)"
+	elif not unit.get("orbit", {}).is_empty():
 		var orbit: Dictionary = detail.get("orbit", {})
 		var parent := FlightLogic.body_name(view, orbit.get("parent", unit["orbit"]["parent"]))
 		if orbit.is_empty():
@@ -130,6 +144,53 @@ static func busy_note(unit: Dictionary) -> String:
 	if not unit["route"].is_empty() or unit["task"] != 0:
 		return "Busy with an order: a burn that starts before it ends is dropped."
 	return ""
+
+
+## [up speed, across speed] in um/s for a velocity at a position round a body:
+## up is along the position from the centre, positive climbing.
+static func vertical_motion(pos_mm: Array, vel_um_s: Array) -> Vector2:
+	var up := Vector3(pos_mm[0], pos_mm[1], pos_mm[2]).normalized()
+	var v := Vector3(vel_um_s[0], vel_um_s[1], vel_um_s[2])
+	var climb := v.dot(up)
+	return Vector2(climb, (v - up * climb).length())
+
+
+static func motion_text(motion: Vector2) -> String:
+	var vertical := "holding height"
+	if roundi(motion.x) > 0:
+		vertical = "climbing %s" % FlightLogic.speed(roundi(motion.x))
+	elif roundi(motion.x) < 0:
+		vertical = "falling %s" % FlightLogic.speed(roundi(-motion.x))
+	return "%s, %s across" % [vertical, FlightLogic.speed(roundi(motion.y))]
+
+
+## "Touchdown in 42 s at 12.3 m/s, hex 1234", from predict's contact.
+static func contact_text(found: Dictionary, tick: int, ticks_per_second: int) -> String:
+	if found.is_empty():
+		return "No touchdown in the next %s." % OrderText.duration(float(PREDICT_HORIZON_TICKS) / ticks_per_second)
+	return "Touchdown in %s at %s, hex %d" % [OrderText.duration(float(maxi(0, found["tick"] - tick)) / ticks_per_second),
+		FlightLogic.speed(found["speed_um_s"]), found["cell"]]
+
+
+static func lands_safely(found: Dictionary, limit_mm_s: int) -> bool:
+	return not found.is_empty() and limit_mm_s > 0 and found["speed_um_s"] <= limit_mm_s * 1000
+
+
+static func legs_text(limit_mm_s: int) -> String:
+	if limit_mm_s <= 0:
+		return "No landing legs: any touchdown is a crash."
+	return "Legs take up to %s." % FlightLogic.speed(limit_mm_s * 1000)
+
+
+## The land-or-crash verdict for the predicted touchdown.
+static func verdict_text(found: Dictionary, limit_mm_s: int) -> String:
+	if found.is_empty():
+		return FlightLogic.legs_text(limit_mm_s)
+	if limit_mm_s <= 0:
+		return "CRASH: no landing legs, so any touchdown is a crash."
+	if FlightLogic.lands_safely(found, limit_mm_s):
+		return "Lands safely: the legs take up to %s." % FlightLogic.speed(limit_mm_s * 1000)
+	return "CRASH at this speed: the legs take only %s. Burn radial out to slow down." % FlightLogic.speed(limit_mm_s * 1000)
 
 
 ## A land or take_off check as one line: "Descent: delta-v 1.20 km/s, 640 kg

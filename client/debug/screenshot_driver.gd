@@ -22,6 +22,8 @@ class_name ScreenshotDriver extends Node
 ##                                   orbit: choosing a hex with Land's cost, or after landing on it
 ##   --soi-demo=<fraction>           (reference) A18's compact system on the real Sim, the ship sent
 ##                                   to the moon's ring; -1 shows it waiting, else that far through
+##   --descent-demo=<m/s>,<seconds>  (reference) a light 250 km world on the real Sim: the probe, with
+##                                   legs, lifts off straight up at that speed and flies that long
 ##   --copy=1                        (stub_load) strips two parts off the first ship and
 ##                                   opens fitting there, to show "Fit like this one"
 ##   --fit=<item>  --fit-slot=<connector>  opens fitting after the orders and picks both
@@ -67,6 +69,8 @@ func _run() -> void:
 		_transfer_demo(float(parsed["transfer-demo"]))
 	if parsed.has("soi-demo"):
 		_soi_demo(float(parsed["soi-demo"]))
+	if parsed.has("descent-demo"):
+		await _descent_demo(parsed["descent-demo"])
 	if parsed.has("landing-demo"):
 		await _landing_demo(parsed["landing-demo"])
 	if parsed.has("planet-wait"):
@@ -285,6 +289,53 @@ func _open_jobs() -> void:
 	screen.refresh()
 
 
+## The descent test's world: 250 km, light enough (0.16 m/s^2) for the starter ship to
+## lift off, with the probe on hex 4321 with legs.
+func _descent_demo(spec: String) -> void:
+	var parts := spec.split(",")
+	var up_m_s := float(parts[0])
+	var seconds := float(parts[1]) if parts.size() > 1 else 20.0
+	var defs := DataLoader.load_defs()
+	var sim := Sim.new()
+	sim._setup(Sim._new_state("reference", 7, defs), defs)
+	ScenarioBuilder.populate(sim._ctx, {
+		"bodies": [
+			{ "key": "star", "name": "Star", "kind": "star", "pos_mm": [0, 0, 0], "radius_mm": 696_000_000_000,
+				"visual_seed": 1, "deposits": [], "gm": 132_712_440_018_000_000 },
+			{ "key": "planet", "name": "Grit", "kind": "planet", "radius_mm": 250_000_000, "visual_seed": 2,
+				"deposits": [], "gm": 10_000_000, "orbit": { "parent": "star", "a_mm": 149_597_870_700_000 },
+				"planet": { "seed": 48213, "height_range_m": 6000 } },
+		],
+		"units": [{ "key": "ship", "template": "starter_ship", "name": "Probe", "pos_mm": [0, 0, 0],
+			"inventory": [{ "item": "propellant", "grams": 1_900_000 }], "dock": null }],
+	}, {})
+	var ship := 0
+	var planet := 0
+	for id: int in sim._state["units"]:
+		ship = id
+	for id: int in sim._state["bodies"]:
+		if sim._state["bodies"][id]["kind"] == "planet":
+			planet = id
+	LandingLegs.fit(sim, ship)
+	var n := PlanetGrid.n_for_radius(250_000_000)
+	var height := PlanetGrid.height_m(48213, PlanetGrid.direction(4321, n), PlanetMesh.DEFAULT_WEIGHTS, 6000)
+	var unit: Dictionary = sim._state["units"][ship]
+	unit["orbit"] = {}
+	unit["landed"] = { "body": planet, "cell": 4321 }
+	unit["pos_mm"] = PlanetGrid.centre_mm(4321, n, 250_000_000, height)
+	sim._ctx.index.clear()
+	sim.submit({ "type": "plan_burn", "unit": ship, "args": { "tick": sim.current_tick() + 1,
+		"prograde_um_s": 0, "normal_um_s": 0, "radial_um_s": roundi(up_m_s * 1_000_000) } })
+	sim.step(roundi(seconds * Sim.TICKS_PER_SECOND))
+	main.bridge.start(sim)
+	main.bridge.set_paused(true)
+	main.local_view.rebuild()
+	main.local_view.focus_on("unit", ship)
+	while PlanetMesh.busy():
+		await get_tree().process_frame
+	main.toggle_flight()
+
+
 ## A18's test world: a heavy central body, a home frame at 20,000 km, and a moon at
 ## 30,000 km with a ring frame round it. The ship is sent to the ring's rock.
 func _soi_demo(fraction: float) -> void:
@@ -390,6 +441,7 @@ func _landing_demo(stage: String) -> void:
 			planet = id
 	var orbit := OrbitMath.from_state([300_000_000, 0, 0], [0, 0, -466_000_000], 65_138_398, 0)
 	orbit["parent"] = planet
+	LandingLegs.fit(sim, ship)
 	sim._state["units"][ship]["orbit"] = orbit
 	sim._state["units"][ship]["pos_mm"] = OrbitMath.position_at(orbit, 0)
 	sim._ctx.index.clear()
