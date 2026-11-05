@@ -193,7 +193,7 @@ Every command has this envelope. `submit` fills in `id` and `tick`.
 
 Running shortfalls are still handled by shedding and faults.
 
-**Building units.** A recipe output may name a unit template. When the job finishes, the unit appears docked at a free port of the facility's station. The port is reserved in phase 4, and the job blocks with `no_free_port` if none is free. B4 checks that template part mass equals recipe input mass, and that the template holds a port.
+**Building units.** A recipe output may name a unit template. When the job finishes, the unit appears docked at a free port of the facility's unit, or failing that of the unit it is docked to, and takes that unit's place (frame, orbit or landed cell). The port is reserved in phase 4, and the job blocks with `no_free_port` if none is free. B4 checks that template part mass equals recipe input mass, and that the template holds a port.
 
 **Jobs.** With `count` above 1, inputs are taken at the start of each run and `job_finished` fires per run.
 
