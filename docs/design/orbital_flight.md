@@ -566,3 +566,52 @@ perf_budget.md section 5a has the figures.
   - There are no jumps at leg changes.
   - The speeds are high because the system is compact. The test ship carries 1,000 t of propellant, because a 4.6 t dry ship at this exhaust speed needs a mass ratio of about 128,000 for 35 km/s. At the game's scale the same shape costs what section 5's table gives, plus the parking circle's capture and escape.
 - **Not done:** inclined targets, Lambert transfers, and a direct trip that skips the parking circle. Skipping it would save the capture and escape burns around the planet (the second crossing's Hohmann start), but it would need a three-body window.
+
+### 11.19 A23 results: can the probe reach a first planet's moon?
+
+**No placement round the star is reachable on one tank, and the time is a bigger wall than the propellant.** These are measured with the real planner (A18 and A22) by `tools/reach_run.gd`, which quotes trips and flies nothing. The probe is 6.78 t dry with legs, carries 2 t of propellant and has a 3000 m/s exhaust, so it has 775 m/s on a full tank.
+
+The setup:
+- The cluster circles the star (the Sun's GM) at 1 AU.
+- The first planet is the agreed 600 km planet at Kerbin's density.
+- Its moon is 60 km, at the same density, 12,000 km from the planet.
+- The target is a ring 66 km from the moon's centre, a tenth of its radius up, so section 11.13's 370 m/s landing round trip applies.
+- Trips go out through A22's parking circle round the planet and come back the same way.
+
+**The first planet round the star:**
+
+| Planet at | Out | Back | Round trip plus landing | Probe propellant for that | In flight out | Windows every |
+| --------- | --- | ---- | ----------------------- | ------------------------- | ------------- | ------------- |
+| 0.70 AU | 5,636 m/s | 5,515 m/s | 11,521 m/s | 309 t | 144 days | 1.4 years |
+| 0.90 AU | 1,692 m/s | 1,718 m/s | 3,780 m/s | 17.1 t | 170 days | 5.8 years |
+| 1.05 AU | 1,026 m/s | 1,094 m/s | 2,490 m/s | 8.8 t | 190 days | 14.2 years |
+| 1.20 AU | 2,532 m/s | 2,534 m/s | 5,436 m/s | 34.7 t | 212 days | 4.2 years |
+| 1.52 AU | 5,349 m/s | 5,329 m/s | 11,048 m/s | 263 t | 259 days | 2.1 years |
+
+- **Even the cheapest case is beyond the tank one way.** At 1.05 AU the trip out alone needs 2.77 t. Just matching the planet's orbit round the star costs 718 m/s each way, almost the whole tank, before any capture.
+- **Closer planets are cheaper but their windows are rarer.** Below about 1.05 AU the gap closes and the window spacing heads for decades. That is the synodic period, which no planner can shorten.
+- **Time rules it out on its own.** A trip is 5 to 9 months of game time, which is 18 to 32 days of real play at 8x. A trip home waits at the planet for the next window round the star, so it is longer still: 15 years at 1.05 AU. To play it, the game would need a coast warp of about 10,000x (section 5), a large job that isn't planned.
+- **What would make 1.05 AU work on propellant alone:**
+  - For a round trip with landing (2,490 m/s), either a tank of about 8.8 t, before counting the tank's own extra mass, or a 9,600 m/s exhaust on today's 2 t tank.
+  - To go out and land, refuelling on the moon for the way back (1,396 m/s), either about 4.0 t of propellant or a 5,400 m/s exhaust.
+  - Neither helps the time.
+
+**The fallback: the cluster round the first planet.** Section 5's first option, but higher up, where the shadow costs little. The trips are one level (A18):
+
+| Cluster at | Its orbit | In shadow | Out | Back | Round trip plus landing | Probe propellant for that | In flight out, back | Windows every |
+| ---------- | --------- | --------- | --- | ---- | ----------------------- | ------------------------- | ------------------- | ------------- |
+| 3,000 km | 4.8 h | 6.4% | 474 m/s | 494 m/s | 1,339 m/s | 3.8 t | 11 h, 15 h | 11 to 17 h |
+| 8,000 km | 21 h | 2.4% | 196 m/s | 235 m/s | 801 m/s | 2.08 t | 14 h, 37 h | 46 h |
+| 20,000 km | 83 h | 1.0% | 190 m/s | 233 m/s | 793 m/s | 2.05 t | 31 h, 115 h | 72 to 144 h |
+| 30,000 km | 153 h | 0.6% | 226 m/s | 260 m/s | 856 m/s | 2.24 t | 46 h, 200 h | 50 to 207 h |
+
+- **From 8,000 to 20,000 km the probe misses by under 4%:** about 800 m/s against 775. Any of these closes the gap:
+  - A tank of 2.1 t.
+  - A moon a little lighter or a little nearer the cluster's orbit.
+  - Landing straight from the capture orbit and skipping the ring phasing. That phasing costs up to a fifth of the ring's 231 m/s at each end, and skipping it is a planner change.
+  - Making propellant on the moon.
+- **A drone of the probe's mass ratio does the same.** A drone with a bigger share of propellant goes further, because only the ratio matters.
+- **The trips are still long:** 14 to 37 hours of game time, or 2 to 5 hours of play at 8x. A moon nearer than 12,000 km shortens them. The trip time is about half the transfer orbit, so a moon at 4,000 km and a cluster at 2,000 km would bring it to a few hours, at more delta-v.
+- **The shadow is small up there**, under 2.5% from 8,000 km out, against the fifth that B measured at 1,000 km. It still changes the start's solar figures a little.
+
+**Recommendation to B:** don't make the first landing an interplanetary trip. Put the cluster in a high orbit round the first planet, about 8,000 to 20,000 km, with a 60 km moon. Then size the probe's tank to about 2.2 t, or place the moon a little nearer, so that one tank covers the trip out, the landing and the trip home with some margin. Planets round the star become a later goal, once coast warp and better engines exist.
