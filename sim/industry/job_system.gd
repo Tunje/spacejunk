@@ -316,7 +316,7 @@ func _needs_port(ctx: SimContext, job: Dictionary) -> bool:
 func _claim_port(ctx: SimContext, job: Dictionary) -> void:
 	var parts: Dictionary = ctx.state["parts"]
 	var since: int = job["since_tick"] if job["reason"] == REASON_NO_FREE_PORT else ctx.tick
-	for port: int in Units.ports(ctx.state, ctx.defs, job["unit"]):
+	for port: int in _build_ports(ctx, job["unit"]):
 		if parts[port]["fault"] == "" and not Units.port_in_use(ctx.state, port) \
 				and PortQueue.is_free_for_job(ctx, port, since, job["id"]):
 			parts[port]["claimed_by"] = job["id"]
@@ -327,6 +327,16 @@ func _claim_port(ctx: SimContext, job: Dictionary) -> void:
 	if job["reason"] != REASON_NO_FREE_PORT:
 		job["since_tick"] = ctx.tick
 	_pause(ctx, job, REASON_NO_FREE_PORT)
+
+
+## Ports a built unit may dock at: the builder's own, then those of the unit it is docked to, so a
+## probe docked at its station builds onto the station's spare port (start_and_build.md section 5).
+func _build_ports(ctx: SimContext, unit_id: int) -> Array[int]:
+	var ports := Units.ports(ctx.state, ctx.defs, unit_id)
+	var dock: Dictionary = ctx.state["units"][unit_id]["dock"]
+	if not dock.is_empty():
+		ports.append_array(Units.ports(ctx.state, ctx.defs, dock["target_unit"]))
+	return ports
 
 
 func _release_port(ctx: SimContext, job: Dictionary) -> void:

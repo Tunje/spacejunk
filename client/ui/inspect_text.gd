@@ -48,11 +48,27 @@ static func inventory(stock: Dictionary, items: Dictionary) -> String:
 	return ", ".join(lines)
 
 
-static func status(unit: Dictionary, view: Dictionary) -> String:
+## The operation with its progress: "Moving 50%", "Waiting for window, departs in
+## 12 min", or on an autopilot transfer (A13) "Transfer 40%, arrives in 3 min".
+static func op_line(unit: Dictionary, tick: int, ticks_per_second: int) -> String:
 	var op: Dictionary = unit["op"]
+	if op["type"] == "waiting":
+		var wait := float(maxi(0, int(op.get("depart_tick", op["end_tick"] + 1)) - tick)) / ticks_per_second
+		return "Waiting for window, departs in %s" % OrderText.duration(wait)
+	var transfer: Dictionary = unit.get("transfer", {})
+	if op["type"] == "moving" and not transfer.is_empty():
+		var span: int = transfer["arrive_tick"] - transfer["depart_tick"]
+		var done := int(ratio(tick - transfer["depart_tick"], span) * 100.0) if span > 0 else 100
+		var left := float(maxi(0, int(transfer["arrive_tick"]) - tick)) / ticks_per_second
+		return "Transfer %d%%, arrives in %s" % [done, OrderText.duration(left)]
 	var text := OrderText.operation(op["type"])
 	if op["end_tick"] > op["start_tick"]:
-		text += " %d%%" % int(ratio(view["tick"] - op["start_tick"], op["end_tick"] - op["start_tick"]) * 100.0)
+		text += " %d%%" % int(ratio(tick - op["start_tick"], op["end_tick"] - op["start_tick"]) * 100.0)
+	return text
+
+
+static func status(unit: Dictionary, view: Dictionary, ticks_per_second := 10) -> String:
+	var text := InspectText.op_line(unit, view["tick"], ticks_per_second)
 	if not unit["dock"].is_empty():
 		text += ", docked"
 	var task: Dictionary = view["tasks"].get(unit["task"], {})

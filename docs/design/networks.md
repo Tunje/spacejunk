@@ -109,7 +109,7 @@ The fault takes effect from the next tick, as the contracts require.
 
 Transfers and mining test their end conditions in phase 6, after the tick's delta, so a store that fills exactly ends on that tick with no idle tick after it. A job run works the same way: started in phase 4 of S, it counts down in phase 5 from S and delivers on S + N - 1, so the next run starts on S + N.
 
-**Bodies and stations do not move in the slice**, so a route is fixed when it starts.
+**Nothing moves within a frame**, so a route is fixed when it starts. Everything here works in one frame's local coordinates, or in the old world of a scenario without frames (contracts.md section 1, Places). A frame itself moves on rails, carrying its members with it. A `move_to` target on an orbit or in another frame is refused with `unsupported_orbit` until the transfer planner (orbital_flight.md section 11, A13).
 
 **Stand-off.** A unit never flies to a target's centre, which would put it inside an asteroid. It stops short by `STANDOFF_MM`, a kernel constant of 150000 (150 m), measured from the surface of a body (`radius_mm + STANDOFF_MM` from its centre) or from the position of a unit. `to_mm` is that stop point on the straight line from `from_mm` to the target, calculated with `IntMath`:
 

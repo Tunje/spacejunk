@@ -22,17 +22,36 @@ func before_each() -> void:
 ## The client's reference: position in mm of an orbit record at a tick, in double-precision floats.
 ## Godot's Vector3 is single precision, too coarse for this, so positions are float arrays.
 static func position_float(orbit: Dictionary, tick: int) -> Array[float]:
-	var period := float(orbit["period_sub"]) / OrbitMath.SUB_TICKS
-	var e := float(orbit["e"]) / ONE
-	var dt := float(tick - int(orbit["epoch"]))
-	var m := float(orbit["m0"]) / TURN * TAU + TAU * fposmod(dt, period) / period
+	if orbit.get("hyperbolic", false):
+		return _hyperbolic_float(orbit, tick)
+	var period := float(orbit["period_subticks"]) / OrbitMath.SUB_TICKS
+	var e := float(orbit["e_q30"]) / ONE
+	var dt := float(tick - int(orbit["epoch_tick"]))
+	var m := float(orbit["m0_angle"]) / TURN * TAU + TAU * fposmod(dt, period) / period
 	var big_e := m + 0.85 * e * signf(sin(m))
 	for i in 50:
 		big_e -= (big_e - e * sin(big_e) - m) / (1.0 - e * cos(big_e))
 	var x := float(orbit["a_mm"]) * (cos(big_e) - e)
 	var y := float(orbit["b_mm"]) * sin(big_e)
-	var p: Array = orbit["p"]
-	var q: Array = orbit["q"]
+	var p: Array = orbit["p_q30"]
+	var q: Array = orbit["q_q30"]
+	var out: Array[float] = []
+	for axis in 3:
+		out.append((x * p[axis] + y * q[axis]) / ONE)
+	return out
+
+
+## The same for a hyperbolic record: e sinh H - H = M, with M growing linearly from m0_rad.
+static func _hyperbolic_float(orbit: Dictionary, tick: int) -> Array[float]:
+	var e := float(orbit["e_q30"]) / ONE
+	var m := (float(orbit["m0_rad"]) + float(tick - int(orbit["epoch_tick"])) * float(orbit["motion_q60"]) / pow(2.0, 30)) / ONE
+	var big_h := signf(m) * log(2.0 * absf(m) / e + 1.8)
+	for i in 60:
+		big_h -= (e * sinh(big_h) - big_h - m) / (e * cosh(big_h) - 1.0)
+	var x := float(orbit["a_mm"]) * (e - cosh(big_h))
+	var y := float(orbit["b_mm"]) * sinh(big_h)
+	var p: Array = orbit["p_q30"]
+	var q: Array = orbit["q_q30"]
 	var out: Array[float] = []
 	for axis in 3:
 		out.append((x * p[axis] + y * q[axis]) / ONE)
@@ -66,7 +85,7 @@ func _random_orbit(gm: int, a_mm: int, e: int, inclination: int = -1) -> Diction
 
 ## The worst distance in mm between two orbits over one period of the first, at 48 ticks.
 func _worst_gap(first: Dictionary, second: Dictionary, from_tick: int) -> int:
-	var period: int = first["period_sub"] / OrbitMath.SUB_TICKS
+	var period: int = first["period_subticks"] / OrbitMath.SUB_TICKS
 	var worst := 0
 	for k in 49:
 		var tick := from_tick + period * k / 48
@@ -137,17 +156,17 @@ func test_positions_match_the_float_reference() -> void:
 func test_a_circular_period_matches_the_formula() -> void:
 	var orbit := OrbitMath.make_orbit(GM_PLANET, 700_000_000, 0, [ONE, 0, 0], [0, 0, -ONE], 0, 0)
 	var exact := TAU * sqrt(pow(700_000.0, 3) / 3.5316e12) * Sim.TICKS_PER_SECOND * OrbitMath.SUB_TICKS
-	assert_almost_eq(float(orbit["period_sub"]), exact, exact * 1e-8)
+	assert_almost_eq(float(orbit["period_subticks"]), exact, exact * 1e-8)
 
 
 func test_an_orbit_has_no_drift() -> void:
 	var orbit := _random_orbit(GM_PLANET, 900_000_000, ONE / 5)
-	var start: int = orbit["epoch"]
-	var whole: int = orbit["period_sub"]
+	var start: int = orbit["epoch_tick"]
+	var whole: int = orbit["period_subticks"]
 	# period_sub ticks is exactly SUB_TICKS whole periods, so the orbit is exactly back where it began.
 	for k in [1, 7, 1000]:
 		assert_eq(OrbitMath.position_at(orbit, start + whole * k), OrbitMath.position_at(orbit, start))
-	assert_eq(OrbitMath.mean_anomaly(orbit, start + whole * 1000), orbit["m0"])
+	assert_eq(OrbitMath.mean_anomaly(orbit, start + whole * 1000), orbit["m0_angle"])
 
 
 func test_an_orbit_record_saves_byte_exact() -> void:
@@ -256,20 +275,20 @@ func test_a_prograde_burn_raises_apoapsis_as_hohmann_predicts() -> void:
 	for axis in 3:
 		boosted.append(v[axis] + roundi(v[axis] / speed * dv1_m_s * 1e6))
 	var after := OrbitMath.from_state(state["r"], boosted, GM_PLANET, 100)
-	var apoapsis := float(after["a_mm"]) * (1.0 + float(after["e"]) / ONE)
-	var periapsis := float(after["a_mm"]) * (1.0 - float(after["e"]) / ONE)
+	var apoapsis := float(after["a_mm"]) * (1.0 + float(after["e_q30"]) / ONE)
+	var periapsis := float(after["a_mm"]) * (1.0 - float(after["e_q30"]) / ONE)
 	assert_almost_eq(apoapsis, r2 * 1000.0, 1000.0, "apoapsis within 1 m of 760 km")
 	assert_almost_eq(periapsis, r1 * 1000.0, 1000.0, "periapsis stays at 700 km")
-	var half := int(after["period_sub"]) / OrbitMath.SUB_TICKS / 2
+	var half := int(after["period_subticks"]) / OrbitMath.SUB_TICKS / 2
 	var far := _length(OrbitMath.position_at(after, 100 + half))
 	assert_almost_eq(far, r2 * 1000.0, 20_000.0, "half an orbit later it is at the apoapsis")
 
 
-func test_an_unbound_or_degenerate_state_is_refused() -> void:
+func test_a_degenerate_state_is_refused() -> void:
 	var r := [700_000_000, 0, 0]
 	var escape_um := roundi(sqrt(2.0 * 3.5316e12 / 700_000.0) * 1e6)
-	assert_eq(OrbitMath.from_state(r, [0, 0, -escape_um], GM_PLANET, 0), {}, "escape speed")
-	assert_eq(OrbitMath.from_state(r, [0, 0, -escape_um * 2], GM_PLANET, 0), {}, "hyperbolic")
+	assert_eq(OrbitMath.from_state(r, [0, 0, -escape_um], GM_PLANET, 0), {}, "exactly parabolic")
+	assert_true(OrbitMath.from_state(r, [0, 0, -escape_um * 2], GM_PLANET, 0)["hyperbolic"], "past escape")
 	assert_eq(OrbitMath.from_state(r, [1_000_000, 0, 0], GM_PLANET, 0), {}, "straight up")
 	assert_eq(OrbitMath.from_state([0, 0, 0], [0, 0, 1], GM_PLANET, 0), {}, "at the centre")
 
@@ -309,3 +328,59 @@ func test_cost_per_call() -> void:
 	print("ORBIT cost: position %.1f us, state %.1f us, state to orbit %.1f us" % [position_us, state_us, convert_us])
 	assert_lt(position_us, 200.0)
 	assert_lt(convert_us, 1000.0)
+
+
+# ------------------------------------------------------------------------------ A12: hyperbolas and SOI
+
+func test_exp_ln_sinh_and_cosh_match_floats() -> void:
+	var worst := 0.0
+	for i in 400:
+		var x := rng.randi_range(0, 20 * ONE)
+		var got := float(OrbitMath.exp_q30(x)) / ONE
+		worst = maxf(worst, absf(got / exp(float(x) / ONE) - 1.0))
+	print("ORBIT exp worst relative error %.2f parts per billion" % (worst * 1e9))
+	assert_lt(worst, 5e-8)
+	var ln_worst := 0.0
+	for value: int in [1, 2, 3, 1000, ONE, 3_531_600_000, GM_STAR, 1 << 62]:
+		ln_worst = maxf(ln_worst, absf(float(OrbitMath.ln(value)) / ONE - log(float(value))))
+	assert_lt(ln_worst, 1e-8)
+	for x: int in [-5 * ONE, -ONE / 3, 0, ONE / 7, 2 * ONE, 15 * ONE]:
+		var sh := OrbitMath.sinh_cosh(x)
+		var fx := float(x) / ONE
+		assert_almost_eq(float(sh[0]) / ONE, sinh(fx), absf(sinh(fx)) * 5e-8 + 1e-8)
+		assert_almost_eq(float(sh[1]) / ONE, cosh(fx), cosh(fx) * 5e-8)
+
+
+func test_sphere_of_influence_matches_laplace() -> void:
+	# Kerbin around Kerbol, whose figures are public: about 84,159 km.
+	var soi := OrbitMath.soi_mm(13_599_840_256_000, 3_531_600_000, 1_172_332_800_000_000)
+	assert_almost_eq(float(soi), 84_159_286_000.0, 84_159_286_000.0 * 1e-5)
+
+
+func test_hyperbolic_positions_match_the_float_reference() -> void:
+	var r := [700_000_000, 0, 0]
+	for factor_permille: int in [1500, 2000, 3000, 5000]:
+		var v := roundi(sqrt(3.5316e12 / 700_000.0) * 1e6 * factor_permille / 1000.0)
+		var orbit := OrbitMath.from_state(r, [0, 0, -v], GM_PLANET, 1000)
+		assert_true(orbit.get("hyperbolic", false), "hyperbolic at %d permille" % factor_permille)
+		var worst := 0.0
+		for tick in [1000, 1001, 1100, 2000, 6000, 20000]:
+			var gap := _gap(OrbitMath.position_at(orbit, tick), position_float(orbit, tick))
+			worst = maxf(worst, gap / maxf(1.0, _length(OrbitMath.position_at(orbit, tick))))
+		assert_lt(worst, 1e-7, "factor %d permille, within 100 parts per billion of the distance" % factor_permille)
+		assert_lt(_gap(OrbitMath.position_at(orbit, 1000), r), 2000.0, "it starts where it was made")
+
+
+func test_hyperbolic_round_trip_is_bounded() -> void:
+	var r := [700_000_000, 0, 0]
+	for factor_permille: int in [1500, 2000, 3000]:
+		var v := roundi(sqrt(3.5316e12 / 700_000.0) * 1e6 * factor_permille / 1000.0)
+		var orbit := OrbitMath.from_state(r, [0, 30_000_000, -v], GM_PLANET, 0)
+		var state := OrbitMath.state_at(orbit, GM_PLANET, 500)
+		var again := OrbitMath.from_state(state["r"], state["v"], GM_PLANET, 500)
+		assert_true(again.get("hyperbolic", false))
+		var worst := 0
+		for tick in [500, 1000, 3000, 10000]:
+			worst = maxi(worst, IntMath.dist(OrbitMath.position_at(orbit, tick), OrbitMath.position_at(again, tick)))
+		print("ORBIT hyperbolic round trip at %d permille of circular speed: worst gap %d mm" % [factor_permille, worst])
+		assert_lt(worst, 50_000)

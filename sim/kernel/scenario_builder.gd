@@ -1,9 +1,11 @@
 class_name ScenarioBuilder
 extends RefCounted
 ## Builds a new game's entities from a scenario, issuing IDs in the order of schemas.md section
-## 14: each body, then its deposits, then each unit, then its parts.
+## 14: each body, then its deposits, then each frame, then each unit, then its parts.
 
 const MAX_WORLD_G := 9_000_000_000_000_000_000
+const PPM := 1_000_000
+const MILLIDEGREES_PER_TURN := 360_000
 
 
 ## Fills the state from a scenario in sim units. Returns "" or what is wrong with it.
@@ -11,11 +13,18 @@ static func populate(ctx: SimContext, scenario: Dictionary, deposits: Dictionary
 	var keys := {}
 	for body: Dictionary in scenario["bodies"]:
 		_add_body(ctx, body, deposits, keys)
+	for entry: Dictionary in scenario.get("frames", []):
+		keys[entry["key"]] = ctx.new_id()
+	var problem := _place_bodies(ctx, scenario, keys)
+	if problem != "":
+		return problem
 	for entry: Dictionary in scenario["units"]:
-		_add_unit(ctx, entry, keys)
+		problem = _add_unit(ctx, entry, keys)
+		if problem != "":
+			return problem
 	for entry: Dictionary in scenario["units"]:
 		if entry["dock"] != null:
-			var problem := _dock(ctx, entry, keys)
+			problem = _dock(ctx, entry, keys)
 			if problem != "":
 				return problem
 	return _set_world_total(ctx)
@@ -26,8 +35,9 @@ static func _add_body(ctx: SimContext, entry: Dictionary, deposits: Dictionary, 
 	keys[entry["key"]] = id
 	var deposit_ids: Array[int] = []
 	var body := {
-		"id": id, "name": entry["name"], "kind": entry["kind"], "pos_mm": entry["pos_mm"].duplicate(),
+		"id": id, "name": entry["name"], "kind": entry["kind"], "pos_mm": entry.get("pos_mm", [0, 0, 0]).duplicate(),
 		"radius_mm": entry["radius_mm"], "visual_seed": entry["visual_seed"], "scanned": false,
+		"frame": 0, "orbit": {}, "gm": entry.get("gm", 0), "soi_mm": 0, "planet": entry.get("planet", {}).duplicate(),
 	}
 	ctx.state["bodies"][id] = body
 	for def: String in entry["deposits"]:
@@ -41,13 +51,66 @@ static func _add_body(ctx: SimContext, entry: Dictionary, deposits: Dictionary, 
 	body["deposits"] = Array(deposit_ids)
 
 
-static func _add_unit(ctx: SimContext, entry: Dictionary, keys: Dictionary) -> void:
+## Frames, then each body's orbit or frame, once every key has its ID.
+static func _place_bodies(ctx: SimContext, scenario: Dictionary, keys: Dictionary) -> String:
+	for entry: Dictionary in scenario.get("frames", []):
+		var orbit := _orbit(ctx, entry["orbit"], keys)
+		if orbit.is_empty():
+			return "frame %s orbits nothing with gravity" % entry["key"]
+		var id: int = keys[entry["key"]]
+		ctx.state["frames"][id] = {
+			"id": id, "name": entry.get("name", entry["key"]), "radius_mm": entry["radius_mm"],
+			"orbit": orbit, "pos_mm": OrbitMath.position_at(orbit, ctx.state["tick"]),
+		}
+	for entry: Dictionary in scenario["bodies"]:
+		var body: Dictionary = ctx.state["bodies"][keys[entry["key"]]]
+		if entry.has("orbit"):
+			body["orbit"] = _orbit(ctx, entry["orbit"], keys)
+			if body["orbit"].is_empty():
+				return "body %s orbits nothing with gravity" % entry["key"]
+			body["pos_mm"] = OrbitMath.position_at(body["orbit"], ctx.state["tick"])
+			if body["gm"] > 0:
+				var parent_gm: int = ctx.state["bodies"][body["orbit"]["parent"]]["gm"]
+				body["soi_mm"] = OrbitMath.soi_mm(body["orbit"]["a_mm"], body["gm"], parent_gm)
+		if entry.has("frame"):
+			if not ctx.state["frames"].has(keys.get(entry["frame"], 0)):
+				return "body %s is in an unknown frame" % entry["key"]
+			body["frame"] = keys[entry["frame"]]
+	return ""
+
+
+## An orbit record from scenario data, or {} if its parent is not a body with gravity. Data states
+## the eccentricity in parts per million and angles in millidegrees, so no float is involved.
+static func _orbit(ctx: SimContext, data: Dictionary, keys: Dictionary) -> Dictionary:
+	var parent: int = keys.get(data["parent"], 0)
+	var gm: int = ctx.state["bodies"].get(parent, {}).get("gm", 0)
+	if gm <= 0:
+		return {}
+	var dirs := OrbitMath.directions(_angle(data, "inclination_mdeg"), _angle(data, "node_mdeg"),
+		_angle(data, "periapsis_mdeg"))
+	var e := IntMath.mul_div(data.get("e_ppm", 0), OrbitMath.ONE, PPM)
+	var orbit := OrbitMath.make_orbit(gm, data["a_mm"], e, dirs[0], dirs[1],
+		_angle(data, "mean_anomaly_mdeg"), 0)
+	orbit["parent"] = parent
+	return orbit
+
+
+static func _angle(data: Dictionary, key: String) -> int:
+	return IntMath.mul_div(posmod(data.get(key, 0), MILLIDEGREES_PER_TURN), OrbitMath.TURN, MILLIDEGREES_PER_TURN)
+
+
+static func _add_unit(ctx: SimContext, entry: Dictionary, keys: Dictionary) -> String:
 	var id := Units.create(ctx, entry["template"], entry["name"], entry["pos_mm"])
 	keys[entry["key"]] = id
+	if entry.has("frame"):
+		if not ctx.state["frames"].has(keys.get(entry["frame"], 0)):
+			return "unit %s is in an unknown frame" % entry["key"]
+		ctx.state["units"][id]["frame"] = keys[entry["frame"]]
 	_fill_batteries(ctx, id)
 	var inventory: Dictionary = ctx.state["units"][id]["inventory"]
 	for stock: Dictionary in entry["inventory"]:
 		Units.add_stock(inventory, stock["item"], stock["grams"])
+	return ""
 
 
 ## Batteries start full in a scenario, and empty anywhere else.

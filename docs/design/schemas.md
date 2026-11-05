@@ -44,9 +44,13 @@ The loader applies these by field name, and `defs()` returns the converted names
 | `_m3` | `_l` | 1000 |
 | `_kg_per_s` | `_g_per_s` | 1000 |
 | `_m_s` | `_mm_s` | 1000 |
+| `_kn` | `_n` | 1000 |
 | `seconds` | `ticks` | `TICKS_PER_SECOND` |
 | `density_kg_m3` | `density_g_l` | 1 |
-| `_mm`, `_ppm` | Unchanged | 1 |
+| `gm_km3_s2` | `gm`, in 1000 m³/s² | 10^6 |
+| `_mm`, `_ppm`, `_mdeg` | Unchanged | 1 |
+
+A whole number converts by integer multiplication, so a value such as the star's GM stays exact beyond 2^53 once multiplied.
 
 `defs()` returns `{ modules, items, recipes, templates, sinks }`, each keyed by ID (contracts section 3). Deposit definitions are not in it. They are read only at scenario load, and clients must learn deposits through scanning.
 
@@ -134,7 +138,8 @@ The loader applies these by field name, and `defs()` returns the converted names
 | `radiator` | `reject_kw` | Radiators |
 | `heat_capacity` | `limit_kj` | Summed to give the unit's heat limit |
 | `port` | `transfer_kg_per_s`, `dock_seconds` (whole), `undock_seconds` (whole) | Docking ports |
-| `thruster` | `speed_m_s`, `propellant_kg_per_s`, `rated_mass_kg` | Thrusters |
+| `thruster` | `speed_m_s`, `propellant_kg_per_s`, `rated_mass_kg`, `exhaust_m_s`, `thrust_kn` | Thrusters |
+| `landing_gear` | `max_touchdown_m_s` | Landing legs |
 | `facility` | `type`: `refinery` or `fabricator` | Station facilities |
 | `always_on` | `true` | A load that runs whenever healthy, such as a command hub |
 
@@ -148,7 +153,11 @@ The loader applies these by field name, and `defs()` returns the converted names
 
 A multi-role part has one `power_kw` and one `heat_kw`, which apply whenever it runs anything. The slice has none, since a drone is built from single-role parts like a ship.
 
-A trip's cost is its travel time at `propellant_kg_per_s`, scaled by the unit's mass at departure over `rated_mass_kg`, and paid in one lump at departure ([autonomy.md](autonomy.md) section 4). The network spec holds the exact formula. A thruster is not a power or heat load during a trip, so in the slice its `power_kw` and `heat_kw` count only toward fitting budgets.
+A trip's cost is its travel time at `propellant_kg_per_s`, scaled by the unit's mass at departure over `rated_mass_kg`, and paid in one lump at departure ([autonomy.md](autonomy.md) section 4). The network spec holds the exact formula.
+
+**Two kinds of thruster figure.** Trips inside a frame read `speed_m_s`, `propellant_kg_per_s` and `rated_mass_kg`, exactly as above. Burns outside a frame read only `exhaust_m_s` (loaded as `exhaust_mm_s`) and `thrust_kn` (loaded as `thrust_n`), through the rocket equation of [orbital_flight.md](orbital_flight.md) section 7. For today's thrusters, `thrust_kn` is `propellant_kg_per_s` times `exhaust_m_s`, so both kinds of figure give the same propellant flow: 3 kN for `chemical_thruster_mk1` and 0.15 kN for `small_chemical_thruster_mk1`, at 3000 m/s. All five fields are required, and the validator checks them (task B13). A thruster is not a power or heat load during a trip, so in the slice its `power_kw` and `heat_kw` count only toward fitting budgets.
+
+**Landing gear.** `max_touchdown_m_s` is the fastest touchdown the part survives, above 0, and it loads as `max_touchdown_mm_s` (task B15). A unit's touchdown limit is the highest figure among its healthy parts with landing gear, and 0 when it has none. A touchdown at or under the limit lands, and one over it crashes. Hand-flown landings and the core autopilot's `land` both obey this, so a unit with no gear cannot land. `max_slope_mdeg` is reserved on this object for a later slope limit. It is not part of the schema yet, and the validator rejects nothing for its absence. Today's parts are `landing_legs_mk1` (6 m/s, 100 kg, two structural frames) and `small_landing_legs_mk1` (4 m/s, 50 kg, one frame), both side-mounted.
 
 ## 6. Connectors
 
@@ -296,6 +305,14 @@ B4 enforces these on top of section 3 of the accounting spec.
 - A unit with any `heat_kw` above 0 has `heat_capacity`, since its limit is otherwise 0.
 - A unit with `thruster` has `propellant` storage.
 
+**Scenario places** (section 14)
+- An orbit's `parent` is a body in the same scenario with `gm_km3_s2`, and is not the orbiting entry itself.
+- Every `frame` key names a frame in the scenario. A docked unit has no `frame`.
+- A body on an `orbit` has neither `pos_mm` nor `frame`. A body without an orbit has `pos_mm`.
+- Orbits are whole numbers: `a_mm` from 1 to 10^15, `e_ppm` from 0 to 999999, and each angle from 0 to 359999 millidegrees. `gm_km3_s2` stays within the contract range of `gm` once converted.
+- Frame keys share the one key space with bodies and units.
+- A `planet` object appears only on a body of kind `planet`, within the ranges of section 14.
+
 **Coverage**
 - A source is a deposit, a recipe or scenario stock. A use is a recipe input, a fitted part, propellant burn or a sink (spec section 10).
 
@@ -320,15 +337,50 @@ A scenario places bodies, deposits and units in the world and sets starting inve
 | `name` | string | Display name |
 | `seed` | whole | Seed the scenario is tested with. `new_game`'s argument still decides the run. |
 | `bodies` | array | Listed in entity ID order |
+| `frames` | array, optional | Co-moving frames, such as the rock cluster |
 | `units` | array | Listed in entity ID order |
 
-A body has `key`, `name`, `kind` (`star` or `asteroid`), `pos_mm`, `radius_mm`, `visual_seed` and `deposits`, a list of deposit definition IDs.
+A body has `key`, `name`, `kind` (`star`, `asteroid` or `planet`), `pos_mm`, `radius_mm`, `visual_seed` and `deposits`, a list of deposit definition IDs. It may also have:
 
-A unit has `key`, `template`, `name`, `pos_mm`, `inventory` and `dock`. `inventory` is a list of `{ "item": id }` plus `kg` or `count`, as in recipe inputs. `dock` is null or `{ "host": key, "port": index, "host_port": index }`. An index counts the unit's `port` parts in part ID order, from 0.
+| Field | Type | Meaning |
+| ----- | ---- | ------- |
+| `gm_km3_s2` | number, optional | Gravitational parameter. Loads as `gm` in 1000 m³/s². A body that others orbit must have it |
+| `orbit` | object, optional | Its orbit, below. A body on an orbit needs no `pos_mm`, because its position is derived from the orbit and the tick |
+| `frame` | frame key, optional | The frame it belongs to. Its `pos_mm` is then local to the frame |
+| `planet` | object, optional | Terrain, below. Only on a body of kind `planet`. A planet without it is a smooth sphere |
+
+A frame has `key`, `name`, `radius_mm` and `orbit`. It is not a body, and it never appears where bodies are listed as targets. Its `radius_mm` is the sphere within which a unit can join it ([orbital_flight.md](orbital_flight.md) section 11.2).
+
+An orbit is an object of whole numbers, so no float reaches it:
+
+| Field | Type | Meaning |
+| ----- | ---- | ------- |
+| `parent` | body key | The body orbited. It must have `gm_km3_s2`, or the scenario is refused |
+| `a_mm` | whole, positive | Semi-major axis. 1 AU is 149597870700000 |
+| `e_ppm` | whole, optional, default 0 | Eccentricity in parts per million, below 1000000 |
+| `inclination_mdeg` | whole, optional, default 0 | Angles in millidegrees |
+| `node_mdeg` | whole, optional, default 0 | |
+| `periapsis_mdeg` | whole, optional, default 0 | |
+| `mean_anomaly_mdeg` | whole, optional, default 0 | At tick 0 |
+
+A unit has `key`, `template`, `name`, `pos_mm`, `inventory` and `dock`, and an optional `frame` key. A unit in a frame has a local `pos_mm`. A docked unit takes its host's place, so it has no `frame` of its own. `inventory` is a list of `{ "item": id }` plus `kg` or `count`, as in recipe inputs. `dock` is null or `{ "host": key, "port": index, "host_port": index }`. An index counts the unit's `port` parts in part ID order, from 0.
 
 `key` is a name used only inside the file, unique across bodies and units. Whole-number fields must stay within 2^53, because Godot parses JSON numbers as floats.
 
-**Entity IDs.** The counter starts at 1 and issues IDs in file order: each body, then that body's deposits, then each unit, then that unit's parts in template order. This makes IDs known in advance.
+**Entity IDs.** The counter starts at 1 and issues IDs in file order: each body, then that body's deposits, then each frame, then each unit, then that unit's parts in template order. This makes IDs known in advance.
+
+A `planet` object holds the terrain settings that both the simulation and the client read, so a hex's height is the same in both ([planets.md](planets.md) section 4):
+
+| Field | Type | Meaning |
+| ----- | ---- | ------- |
+| `seed` | whole | Lays out the terrain through `PlanetGrid` |
+| `height_range_m` | whole, 0 to 8000 | Highest peak and deepest basin either side of the datum radius. 8000 is the proven limit |
+| `sea_level_m` | whole, -8000 to 8000, optional | Cells below it are sea. Absent means a dry world |
+| `weights` | list of 1 to 12 whole numbers, each 0 to 1000, optional | Octave weights for the height and moisture noise, broadest first, with at least one above 0. Default `[4, 2, 1]` |
+
+The other settings in [planets.md](planets.md) section 1 (`kind`, `temperature`, `moisture_bias` and the palette) are not data yet. They arrive with the surface rule tables. `roughness` is not a scenario field. It is a planet-kind idea for a later generator that writes `weights`, so there is one source of truth for the noise.
+
+**No sphere-of-influence field.** A body's sphere of influence is not data. A12 works it out at scenario load from Laplace's formula, a × (GM / parent GM)^(2/5), and stores it as `soi_mm` in the state. So it always agrees with the GMs and orbits.
 
 **Validity.** A docked unit's `pos_mm` equals its host's, and starting inventory fits the unit's capacity, by mass and volume per cargo class. The validator checks both.
 

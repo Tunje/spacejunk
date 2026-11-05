@@ -139,7 +139,9 @@
         "thruster": {
           "speed_m_s": 500,
           "propellant_kg_per_s": 1,
-          "rated_mass_kg": 10000
+          "rated_mass_kg": 10000,
+          "exhaust_m_s": 3000,
+          "thrust_kn": 3
         }
       },
       "fabrication": {
@@ -561,6 +563,46 @@
       }
     },
     {
+      "id": "landing_legs_mk1",
+      "name": "Landing Legs",
+      "mass_kg": 100,
+      "volume_m3": 0.5,
+      "power_kw": 0,
+      "heat_kw": 0,
+      "priority": 0,
+      "durability": 1000,
+      "min_ai_tier": 1,
+      "realism": "established",
+      "capabilities": {
+        "landing_gear": {
+          "max_touchdown_m_s": 6
+        }
+      },
+      "fabrication": {
+        "recipe": "landing_legs_mk1"
+      },
+      "connectors": [
+        {
+          "id": "mount",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [0, 0, 0],
+          "facing": "-z",
+          "up": "+y",
+          "load_limit_kg": 1000
+        }
+      ],
+      "collision": {
+        "shape": "box",
+        "center_mm": [0, -800, 400],
+        "size_mm": [800, 2000, 800]
+      },
+      "visual": {
+        "model": null,
+        "tint": "#8a8d91"
+      }
+    },
+    {
       "id": "lidar_mk1",
       "name": "LIDAR",
       "mass_kg": 100,
@@ -834,7 +876,9 @@
         "thruster": {
           "speed_m_s": 250,
           "propellant_kg_per_s": 0.05,
-          "rated_mass_kg": 1000
+          "rated_mass_kg": 1000,
+          "exhaust_m_s": 3000,
+          "thrust_kn": 0.15
         }
       },
       "fabrication": {
@@ -1070,6 +1114,46 @@
       "visual": {
         "model": null,
         "tint": "#e8e4d8"
+      }
+    },
+    {
+      "id": "small_landing_legs_mk1",
+      "name": "Small Landing Legs",
+      "mass_kg": 50,
+      "volume_m3": 0.2,
+      "power_kw": 0,
+      "heat_kw": 0,
+      "priority": 0,
+      "durability": 1000,
+      "min_ai_tier": 1,
+      "realism": "established",
+      "capabilities": {
+        "landing_gear": {
+          "max_touchdown_m_s": 4
+        }
+      },
+      "fabrication": {
+        "recipe": "small_landing_legs_mk1"
+      },
+      "connectors": [
+        {
+          "id": "mount",
+          "type": "side",
+          "size": "small",
+          "pos_mm": [0, 0, 0],
+          "facing": "-z",
+          "up": "+y",
+          "load_limit_kg": 500
+        }
+      ],
+      "collision": {
+        "shape": "box",
+        "center_mm": [0, -300, 200],
+        "size_mm": [400, 1000, 400]
+      },
+      "visual": {
+        "model": null,
+        "tint": "#8a8d91"
       }
     },
     {

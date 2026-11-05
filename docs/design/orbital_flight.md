@@ -251,6 +251,8 @@ Sizes compare with earlier kernel tasks: **S** is about A7's size, **M** about A
 | A14 | **Planet grid and terrain** | `PlanetGrid`: cell IDs, neighbours, integer cell directions and the integer noise from section 8, plus `cell(seed, id)` on demand. Pure functions, with the proof's checks as tests: 12 pentagons, Euler, symmetry and replay. | A9's trig only | M |
 | A15 | **Landing and takeoff** | Autopilot operations between an orbit and a cell, with an integer delta-v cost from the body's figures, as in B's planets.md section 3.2. The landed state, and leaving it. The player's ship uses the same operations, because a hand-flown descent isn't proposed. | A10, A11, A14 | M |
 | A16 | **Planet shadow** | A solar generator gives nothing while its unit is in a planet's shadow. This is an integer cylinder test from the star direction, in phase 3. C found that this is what stretches laps around a planet. | A10 | S |
+| A18 | **Trips across spheres of influence** | Added after A13 by the Lead. The cluster orbits the star, so no core can fly to a planet until the planner handles a trip that changes parent body. That needs patched-conic transfers: from one orbit to an escape or capture hyperbola, with the sphere-crossing tick found by bounded integer search on the rails, and a window from both bodies' positions. Planned after A15. | A12, A13 | L |
+| A19 | **Hand-flown landing for the player's own ship** | Added after A15 by the Lead, under the owner's ruling that the player flies their own ship. Atomic `land` stays as the autopilot for cores. A hand-flown descent uses A11's finite burns; it doesn't replace them. The kernel needs: contact with the ground at the height of the cell below, not the datum radius; a touchdown rule, landed below a speed limit and crashed above it; that limit from a landing-gear capability (B's data); and lift-off by burns from the landed place. D builds the descent screen on `predict` and the cell heights. Not built yet. | A15 | M |
 | A17 | **Performance and limits** | Re-measure [perf_budget.md](perf_budget.md) with rails, burns and window searches at 20 times the slice, measure the top speed of time warp at slice size, and update the budget's rules. | A13 | S |
 
 **Order and why:**
@@ -285,7 +287,7 @@ Sizes compare with earlier kernel tasks: **S** is about A7's size, **M** about A
 - **networks.md section 6** is rewritten by me in A10 to A13. Inside a frame it stays word for word. Outside a frame it gains burns, transfers, frames and landing.
 - **schemas.md:**
   - The thruster capability gains `exhaust_m_s` and `thrust_kn`. A burn's per-tick delta-v is thrust over mass, so it needs thrust. `speed_m_s`, `propellant_kg_per_s` and `rated_mass_kg` stay, because in-frame `move_to` trips still read them (corrected after B asked).
-  - Bodies gain `gm_m3_s2`, `soi_m` and an orbit, and planets also gain a seed.
+  - Bodies gain `gm_km3_s2` (held as `gm` in 1000 m³/s²) and an orbit, and planets also gain a seed. The sphere of influence is derived at load (11.11), so there is no `soi_m`.
   - Scenarios gain frames.
   - All of these are B's data. I need them before A10's loader and A11's burns.
 - **accounting.md:**
@@ -358,3 +360,330 @@ Sizes compare with earlier kernel tasks: **S** is about A7's size, **M** about A
 **Not done in A9:**
 - Hyperbolic orbits, in A12.
 - Positions at 1 AU better than about 300 m. That would need Q40 trigonometry and roughly twice the cost. It isn't needed while frames convert at their radius.
+
+### 11.9 A10 results: rails, frames and places in state
+
+- **State:**
+  - Bodies gain `frame`, `orbit` and `gm`.
+  - Units gain `frame` and `orbit`.
+  - A new `frames` table holds each frame's orbit, `radius_mm` and derived `pos_mm`.
+  - A docked unit's place is its host's, worked out by `RailSystem.unit_place` rather than stored, so a newly built unit needs no extra step.
+- **Frames are their own table, not bodies of a new kind.** They take IDs from the same counter, after the bodies and their deposits. Kept apart, a frame never appears where code or the client lists targetable bodies.
+- **`RailSystem` is registered first.** In phase 2 it sets `pos_mm` on every orbiting body and frame from the tick. Those positions are saved, which contracts.md section 8 now allows as the one exception to the no-derived-caches rule, because they are a pure function of the stored orbit and the tick.
+- **Travel inside a frame is unchanged,** and the reference scenario has no frames, so all its figures hold. A `move_to` to a target on an orbit or in another frame is refused with `unsupported_orbit` until A13.
+- **The view** gains `frames`, plus `frame`, `orbit` and `world_mm` per body and unit, and `gm` per body.
+- **Scenario data**, in sim units after loading:
+  - Bodies may have `gm_km3_s2`, `orbit` and `frame`.
+  - Frames are `{ key, name, radius_mm, orbit }`.
+  - Units may have `frame`.
+  - An orbit is `{ parent, a_mm, e_ppm, inclination_mdeg, node_mdeg, periapsis_mdeg, mean_anomaly_mdeg }`, all whole numbers, so no float is involved. Only `parent` and `a_mm` are required.
+  - A body on an orbit needs no `pos_mm`.
+- **The loader:**
+  - `gm_km3_s2` becomes `gm` in 1000 m³/s².
+  - `thrust_kn` becomes `thrust_n`.
+  - Whole numbers now convert by integer multiplication, so the star's GM stays exact beyond 2^53.
+- **The contract is version 3.** An older save is refused with `version_mismatch`, because the version is now checked before the shape. contracts.md also lists what A11 to A15 will add, so C and D can work against it.
+- **Tests:** tests/sim/kernel/test_rails.gd, 13 tests. They cover:
+  - positions on rails;
+  - world positions through the chain;
+  - a docked unit's frame;
+  - a trip inside a frame identical to the reference figures;
+  - refusal of trips across places;
+  - a byte-exact save and load midway through a trip, running on identically;
+  - strict ranges;
+  - the view;
+  - bad scenarios;
+  - old saves;
+  - the loader's exact GM.
+
+### 11.10 A11 results: burns for the player's ship
+
+- **`BurnSystem`** (sim/networks/burn_system.gd) is registered after `RailSystem` and `UnitSystem`, and before `PowerSystem`. contracts.md sections 3, 5, 6 and 7 hold the commands, events, `check` detail, `predict` and view fields as built. D has had the shape since the start of A11.
+- **The thruster:** a burn uses the healthy thruster with the most `thrust_n`, which must also have `exhaust_mm_s`.
+- **Each tick's delta-v** is thrust over the unit's mass at the start of the tick, with a carried remainder.
+- **Propellant** flows at thrust / exhaust speed, also with a remainder. It is claimed against reservations and leaves in phase 6 through `propellant_exhaust`, so the matter ledger holds.
+- **Drift:** in a frame, a burn changes `vel_um_s`, and the unit drifts in a straight line, with a carry in tenths of a micrometre so the drift is exact. A `move_to` in a frame stops the drift.
+- **Frame margins,** a change from 11.2: a drifting unit leaves at the frame's radius + **2000 km**, and joins at radius + 1000 km under 1 m/s. The gap stops a slow unit at the edge flapping in and out.
+- **Measured:**
+  - The first Hohmann burn from 700 km (45.7 m/s), flown as a finite burn of 844 ticks, gives an apoapsis of 759.3 km, against 760 km for an instant impulse.
+  - The delta-v delivered matches the request within the rounding of its direction.
+  - Leaving the cluster frame at 1 AU puts the unit 304 m from where the frame plus its drift would have, which is the integer precision at 1 AU that A9 predicted.
+  - A save and load midway through two burns, one on an orbit and one in a frame, is byte-exact and runs on identically.
+- **Tests:** tests/sim/networks/test_burns.gd, 13 tests. They patch B13's thruster figures (3 kN, 3000 m/s) into the cached data until B13 is on main.
+
+### 11.11 A12 results: hyperbolic orbits and spheres of influence
+
+- **Hyperbolic orbits** are a second kind of record in `OrbitMath`, as contracts.md section 1 describes.
+  - `from_state` now returns one for anything past escape speed. Only an exactly parabolic state is refused, which rounding makes vanishingly rare.
+  - Kepler's equation for a hyperbola, e sinh H − H = M, is solved by Newton's method in integers.
+  - The hyperbolic anomaly is clamped at 20, by which point a unit is millions of radii out.
+- **New integer functions:**
+  - `exp_q30`: an exact table of e^0 to e^20, plus a series for the fraction.
+  - `ln`: by powers of 2, then 2 atanh.
+  - `sinh_cosh`.
+  - `soi_mm`: Laplace's a (m / M)^(2/5), checked against Kerbin's public sphere of influence of about 84,159 km to within 1e-5.
+- **Spheres of influence:**
+  - The scenario builder gives each orbiting body with gravity a `soi_mm`.
+  - In phase 5, `BurnSystem` moves a unit's orbit up to its parent's parent when it passes its parent's sphere, or down into a child body's.
+  - It is checked every tick, so the change comes on the first tick past the boundary at any speed, with no search.
+- **The A11 follow-up D found:** `BurnSystem` now runs after `TaskSystem`, so a burn planned for the tick after an undock starts on time instead of being dropped as `part_busy`.
+- **Measured:**
+  - Hyperbolic positions are within 100 parts per billion of the distance, against a float reference.
+  - The state-to-orbit round trip on a hyperbola is within 40 mm over 1000 s.
+  - A unit leaving a planet at 5 km/s crosses the 279,240 km sphere with a world-position step of one tick's motion and no jump. One falling in changes parent the same way.
+  - A save and load on a hyperbola is byte-exact.
+- **For D:** `position_float` in tests/sim/kernel/test_orbit_math.gd now draws hyperbolic records too. The view gives each body its `soi_mm`, for drawing spheres on the map.
+- **Not done:**
+  - Crashing into a body. A unit whose path goes through a planet passes through it until landing exists in A15.
+  - Predicting a sphere change ahead of time. `predict` still follows the current orbit only. A13's planner will need the crossing tick, found by bounded integer search on the rails function.
+
+### 11.12 A13 results: the autopilot planner
+
+- **`Transfer`** (sim/networks/transfer.gd) plans trips between orbits around the same parent body.
+  - A unit's orbit is its own, its frame's or its host's.
+  - A target's orbit is its frame's or its own. A body with gravity is a place to orbit or land on, so it isn't a rendezvous target, and landing is A15.
+  - Both orbits must be near-circular (e ≤ 0.01) and in one plane (within 1°). Anything else is `unsupported_orbit`.
+- **Hohmann transfers** between different radii.
+  - The window is closed form. The target must lead by half a turn less its motion during the flight, and the phase gap closes at a constant rate, so the wait is one long division on the two periods.
+  - The flight is half the transfer orbit's period. Both burns are priced by the rocket equation and paid at departure.
+- **Phasing** within one ring (radii within 1/15, where windows would be ten or more orbits apart).
+  - It leaves at once on an orbit whose period brings it back to its start just as the target arrives there.
+  - That takes one or more turns, changing the period by at most a tenth per turn.
+- **The `move_to` step** (MoveStep, CargoSystem) works as contracts.md sections 3 and 7 describe.
+  - It waits with op `waiting` until the window. Nothing is paid, and `stop` cancels freely.
+  - At the stored window it pays and rides the transfer orbit on rails. The transfer is atomic.
+  - On arrival it parks at the stand-off beside a target in a frame, joining the frame, or takes a target unit's orbit.
+  - A wait whose task is held over its window takes the next window instead of leaving late.
+  - A player's order that finds no propellant at its window ends with `no_propellant`, as a route does. A cycle's step is held, and `MoveStep.retry` quotes the next window once the propellant is there.
+  - Inside one frame, a `move_to` is still today's route, so every slice figure holds.
+- **Queries for C:** `Travel.quote_trip`, `Travel.next_window` and `Travel.quote_leg`. The last prices a lap leg from another place at any mass, for the lap gate. `Sim.quote` and `Sim.next_window` are the read-only versions.
+- **A change from the plan:** the autopilot's burns are paid as impulses at departure, and the flight rides the transfer orbit on rails. It doesn't place finite burns through A11. That makes the arrival tick exact, and it matches the trip record agreed with C. A finite burn of a few minutes against a flight of 20 minutes or more changes little. The thruster isn't a power or heat load during an autopilot trip, as with today's routes.
+- **Measured:**
+  - Hohmann from 700 km to 900 km: 11,962 ticks, matching half the transfer period to two ticks. It lands within a kilometre of the target frame before parking.
+  - The window is within two ticks of relative motion of exact.
+  - Phasing 20° ahead in one ring: 0.94 of an orbit at 88 m/s.
+  - Save and load while waiting and in flight is byte-exact, and the run goes on to the same arrival.
+- **Not done:**
+  - Lambert transfers, which leave between windows at a higher cost.
+  - Eccentric or inclined targets.
+  - Trips that change sphere of influence.
+  - A transfer that passes through the planet isn't checked, which is A15.
+
+### 11.13 A15 results: landing, takeoff and collisions
+
+- **`LandingSystem`** (sim/networks/landing_system.gd) adds `land { body, cell }` and `take_off { altitude_mm }` as atomic autopilot operations, `landing` and `taking_off`, with an integer delta-v cost and no simulated descent. That is planets.md section 3.2's model.
+- **The cost**, paid at the start:
+  - the burn down half an ellipse from the current radius to the surface;
+  - plus killing the speed left at the surface, with a 3% gravity loss;
+  - priced by the rocket equation.
+  - The op lasts the half ellipse. Takeoff is the reverse, onto a circular orbit through the cell's direction, moving east around +Y.
+- **Landed** is a fourth place, beside an orbit, a frame and the old world.
+  - The unit's `landed { body, cell }` sets its `pos_mm` to the cell's centre at its integer height, from the body's `planet { seed, height_range_m }` through `PlanetGrid`.
+  - A landed unit never moves, can't burn, and can't `move_to`.
+- **Collisions:** every tick, a unit on an orbit below its parent's radius crashes.
+  - It comes down on the cell below. That is the nearest cell centre, found by walking downhill from the nearest icosahedron corner.
+  - Its burn or transfer ends, and `crashed` fires. Damage isn't modelled.
+  - This also catches transfers that pass through a planet, which A13 left open.
+- **Measured:** landing from a 700 km orbit on the 600 km planet costs 2681 m/s, about 9.8 t of propellant for the starter ship, over 8760 ticks. That is just above section 7's 2.3 to 2.6 km/s, because a ship on the descent ellipse meets the surface at 2.5 km/s, not at circular speed.
+- **What the starter ship can land on and return from.** This assumes 4.58 t dry and 2 t of propellant at 3000 m/s exhaust speed, which is about 1090 m/s in all. Each case lands from, and returns to, an orbit at a tenth of the radius up, by this model:
+  - At Kerbin's density, a body up to about **120 km** radius. Surface gravity there is about 2 m/s², and the trip costs about 1045 m/s.
+  - A Minmus-sized moon, 60 km at Minmus's density (half Kerbin's), uses about 370 m/s, leaving about 1.2 t of propellant. At Kerbin's density it is 523 m/s (11.19).
+  - A Mun-sized moon, 200 km, needs about 1230 m/s, so it's short by about 210 kg.
+  - The 600 km planet needs about 5.2 km/s for the round trip, beyond any single ship without refuelling.
+  - None of these include the trip from the cluster to the moon. B has these figures for the new start.
+  - B10's probe is heavier, at 6.78 t dry, so it has about 775 m/s. At a fixed density the round trip scales with the radius, so it can land on and return from a body of about **90 km** at Kerbin's density, and still from a Minmus-sized one.
+- **Not done:**
+  - Surface types and slope limits on landing, which need planets.md's rule tables in `data/`.
+  - Damage on a crash.
+  - Planet rotation.
+  - Planetary deposits and scanning a patch of cells, which are B's and C's.
+
+### 11.14 A16 results: planet shadow
+
+- **`RailSystem.in_shadow(state, unit)`** is an integer cylinder test.
+  - The unit is in shadow if a body with gravity on an orbit is between it and the body of kind `star`.
+  - That means the unit is behind the body as seen from the star, and closer to the star-to-body line than the body's radius.
+  - It uses world positions, so it works for units on orbits, in frames, landed and docked.
+- **In phase 3 `PowerSystem` gives a shadowed unit no supply,** because every generator in the data is solar. A later non-solar generator, such as a reactor, needs a field saying so.
+  - Batteries then carry the loads, and anything left is shed by the existing rules, which is what C described for laps around a planet.
+  - The power view's `supply_w` follows, and `in_shadow` shows why.
+- **Tests** (in test_landing.gd):
+  - behind the planet, in front, behind but beside the shadow;
+  - landed on the day and night sides;
+  - supply 0 in shadow after a tick.
+
+### 11.15 A17 results: performance and limits
+
+perf_budget.md section 5a has the figures.
+- **Orbital load at 20 times the slice:** 14.9 ms mean and 30.8 ms at the 99th percentile for step and view, inside the 16 and 33 ms budget.
+- **Before two fixes it was 26 ms:** the frame-join check now tests positions before velocities, and planet-shadow casters are worked out once per tick.
+- **Burn previews:** a burn's flown preview costs about 0.2 ms per burn tick in `check`, so the client calls it on an edit, not every frame. Phase 1 no longer runs it, which removed 185 ms spikes when a burn was applied.
+- **Time warp:** at the slice's real size a tick costs 0.23 ms, so one core can run about 440x. At 20 times the slice it is about 7x.
+
+### 11.16 A18 results: trips across spheres of influence
+
+- **`SoiTransfer`** (sim/networks/soi_transfer.gd) plans `move_to` trips one level across spheres, as patched conics. That covers out from an orbit around a body to a ring around its child, and back. A trip two levels apart is refused with `unsupported_orbit`.
+  - The ship's and target's orbits must be near-circular, as for A13. A planet's own orbit may be eccentric up to 0.1.
+  - All the orbits must be in one plane with the planet's.
+- **Out:**
+  - A Hohmann ellipse around the parent, timed by A13's window to meet the planet.
+  - The tick it enters the planet's sphere, found by a coarse walk back from the expected arrival, then integer bisection.
+  - From there, a hyperbola around the planet that keeps the speed at the sphere's edge but is shaped to reach the target's ring at periapsis. The small change of direction stands for a correction burn.
+  - A capture burn at periapsis onto that ring, then A13's phasing to the target.
+- **Back:**
+  - An escape hyperbola from the parking orbit. Its asymptote lies along the planet's motion, or against it for an inward trip, on the Hohmann window. It is burned when the ship passes the periapsis direction nearest that window, and the exit time from the sphere is closed form.
+  - At the sphere's edge, a small correction sets the coast's far side at exactly the target's radius.
+  - There it circles and phases round to the target, because the wait for the parking orbit puts the exit up to half a parking orbit off the window.
+- **How it runs:** the trip is a list of legs, each an orbit and the tick it starts, kept in `transfer.legs` and ridden on rails by `RailSystem`. While waiting, the op keeps the whole plan, so the departure flies exactly the quoted legs, including after a save. All burns are paid at departure, by the rocket equation on their sum.
+- **Measured** on a compact test system: a central body of 1e17 m³/s², a home frame at 20,000 km, and a moon of 1e13 m³/s² at 30,000 km with a sphere of about 750 km.
+  - Out to a 300 km ring around the moon: 27,098 ticks and 10.1 km/s. The largest step between ticks is 7 km, with no jump at the leg changes, and the arrival parks 78 km from where the path ends.
+  - Back: 31,510 ticks and 14.7 km/s, with the same smoothness, parking 31 km away.
+  - A save mid-flight is byte-exact and runs on identically. Quotes are deterministic.
+  - The speeds here are high because the test system is compact. At the game's scale the same shapes cost what section 5's table gives.
+- **Costs to know:**
+  - Phasing at the far end is expensive on a fast ring: it adds up to a fifth of the orbital speed. Lambert transfers would remove most of it, and they are still not planned.
+  - The arrival parks the ship within about a hundred kilometres of where its path ends. That is a visible but small jump at star scale.
+- **Not done:**
+  - Trips two levels apart, such as a moon of another planet. A22 added these (11.18).
+  - Inclined targets.
+  - Lambert transfers.
+
+### 11.17 A19 results: hand-flown landing
+
+- **Low flight** (sim/networks/low_flight.gd) is a fifth place, near a planet's surface.
+  - Orbit records can't hold the near-vertical paths a landing uses, so below 20 km above the datum a unit flies as a position and velocity relative to the body. Gravity, GM / r², is applied each tick in integers, with the frame's tenth-of-a-micrometre carry.
+  - Above 30 km it converts back to an orbit, with the gap to stop flapping.
+  - A unit on an orbit that dips below 20 km switches in automatically.
+- **Ground and touchdown:**
+  - The ground is the cell below at its real height, from the planet's settings through PlanetGrid.
+  - Touching it at or under the unit's touchdown limit lands. Over it crashes. Both leave the unit landed on the cell, with `speed_um_s` in the event.
+  - The limit comes from B15's `landing_gear.max_touchdown_m_s` capability: the best healthy part's, and 0 without gear.
+  - The autopilot's atomic `land` now needs gear too (`no_landing_gear`), per the Lead.
+- **Burns:**
+  - They work landed, which is a lift-off into low flight, and in low flight.
+  - The basis there is level prograde, normal, and radial straight up, so the axes stay steady on a vertical descent.
+  - A lift-off whose thrust is under the ship's weight settles back and lands again at near-zero speed.
+- **`predict` in low flight** runs the same integration and reports where and how fast the path meets the ground. The test checks that the predicted contact tick, cell and speed equal what the flight then does.
+- **The ground test is cheap where it can be** (D's finding).
+  - Nothing is looked up above the body's own highest possible ground (its `height_range_m`, plus 1 km).
+  - Below that, each tick's search for the cell starts from the last tick's cell, and each cell's ground height is kept once found.
+  - Predict keeps these for one path. A flying unit keeps them in the context, which is derived and never saved, so a loaded game simply starts its next search cold (A24).
+  - A hinted search ends at the same cell as a cold one, so the drawn path still meets the ground where the flight does.
+  - A 670-tick hop skimming the ground used to take about 2 s to predict and now takes about 0.1 s.
+- **Tests:** in test_landing.gd: gentle and hard touchdowns, contact at the real height, prediction against the flight, entering and leaving low flight from a dipping orbit, lift-off with and without enough thrust, gear for the autopilot, and a byte-exact save in low flight. They give the starter hull landing gear in the cached data until B15's legs are on main.
+- **Not done:** crash damage, slope limits (B reserved `max_slope_mdeg` for later), and planet rotation.
+
+### 11.18 A22 results: trips two levels apart
+
+- **What it covers:** a `move_to` from an orbit around a star to a ring around a moon of one of its planets, and back. That is the trip the new start's first landing needs: from the cluster, which circles the star, to a moon. Trips three levels apart, and trips across to another planet's moon, are still refused with `unsupported_orbit`.
+- **How:** it chains A18's crossing twice through a parking circle around the middle body.
+  - The circle is halfway between the middle body's surface and the inner edge of the moon's sphere, and at least 60 km above the surface.
+  - Going out, it lies in the planet's own orbit plane, which the first crossing arrives in. Coming back, it lies in the moon's orbit plane, which the first crossing leaves.
+  - The first crossing stops on the circle without phasing, since nothing waits there. The second starts from that circle at the tick the first arrives, waits for its own window, and ends with the usual phasing to the target.
+  - The legs are A18's, six in all: Hohmann, hyperbola and circle, then the next three. `transfer.legs` and `op.plan` hold them as before.
+- **Arriving below escape speed:** the second crossing outward reaches the moon slower than the moon's escape speed at the sphere's edge. So the approach to the moon is an ellipse, not a hyperbola. The approach shaping now handles both, and the time to periapsis is worked out for either.
+- **Price:** every burn is in the delta-v and paid at departure by the rocket equation. That means two Hohmann burns, two captures, the escape from the parking circle, and the phasing at the end. The wait on the parking circle for the second window is free in propellant but counts in the trip's ticks.
+- **Measured** on a compact test system:
+  - The system: a star of 4e17 m³/s² with the home frame at 20,000 km, and a planet of 4e13 m³/s² at 30,000 km with a sphere of about 750 km. The moon is 4e11 m³/s² at 400 km from the planet, with a sphere of about 63 km. The target ring is 30 km round the moon.
+  - Out: 10,199 ticks and 32.0 km/s, with 26.1 km/s to the planet's circle and 5.9 km/s from it to the moon ring. It parks 12 km from where the path ends, against about 10.6 km of motion a tick, so within 1.1 ticks.
+  - Back: 22,248 ticks and 35.3 km/s, parking 33 km away against 14.2 km a tick, so within 2.3 ticks.
+  - The tests hold both under A21's tolerance of 5 ticks of motion.
+  - There are no jumps at leg changes.
+  - The speeds are high because the system is compact. The test ship carries 1,000 t of propellant, because a 4.6 t dry ship at this exhaust speed needs a mass ratio of about 128,000 for 35 km/s. At the game's scale the same shape costs what section 5's table gives, plus the parking circle's capture and escape.
+- **Not done:** inclined targets, Lambert transfers, and a direct trip that skips the parking circle. Skipping it would save the capture and escape burns around the planet (the second crossing's Hohmann start), but it would need a three-body window.
+
+### 11.19 A23 results: can the probe reach a first planet's moon?
+
+All figures are measured by two scripts, which fly nothing and change nothing:
+- `tools/reach_run.gd` quotes real-planner trips (A13, A18, A22). It works out landings with LandingSystem's own sums and samples shadow with A16's test.
+- `tools/moon_power_run.gd` runs B's ReferenceBot over today's reference game, with the cluster moved round a moon.
+
+The world:
+- The probe is B10's at 6.88 t dry, which includes B15's 100 kg legs. It carries 2 t of propellant at 3000 m/s exhaust, so it has **766 m/s** on a full tank.
+- The first planet is the agreed 600 km planet at Kerbin's density.
+- Its moon is 60 km at the same density (GM 3.53e9 m³/s²), 12,000 km from the planet, with a sphere of 757 km.
+
+**A correction to 11.13's moon figure.** Landing on a 60 km moon at Kerbin's density from a ring 66 km from its centre, and going back up, costs **523 m/s**. 11.13's 370 m/s is for a moon at half that density, Minmus's real one. Section 1.1 of start_and_build.md uses the 370.
+
+#### The cluster round the star at 1 AU: out of reach
+
+| Planet at | Out | Back | Round trip with landing | Probe propellant | In flight out | Windows every |
+| --------- | --- | ---- | ----------------------- | ---------------- | ------------- | ------------- |
+| 0.70 AU | 5,636 m/s | 5,515 m/s | 11,674 m/s | 330 t | 144 days | 1.4 years |
+| 0.90 AU | 1,692 m/s | 1,718 m/s | 3,933 m/s | 18.6 t | 170 days | 5.8 years |
+| 1.05 AU | 1,026 m/s | 1,094 m/s | 2,643 m/s | 9.7 t | 190 days | 14.2 years |
+| 1.20 AU | 2,532 m/s | 2,534 m/s | 5,589 m/s | 37.4 t | 212 days | 4.2 years |
+| 1.52 AU | 5,349 m/s | 5,329 m/s | 11,201 m/s | 281 t | 259 days | 2.1 years |
+
+- **Even the cheapest case is beyond the tank one way.** Just matching the planet's orbit round the star costs 718 m/s each way at 1.05 AU, before any capture.
+- **Closer planets are cheaper but their windows are rarer.** That is the synodic period, which no planner can shorten.
+- **Time rules it out on its own.** A trip is 5 to 9 months of game time, which is 18 to 32 days of play at 8x. A trip home also waits at the planet for the next window round the star: 15 years at 1.05 AU. To play it, the game would need a coast warp of about 10,000x (section 5), which isn't planned.
+- **What would make 1.05 AU work on propellant:** a tank of about 9.7 t, before counting the tank's own mass, or an exhaust of about 10,300 m/s on today's tank. Neither helps the time.
+
+#### The cluster round the planet: just out of reach
+
+| Cluster at | Its orbit | Behind the planet | Out | Back | Round trip with landing | Probe propellant | In flight out, back | Windows every |
+| ---------- | --------- | ----------------- | --- | ---- | ----------------------- | ---------------- | ------------------- | ------------- |
+| 3,000 km | 4.8 h | 6.4% | 474 m/s | 494 m/s | 1,491 m/s | 4.4 t | 11 h, 15 h | 11 to 17 h |
+| 8,000 km | 21 h | 2.4% | 196 m/s | 235 m/s | 954 m/s | 2.6 t | 14 h, 37 h | 46 h |
+| 20,000 km | 83 h | 1.0% | 190 m/s | 233 m/s | 946 m/s | 2.55 t | 31 h, 115 h | 72 to 144 h |
+| 30,000 km | 153 h | 0.6% | 226 m/s | 260 m/s | 1,009 m/s | 2.75 t | 46 h, 200 h | 50 to 207 h |
+
+- **The best case misses by about 25%.** A 2.6 t tank, or a moon at half the density, would close it.
+- **The trips are long:** 14 to 37 hours of game time, or 2 to 5 hours of play at 8x.
+
+#### The cluster round the moon: in reach, just
+
+The probe lands straight from the cluster's orbit and comes back up to it. On the way back it may be up to half a turn from the cluster. The rejoin is A13's phasing from there, which is cheap but slow.
+
+| Cluster at | Its orbit | Down, and up again | Rejoin, worst case | Round trip | Of the 2 t tank | Spare | At half the density | Shadow | Longest eclipse |
+| ---------- | --------- | ------------------ | ------------------ | ---------- | --------------- | ----- | ------------------- | ------ | --------------- |
+| 300 km | 4.8 h | 368 m/s each, 67 min each | 8 m/s, 22 h | 745 m/s | 1.94 t | 21 m/s | 521 m/s + rejoin | 7.6% | 48 min |
+| 400 km | 7.4 h | 376 m/s each, 97 min each | 7 m/s, 33 h | 758 m/s | 1.98 t | 8 m/s | 531 m/s + rejoin | 6.2% | 53 min |
+| 600 km | 13.7 h | 381 m/s each, 167 min each | 6 m/s, 61 h | 768 m/s | 2.01 t | -2 m/s | 539 m/s + rejoin | 4.6% | 43 min |
+
+- **At Kerbin's density the trip takes the whole tank.**
+  - Going lower is cheaper, because the landing pays the full surface speed from any height.
+  - A moon at half the density leaves about 230 m/s spare.
+  - A 2.3 t tank leaves about 100 m/s spare.
+  - A smaller moon also helps, since the cost scales with radius times the square root of density.
+- **The rejoin is slow:** up to 61 hours at worst. A take-off timed for when the cluster passes overhead would rejoin within one cluster orbit at no cost. That is a planner change, not yet made.
+- **Shadow** is sampled every 3 s over ten orbits of the moon, with every orbit in one plane, which is the worst case.
+  - Behind the moon: 6.4%, 4.8% and 3.2% of the time at 300, 400 and 600 km.
+  - Behind the planet: about 1.5%.
+  - The longest single eclipse, 43 to 53 minutes, comes when the planet's shadow runs straight into the moon's.
+
+**Power, from today's parts:**
+- **Mean solar** falls by the shadow share: 4.6% to 7.6%.
+- **The probe** has two battery banks, 720 MJ in all, discharging up to 300 kW.
+  - It covers the longest eclipse with mining (150 kW) and the core: 80 minutes at that load.
+  - It cannot cover mining with the compact refinery (250 kW). That lasts 48 minutes, just short of the 53-minute worst case.
+  - It recharges in about 1.9 hours at its 120 kW charge rate.
+- **The station** has one battery bank: 360 MJ, discharging up to **150 kW**.
+  - The 200 kW refinery cannot run at all in shadow, however full the battery is, because of the discharge limit.
+  - The fabricator (100 kW), with the hub and core, runs through any eclipse: about 56 minutes at its 107 kW.
+- **The drone** has a 30 kW panel and no battery, so in shadow its core goes offline and it stops dead.
+
+**The reference chain round the moon:** today's chain (ReferenceBot) is run with the station, ship and rocks in a cluster frame round the moon. It is tried at four starting phases of the cluster, with the moon either just short of the planet's shadow or far from it.
+- **Laps don't change** (5,356, 5,340 and 5,340 ticks) whenever the drone isn't caught in shadow. Trips inside the frame are the same straight lines as today.
+- **The handover slips** by 0 to 37 minutes against today's 140 minutes at the bot's pace. The worst cases are where the planet's eclipse meets the moon's.
+  - At 300 km: 0 to 37 min, with the moon far from the planet's shadow up to 19 min.
+  - At 400 km: 0 to 23 min, and 0 with the moon far away.
+  - At 600 km: 0 to 30 min.
+  - All of it is the refinery paused for power. The pause counts match the slip exactly.
+- **The drone stalls in shadow:** two of 24 runs fail through it.
+  - At 300 km, set_cycle is refused with core_offline when the order lands in an eclipse.
+  - At 600 km, a lap runs past the bot's limit.
+- **A fix in data, which is B's:** a second station battery bank, or a 300 kW discharge, lets the refinery run through eclipses. A small battery on the drone keeps its core alive. With both, the chain should be as today, but that has not been measured.
+- **A gap this run found, reported to C:** a craft built at a station in a frame starts outside the frame (ConstructionSystem gives it frame 0), so the drone could not run its cycle. The script moves it into the frame and says so. C has the fix ready.
+
+#### Recommendation
+
+The cluster round the moon is the only placement where the probe's first landing fits one tank. Do it at 300 to 400 km, and use any one of these to make room:
+- a moon a little lighter or smaller than Kerbin's density at 60 km;
+- a 2.3 t tank;
+- accept that the landing uses all of today's tank.
+
+Then add station battery capacity and a drone battery in data, so the chain is as quick as today's.
+
+Planets round the star are a later goal. They need propellant made on the surface, and a coast warp before they are playable at all.

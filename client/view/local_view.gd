@@ -35,6 +35,11 @@ var field: AsteroidField
 var beams: Dictionary = {}
 ## Asked with each click's hit, which may be {}. A false answer ignores the click.
 var click_filter: Callable
+## Close-up terrain on the planet the camera is near (planets.md section 7).
+var detail: PlanetDetail
+## Per craft in low flight, the hex under it when last looked up: { dir, cell }.
+var _hex_cache: Dictionary = {}
+const HEX_RECHECK_M := 50.0
 
 var _modules: Dictionary = {}
 var _pivot_offset := Vector3.ZERO
@@ -69,6 +74,9 @@ func bind(new_bridge: SimBridge) -> void:
 	field = AsteroidField.new()
 	add_child(field)
 	field.build(bridge.current_view)
+	if detail == null:
+		detail = PlanetDetail.new()
+		add_child(detail)
 	var first_ship := _first_unit("ship")
 	commanded_unit = first_ship
 	focus_on("unit", first_ship)
@@ -81,10 +89,11 @@ func bind(new_bridge: SimBridge) -> void:
 ## Starts the camera on the star's side, so the first view shows sunlit hulls.
 func _face_the_lit_side() -> void:
 	var view: Dictionary = bridge.current_view
-	var focus: Array = view["units"][focus_id]["pos_mm"]
+	var focus := WorldPosition.of(view["units"][focus_id])
 	for id: int in view["bodies"]:
 		if view["bodies"][id]["kind"] == "star":
-			var to_star := FloatingOrigin.relative_m(view["bodies"][id]["pos_mm"], view["bodies"][id]["pos_mm"], focus, focus, 0.0)
+			var star := WorldPosition.of(view["bodies"][id])
+			var to_star := FloatingOrigin.relative_m(star, star, focus, focus, 0.0)
 			var direction := to_star.normalized()
 			camera.yaw = atan2(direction.x, direction.z) + LIT_SIDE_OFFSET
 			camera.pitch = -clampf(asin(direction.y), -LIT_PITCH_LIMIT, LIT_PITCH_LIMIT)
@@ -150,6 +159,13 @@ func _handle_key(key: InputEventKey) -> void:
 	elif key.physical_keycode == KEY_TAB:
 		_cycle_unit()
 		get_viewport().set_input_as_handled()
+
+
+## Hex outlines on every planet, on or off.
+func set_planet_outlines(on: bool) -> void:
+	BodyNode.show_outlines = on
+	for id: int in bodies:
+		bodies[id].set_outlines(on)
 
 
 func focus_on_selection() -> void:
@@ -223,8 +239,8 @@ func pick_ray(from: Vector3, direction: Vector3) -> Dictionary:
 		return {}
 	var collider: Object = hit["collider"]
 	if collider.has_meta("unit"):
-		return { "kind": "unit", "id": collider.get_meta("unit"), "part": collider.get_meta("part") }
-	return { "kind": "body", "id": collider.get_meta("body"), "part": 0 }
+		return { "kind": "unit", "id": collider.get_meta("unit"), "part": collider.get_meta("part"), "point": hit["position"] }
+	return { "kind": "body", "id": collider.get_meta("body"), "part": 0, "point": hit["position"] }
 
 
 func refresh(delta: float) -> void:
@@ -237,12 +253,12 @@ func refresh(delta: float) -> void:
 	for id: int in bodies:
 		var entry: Dictionary = after["bodies"][id]
 		var relative := FloatingOrigin.relative_m(
-			before["bodies"].get(id, entry)["pos_mm"], entry["pos_mm"], focus_before, focus_after, alpha)
+			WorldPosition.of(before["bodies"].get(id, entry)), WorldPosition.of(entry), focus_before, focus_after, alpha)
 		bodies[id].place(relative)
 		if bodies[id].kind == "star":
 			sun.look_at_from_position(relative.normalized(), Vector3.ZERO)
 			fill.look_at_from_position(-relative.normalized(), Vector3.ZERO)
-	field.position = FloatingOrigin.relative_m(field.anchor_mm, field.anchor_mm, focus_before, focus_after, alpha)
+	field.position = FloatingOrigin.relative_m(field.world_anchor(before), field.world_anchor(after), focus_before, focus_after, alpha)
 	for docked_pass: bool in [false, true]:
 		for id: int in crafts:
 			if after["units"][id]["dock"].is_empty() != docked_pass:
@@ -251,7 +267,9 @@ func refresh(delta: float) -> void:
 	camera.pivot = _node_of(focus_kind, focus_id).position + _pivot_offset
 	for id: int in crafts:
 		_update_effects(crafts[id], id, after, delta)
+	_settle_camera(delta)
 	camera.update_view(delta)
+	_update_detail(after)
 	sun.directional_shadow_max_distance = clampf(
 		camera.distance_m * SHADOW_RANGE_FACTOR, MIN_SHADOW_RANGE_M, MAX_SHADOW_RANGE_M)
 	markers.update_entities()
@@ -261,13 +279,22 @@ func _place_craft(craft: CraftNode, id: int, before: Dictionary, after: Dictiona
 		focus_before: Array, focus_after: Array, alpha: float, delta: float) -> void:
 	var unit: Dictionary = after["units"][id]
 	var relative := FloatingOrigin.relative_m(
-		before["units"].get(id, unit)["pos_mm"], unit["pos_mm"], focus_before, focus_after, alpha)
+		WorldPosition.of(before["units"].get(id, unit)), WorldPosition.of(unit), focus_before, focus_after, alpha)
 	if not unit["route"].is_empty():
 		var aim := CraftLayout.to_metres(unit["route"]["to_mm"]) - CraftLayout.to_metres(unit["route"]["from_mm"])
 		if aim.length_squared() > 0.0:
 			craft.heading = craft.heading.slerp(CraftLayout.heading_towards(aim), 1.0 - exp(-HEADING_RATE * delta))
 	var wanted := Vector3.ZERO
-	if _is_crowded(unit, id, after):
+	if not unit.get("landed", {}).is_empty():
+		# Upright on its cell, with its lowest part on the ground.
+		var up := Vector3(unit["pos_mm"][0], unit["pos_mm"][1], unit["pos_mm"][2]).normalized()
+		craft.heading = Quaternion(Vector3.UP, up)
+		relative += up * -craft.bottom_m
+	elif int(unit.get("low_flight", 0)) != 0:
+		# Flying low over a body, a craft holds the local vertical, like a lander.
+		var up := Vector3(unit["pos_mm"][0], unit["pos_mm"][1], unit["pos_mm"][2]).normalized()
+		craft.heading = craft.heading.slerp(Quaternion(Vector3.UP, up), 1.0 - exp(-HEADING_RATE * delta))
+	elif _is_crowded(unit, id, after):
 		wanted = LocalView.spread_offset(id)
 	craft.display_offset = craft.display_offset.lerp(wanted, 1.0 - exp(-SPREAD_RATE * delta))
 	var free := Transform3D(Basis(craft.heading), relative + craft.display_offset)
@@ -295,7 +322,7 @@ func _is_crowded(unit: Dictionary, id: int, view: Dictionary) -> bool:
 		return false
 	for other: int in view["units"]:
 		var neighbour: Dictionary = view["units"][other]
-		if other != id and neighbour["kind"] != "station" and neighbour["dock"].is_empty():
+		if other != id and neighbour["kind"] != "station" and neighbour["dock"].is_empty() 				and WorldPosition.same_place(unit, neighbour):
 			if IntMath.dist(unit["pos_mm"], neighbour["pos_mm"]) < CROWD_MM:
 				return true
 	return false
@@ -385,9 +412,70 @@ func _sync_entities() -> void:
 				beams.erase(id)
 
 
+## Near a planet drawn at true scale, the camera's up is the local vertical and its
+## far plane reaches the planet's far side; elsewhere world +Y and the usual far.
+func _settle_camera(delta: float) -> void:
+	var wanted := Vector3.UP
+	var far_m := 0.0
+	for id: int in bodies:
+		var body: BodyNode = bodies[id]
+		var from_focus := body.position - camera.pivot
+		if body.is_true_scale(from_focus.length()):
+			wanted = -from_focus
+			far_m = maxf(far_m, from_focus.length() + body.radius_m * 1.1)
+	camera.settle_up(wanted, far_m, delta)
+
+
+## Close-up terrain under the camera when near a planet drawn at true scale.
+func _update_detail(view: Dictionary) -> void:
+	if detail == null:
+		return
+	var body := near_planet()
+	if body == null:
+		detail.update(null, {}, Vector3.ZERO, [])
+		return
+	var landed: Array[Dictionary] = []
+	var radius_mm: float = view["bodies"][body.body_id]["radius_mm"]
+	for id: int in view["units"]:
+		var unit: Dictionary = view["units"][id]
+		if unit.get("landed", {}).get("body", 0) == body.body_id:
+			var pos := Vector3(unit["pos_mm"][0], unit["pos_mm"][1], unit["pos_mm"][2])
+			landed.append({ "dir": pos.normalized(), "height_m": roundi((pos.length() - radius_mm) / 1000.0) })
+		elif int(unit.get("low_flight", 0)) == body.body_id:
+			var site := _hex_below(body, id, unit)
+			if not site.is_empty():
+				landed.append(site)
+	detail.update(body, view["bodies"][body.body_id], camera.global_position - body.position, landed)
+
+
+## The hex under a craft in low flight, levelled across most of the hex to its
+## height, which is the ground the simulation meets (A19). The hex is looked up again
+## only after the craft moves HEX_RECHECK_M, so tiles rebuild only on a new hex.
+func _hex_below(body: BodyNode, id: int, unit: Dictionary) -> Dictionary:
+	if body.planet.is_empty():
+		return {}
+	var dir := Vector3(unit["pos_mm"][0], unit["pos_mm"][1], unit["pos_mm"][2]).normalized()
+	var known: Dictionary = _hex_cache.get(id, {})
+	if known.is_empty() or known["dir"].angle_to(dir) * body.radius_m > HEX_RECHECK_M:
+		var cell := PlanetMesh.nearest_cell(body.planet, dir)
+		known = { "dir": dir, "cell": cell }
+		_hex_cache[id] = known
+	var cell: int = known["cell"]
+	return { "dir": body.planet["directions"][cell], "height_m": body.planet["heights"][cell],
+		"inner_m": PlanetDetail.HEX_INNER_M, "outer_m": PlanetDetail.HEX_OUTER_M }
+
+
+func near_planet() -> BodyNode:
+	for id: int in bodies:
+		var body: BodyNode = bodies[id]
+		if body.is_true_scale((body.position - camera.pivot).length()):
+			return body
+	return null
+
+
 func _position_in(view: Dictionary, fallback: Dictionary, kind: String, id: int) -> Array:
 	var section: String = "units" if kind == "unit" else "bodies"
-	return view[section].get(id, fallback[section][id])["pos_mm"]
+	return WorldPosition.of(view[section].get(id, fallback[section][id]))
 
 
 func _node_of(kind: String, id: int) -> Node3D:

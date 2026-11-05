@@ -34,6 +34,9 @@ func allocate(ctx: SimContext) -> void:
 		var op_type: String = unit["op"]["type"]
 		if op_type == MoveStep.OP_MOVING and unit["op"]["start_tick"] == ctx.tick:
 			_depart(ctx, id)
+		elif op_type == MoveStep.OP_WAITING and unit["op"]["depart_tick"] <= ctx.tick \
+				and not unit["op"].has("reason") and TaskSystem.is_running(ctx, unit):
+			_depart(ctx, id)
 		elif op_type == DockStep.OP_DOCKING and unit["task"] != 0 and not unit["op"].has("granted"):
 			_grant_ports(ctx, id)
 
@@ -43,6 +46,8 @@ func run(ctx: SimContext) -> void:
 		var unit: Dictionary = ctx.state["units"][id]
 		if not unit["route"].is_empty():
 			_advance(ctx, id)
+		elif not unit["transfer"].is_empty() and ctx.tick >= unit["transfer"]["arrive_tick"]:
+			_arrive(ctx, id)
 		match unit["op"]["type"]:
 			TransferStep.OP_LOADING, TransferStep.OP_UNLOADING:
 				if TaskSystem.is_running(ctx, unit) and not unit["op"].has("reason"):
@@ -71,9 +76,22 @@ func apply_delta(ctx: SimContext, payload: Dictionary) -> void:
 func _depart(ctx: SimContext, id: int) -> void:
 	var unit: Dictionary = ctx.state["units"][id]
 	var op: Dictionary = unit["op"]
-	var quoted := Travel.quote(ctx, id, op["target"])
+	# A wait that has reached its window flies the plan it stored. Quoting afresh could move the
+	# window by a tick through rounding, and the unit would never go. A wait that missed its window,
+	# held by its task, quotes the next one: leaving late would miss the target.
+	var quoted: Dictionary
+	if op["type"] == MoveStep.OP_WAITING and op["depart_tick"] == ctx.tick and op.has("plan"):
+		quoted = op["plan"].duplicate(true)
+	else:
+		quoted = Travel.quote(ctx, id, op["target"])
 	if quoted.has("reason"):
 		op["reason"] = quoted["reason"]
+		return
+	if quoted["kind"] == Transfer.KIND:
+		if quoted["depart_tick"] > ctx.tick:
+			MoveStep.wait_for(ctx, id, quoted["depart_tick"], quoted)
+		else:
+			_depart_transfer(ctx, id, quoted)
 		return
 	var cost_g: int = quoted["cost_g"]
 	if cost_g > Reservations.free_stock(ctx, id, Travel.PROPELLANT):
@@ -89,7 +107,73 @@ func _depart(ctx: SimContext, id: int) -> void:
 		"speed_remainder": 0, "eta_tick": op["end_tick"],
 	}
 	unit["at_target"] = 0
+	unit["vel_um_s"] = [0, 0, 0]
+	unit["drift_carry"] = [0, 0, 0]
 	_clear_followers(ctx, id)
+
+
+## Pays a transfer's whole price and puts the unit on the transfer orbit, on rails (A13). A missing
+## load of propellant sends it back to waiting, held by `no_propellant`, and MoveStep.retry quotes the
+## next window once the propellant is there: leaving late on an old window would miss the target.
+func _depart_transfer(ctx: SimContext, id: int, quoted: Dictionary) -> void:
+	var unit: Dictionary = ctx.state["units"][id]
+	var target: int = quoted["target"]
+	if quoted["cost_g"] > Reservations.free_stock(ctx, id, Travel.PROPELLANT):
+		MoveStep.wait_for(ctx, id, ctx.tick)
+		unit["op"]["reason"] = MoveStep.REASON_NO_PROPELLANT
+		return
+	var legs: Array = quoted.get("legs", []).duplicate(true)
+	var orbit: Dictionary = legs.pop_front()["orbit"] if not legs.is_empty() 		else Transfer.departure_orbit(ctx, id, quoted, ctx.tick)
+	if orbit.is_empty():
+		unit["op"]["reason"] = Travel.REASON_OTHER_PLACE
+		return
+	if quoted["cost_g"] > 0:
+		Reservations.claim_stock(ctx, id, Travel.PROPELLANT, quoted["cost_g"])
+		ctx.record_delta(id, self, { "kind": DELTA_BURN, "unit": id, "grams": quoted["cost_g"] })
+	unit["transfer"] = { "target": target, "depart_tick": ctx.tick, "arrive_tick": quoted["arrive_tick"],
+		"legs": legs }
+	unit["orbit"] = orbit
+	unit["frame"] = 0
+	unit["pos_mm"] = OrbitMath.position_at(orbit, ctx.tick)
+	unit["vel_um_s"] = [0, 0, 0]
+	unit["drift_carry"] = [0, 0, 0]
+	unit["at_target"] = 0
+	unit["op"] = { "type": MoveStep.OP_MOVING, "target": target, "part": 0, "start_tick": ctx.tick,
+		"end_tick": quoted["arrive_tick"] }
+	_clear_followers(ctx, id)
+
+
+## The end of a transfer: the unit takes the target's place, parked beside it.
+func _arrive(ctx: SimContext, id: int) -> void:
+	var unit: Dictionary = ctx.state["units"][id]
+	var target: int = unit["transfer"]["target"]
+	var place := RailSystem.target_place(ctx.state, target)
+	if place > 0:
+		var frame: Dictionary = ctx.state["frames"][place]
+		var local: Array[int] = []
+		for axis in 3:
+			local.append(int(unit["pos_mm"][axis]) - int(frame["pos_mm"][axis]))
+		var target_mm := _position_of(ctx, target)
+		var total := IntMath.dist(local, target_mm)
+		var stop: int = Travel._stop_distance(ctx, target)
+		unit["frame"] = place
+		unit["orbit"] = {}
+		unit["pos_mm"] = Travel.stop_point(local, target_mm, total, stop) if total > stop else local
+	else:
+		var host: Dictionary = Transfer.target_orbit(ctx, target).duplicate(true)
+		unit["orbit"] = host
+		unit["pos_mm"] = OrbitMath.position_at(host, ctx.tick)
+	unit["vel_um_s"] = [0, 0, 0]
+	unit["drift_carry"] = [0, 0, 0]
+	unit["at_target"] = target
+	unit["transfer"] = {}
+	ctx.emit_event("arrived", id, { "target": target })
+
+
+static func _position_of(ctx: SimContext, target: int) -> Array:
+	if ctx.state["bodies"].has(target):
+		return ctx.state["bodies"][target]["pos_mm"]
+	return ctx.state["units"][target]["pos_mm"]
 
 
 ## Nothing stays at a target that has left. Docked guests keep theirs and follow their host.

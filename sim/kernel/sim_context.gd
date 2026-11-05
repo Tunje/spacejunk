@@ -13,6 +13,10 @@ var phase := 0
 var flows := {}
 ## UnitIndex entries by unit ID. Derived, so never saved.
 var index := {}
+## LowFlight's ground memo by unit ID: the last cell under each unit in low flight and the ground
+## radius of cells it has met. Only a starting point for the search, which ends at the same cell
+## without it, so it is derived and never saved (A24).
+var ground_memo := {}
 
 var _events: Array[Dictionary] = []
 var _deltas: Array[Dictionary] = []

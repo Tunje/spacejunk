@@ -3,7 +3,12 @@ extends SimSystem
 ## The view and matter ledger of units, parts, bodies and deposits.
 
 
+## Shadow casters for the view being filled, worked out once per view rather than per unit.
+var _casters: Array = []
+
+
 func fill_view(ctx: SimContext, view: Dictionary) -> void:
+	_casters = RailSystem.shadow_casters(ctx.state)
 	var units: Dictionary = ctx.state["units"]
 	for id: int in _sorted(units):
 		view["units"][id] = _unit_view(ctx, id)
@@ -13,6 +18,9 @@ func fill_view(ctx: SimContext, view: Dictionary) -> void:
 		view["bodies"][id] = {
 			"name": body["name"], "kind": body["kind"], "pos_mm": body["pos_mm"].duplicate(),
 			"radius_mm": body["radius_mm"], "visual_seed": body["visual_seed"], "scanned": body["scanned"],
+			"frame": body["frame"], "orbit": body["orbit"].duplicate(true), "gm": body["gm"],
+			"soi_mm": body.get("soi_mm", 0), "planet": body.get("planet", {}).duplicate(),
+			"world_mm": RailSystem.world_mm(ctx.state, "bodies", id),
 		}
 	var deposits: Dictionary = ctx.state["deposits"]
 	for id: int in _sorted(deposits):
@@ -61,6 +69,9 @@ func _unit_view(ctx: SimContext, id: int) -> Dictionary:
 	var result := {
 		"def": unit["def"], "kind": unit["kind"], "name": unit["name"],
 		"pos_mm": unit["pos_mm"].duplicate(), "at_target": unit["at_target"],
+		"frame": maxi(0, RailSystem.unit_place(state, id)), "orbit": unit["orbit"].duplicate(true),
+		"transfer": unit["transfer"].duplicate(),
+		"world_mm": RailSystem.world_mm(state, "units", id),
 		"core": core, "core_tier": tier, "task": unit["task"], "cycle_task": unit["cycle_task"],
 		"last_cycle": unit["last_cycle"].duplicate(true),
 		"op": unit["op"].duplicate(), "route": shown_route, "dock": unit["dock"].duplicate(),
@@ -81,8 +92,9 @@ func _power_view(ctx: SimContext, id: int) -> Dictionary:
 	var stored_j := 0
 	for battery: Array in index["batteries"]:
 		stored_j += ctx.state["parts"][battery[0]]["stored_j"]
+	var shadow: bool = not index["generators"].is_empty() and not _casters.is_empty() 		and RailSystem.in_shadow(ctx.state, id, _casters)
 	return {
-		"supply_w": UnitIndex.healthy_total(ctx, index["generators"]),
+		"supply_w": 0 if shadow else UnitIndex.healthy_total(ctx, index["generators"]), "in_shadow": shadow,
 		"demand_w": ctx.state["units"][id]["demand_w"], "stored_j": stored_j,
 		"capacity_j": index["capacity_j"], "max_discharge_w": index["max_discharge_w"],
 	}

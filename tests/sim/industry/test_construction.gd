@@ -111,6 +111,49 @@ func test_a_built_craft_appears_docked_with_no_core_and_no_tank() -> void:
 	assert_eq(view["jobs"].size(), 0)
 
 
+
+## Docks the station by its free port to a second station, so the builder has no free port of its own.
+func _dock_station_to_host() -> int:
+	var host := Units.create(sim._ctx, "starter_station", "Host", state["units"][STATION]["pos_mm"])
+	var host_ports := Units.ports(state, defs, host)
+	state["units"][STATION]["dock"] = { "port": FREE_PORT, "target_unit": host, "target_port": host_ports[0] }
+	sim._ctx.index.clear()
+	state["matter_start_g"] = sim.ledger()["matter"]["total_g"]
+	assert_gt(host_ports.size(), 1, "the host has a spare port")
+	for port: int in Units.ports(state, defs, STATION):
+		assert_true(Units.port_in_use(state, port), "the builder's ports are all taken")
+	return host
+
+
+func test_a_builder_with_no_free_port_builds_onto_the_unit_it_is_docked_to() -> void:
+	var host := _dock_station_to_host()
+	var spare: int = Units.ports(state, defs, host)[1]
+	_give_inputs("small_craft")
+	sim.submit(_start("small_craft"))
+	_step_balanced(RUN_TICKS)
+	var created := _first(sim.take_events(), "unit_created")
+	assert_eq(created["unit"], STATION, "reported by the builder")
+	var id: int = created["data"]["unit"]
+	var drone: Dictionary = sim.view()["units"][id]
+	assert_eq(drone["dock"], { "port": Units.ports(state, defs, id)[0], "target_unit": host, "target_port": spare })
+	assert_eq(drone["at_target"], host)
+	assert_false(state["parts"][spare].has("claimed_by"))
+
+
+func test_with_no_free_port_on_the_builder_or_its_host_the_run_waits() -> void:
+	var host := _dock_station_to_host()
+	var blocker := Units.create(sim._ctx, "small_craft", "Blocker", [0, 0, 0])
+	state["units"][blocker]["dock"] = {
+		"port": Units.ports(state, defs, blocker)[0], "target_unit": host, "target_port": Units.ports(state, defs, host)[1],
+	}
+	state["matter_start_g"] = sim.ledger()["matter"]["total_g"]
+	_give_inputs("small_craft")
+	sim.submit(_start("small_craft"))
+	_step_balanced(RUN_TICKS + 2)
+	var shown: Dictionary = sim.view()["jobs"].values()[0]
+	assert_eq([shown["status"], shown["reason"]], ["paused", "no_free_port"])
+	assert_false(_types(sim.take_events()).has("unit_created"))
+
 func test_building_moves_the_inputs_into_installed_parts() -> void:
 	_give_inputs("small_craft")
 	var installed: int = sim.ledger()["matter"]["installed_g"]

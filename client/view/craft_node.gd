@@ -16,6 +16,9 @@ var unit_id := 0
 var signature := ""
 var part_transforms: Dictionary = {}
 var fit_radius_m := 10.0
+## The lowest point of any part along the craft's -Y, in metres, so a landed craft
+## can stand on the ground rather than in it.
+var bottom_m := 0.0
 var heading := Quaternion.IDENTITY
 var dock_blend := 0.0
 var display_offset := Vector3.ZERO
@@ -65,6 +68,7 @@ func build(id: int, root: Dictionary, modules: Dictionary) -> void:
 	_radiators.clear()
 	part_transforms = CraftLayout.part_transforms(root, modules)
 	fit_radius_m = 2.0
+	bottom_m = 0.0
 	_add_part(root, modules)
 	var ids := Feedback.part_ids(root)
 	if not _known_parts.is_empty():
@@ -159,6 +163,10 @@ func _add_part(part: Dictionary, modules: Dictionary) -> void:
 	var centre := CraftLayout.to_metres(collision["center_mm"])
 	var size := CraftLayout.to_metres(collision["size_mm"])
 	fit_radius_m = maxf(fit_radius_m, (xform * centre).length() + size.length() * 0.5)
+	for corner in 8:
+		var offset := Vector3(size.x * (0.5 if corner & 1 else -0.5), size.y * (0.5 if corner & 2 else -0.5),
+			size.z * (0.5 if corner & 4 else -0.5))
+		bottom_m = minf(bottom_m, (xform * (centre + offset)).y)
 
 	var body := StaticBody3D.new()
 	body.transform = xform

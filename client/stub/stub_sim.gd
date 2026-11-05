@@ -7,14 +7,26 @@ const TICKS_PER_SECOND := 10
 const SCENARIO_ID := "stub"
 ## The stub scenario with extra ships, well above the slice's real craft count.
 const SCENARIO_LOAD := "stub_load"
+## The probe on a circular orbit round a small moon, for flight on an orbit (A11).
+const SCENARIO_ORBIT := "stub_orbit"
 const LOAD_EXTRA_SHIPS := 11
 const LOAD_SHIP_SPACING_MM := 40000
 const DATA_DIR := "res://client/stub/data/"
-const SAVE_HEADER := "stub-save:2\n"
+const SAVE_HEADER := "stub-save:3\n"
 const SAVE_PREFIX := "stub-save:"
 const EVENT_LIMIT := 4096
 
 const STANDOFF_MM := 150000
+const CLUSTER_RADIUS_MM := 50_000_000_000
+## stub_orbit's 600 km planet, with the settings of planets.md section 1, and the
+## probe's circular orbit round it.
+const PLANET_GM := 3_531_600_000
+const PLANET_RADIUS_MM := 600_000_000
+const PLANET_POS_MM := [0, 0, -20_000_000_000]
+const PROBE_ORBIT_MM := 700_000_000
+const PLANET_SEED := 48213
+const PLANET_RANGE_M := 6000
+const PLANET_SEA_LEVEL_M := -400
 ## C9: jobs on one facility, counting the active one.
 const QUEUE_LIMIT := 16
 const JOB_VIEW_FIELDS: Array[String] = [
@@ -24,6 +36,8 @@ const JOB_VIEW_FIELDS: Array[String] = [
 const BUSY_STATUSES: Array[String] = ["running", "paused", "cancelling"]
 
 static var _last_error := ""
+## True while commands are applied in phase 1, when the tick has already moved on.
+var _applying := false
 
 var _state: Dictionary = {}
 var _defs: Dictionary = {}
@@ -32,13 +46,16 @@ var _events: Array[Dictionary] = []
 
 static func new_game(scenario_id: String, seed_value: int) -> StubSim:
 	_last_error = ""
-	if scenario_id != SCENARIO_ID and scenario_id != SCENARIO_LOAD:
+	if not [SCENARIO_ID, SCENARIO_LOAD, SCENARIO_ORBIT].has(scenario_id):
 		_last_error = "unknown_scenario"
 		return null
 	var sim := StubSim.new()
 	sim._defs = _load_defs()
 	var extra_ships := LOAD_EXTRA_SHIPS if scenario_id == SCENARIO_LOAD else 0
 	sim._state = _build_state(sim._defs, seed_value, extra_ships)
+	if scenario_id == SCENARIO_ORBIT:
+		sim._put_probe_in_orbit()
+	sim._update_rails()
 	return sim
 
 
@@ -94,7 +111,8 @@ func view() -> Dictionary:
 		"tick": _state["tick"],
 		"seed": _state["seed"],
 		"units": units,
-		"bodies": _state["bodies"].duplicate(true),
+		"bodies": _bodies_view(),
+		"frames": _frames_view(),
 		"deposits": _state["deposits"].duplicate(true),
 		"jobs": _jobs_view(),
 		"tasks": _state["tasks"].duplicate(true),
@@ -133,6 +151,7 @@ func ledger() -> Dictionary:
 	for id: int in _state["jobs"]:
 		for item: String in _state["jobs"][id]["held"]:
 			matter += _state["jobs"][id]["held"][item]
+	matter += _state["exhaust_g"]
 	return { "matter_g": matter }
 
 
@@ -198,6 +217,9 @@ static func _convert(value: Variant) -> Variant:
 			elif key.ends_with("_kw"):
 				new_key = key.trim_suffix("_kw") + "_w"
 				factor = 1000
+			elif key.ends_with("_kn"):
+				new_key = key.trim_suffix("_kn") + "_n"
+				factor = 1000
 			elif key.ends_with("_kj"):
 				new_key = key.trim_suffix("_kj") + "_j"
 				factor = 1000
@@ -215,6 +237,7 @@ static func _build_state(module_defs: Dictionary, seed_value: int, extra_ships: 
 	var state: Dictionary = {
 		"tick": 0, "seed": seed_value, "next_id": 1, "next_command": 1, "queue": [],
 		"units": {}, "bodies": {}, "deposits": {}, "hidden_deposits": {}, "tasks": {}, "jobs": {},
+		"frames": {}, "exhaust_g": 0,
 	}
 	_add_extra_ships(scenario["units"], extra_ships)
 	var body_ids: Dictionary = {}
@@ -225,6 +248,7 @@ static func _build_state(module_defs: Dictionary, seed_value: int, extra_ships: 
 			"kind": entry["kind"], "name": "Star" if entry["kind"] == "star" else "Asteroid %d" % id,
 			"pos_mm": entry["pos_mm"], "radius_mm": entry["radius_mm"],
 			"visual_seed": absi(seed_value * 31 + id * 2654435761) % 2147483647, "scanned": false,
+			"frame": 0, "orbit": {}, "gm": entry.get("gm", 0), "soi_mm": 0, "planet": {},
 		}
 	for entry: Dictionary in scenario["deposits"]:
 		state["hidden_deposits"][_next_id(state)] = {
@@ -240,8 +264,23 @@ static func _build_state(module_defs: Dictionary, seed_value: int, extra_ships: 
 			"op": _idle_op(), "route": {}, "dock": {},
 			"parts": _build_part(state, module_defs, entry["parts"]),
 			"inventory": entry["inventory"],
+			"frame": 0, "orbit": {}, "vel_um_s": [0, 0, 0], "burns": [], "burn": {},
+			"drift_rem": [0, 0, 0], "burn_dir": [], "transfer": {}, "landed": {}, "low_flight": 0, "touchdown_mm_s": 0,
 		}
+	_add_cluster_frame(state)
 	return state
+
+
+## The stub's rocks and craft sit in one frame that stays still, with today's
+## positions as its local ones. The real cluster frame orbits the star.
+static func _add_cluster_frame(state: Dictionary) -> void:
+	var frame := _next_id(state)
+	state["frames"][frame] = { "name": "Rock Cluster", "radius_mm": CLUSTER_RADIUS_MM, "orbit": {}, "pos_mm": [0, 0, 0] }
+	for id: int in state["bodies"]:
+		if state["bodies"][id]["kind"] == "asteroid":
+			state["bodies"][id]["frame"] = frame
+	for id: int in state["units"]:
+		state["units"][id]["frame"] = frame
 
 
 static func _add_extra_ships(units: Array, count: int) -> void:
@@ -334,6 +373,16 @@ func _unit_view(unit: Dictionary) -> Dictionary:
 	var shown: Dictionary = unit.duplicate(true)
 	shown.erase("id")
 	shown.erase("heat_j")
+	shown.erase("drift_rem")
+	shown.erase("burn_dir")
+	var burn: Dictionary = shown["burn"]
+	if not burn.is_empty():
+		shown["burn"] = { "id": burn["id"], "dv_um_s": burn["dv_um_s"], "done_um_s": burn["done_um_s"], "start_tick": burn["start_tick"] }
+	if not unit["dock"].is_empty():
+		var host: Dictionary = _state["units"][unit["dock"]["target_unit"]]
+		shown["frame"] = host["frame"]
+		shown["orbit"] = host["orbit"].duplicate(true)
+	shown["world_mm"] = _world_of(unit)
 	var demand := 0
 	var waste := 0
 	var rated_power := 0
@@ -498,6 +547,10 @@ func _validate(command: Dictionary) -> Dictionary:
 			return _validate_attach(unit, args)
 		"detach_part":
 			return _validate_detach(unit, args)
+		"plan_burn":
+			return _validate_burn(unit, args)
+		"cancel_burn":
+			return _validate_cancel_burn(unit, args)
 		"start_job":
 			return _validate_queue(unit, args, true)
 		"queue_job":
@@ -601,6 +654,8 @@ func _validate_detach(unit: Dictionary, args: Dictionary) -> Dictionary:
 
 func _validate_move(unit: Dictionary, args: Dictionary) -> Dictionary:
 	var target: int = args.get("target", 0)
+	if not unit["orbit"].is_empty():
+		return _result("unsupported_orbit")
 	if _part_with(unit, "thruster").is_empty():
 		return _result("module_missing")
 	if not unit["dock"].is_empty():
@@ -690,11 +745,16 @@ func _run_tick() -> void:
 	_state["queue"] = waiting
 	for id: int in _sorted_keys(_state["units"]):
 		_advance_unit(_state["units"][id])
+	for id: int in _sorted_keys(_state["units"]):
+		_advance_flight(_state["units"][id])
+	_update_rails()
 	_advance_jobs()
 
 
 func _apply(command: Dictionary) -> void:
+	_applying = true
 	var result := _validate(command)
+	_applying = false
 	if not result["ok"]:
 		var is_fit_failure: bool = command.get("type", "") == "attach_part" and result["detail"].has("mass_limit_g")
 		var data: Dictionary = { "command": command["id"], "reason": result["reason"], "detail": result["detail"] }
@@ -713,6 +773,10 @@ func _apply(command: Dictionary) -> void:
 			_apply_attach(unit, args)
 		"detach_part":
 			_apply_detach(unit, args)
+		"plan_burn":
+			_apply_plan_burn(unit, args)
+		"cancel_burn":
+			_apply_cancel_burn(unit, args["burn"])
 		"start_job", "queue_job":
 			_apply_queue(unit, command)
 		"move_job":
@@ -725,6 +789,8 @@ func _apply(command: Dictionary) -> void:
 				"source": args["source"], "attached": plan["attached"], "missing": plan["missing"], "refused": plan["refused"],
 			})
 		"move_to":
+			unit["vel_um_s"] = [0, 0, 0]
+			unit["drift_rem"] = [0, 0, 0]
 			_begin(unit, command, "moving", args["target"], 0, _travel_ticks(unit, args["target"]))
 			unit["at_target"] = 0
 			unit["route"] = {
@@ -814,7 +880,7 @@ func _advance_unit(unit: Dictionary) -> void:
 			_advance_move(unit)
 		"mining":
 			_advance_mining(unit)
-		"idle":
+		"idle", "burning":
 			return
 		_:
 			if _state["tick"] >= op["end_tick"]:
@@ -869,6 +935,8 @@ func _finish_timed_op(unit: Dictionary) -> void:
 		"undocking":
 			var target: int = unit["dock"]["target_unit"]
 			unit["dock"] = {}
+			unit["frame"] = _state["units"][target]["frame"]
+			unit["orbit"] = {}
 			var host: Array = _state["units"][target]["pos_mm"]
 			unit["pos_mm"] = [host[0] + STANDOFF_MM, host[1], host[2]]
 			_end_task(unit, "task_finished")
@@ -1168,3 +1236,301 @@ func _child_at(parent: Dictionary, connector: String) -> Dictionary:
 		if child["parent_connector"] == connector:
 			return child
 	return {}
+
+
+# --- Places and flight (A10 view fields; A11 burns as the kernel's shape gives them) ---
+#
+# Simplified against A11: the stub's frame has no orbit, so nothing leaves or joins
+# it, and a frame burn's axes are fixed: prograde -Z, normal +Y, radial +X.
+
+const FRAME_PROGRADE: Array[int] = [0, 0, -OrbitMath.ONE]
+const FRAME_NORMAL: Array[int] = [0, OrbitMath.ONE, 0]
+const PREDICT_LIMIT := 10000
+const MM_PER_UM := 1000
+
+
+func _bodies_view() -> Dictionary:
+	var shown: Dictionary = {}
+	for id: int in _sorted_keys(_state["bodies"]):
+		var body: Dictionary = _state["bodies"][id].duplicate(true)
+		body["world_mm"] = _world_of(body)
+		shown[id] = body
+	return shown
+
+
+func _frames_view() -> Dictionary:
+	var shown: Dictionary = {}
+	for id: int in _sorted_keys(_state["frames"]):
+		var frame: Dictionary = _state["frames"][id].duplicate(true)
+		frame["world_mm"] = frame["pos_mm"].duplicate()
+		shown[id] = frame
+	return shown
+
+
+## World position: the parent body's or frame's world position plus the local one.
+func _world_of(entry: Dictionary) -> Array:
+	var place := entry
+	if entry.has("dock") and not entry["dock"].is_empty():
+		place = _state["units"][entry["dock"]["target_unit"]]
+	var base: Array = [0, 0, 0]
+	if not place["orbit"].is_empty():
+		base = _world_of(_state["bodies"][place["orbit"]["parent"]])
+	elif place["frame"] != 0:
+		base = _state["frames"][place["frame"]]["pos_mm"]
+	var pos: Array = entry["pos_mm"]
+	return [base[0] + pos[0], base[1] + pos[1], base[2] + pos[2]]
+
+
+func _put_probe_in_orbit() -> void:
+	var moon := _next_id(_state)
+	_state["bodies"][moon] = {
+		"kind": "planet", "name": "Cairn", "pos_mm": PLANET_POS_MM.duplicate(), "radius_mm": PLANET_RADIUS_MM,
+		"visual_seed": 7, "scanned": true, "frame": 0, "orbit": {}, "gm": PLANET_GM, "soi_mm": 0,
+		"planet": { "seed": PLANET_SEED, "height_range_m": PLANET_RANGE_M, "sea_level_m": PLANET_SEA_LEVEL_M },
+	}
+	for id: int in _state["units"]:
+		var unit: Dictionary = _state["units"][id]
+		if unit["kind"] == "ship":
+			unit["dock"] = {}
+			unit["at_target"] = 0
+			unit["frame"] = 0
+			unit["orbit"] = OrbitMath.make_orbit(PLANET_GM, PROBE_ORBIT_MM, 0,
+				[OrbitMath.ONE, 0, 0], [0, 0, -OrbitMath.ONE], 0, 0)
+			unit["orbit"]["parent"] = moon
+
+
+## Phase 2's rails: a unit on an orbit is where its orbit puts it at this tick.
+func _update_rails() -> void:
+	for id: int in _sorted_keys(_state["units"]):
+		var unit: Dictionary = _state["units"][id]
+		if not unit["orbit"].is_empty() and unit["dock"].is_empty():
+			unit["pos_mm"] = OrbitMath.position_at(unit["orbit"], _state["tick"])
+
+
+func _gm_of(unit: Dictionary) -> int:
+	return _state["bodies"][unit["orbit"]["parent"]]["gm"]
+
+
+func _thruster(unit: Dictionary) -> Dictionary:
+	for part: Dictionary in _flat_parts(unit["parts"]):
+		var thruster: Dictionary = _module(part)["capabilities"].get("thruster", {})
+		if thruster.has("thrust_n") and thruster.has("exhaust_mm_s"):
+			return { "part": part["id"], "thrust_n": thruster["thrust_n"], "exhaust_mm_s": thruster["exhaust_mm_s"] }
+	return {}
+
+
+func _unit_mass(unit: Dictionary) -> int:
+	var mass := _parts_mass(unit["parts"])
+	for item: String in unit["inventory"]:
+		mass += unit["inventory"][item]
+	return mass
+
+
+## Position (mm) and velocity (um/s) at a tick, in the unit's own place.
+func _motion_at(unit: Dictionary, tick: int) -> Dictionary:
+	if not unit["orbit"].is_empty():
+		return OrbitMath.state_at(unit["orbit"], _gm_of(unit), tick)
+	var dt: int = tick - _state["tick"]
+	var r: Array[int] = []
+	for axis in 3:
+		r.append(unit["pos_mm"][axis] + OrbitMath.smul_div(unit["vel_um_s"][axis], dt, MM_PER_UM * TICKS_PER_SECOND))
+	return { "r": r, "v": unit["vel_um_s"].duplicate() }
+
+
+## The burn's delta-v as a vector in um/s, from the prograde, normal and radial axes
+## at that motion: on an orbit from its velocity and position, in a frame fixed.
+func _burn_vector(unit: Dictionary, motion: Dictionary, burn: Dictionary) -> Array[int]:
+	var prograde: Array[int] = FRAME_PROGRADE
+	var normal: Array[int] = FRAME_NORMAL
+	if not unit["orbit"].is_empty():
+		prograde = OrbitMath.unit(motion["v"])
+		normal = OrbitMath.unit(OrbitMath.cross(motion["r"], motion["v"]))
+	var radial := OrbitMath.unit(OrbitMath.cross(prograde, normal))
+	var out: Array[int] = []
+	for axis in 3:
+		out.append(OrbitMath.smul_div(prograde[axis], burn["prograde_um_s"], OrbitMath.ONE)
+			+ OrbitMath.smul_div(normal[axis], burn["normal_um_s"], OrbitMath.ONE)
+			+ OrbitMath.smul_div(radial[axis], burn["radial_um_s"], OrbitMath.ONE))
+	return out
+
+
+func _validate_burn(unit: Dictionary, args: Dictionary) -> Dictionary:
+	for field: String in ["tick", "prograde_um_s", "normal_um_s", "radial_um_s"]:
+		if not args.get(field) is int:
+			return _result("malformed_command")
+	if not unit["dock"].is_empty():
+		return _result("not_flying")
+	# "Burn now" is current_tick() + 1, the tick the order is applied on.
+	var now: int = _state["tick"] - (1 if _applying else 0)
+	if args["tick"] <= now:
+		return _result("burn_in_past")
+	var thruster := _thruster(unit)
+	if thruster.is_empty():
+		return _result("module_missing")
+	var motion := _motion_at(unit, args["tick"])
+	var dv_vector := _burn_vector(unit, motion, args)
+	var dv := IntMath.dist(dv_vector, [0, 0, 0])
+	var mass := _unit_mass(unit)
+	var after: Array[int] = []
+	for axis in 3:
+		after.append(motion["v"][axis] + dv_vector[axis])
+	var detail: Dictionary = {
+		"dv_um_s": dv,
+		"propellant_g": OrbitMath.burn_g(mass, dv, thruster["exhaust_mm_s"]),
+		"burn_ticks": IntMath.mul_div_ceil(dv, mass, thruster["thrust_n"] * 100_000_000),
+		"orbit": {}, "vel_um_s": [0, 0, 0], "leaves_frame": false,
+	}
+	if not unit["orbit"].is_empty():
+		var orbit := OrbitMath.from_state(motion["r"], after, _gm_of(unit), args["tick"])
+		if not orbit.is_empty():
+			orbit["parent"] = unit["orbit"]["parent"]
+		detail["orbit"] = orbit
+	else:
+		detail["vel_um_s"] = after
+		detail["leaves_frame"] = unit["frame"] != 0 and after != [0, 0, 0]
+	return _result("", detail)
+
+
+func _validate_cancel_burn(unit: Dictionary, args: Dictionary) -> Dictionary:
+	var id: Variant = args.get("burn")
+	if not id is int:
+		return _result("malformed_command")
+	if unit["burn"].get("id", 0) == id:
+		return _result()
+	for burn: Dictionary in unit["burns"]:
+		if burn["id"] == id:
+			return _result()
+	return _result("invalid_target")
+
+
+func _apply_plan_burn(unit: Dictionary, args: Dictionary) -> void:
+	var burn: Dictionary = {
+		"id": _next_id(_state), "tick": args["tick"],
+		"prograde_um_s": args["prograde_um_s"], "normal_um_s": args["normal_um_s"], "radial_um_s": args["radial_um_s"],
+	}
+	unit["burns"].append(burn)
+	unit["burns"].sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["tick"] < b["tick"] or (a["tick"] == b["tick"] and a["id"] < b["id"]))
+
+
+func _apply_cancel_burn(unit: Dictionary, id: int) -> void:
+	if unit["burn"].get("id", 0) == id:
+		_end_burn(unit, "burn_short", "cancelled")
+		return
+	unit["burns"] = unit["burns"].filter(func(burn: Dictionary) -> bool: return burn["id"] != id)
+
+
+## Phase 5: start a due burn, deliver one tick of a running one, then drift.
+func _advance_flight(unit: Dictionary) -> void:
+	if not unit["dock"].is_empty():
+		return
+	if unit["burn"].is_empty() and not unit["burns"].is_empty() and unit["burns"][0]["tick"] <= _state["tick"]:
+		_start_burn(unit, unit["burns"].pop_front())
+	if not unit["burn"].is_empty():
+		if unit["op"]["type"] != "burning":
+			_end_burn(unit, "burn_short", "part_busy")
+		else:
+			_burn_step(unit)
+	_drift(unit)
+
+
+## A unit doing anything else at the burn tick drops the burn (A11).
+func _start_burn(unit: Dictionary, planned: Dictionary) -> void:
+	if unit["op"]["type"] != "idle" or not unit["route"].is_empty() or unit["task"] != 0:
+		_emit("burn_short", unit["id"], { "burn": planned["id"], "reason": "part_busy", "dv_um_s": 0, "propellant_g": 0 })
+		return
+	var thruster := _thruster(unit)
+	var vector := _burn_vector(unit, _motion_at(unit, _state["tick"]), planned)
+	unit["burn_dir"] = OrbitMath.unit(vector)
+	unit["burn"] = {
+		"id": planned["id"], "dv_um_s": IntMath.dist(vector, [0, 0, 0]), "done_um_s": 0,
+		"start_tick": _state["tick"], "propellant_g": 0, "dv_rem": 0, "flow_rem": 0,
+	}
+	unit["op"] = { "type": "burning", "target": 0, "part": thruster["part"], "start_tick": _state["tick"], "end_tick": 0 }
+	unit["at_target"] = 0
+	_emit("burn_started", unit["id"], { "burn": planned["id"] })
+
+
+## As A11 does it: delta-v per tick from thrust over mass at the tick's start, and
+## propellant as a constant mass flow, each with its remainder carried. The last,
+## partial tick pays its share of a full tick's flow, rounded up.
+func _burn_step(unit: Dictionary) -> void:
+	var burn: Dictionary = unit["burn"]
+	var thruster := _thruster(unit)
+	if thruster.is_empty():
+		_end_burn(unit, "burn_short", "module_missing")
+		return
+	var mass := _unit_mass(unit)
+	var accel_total: int = IntMath.mul_div(thruster["thrust_n"], 1_000_000_000, mass) + burn["dv_rem"]
+	var full_step := accel_total / TICKS_PER_SECOND
+	var flow_total: int = thruster["thrust_n"] * 1_000_000 + burn["flow_rem"]
+	var flow_divisor: int = thruster["exhaust_mm_s"] * TICKS_PER_SECOND
+	var full_flow := flow_total / flow_divisor
+	var step := mini(burn["dv_um_s"] - burn["done_um_s"], full_step)
+	var spent := full_flow if step == full_step else IntMath.mul_div_ceil(full_flow, step, maxi(1, full_step))
+	if unit["inventory"].get("propellant", 0) < spent:
+		_end_burn(unit, "burn_short", "no_propellant")
+		return
+	var added: Array[int] = []
+	for axis in 3:
+		added.append(OrbitMath.smul_div(unit["burn_dir"][axis], step, OrbitMath.ONE))
+	if not unit["orbit"].is_empty():
+		var motion := OrbitMath.state_at(unit["orbit"], _gm_of(unit), _state["tick"])
+		var v: Array[int] = []
+		for axis in 3:
+			v.append(motion["v"][axis] + added[axis])
+		var orbit := OrbitMath.from_state(motion["r"], v, _gm_of(unit), _state["tick"])
+		if orbit.is_empty():
+			_end_burn(unit, "burn_short", "unsupported_orbit")
+			return
+		orbit["parent"] = unit["orbit"]["parent"]
+		unit["orbit"] = orbit
+	else:
+		for axis in 3:
+			unit["vel_um_s"][axis] += added[axis]
+	burn["dv_rem"] = accel_total - full_step * TICKS_PER_SECOND
+	burn["flow_rem"] = flow_total - full_flow * flow_divisor
+	unit["inventory"]["propellant"] -= spent
+	if unit["inventory"]["propellant"] == 0:
+		unit["inventory"].erase("propellant")
+	_state["exhaust_g"] += spent
+	burn["done_um_s"] += step
+	burn["propellant_g"] += spent
+	if burn["done_um_s"] >= burn["dv_um_s"]:
+		_end_burn(unit, "burn_done", "")
+
+
+func _end_burn(unit: Dictionary, event_type: String, reason: String) -> void:
+	var burn: Dictionary = unit["burn"]
+	var data: Dictionary = { "burn": burn["id"], "dv_um_s": burn["done_um_s"], "propellant_g": burn["propellant_g"] }
+	if event_type == "burn_short":
+		data["reason"] = reason
+	unit["burn"] = {}
+	unit["burn_dir"] = []
+	if unit["op"]["type"] == "burning":
+		unit["op"] = _idle_op()
+	_emit(event_type, unit["id"], data)
+
+
+## Straight-line drift inside a frame, with remainders so no micrometre is lost.
+func _drift(unit: Dictionary) -> void:
+	if not unit["orbit"].is_empty() or unit["vel_um_s"] == [0, 0, 0]:
+		return
+	for axis in 3:
+		var total: int = unit["vel_um_s"][axis] + unit["drift_rem"][axis]
+		var moved := total / (MM_PER_UM * TICKS_PER_SECOND)
+		unit["drift_rem"][axis] = total - moved * MM_PER_UM * TICKS_PER_SECOND
+		unit["pos_mm"][axis] += moved
+
+
+## Read-only path points in the unit's place, following the current orbit or drift.
+func predict(unit_id: int, from_tick: int, ticks: int, step: int) -> Dictionary:
+	var unit: Dictionary = _state["units"].get(unit_id, {})
+	if unit.is_empty() or step <= 0 or ticks / step >= PREDICT_LIMIT:
+		return {}
+	var place: Dictionary = { "orbit_parent": unit["orbit"]["parent"] } if not unit["orbit"].is_empty() else { "frame": unit["frame"] }
+	var points: Array = []
+	var tick := from_tick
+	while tick <= from_tick + ticks:
+		points.append(_motion_at(unit, tick)["r"] if unit["orbit"].is_empty() else OrbitMath.position_at(unit["orbit"], tick))
+		tick += step
+	return { "place": place, "points": points }
