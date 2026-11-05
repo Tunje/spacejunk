@@ -9,12 +9,12 @@ Text briefs for the image-to-3d pipeline, one file per model. Codex draws each p
 This applies to every brief. Each brief also repeats what Codex needs, so it can be used alone.
 
 **Shape**
-- Chunky, rounded industrial hardware: cylinders, short tapers, tanks, thick flanged joints and bolted-on boxes.
+- Chunky, faceted industrial hardware: flat-faced prisms with sharp corners, short tapers, domed tanks, thick flanged joints and bolted-on boxes.
 - Slightly oversized and simplified. A part should look sturdy and a little toy-like in its proportions, while still believable as real machinery.
 - Identity comes from the silhouette. Someone should be able to name a part from its outline alone.
 - Each part ends in a thick collar or flange, which hides small gaps where parts join.
 - Nothing sticks out past the size in `data/`. On round parts the widest diameter, collars and bands included, equals the data diameter, so bands are flush with the body, set off by grooves, never raised rings. On faceted hulls the data diameter is measured across the flats, and the corners stand up to 8% beyond it.
-- Hulls are never plain drums. The owner said the first hulls looked like barrels, not spaceship parts. A hull is a faceted prism (eight sides, or twelve for the station hub) with tapered shoulders stepping down to a smaller mounting face at each end, panel-seam grooves so it reads as bolted plating, and one feature on one side only, such as the core bay, so it isn't the same all round. Tanks get domed shoulders, and storage parts get facets or bevels, for the same reason.
+- Hulls are never plain drums. The owner said the first hulls looked like barrels, not spaceship parts. A hull is a faceted prism (eight sides, or twelve for the station hub) with tapered shoulders stepping down to a smaller mounting face at each end, panel-seam grooves so it reads as bolted plating, and one feature on one side only, such as the core bay, so it isn't the same all round. Tanks get domed shoulders, and storage parts get facets or bevels, for the same reason. The first B12 pictures of both hulls, the hub, the tank and ore storage were drawn from an early brief that still said "cylinder", and this README then said "rounded hardware: cylinders", which Codex copied into its prompt. So those five briefs now open with a SHAPE line that names the shape and says what it is not, their end faces are faceted too, and the view asks for each flat face to be lit to its own tone.
 - Side connector rows sit on plain, smooth body, clear of bands. In B9 the bands landed on the rows and buried the mounted parts' plates.
 
 **Colour**

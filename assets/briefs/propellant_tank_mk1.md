@@ -1,6 +1,8 @@
 # Propellant tank
 Priority 6 (Newman Probe batch B12). Image: `newmanprobe_propellant_tank_mk1.png`. Model: `propellant_tank_mk1.glb`
 
+SHAPE, read this first: a CAPSULE-SHAPED PRESSURE TANK: straight sides with big rounded DOMES at the top and bottom, which curve in to smaller mounting rings, a little over half the tank's width, at each end. It is NOT a straight can: no flat lids as wide as the tank, no raised hoops or bands.
+
 A fuel tank that stacks between a hull and a thruster: an off-white pressure vessel 2.0 m across, with straight sides and smoothly domed shoulders top and bottom, each about 0.5 m tall, curving in to a thick, flat mid-grey mounting ring about 1.2 m across at each end. A crisp weld-seam groove runs round the middle. Four flat mid-grey straps, each about 0.2 m wide and set flush, run straight down the sides from shoulder to shoulder, evenly spaced, as if holding the tank in its frame. Simple, sturdy and clean, clearly a rocket propellant tank with domed ends, never a drum or paint tin.
 
 Real size: 3.0 m tall (Y), 2.0 m in diameter (X and Z), the widest point. Scale by the longest side.
