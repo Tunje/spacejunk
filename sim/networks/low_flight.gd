@@ -65,12 +65,19 @@ static func step(ctx: SimContext, unit_id: int) -> void:
 	unit["pos_mm"] = next["pos"]
 	unit["vel_um_s"] = next["vel"]
 	unit["drift_carry"] = next["carry"]
-	var contact := ground_contact(ctx, body, next["pos"], {})
+	var memo: Dictionary = ctx.ground_memo.get_or_add(unit_id, {})
+	if memo.get("body", 0) != body:
+		memo.clear()
+		memo["body"] = body
+	var contact := ground_contact(ctx, body, next["pos"], memo)
 	if contact >= 0:
+		ctx.ground_memo.erase(unit_id)
 		_touch_down(ctx, unit_id, body, contact)
 		return
 	if altitude_mm(ctx, body, next["pos"]) > LEAVE_MM:
 		_leave(ctx, unit_id, body)
+		if unit["low_flight"] == 0:
+			ctx.ground_memo.erase(unit_id)
 
 
 ## Gravity and one tick of motion, as plain values: { pos, vel, carry }. Shared with predict, so the
@@ -93,9 +100,10 @@ static func advance(ctx: SimContext, body: int, pos: Array, vel: Array, carry: A
 
 
 ## The cell a point has met the ground of, or -1 if it is still above ground. Nothing is looked up
-## above the body's highest possible ground. A `memo` kept across the ticks of one path holds the
-## last cell found, to start the next search from, and each cell's ground radius; the answer is the
-## same with or without it, so a drawn path meets the ground where the flown one does.
+## above the body's highest possible ground. A `memo` kept across the ticks of one path, or of one
+## unit's flight, holds the last cell found, to start the next search from, and each cell's ground
+## radius; the answer is the same with or without it, so a drawn path meets the ground where the
+## flown one does.
 static func ground_contact(ctx: SimContext, body: int, pos: Array, memo: Dictionary) -> int:
 	if altitude_mm(ctx, body, pos) > contact_gate_mm(ctx, body):
 		return -1

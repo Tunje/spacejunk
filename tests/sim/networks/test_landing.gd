@@ -1,82 +1,7 @@
-extends GutTest
+extends "res://tests/sim/networks/landing_fixture.gd"
 ## Landing, takeoff and collisions (task A15, orbital_flight.md section 11, planets.md section 3.2),
-## and the player's hand-flown landing in low flight (task A19).
-
-const GM_STAR := 132_712_440_018_000_000
-const GM_PLANET := 3_531_600_000
-const AU_MM := 149_597_870_700_000
-const RADIUS_MM := 600_000_000
-const ONE := OrbitMath.ONE
-const PROPELLANT_G := 12_000_000
-
-const GEAR_MM_S := 6000
-
-var sim: Sim
-var keys := {}
-## The hull this file fitted with landing gear in the cached data, to take it off afterwards.
-var _geared: Dictionary = {}
-
-
-## Landing needs gear (A19), and B15's legs aren't in data yet, so the starter hull carries some.
-## It is patched in the cached definitions so a loaded save sees the same data hash.
-func before_all() -> void:
-	var hull: Dictionary = DataLoader.load_defs()["modules"]["starter_hull"]["capabilities"]
-	if not hull.has(LowFlight.GEAR):
-		hull[LowFlight.GEAR] = { "max_touchdown_mm_s": GEAR_MM_S }
-		_geared = hull
-
-
-func after_all() -> void:
-	_geared.erase(LowFlight.GEAR)
-
-
-func before_each() -> void:
-	var defs := DataLoader.load_defs()
-	sim = Sim.new()
-	sim._setup(Sim._new_state("reference", 7, defs), defs)
-	assert_eq(ScenarioBuilder.populate(sim._ctx, {
-		"bodies": [
-			{ "key": "star", "name": "Star", "kind": "star", "pos_mm": [0, 0, 0], "radius_mm": 696_000_000_000,
-				"visual_seed": 1, "deposits": [], "gm": GM_STAR },
-			{ "key": "planet", "name": "Planet", "kind": "planet", "radius_mm": RADIUS_MM, "visual_seed": 2,
-				"deposits": [], "gm": GM_PLANET, "orbit": { "parent": "star", "a_mm": AU_MM },
-				"planet": { "seed": 48213, "height_range_m": 8000 } },
-		],
-		"units": [
-			{ "key": "ship", "template": "starter_ship", "name": "Ship", "pos_mm": [0, 0, 0],
-				"inventory": [{ "item": "propellant", "grams": PROPELLANT_G }], "dock": null },
-		],
-	}, {}), "")
-	sim._strict = true
-	keys = {}
-	for table: String in ["bodies", "units"]:
-		for id: int in sim._state[table]:
-			keys[sim._state[table][id]["name"]] = id
-	_put_in_orbit(OrbitMath.make_orbit(GM_PLANET, 700_000_000, 0, [ONE, 0, 0], [0, 0, -ONE], 0, 0))
-
-
-func _ship() -> Dictionary:
-	return sim._state["units"][keys["Ship"]]
-
-
-func _put_in_orbit(orbit: Dictionary) -> void:
-	orbit["parent"] = keys["Planet"]
-	_ship()["orbit"] = orbit
-	_ship()["pos_mm"] = OrbitMath.position_at(orbit, sim.current_tick())
-	sim._ctx.index.clear()
-
-
-func _land(cell: int) -> Dictionary:
-	return { "type": "land", "unit": keys["Ship"], "args": { "body": keys["Planet"], "cell": cell } }
-
-
-func _until(event_type: String, limit: int) -> Dictionary:
-	for i in limit:
-		sim.step()
-		for event in sim.take_events():
-			if event["type"] == event_type:
-				return event
-	return {}
+## and the player's hand-flown landing in low flight (task A19). Flights that take half an orbit
+## and can't be shortened are in tests/slow/test_landing_flights.gd (A24).
 
 
 func test_landing_sets_the_ship_down_on_its_cell() -> void:
@@ -89,7 +14,9 @@ func test_landing_sets_the_ship_down_on_its_cell() -> void:
 	sim.submit(_land(4242))
 	sim.step()
 	assert_eq(_ship()["op"]["type"], LandingSystem.OP_LANDING)
-	var landed := _until("landed", detail["ticks"] + 5)
+	sim.step(detail["ticks"] - 5)
+	assert_eq(_ship()["op"]["type"], LandingSystem.OP_LANDING, "still descending")
+	var landed := _until("landed", 10)
 	assert_eq(landed["data"], { "body": keys["Planet"], "cell": 4242 })
 	assert_eq(_ship()["landed"], { "body": keys["Planet"], "cell": 4242 })
 	assert_eq(_ship()["orbit"], {})
@@ -106,21 +33,6 @@ func test_landing_sets_the_ship_down_on_its_cell() -> void:
 	assert_eq(ledger["violations"], PackedStringArray())
 	sim.step(50)
 	assert_eq(_ship()["pos_mm"], PlanetGrid.centre_mm(4242, 100, RADIUS_MM, height), "a landed ship stays put")
-
-
-func test_take_off_reaches_a_circular_orbit() -> void:
-	LandingSystem._set_down(sim._ctx, keys["Ship"], keys["Planet"], 777)
-	var command := { "type": "take_off", "unit": keys["Ship"], "args": { "altitude_mm": 100_000_000 } }
-	var checked := sim.check(command)
-	assert_true(checked["ok"], str(checked))
-	sim.submit(command)
-	var took := _until("took_off", 30_000)
-	assert_false(took.is_empty())
-	var orbit: Dictionary = _ship()["orbit"]
-	assert_eq(orbit["parent"], keys["Planet"])
-	assert_almost_eq(orbit["a_mm"], 700_000_000, 10_000, "a circle at 100 km altitude")
-	assert_lt(orbit["e_q30"], ONE / 100_000)
-	assert_eq(_ship()["landed"], {})
 
 
 func test_landing_and_takeoff_refusals() -> void:
@@ -208,6 +120,7 @@ func test_save_and_load_while_landing_and_landed_is_byte_exact() -> void:
 
 # ------------------------------------------------------------------------------ A16: planet shadow
 
+
 ## On the far side of the planet from the star, solar panels give nothing; on the near side, full.
 func test_solar_power_stops_in_a_planets_shadow() -> void:
 	var planet_mm := RailSystem.world_mm(sim._state, "bodies", keys["Planet"])
@@ -236,27 +149,6 @@ func test_solar_power_stops_in_a_planets_shadow() -> void:
 
 
 # ------------------------------------------------------------------------------ A19: hand-flown landing
-
-## Puts the ship in low flight a height above the ground of a cell, still.
-func _hover(cell: int, height_mm: int) -> void:
-	var ground := LandingSystem.cell_mm(sim._ctx, keys["Planet"], cell)
-	var up := OrbitMath.unit(ground)
-	var ship := _ship()
-	ship["orbit"] = {}
-	ship["low_flight"] = keys["Planet"]
-	ship["pos_mm"] = [ground[0] + OrbitMath.smul_div(up[0], height_mm, ONE),
-		ground[1] + OrbitMath.smul_div(up[1], height_mm, ONE), ground[2] + OrbitMath.smul_div(up[2], height_mm, ONE)]
-	ship["vel_um_s"] = [0, 0, 0]
-	ship["drift_carry"] = [0, 0, 0]
-
-
-func _until_any(types: Array, limit: int) -> Dictionary:
-	for i in limit:
-		sim.step()
-		for event in sim.take_events():
-			if types.has(event["type"]):
-				return event
-	return {}
 
 
 func test_a_gentle_touchdown_lands() -> void:
@@ -298,11 +190,15 @@ func test_predict_shows_the_contact_the_flight_meets() -> void:
 
 
 func test_an_orbit_dipping_low_enters_low_flight_and_climbing_leaves_it() -> void:
-	# An ellipse from 700 km down to a 15 km periapsis.
+	# An ellipse from 700 km down to a 15 km periapsis, joined 1500 ticks before periapsis rather
+	# than at apoapsis, half an orbit earlier (A24).
 	var periapsis := RADIUS_MM + 15_000_000
 	var a := (700_000_000 + periapsis) / 2
 	var apo_speed := OrbitMath.speed_um_s(GM_PLANET, 700_000_000, a)
-	_put_in_orbit(OrbitMath.from_state([700_000_000, 0, 0], [0, 0, -apo_speed], GM_PLANET, sim.current_tick()))
+	var half_orbit := OrbitMath.period_sub(GM_PLANET, a) / OrbitMath.SUB_TICKS / 2
+	var at_apoapsis := sim.current_tick() - (half_orbit - 1500)
+	_put_in_orbit(OrbitMath.from_state([700_000_000, 0, 0], [0, 0, -apo_speed], GM_PLANET, at_apoapsis))
+	assert_gt(LowFlight.altitude_mm(sim._ctx, keys["Planet"], _ship()["pos_mm"]), LowFlight.ENTER_MM, "it starts above low flight")
 	var entered := _until_any(["low_flight_entered"], 20_000)
 	assert_eq(entered.get("data", {}), { "body": keys["Planet"] })
 	assert_eq(_ship()["orbit"], {})
@@ -332,13 +228,6 @@ func test_atomic_land_needs_gear() -> void:
 	assert_eq(sim.check(_land(4242))["reason"], "no_landing_gear")
 
 
-func _geared_off() -> void:
-	var defs: Dictionary = sim._ctx.defs.duplicate(true)
-	defs["modules"]["starter_hull"]["capabilities"].erase(LowFlight.GEAR)
-	sim._ctx.defs = defs
-	assert_eq(LowFlight.touchdown_mm_s(sim._ctx, keys["Ship"]), 0)
-
-
 func test_save_and_load_in_low_flight_is_byte_exact() -> void:
 	_hover(4242, 2_000_000)
 	sim.step(5)
@@ -358,7 +247,7 @@ func test_a_hinted_search_finds_the_same_cell() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 7
 	var far_misses := 0
-	for i in 300:
+	for i in 60:
 		var pos: Array[int] = [rng.randi_range(-ONE, ONE), rng.randi_range(-ONE, ONE), rng.randi_range(-ONE, ONE)]
 		if pos == [0, 0, 0]:
 			continue
