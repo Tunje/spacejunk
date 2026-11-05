@@ -13,6 +13,8 @@ This applies to every brief. Each brief also repeats what Codex needs, so it can
 - Slightly oversized and simplified. A part should look sturdy and a little toy-like in its proportions, while still believable as real machinery.
 - Identity comes from the silhouette. Someone should be able to name a part from its outline alone.
 - Each part ends in a thick collar or flange, which hides small gaps where parts join.
+- Nothing sticks out past the size in `data/`. On hulls and tanks the widest diameter, collars and bands included, equals the data diameter, so bands are flush with the body, set off by grooves, never raised rings.
+- Side connector rows sit on plain, smooth body, clear of bands. In B9 the bands landed on the rows and buried the mounted parts' plates.
 
 **Colour**
 - Simple solid blocks, in four colours only:
@@ -22,9 +24,10 @@ This applies to every brief. Each brief also repeats what Codex needs, so it can
 | Off-white | `#e8e4d8` | Main bodies and tanks |
 | Mid grey | `#8a8d91` | Collars, flanges, machinery |
 | Safety orange | `#e8641b` | Working tools and hazard parts |
-| Foil gold | `#c9a227` | Insulation wraps and small accents |
+| Gold | `#c9a227` | Insulation wraps, solar cells, lenses and small accents |
 
-- Painted metal with a soft satin finish. The foil is smooth, with no wrinkles, because fine creases come out ragged in 3D.
+- Painted metal with a soft satin finish. Gold is satin, non-mirror: a soft painted sheen, never polished reflective metal. In B9 a metallic gold rendered pure black on its shaded side, because space has nothing for it to reflect. Gold is smooth, with no wrinkles, because fine creases come out ragged in 3D.
+- Crisp machined edges, no hand-moulded lumps. Collars, bands, ribs, rims and grooves are true circles and straight lines, evenly thick all the way round. B9's were lumpy.
 - A colour block is never narrower than about a twentieth of the part's length.
 
 **Mood**
@@ -44,13 +47,24 @@ The target must be set before generation, because reducing a model afterwards ha
 | Kind | Target |
 | ---- | ------ |
 | Root parts, such as hulls | 12000 triangles |
-| Modules | 6000 triangles |
+| Modules, and the small drone hull | 6000 triangles |
 
-A ship of 13 parts then comes to about 84000 triangles. These targets are proposals, and the style test decides whether they hold.
+A ship of 13 parts then comes to about 84000 triangles. B9 confirmed these targets: 11628 and 5875 triangles, with textures intact.
+
+## Placement
+
+Each brief has a placement line, which image-to-3d applies after generation. Models are delivered on the data origin, not centred on their bounding box, so the client places them with no per-model offset.
+
+| Kind | Origin | Facing |
+| ---- | ------ | ------ |
+| Hulls | Centre of the flat bottom face | Up is +Y |
+| Side-mounted parts | Centre of the mounting plate's back face | Plate faces -Z, part extends along +Z, up is +Y |
+| Parts hanging below a stack (thruster, tank) | Centre of the top mounting face | Mount faces +Y, part extends along -Y |
+| Parts standing on a stack (docking port) | Centre of the bottom mounting face | Mount faces -Y, part extends along +Y |
 
 ## Style test (task B9)
 
-No batch is requested until this test passes. It builds these two models only:
+The test passed on 2026-11-05, with fixes carried into B12. Its models are in `assets/models/` and are kept as test pieces. B12 replaces both with versions built from the revised briefs. It built these two models:
 
 | Model | Brief | Why this one |
 | ----- | ----- | ------------ |
@@ -69,8 +83,39 @@ Checks on the delivered models:
 | LOD | Godot's automatic LOD does not shatter the texture. |
 | In place | Scaled from the size in its brief, the model sits on its connectors in `data/` and looks right beside a placeholder at game camera distance. |
 
-If the test fails, the owner chooses between a heavier triangle budget and hand-made or kitbashed models.
+Results: style, off-white edges, colour blocks, triangles and LOD passed. Each model is built from separate touching patches rather than one closed mesh, which is fine because collision comes from `data/`. Under forced LOD, light slivers show where the patches part, so keep Godot's default LOD threshold. The fixes for B12 are gold satin, crisp edges, sizes held to the data, connector rows clear of bands, and placement on the data origin.
+
+## Batch B12
+
+18 models, one brief each, in priority order:
+
+| # | Model | Target |
+| - | ----- | ------ |
+| 1 | [starter_hull](starter_hull.md) | 12000 |
+| 2 | [small_hull](small_hull.md) | 6000 |
+| 3 | [command_hub](command_hub.md) | 12000 |
+| 4 | [chemical_thruster_mk1](chemical_thruster_mk1.md) | 6000 |
+| 5 | [docking_port_mk1](docking_port_mk1.md) | 6000 |
+| 6 | [propellant_tank_mk1](propellant_tank_mk1.md) | 6000 |
+| 7 | [battery_bank_mk1](battery_bank_mk1.md) | 6000 |
+| 8 | [fabricator_mk1](fabricator_mk1.md) | 6000 |
+| 9 | [goods_storage_mk1](goods_storage_mk1.md) | 6000 |
+| 10 | [ore_storage_mk1](ore_storage_mk1.md) | 6000 |
+| 11 | [ore_container_mk1](ore_container_mk1.md) | 6000 |
+| 12 | [ore_refinery_mk1](ore_refinery_mk1.md) | 6000 |
+| 13 | [heat_radiator_mk1](heat_radiator_mk1.md) | 6000 |
+| 14 | [solar_panel_mk1](solar_panel_mk1.md) | 6000 |
+| 15 | [solar_farm_mk1](solar_farm_mk1.md) | 6000 |
+| 16 | [lidar_mk1](lidar_mk1.md) | 6000 |
+| 17 | [mining_laser_mk1](mining_laser_mk1.md) | 6000 |
+| 18 | [landing_legs_mk1](landing_legs_mk1.md) | 6000 |
+
+Not in this batch:
+- The two cores, which sit hidden in a hull's core slot.
+- The `small_` versions of modules. Each is a later batch, or the client scales its full-size model.
+
+**GPU memory:** the B9 hull ran out of GPU memory at the usual settings and only built with `max_num_tokens` 32768. Expect the same for the large parts: both hulls, the command hub, fabricator, both storage modules, the refinery and the solar farm. Starting them at that limit saves a failed run.
 
 ## Request and delivery
 
-A request is one message to the image-to-3d session giving the path to these briefs. The owner has given standing permission to send requests, so none waits for approval. The image-to-3d side creates `C:\Users\simon\PROGRAMING\newmanprobe-wt\GPU_HOLD` before it uses the GPU and removes it afterwards. While the file exists, `tools/test.ps1` refuses to run and no agent here starts Godot. The full batch after this test is task B12. Models arrive as `.glb` files in `image-to-3d/data/props/out/newmanprobe/` with a check sheet, and Agent B copies them into `assets/`. Models are visual only: size, mass, collision and attachment all come from `data/`.
+A request is one message to the image-to-3d session giving the path to these briefs. The owner has given standing permission to send requests, so none waits for approval. The image-to-3d side creates `C:\Users\simon\PROGRAMING\newmanprobe-wt\GPU_HOLD` before it uses the GPU and removes it afterwards. While the file exists, `tools/test.ps1` refuses to run and no agent here starts Godot. Models arrive as `.glb` files in `image-to-3d/data/props/out/newmanprobe/` with a check sheet, and Agent B copies them into `assets/`. Models are visual only: size, mass, collision and attachment all come from `data/`.
