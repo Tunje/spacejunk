@@ -73,4 +73,4 @@ If the test fails, the owner chooses between a heavier triangle budget and hand-
 
 ## Request and delivery
 
-A request is one message giving the path to these briefs. It waits until the Lead confirms a GPU slot. Models arrive as `.glb` files in `image-to-3d/data/props/out/newmanprobe/` with a check sheet, and Agent B copies them into `assets/`. Models are visual only: size, mass, collision and attachment all come from `data/`.
+A request is one message to the image-to-3d session giving the path to these briefs. The owner has given standing permission to send requests, so none waits for approval. The image-to-3d side creates `C:\Users\simon\PROGRAMING\newmanprobe-wt\GPU_HOLD` before it uses the GPU and removes it afterwards. While the file exists, `tools/test.ps1` refuses to run and no agent here starts Godot. The full batch after this test is task B12. Models arrive as `.glb` files in `image-to-3d/data/props/out/newmanprobe/` with a check sheet, and Agent B copies them into `assets/`. Models are visual only: size, mass, collision and attachment all come from `data/`.
