@@ -26,6 +26,8 @@ const REASON_BUSY := "part_busy"
 const REASON_NO_PROPELLANT := "no_propellant"
 const REASON_NO_THRUSTER := "module_missing"
 const REASON_NOT_LANDED := "not_landed"
+## The autopilot lands only on gear, as a hand-flown landing does (A19).
+const REASON_NO_GEAR := "no_landing_gear"
 ## Landing and takeoff lose 3% more than the ideal burns to gravity: on an airless body the craft
 ## kills its speed close to the ground, so the loss is small.
 const GRAVITY_LOSS_PERMILLE := 1030
@@ -122,6 +124,8 @@ static func _plan(ctx: SimContext, unit_id: int, type: String, args: Dictionary)
 		cell = args["cell"]
 		if cell < 0 or cell >= PlanetGrid.cell_count(_grid_n(ctx, body_id)):
 			return { "reason": REASON_INVALID }
+		if LowFlight.touchdown_mm_s(ctx, unit_id) <= 0:
+			return { "reason": REASON_NO_GEAR }
 		low_mm = ctx.state["bodies"][body_id]["radius_mm"]
 		high_mm = IntMath.dist(unit["pos_mm"], [0, 0, 0])
 	else:
