@@ -75,7 +75,9 @@ func test_a_real_burn_past_escape_speed_through_the_screen() -> void:
 	assert_string_starts_with(screen._place.text, "Orbiting Planet: ")
 	assert_false(screen._apo_button.disabled)
 	screen.burn_now()
-	screen.set_components(200.0)
+	# 120 m/s is enough from 3.1 km/s against 3.18 km/s escape, and a shorter burn
+	# keeps the flown preview and the run short.
+	screen.set_components(120.0)
 	assert_true(screen.preview["ok"], str(screen.preview))
 	assert_true(OrbitPath.is_open(screen.preview["detail"]["orbit"]), "check previews a hyperbola")
 	assert_string_starts_with(screen._after.text, "Then escaping Planet, periapsis ")
@@ -91,7 +93,7 @@ func test_a_real_burn_past_escape_speed_through_the_screen() -> void:
 	assert_gt(screen.current_path.size(), 2, "predict draws the branch ahead")
 	assert_true(screen._diagram.visible)
 	await wait_process_frames(2)
-	assert_eq(main.event_log.lines[-1], "Orbiter: burn done, 200.0 m/s")
+	assert_eq(main.event_log.lines[-1], "Orbiter: burn done, 120.0 m/s")
 
 
 func test_crossing_out_of_the_planets_sphere_reparents_the_screen() -> void:

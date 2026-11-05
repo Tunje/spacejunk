@@ -105,6 +105,16 @@ func _land_on(cell: int) -> void:
 	_run_to(sim.current_tick() + ticks + 2)
 
 
+## Puts the ship down on a hex the way a landing ends, through the sim's own code,
+## so its height is the sim's: the autopilot's descent is thousands of ticks that
+## only test_land_shows_checks_cost_then_lands_on_the_hex_at_its_height needs.
+func _set_down(cell: int) -> void:
+	LandingSystem._set_down(sim._ctx, keys["Orbiter"], keys["Planet"], cell)
+	sim._ctx.index.clear()
+	_run_to(sim.current_tick() + 1)
+	assert_eq(_ship()["landed"], { "body": keys["Planet"], "cell": cell })
+
+
 func test_the_renderer_takes_the_planets_own_settings() -> void:
 	var settings := PlanetMesh.settings_of({ "radius_mm": 600_000_000, "visual_seed": 9,
 		"planet": { "seed": SEED, "height_range_m": RANGE_M } })
@@ -164,7 +174,7 @@ func test_land_shows_checks_cost_then_lands_on_the_hex_at_its_height() -> void:
 func test_a_landed_craft_stands_on_the_drawn_surface() -> void:
 	_circular()
 	await _wait_for_terrain()
-	_land_on(4321)
+	_set_down(4321)
 	main.local_view.refresh(0.016)
 	var craft: CraftNode = main.local_view.crafts[keys["Orbiter"]]
 	var body := _planet_node()
@@ -184,13 +194,17 @@ func test_a_landed_craft_stands_on_the_drawn_surface() -> void:
 func test_take_off_back_to_orbit() -> void:
 	_circular()
 	await _wait_for_terrain()
-	_land_on(4321)
-	# Landing took nearly the whole starter tank; fill it on the ground to climb back.
+	_set_down(4321)
 	sim._state["units"][keys["Orbiter"]]["inventory"]["propellant"] = 1_900_000
 	_run_to(sim.current_tick() + 1)
 	assert_true(screen._takeoff_row.visible)
 	assert_false(screen._pick_button.visible)
 	assert_string_starts_with(screen._land_text.text, "Climb: delta-v ")
+	# A low orbit keeps the climb short; 40 km is still above A19's low flight.
+	screen._altitude.value = 40.0
+	screen._land_ms = -FlightScreen.PATH_REFRESH_MS
+	screen._settle_until = 0
+	screen.refresh()
 	var ticks: int = screen.takeoff_preview["detail"]["ticks"]
 	screen.take_off()
 	_run_to(sim.current_tick() + 1)
@@ -204,15 +218,18 @@ func test_take_off_back_to_orbit() -> void:
 
 
 func test_a_crash_is_reported() -> void:
-	# An ellipse from 300 km whose periapsis is well under the surface.
+	# An ellipse from 300 km whose periapsis is well under the surface. The sim runs
+	# straight to the crash; the client then gets the view and every event at once.
 	_fly([300_000_000, 0, 0], [0, 0, -200_000_000])
-	var crashed := false
+	var events: Array[Dictionary] = []
 	for i in 400:
-		_run_to(sim.current_tick() + 20)
-		if not _ship()["landed"].is_empty():
-			crashed = true
+		sim.step(50)
+		events.append_array(sim.take_events())
+		if not sim.view()["units"][keys["Orbiter"]]["landed"].is_empty():
 			break
-	assert_true(crashed)
+	bridge.start(sim)
+	bridge.events_received.emit(events)
+	assert_false(_ship()["landed"].is_empty(), "it came down")
 	var said := false
 	for line: String in main.event_log.lines:
 		said = said or line.begins_with("Orbiter crashed on Planet")
@@ -221,7 +238,7 @@ func test_a_crash_is_reported() -> void:
 
 ## The height the mesh draws at a cell, and the sim's landed height there, in m.
 func _heights_at(cell: int) -> Array[int]:
-	_land_on(cell)
+	_set_down(cell)
 	var drawn: int = _planet_node().planet["heights"][cell]
 	var pos: Array = _ship()["pos_mm"]
 	var landed := roundi((Vector3(pos[0], pos[1], pos[2]).length() - RADIUS_MM) / 1000.0)
