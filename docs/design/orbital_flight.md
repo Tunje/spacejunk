@@ -544,6 +544,25 @@ perf_budget.md section 5a has the figures.
   - Phasing at the far end is expensive on a fast ring: it adds up to a fifth of the orbital speed. Lambert transfers would remove most of it, and they are still not planned.
   - The arrival parks the ship within about a hundred kilometres of where its path ends. That is a visible but small jump at star scale.
 - **Not done:**
-  - Trips two levels apart, such as a moon of another planet.
+  - Trips two levels apart, such as a moon of another planet. A22 added these (11.18).
   - Inclined targets.
   - Lambert transfers.
+
+### 11.18 A22 results: trips two levels apart
+
+- **What it covers:** a `move_to` from an orbit around a star to a ring around a moon of one of its planets, and back. That is the trip the new start's first landing needs: from the cluster, which circles the star, to a moon. Trips three levels apart, and trips across to another planet's moon, are still refused with `unsupported_orbit`.
+- **How:** it chains A18's crossing twice through a parking circle around the middle body.
+  - The circle is halfway between the middle body's surface and the inner edge of the moon's sphere, and at least 60 km above the surface.
+  - Going out, it lies in the planet's own orbit plane, which the first crossing arrives in. Coming back, it lies in the moon's orbit plane, which the first crossing leaves.
+  - The first crossing stops on the circle without phasing, since nothing waits there. The second starts from that circle at the tick the first arrives, waits for its own window, and ends with the usual phasing to the target.
+  - The legs are A18's, six in all: Hohmann, hyperbola and circle, then the next three. `transfer.legs` and `op.plan` hold them as before.
+- **Arriving below escape speed:** the second crossing outward reaches the moon slower than the moon's escape speed at the sphere's edge. So the approach to the moon is an ellipse, not a hyperbola. The approach shaping now handles both, and the time to periapsis is worked out for either.
+- **Price:** every burn is in the delta-v and paid at departure by the rocket equation. That means two Hohmann burns, two captures, the escape from the parking circle, and the phasing at the end. The wait on the parking circle for the second window is free in propellant but counts in the trip's ticks.
+- **Measured** on a compact test system:
+  - The system: a star of 4e17 m³/s² with the home frame at 20,000 km, and a planet of 4e13 m³/s² at 30,000 km with a sphere of about 750 km. The moon is 4e11 m³/s² at 400 km from the planet, with a sphere of about 63 km. The target ring is 30 km round the moon.
+  - Out: 10,199 ticks and 32.0 km/s, with 26.1 km/s to the planet's circle and 5.9 km/s from it to the moon ring. It parks 12 km from where the path ends, against about 10.6 km of motion a tick, so within 1.1 ticks.
+  - Back: 22,248 ticks and 35.3 km/s, parking 33 km away against 14.2 km a tick, so within 2.3 ticks.
+  - The tests hold both under A21's tolerance of 5 ticks of motion.
+  - There are no jumps at leg changes.
+  - The speeds are high because the system is compact. The test ship carries 1,000 t of propellant, because a 4.6 t dry ship at this exhaust speed needs a mass ratio of about 128,000 for 35 km/s. At the game's scale the same shape costs what section 5's table gives, plus the parking circle's capture and escape.
+- **Not done:** inclined targets, Lambert transfers, and a direct trip that skips the parking circle. Skipping it would save the capture and escape burns around the planet (the second crossing's Hohmann start), but it would need a three-body window.
