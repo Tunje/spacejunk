@@ -23,6 +23,18 @@ const PATH_REFRESH_MS := 250
 ## an unchanged craft is asked again at most every PATH_REFRESH_MS.
 const EDIT_SETTLE_MS := 150
 const TAKEOFF_KM := 100.0
+## How far ahead a descent is followed: predict integrates one step per tick.
+const DESCENT_TICKS := 3000
+const DESCENT_STEP := 10
+## predict near the ground costs a fraction of a millisecond per tick (A19), so a
+## descent is worked out at most this often, and only as far as the last touchdown.
+const DESCENT_REFRESH_MS := 1000
+const DESCENT_MARGIN_TICKS := 100
+## Paths take at most about 1 / COST_GAP of the time, however slow predict is.
+const COST_GAP := 4
+## The Lift off button's burn: straight up, now.
+const LIFT_OFF_M_S := 30.0
+const SAFE_COLOUR := Color(0.55, 0.85, 0.55)
 const MARKER_LOCAL_FRACTION := 0.03
 const MARKER_MAP := 0.35
 const PATH_COLOUR := Color(0.62, 0.65, 0.7)
@@ -42,6 +54,7 @@ var planned_path: Array[PackedFloat64Array] = []
 var marker := PackedFloat64Array()
 var _path_key := ""
 var _path_ms := -PATH_REFRESH_MS
+var _path_cost_ms := 0
 var _preview_key := ""
 var _preview_ms := -PATH_REFRESH_MS
 ## While typing, the earliest time the preview may be asked for.
@@ -80,6 +93,16 @@ var _land_button: Button
 var _takeoff_row: HBoxContainer
 var _altitude: SpinBox
 var _takeoff_button: Button
+## Low flight and the ground (A19): where and how fast the craft meets the ground.
+var contact: Dictionary = {}
+var _contact_tick := 0
+## How many descent predictions have run, for tests.
+var predicts := 0
+var touchdown := PackedFloat64Array()
+var _descent_box: VBoxContainer
+var _descent_text: Label
+var _verdict: Label
+var _lift_button: Button
 var _map_mesh: MeshInstance3D
 
 
@@ -139,8 +162,23 @@ func _ready() -> void:
 	_message = _add_label(column)
 	_message.modulate = ClientTheme.ORANGE
 	_build_landing(column)
-	# Landing sits under the place and diagram, where it is seen first near a planet.
+	_build_descent(column)
+	# Landing and descent sit under the place and diagram, seen first near a planet.
 	column.move_child(_land_box, _diagram.get_index() + 1)
+	column.move_child(_descent_box, _diagram.get_index() + 1)
+
+
+## The hand-flown descent of A19: the predicted touchdown, the legs' limit and the
+## verdict, plus a lift-off button on the ground.
+func _build_descent(column: VBoxContainer) -> void:
+	_descent_box = VBoxContainer.new()
+	column.add_child(_descent_box)
+	_descent_text = _add_label(_descent_box)
+	_verdict = _add_label(_descent_box)
+	_lift_button = _add_button(_descent_box, "Lift off")
+	_lift_button.tooltip_text = "Fill in a burn straight up, now"
+	_lift_button.pressed.connect(lift_off)
+	_descent_box.visible = false
 
 
 ## Landing and takeoff, the atomic autopilot of A15: shown on an orbit round a
@@ -276,7 +314,8 @@ func refresh() -> void:
 	_title.text = "Flight: %s" % shown["name"]
 	_place.text = FlightLogic.place_text(view, unit_id())
 	_when.set_value_no_signal(float(burn_tick - tick - 1) / bridge.ticks_per_second())
-	var flying: bool = shown["dock"].is_empty() and shown.get("landed", {}).is_empty()
+	# A19: a burn on the ground is a lift-off, so only docking stops one.
+	var flying: bool = shown["dock"].is_empty()
 	var orbit: Dictionary = shown.get("orbit", {})
 	_peri_button.disabled = orbit.is_empty() or OrbitPath.ticks_until(orbit, tick, 0.0) < 0
 	_apo_button.disabled = orbit.is_empty() or OrbitPath.is_open(orbit)
@@ -286,7 +325,14 @@ func refresh() -> void:
 	_show_preview(view, flying)
 	_plan_button.disabled = not preview.get("ok", false)
 	_update_paths(view, command)
+	_show_descent(view, shown)
 	_show_landing(view, shown)
+
+
+## Works the paths out again on the next refresh, whatever the wait, as tests need.
+func force_paths() -> void:
+	_path_ms = -PATH_REFRESH_MS
+	_path_cost_ms = 0
 
 
 func _on_when_changed(seconds: float) -> void:
@@ -323,7 +369,12 @@ func _update_preview(shown: Dictionary, command: Dictionary, flying: bool) -> vo
 func _show_preview(view: Dictionary, flying: bool) -> void:
 	_cost.modulate = ClientTheme.OFF_WHITE
 	if not flying:
-		_cost.text = "Take off to plan a burn." if not unit().get("landed", {}).is_empty() else "Undock to plan a burn."
+		_cost.text = "Undock to plan a burn."
+		_after.text = ""
+	elif not preview.is_empty() and not preview["ok"] and preview["reason"] == "not_flying" \
+			and not unit().get("landed", {}).is_empty():
+		# A Sim before A19 refuses burns on the ground.
+		_cost.text = "Take off to plan a burn."
 		_after.text = ""
 	elif preview.is_empty():
 		_cost.text = "Set prograde, normal or radial to plan a burn."
@@ -338,8 +389,7 @@ func _show_preview(view: Dictionary, flying: bool) -> void:
 		_after.text = lines[1]
 		var busy := FlightLogic.busy_note(unit())
 		if not busy.is_empty():
-			_after.text += "
-" + busy
+			_after.text += "\n" + busy
 
 
 ## Rows for the running burn and each planned one, each with a button to drop it.
@@ -377,13 +427,20 @@ func _add_burn_row(burn_id: int, action: String) -> void:
 ## Works the path data out again only when the tick or the burn changes.
 func _update_paths(view: Dictionary, command: Dictionary) -> void:
 	var shown := unit()
-	var key := "%d:%s:%s:%s:%s:%s" % [unit_id(), str(shown.get("orbit", {})), str(shown.get("vel_um_s", [])),
-		str(shown["dock"]), str(command), str(preview.get("ok", false))]
+	# Velocity changes every tick in low flight, so there it is left out: the time
+	# limit below keeps a falling craft's path fresh without asking every tick. A
+	# drift's velocity only changes with a burn, so a new drift is drawn at once.
+	var low := int(shown.get("low_flight", 0))
+	var drift := "" if low != 0 else str(shown.get("vel_um_s", []))
+	var key := "%d:%s:%d:%s:%s:%s:%s:%s" % [unit_id(), str(shown.get("orbit", {})), low, drift,
+		str(shown.get("landed", {})), str(shown["dock"]), str(command), str(preview.get("ok", false))]
 	var now := Time.get_ticks_msec()
-	if key == _path_key and now - _path_ms < PATH_REFRESH_MS:
+	var every := DESCENT_REFRESH_MS if int(shown.get("low_flight", 0)) != 0 else PATH_REFRESH_MS
+	if key != _path_key:
+		_contact_tick = 0
+	elif now - _path_ms < maxi(every, _path_cost_ms * COST_GAP):
 		return
 	_path_key = key
-	_path_ms = now
 	current_path = _current_path(view)
 	planned_path = []
 	marker = PackedFloat64Array()
@@ -398,6 +455,10 @@ func _update_paths(view: Dictionary, command: Dictionary) -> void:
 		elif not marker.is_empty() and shown.get("orbit", {}).is_empty():
 			planned_path = OrbitPath.drift(marker, detail["vel_um_s"], DRIFT_SECONDS, DRIFT_POINTS)
 	_show_diagram(view)
+	# The wait runs from when the work ends, and grows with what it cost, so a slow
+	# predict (tens of ms to a second near the ground) can't take over the frame.
+	_path_ms = Time.get_ticks_msec()
+	_path_cost_ms = _path_ms - now
 
 
 ## On an orbit, the panel's diagram shows both orbits to scale.
@@ -422,6 +483,12 @@ func _current_path(view: Dictionary) -> Array[PackedFloat64Array]:
 		return points
 	var ticks := roundi(DRIFT_SECONDS * bridge.ticks_per_second())
 	var orbit: Dictionary = shown.get("orbit", {})
+	contact = {}
+	touchdown = PackedFloat64Array()
+	if int(shown.get("low_flight", 0)) != 0:
+		return _descent_path(view)
+	if not shown.get("landed", {}).is_empty():
+		return points
 	if OrbitPath.is_open(orbit):
 		var soi: float = float(view["bodies"][orbit["parent"]].get("soi_mm", 0))
 		ticks = OrbitPath.ticks_to_reach(orbit, view["tick"], soi)
@@ -438,6 +505,54 @@ func _current_path(view: Dictionary) -> Array[PackedFloat64Array]:
 	return points
 
 
+## In low flight, predict integrates the fall and says where it meets the ground.
+func _descent_path(view: Dictionary) -> Array[PackedFloat64Array]:
+	var points: Array[PackedFloat64Array] = []
+	var ticks := DESCENT_TICKS
+	if _contact_tick > view["tick"]:
+		ticks = clampi(_contact_tick - view["tick"] + DESCENT_MARGIN_TICKS, DESCENT_STEP, DESCENT_TICKS)
+	predicts += 1
+	var path: Dictionary = bridge.sim.predict(unit_id(), view["tick"], ticks, DESCENT_STEP)
+	if path.is_empty():
+		return points
+	var base := _place_world(view, path["place"])
+	for point: Array in path["points"]:
+		points.append(OrbitPath.shifted(point, base))
+	contact = path.get("contact", {})
+	_contact_tick = contact.get("tick", 0)
+	if not contact.is_empty():
+		var at: Dictionary = bridge.sim.predict(unit_id(), contact["tick"], 0, 1)
+		if not at.get("points", []).is_empty():
+			touchdown = OrbitPath.shifted(at["points"][0], base)
+	return points
+
+
+## Fills in a burn straight up, now: the ground's lift-off.
+func lift_off() -> void:
+	burn_now()
+	set_components(0.0, 0.0, LIFT_OFF_M_S)
+
+
+## The descent block: shown in low flight and on the ground.
+func _show_descent(view: Dictionary, shown: Dictionary) -> void:
+	var low := int(shown.get("low_flight", 0)) != 0
+	var on_ground: bool = not shown.get("landed", {}).is_empty()
+	_descent_box.visible = low or on_ground
+	if not _descent_box.visible:
+		return
+	_lift_button.visible = on_ground
+	var limit: int = shown.get("touchdown_mm_s", 0)
+	_verdict.modulate = ClientTheme.OFF_WHITE
+	if on_ground:
+		_descent_text.text = "On the ground. A burn with radial out lifts off."
+		_verdict.text = FlightLogic.legs_text(limit)
+		return
+	_descent_text.text = FlightLogic.contact_text(contact, view["tick"], bridge.ticks_per_second())
+	_verdict.text = FlightLogic.verdict_text(contact, limit)
+	if not contact.is_empty():
+		_verdict.modulate = SAFE_COLOUR if FlightLogic.lands_safely(contact, limit) else ClientTheme.ORANGE
+
+
 ## Where the craft will be at a tick on its current path, in world mm.
 func _position_at(view: Dictionary, tick: int) -> PackedFloat64Array:
 	if bridge.sim.has_method("predict"):
@@ -450,6 +565,8 @@ func _position_at(view: Dictionary, tick: int) -> PackedFloat64Array:
 func _place_world(view: Dictionary, place: Dictionary) -> Array:
 	if place.has("orbit_parent"):
 		return WorldPosition.of(view["bodies"][place["orbit_parent"]])
+	if place.has("low_flight"):
+		return WorldPosition.of(view["bodies"][place["low_flight"]])
 	var frame: Dictionary = view.get("frames", {}).get(place.get("frame", 0), {})
 	return frame.get("world_mm", [0, 0, 0]) if not frame.is_empty() else [0, 0, 0]
 
@@ -484,6 +601,9 @@ func _draw_into(mesh: ImmediateMesh, centre: Array, place: Callable, marker_size
 	mesh.clear_surfaces()
 	_add_strip(mesh, current_path, centre, place, PATH_COLOUR)
 	_add_strip(mesh, planned_path, centre, place, PLAN_COLOUR)
+	if not touchdown.is_empty():
+		var safe := FlightLogic.lands_safely(contact, unit().get("touchdown_mm_s", 0))
+		_add_cross(mesh, place.call(OrbitPath.relative_m(touchdown, centre)), marker_size, SAFE_COLOUR if safe else PLAN_COLOUR)
 	if not marker.is_empty():
 		var at: Vector3 = place.call(OrbitPath.relative_m(marker, centre))
 		for axis: Vector3 in [Vector3.RIGHT, Vector3.UP, Vector3.BACK]:
@@ -493,6 +613,16 @@ func _draw_into(mesh: ImmediateMesh, centre: Array, place: Callable, marker_size
 			mesh.surface_set_color(PLAN_COLOUR)
 			mesh.surface_add_vertex(at + axis * marker_size)
 			mesh.surface_end()
+
+
+func _add_cross(mesh: ImmediateMesh, at: Vector3, size: float, colour: Color) -> void:
+	for axis: Vector3 in [Vector3.RIGHT, Vector3.UP, Vector3.BACK]:
+		mesh.surface_begin(Mesh.PRIMITIVE_LINES)
+		mesh.surface_set_color(colour)
+		mesh.surface_add_vertex(at - axis * size)
+		mesh.surface_set_color(colour)
+		mesh.surface_add_vertex(at + axis * size)
+		mesh.surface_end()
 
 
 func _add_strip(mesh: ImmediateMesh, points: Array[PackedFloat64Array], centre: Array, place: Callable, colour: Color) -> void:

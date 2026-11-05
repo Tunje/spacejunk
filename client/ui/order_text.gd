@@ -36,6 +36,7 @@ const REASONS: Dictionary = {
 	"not_docked": "Not docked",
 	"not_flying": "Undock first",
 	"not_landed": "Not on the ground",
+	"no_landing_gear": "No landing legs fitted",
 	"not_in_stub": "Not available in the stub simulation",
 	"not_whole_unit": "Must be whole units",
 	"out_of_range": "Move there first",
@@ -146,11 +147,21 @@ static func event(entry: Dictionary, unit_name: String, items: Dictionary, bodie
 			var why: String = "The craft was busy with another order" if data["reason"] == "part_busy" else reason(data["reason"])
 			return "%s: burn stopped at %s. %s" % [unit_name, FlightLogic.speed(data["dv_um_s"]), why]
 		"landed":
-			return "%s landed on %s" % [unit_name, bodies.get(data["body"], {}).get("name", "the surface")]
+			var place: String = bodies.get(data["body"], {}).get("name", "the surface")
+			if data.has("speed_um_s"):
+				return "%s landed on %s at %s" % [unit_name, place, FlightLogic.speed(data["speed_um_s"])]
+			return "%s landed on %s" % [unit_name, place]
 		"took_off":
 			return "%s took off from %s" % [unit_name, bodies.get(data["body"], {}).get("name", "the surface")]
 		"crashed":
-			return "%s crashed on %s" % [unit_name, bodies.get(data["body"], {}).get("name", "the surface")]
+			var place: String = bodies.get(data["body"], {}).get("name", "the surface")
+			if data.has("speed_um_s"):
+				return "%s crashed on %s at %s" % [unit_name, place, FlightLogic.speed(data["speed_um_s"])]
+			return "%s crashed on %s" % [unit_name, place]
+		"low_flight_entered":
+			return "%s is flying low over %s" % [unit_name, bodies.get(data["body"], {}).get("name", "the surface")]
+		"low_flight_left":
+			return "%s is back in orbit round %s" % [unit_name, bodies.get(data["body"], {}).get("name", "its body")]
 		"soi_changed":
 			var to_name: String = bodies.get(data["to"], {}).get("name", "another body")
 			return "%s: now orbiting %s" % [unit_name, to_name]

@@ -48,6 +48,7 @@ func _fly(orbit_r: Array, orbit_v: Array, terrain: Dictionary = { "seed": SEED, 
 	for table: String in ["bodies", "units"]:
 		for id: int in sim._state[table]:
 			keys[sim._state[table][id]["name"]] = id
+	assert_true(LandingLegs.fit(sim, keys["Orbiter"]), "landing legs fitted, as A19 needs to land")
 	var orbiter: Dictionary = sim._state["units"][keys["Orbiter"]]
 	orbiter["orbit"] = OrbitMath.from_state(orbit_r, orbit_v, GM_PLANET, 0)
 	orbiter["orbit"]["parent"] = keys["Planet"]
@@ -155,7 +156,9 @@ func test_land_shows_checks_cost_then_lands_on_the_hex_at_its_height() -> void:
 	var side := "above" if height >= 0 else "below"
 	assert_eq(screen._place.text, "Landed on Planet, hex %d, %s %s datum" % [cell, OrderText.metres(absi(height) * 1000), side])
 	assert_has(main.event_log.lines, "Orbiter landed on Planet")
-	assert_eq(screen._cost.text, "Take off to plan a burn.")
+	screen.burn_now()
+	screen.set_components(0.0, 0.0, 5.0)
+	assert_string_starts_with(screen._cost.text, "Delta-v 5.0 m/s", "a burn on the ground is a lift-off (A19)")
 
 
 func test_a_landed_craft_stands_on_the_drawn_surface() -> void:
@@ -210,7 +213,10 @@ func test_a_crash_is_reported() -> void:
 			crashed = true
 			break
 	assert_true(crashed)
-	assert_has(main.event_log.lines, "Orbiter crashed on Planet")
+	var said := false
+	for line: String in main.event_log.lines:
+		said = said or line.begins_with("Orbiter crashed on Planet")
+	assert_true(said, "the crash is in the log, with its speed since A19")
 
 
 ## The height the mesh draws at a cell, and the sim's landed height there, in m.

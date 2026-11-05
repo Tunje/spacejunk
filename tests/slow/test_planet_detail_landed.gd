@@ -43,6 +43,7 @@ func test_close_up_tiles_appear_under_a_landed_craft() -> void:
 			planet = id
 	var orbit := OrbitMath.from_state([300_000_000, 0, 0], [0, 0, -466_000_000], 65_138_398, 0)
 	orbit["parent"] = planet
+	assert_true(LandingLegs.fit(sim, ship))
 	sim._state["units"][ship]["orbit"] = orbit
 	sim._state["units"][ship]["pos_mm"] = OrbitMath.position_at(orbit, 0)
 	sim._ctx.index.clear()

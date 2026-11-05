@@ -29,6 +29,10 @@ const FINE_PERIOD_M := 30.0
 const FLAT_INNER_M := 60.0
 const FLAT_OUTER_M := 200.0
 const MAX_TILES := 400
+## The hex under a craft in low flight is levelled to its height across most of the
+## hex, since the simulation's ground there is flat at that height (A19).
+const HEX_INNER_M := 2500.0
+const HEX_OUTER_M := 3400.0
 
 var body_id := 0
 var settings: Dictionary = {}
@@ -48,6 +52,8 @@ var _lock := Mutex.new()
 var _finished: Array[Dictionary] = []
 ## Tasks of dropped tiles still running: waited on once done, so none leak.
 var _abandoned: Array[int] = []
+## Raised whenever tiles are dropped, so a build started before then is ignored.
+var _generation := 0
 
 
 func _init() -> void:
@@ -93,6 +99,7 @@ func clear() -> void:
 
 
 func _drop_all() -> void:
+	_generation += 1
 	for key: String in tiles:
 		var node: MeshInstance3D = tiles[key].get("node")
 		if node != null:
@@ -190,6 +197,7 @@ func _start(key: String) -> void:
 	var job := {
 		"key": key, "settings": settings, "seed": visual_seed, "sites": sites.duplicate(),
 		"centre": centre_dir, "east": east, "north": north, "anchor": PlanetMesh.key_of(settings) + str(centre_dir),
+		"generation": _generation,
 	}
 	tiles[key] = { "task": WorkerThreadPool.add_task(_build_task.bind(job), false, "planet tile") }
 
@@ -215,7 +223,8 @@ func _collect_finished() -> void:
 	_lock.unlock()
 	for built: Dictionary in done:
 		var key: String = built["key"]
-		if not tiles.has(key) or built["anchor"] != PlanetMesh.key_of(settings) + str(centre_dir):
+		# A build from before the last drop, or for a tile already built, is stale.
+		if built.get("generation", -1) != _generation or not tiles.has(key) or not tiles[key].has("task"):
 			continue
 		WorkerThreadPool.wait_for_task_completion(tiles[key]["task"])
 		var mesh := ArrayMesh.new()
@@ -250,8 +259,9 @@ static func height_at(dir: Vector3, settings: Dictionary, noise: Array[FastNoise
 		detail = noise[0].get_noise_3dv(at) * DETAIL_M + noise[1].get_noise_3dv(at) * FINE_M
 	for site: Dictionary in sites:
 		var away: float = (site["dir"] as Vector3).angle_to(dir) * radius
-		if away < FLAT_OUTER_M:
-			var keep := smoothstep(FLAT_INNER_M, FLAT_OUTER_M, away)
+		var outer: float = site.get("outer_m", FLAT_OUTER_M)
+		if away < outer:
+			var keep := smoothstep(site.get("inner_m", FLAT_INNER_M), outer, away)
 			return lerpf(float(site["height_m"]), base + detail, keep)
 	return base + detail
 
@@ -327,7 +337,8 @@ static func build_tile(job: Dictionary) -> Dictionary:
 	arrays[Mesh.ARRAY_NORMAL] = normals
 	arrays[Mesh.ARRAY_COLOR] = colours
 	arrays[Mesh.ARRAY_INDEX] = indices
-	return { "key": job["key"], "anchor": job["anchor"], "arrays": arrays, "origin": origin, "heights": heights }
+	return { "key": job["key"], "anchor": job["anchor"], "generation": job.get("generation", 0), "arrays": arrays,
+		"origin": origin, "heights": heights }
 
 
 ## Two triangles for a quad, wound clockwise seen from outside, Godot's front face.

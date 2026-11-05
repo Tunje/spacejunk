@@ -265,7 +265,7 @@ static func _build_state(module_defs: Dictionary, seed_value: int, extra_ships: 
 			"parts": _build_part(state, module_defs, entry["parts"]),
 			"inventory": entry["inventory"],
 			"frame": 0, "orbit": {}, "vel_um_s": [0, 0, 0], "burns": [], "burn": {},
-			"drift_rem": [0, 0, 0], "burn_dir": [], "transfer": {}, "landed": {},
+			"drift_rem": [0, 0, 0], "burn_dir": [], "transfer": {}, "landed": {}, "low_flight": 0, "touchdown_mm_s": 0,
 		}
 	_add_cluster_frame(state)
 	return state
