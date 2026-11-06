@@ -49,30 +49,6 @@ static func body_speed_um_s(state: Dictionary, body_id: int) -> int:
 	return mini(total, UNBOUNDED_UM_S)
 
 
-## The most a unit can move per second relative to the root, for one that can coast: on an orbit,
-## still in a frame, landed or docked. Anything else is unbounded.
-static func unit_speed_um_s(state: Dictionary, unit_id: int) -> int:
-	var unit: Dictionary = state["units"][unit_id]
-	if not unit["dock"].is_empty():
-		return unit_speed_um_s(state, unit["dock"]["target_unit"])
-	if unit.get("low_flight", 0) != 0 or not unit["route"].is_empty():
-		return UNBOUNDED_UM_S
-	if not unit.get("landed", {}).is_empty():
-		return body_speed_um_s(state, unit["landed"]["body"])
-	if not unit["orbit"].is_empty():
-		var parent: int = unit["orbit"]["parent"]
-		return mini(orbit_max_um_s(state["bodies"][parent]["gm"], unit["orbit"]) + body_speed_um_s(state, parent),
-			UNBOUNDED_UM_S)
-	if unit["frame"] != 0:
-		if unit["vel_um_s"] != [0, 0, 0]:
-			return UNBOUNDED_UM_S
-		var frame: Dictionary = state["frames"][unit["frame"]]
-		var parent: int = frame["orbit"]["parent"]
-		return mini(orbit_max_um_s(state["bodies"][parent]["gm"], frame["orbit"]) + body_speed_um_s(state, parent),
-			UNBOUNDED_UM_S)
-	return 0  # the old world, where nothing moves on its own
-
-
 ## The most a unit and a body can close on each other per second: only the motion below the first
 ## body both hang from counts, since what that body does moves both alike.
 static func relative_speed_um_s(state: Dictionary, unit_id: int, body_id: int) -> int:
@@ -98,8 +74,17 @@ static func _unit_base(state: Dictionary, unit_id: int) -> Array:
 	var unit: Dictionary = state["units"][unit_id]
 	if not unit["dock"].is_empty():
 		return _unit_base(state, unit["dock"]["target_unit"])
-	if unit.get("low_flight", 0) != 0 or not unit["route"].is_empty():
+	if unit.get("low_flight", 0) != 0:
 		return [0, UNBOUNDED_UM_S]
+	if not unit["route"].is_empty():
+		# A straight leg at its speed, in its frame or in the old world (A37).
+		var moving := int(unit["route"]["speed_mm_s"]) * 1000 + 1
+		if unit["frame"] == 0:
+			return [0, moving]
+		var on: Dictionary = state["frames"][unit["frame"]]
+		var parent_id: int = on["orbit"]["parent"]
+		var carried := orbit_max_um_s(state["bodies"][parent_id]["gm"], on["orbit"])
+		return [parent_id, mini(carried + moving, UNBOUNDED_UM_S)]
 	if not unit.get("landed", {}).is_empty():
 		return [unit["landed"]["body"], 0]
 	if not unit["orbit"].is_empty():

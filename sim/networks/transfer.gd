@@ -36,7 +36,12 @@ static func plan(ctx: SimContext, unit_id: int, target: int, from_tick: int) -> 
 ## As plan, from any orbit at any mass, for pricing a leg the unit has not reached yet.
 static func plan_from(ctx: SimContext, unit_id: int, mine: Dictionary, target: int, mass_g: int,
 		from_tick: int) -> Dictionary:
-	var theirs := target_orbit(ctx, target)
+	return plan_between(ctx, unit_id, mine, target_orbit(ctx, target), target, mass_g, from_tick)
+
+
+## As plan_from, onto a given orbit, such as a frame's, which `target` only names (A39).
+static func plan_between(ctx: SimContext, unit_id: int, mine: Dictionary, theirs: Dictionary, target: int,
+		mass_g: int, from_tick: int) -> Dictionary:
 	if mine.is_empty() or theirs.is_empty():
 		return { "reason": REASON_UNSUPPORTED }
 	var found := BurnSystem.thruster(ctx, unit_id)
@@ -172,6 +177,8 @@ static func _semi_major_for_period(a_mm: int, period: int, new_period: int) -> i
 ## that puts the far side of the orbit at the target's radius.
 static func departure_orbit(ctx: SimContext, unit_id: int, quoted: Dictionary, tick: int) -> Dictionary:
 	var mine := unit_orbit(ctx, unit_id)
+	if mine.is_empty():
+		return {}
 	var gm: int = ctx.state["bodies"][mine["parent"]]["gm"]
 	var now := OrbitMath.state_at(mine, gm, tick)
 	var r: Array = now["r"]
