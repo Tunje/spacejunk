@@ -1,20 +1,26 @@
 extends GutTest
 ## D27: C12's research on the client: the research panel's reading of theories,
 ## evidence and designs, the variant preview and designer, Measure orders, event
-## text, and defs read again once a variant is designed. On the real new start.
+## text, and defs read again once a variant is designed. On the real new start, one
+## game for the file: each new start waits on Frost's planet build at teardown. The
+## tests that change it (a variant designed, screens toggled) come last.
 
 var main: Node
 var bridge: SimBridge
 var defs: Dictionary
 
 
-func before_each() -> void:
+func before_all() -> void:
 	main = load("res://client/main.tscn").instantiate()
 	main.scenario = Main.NEW_START
-	add_child_autofree(main)
+	add_child(main)
 	bridge = main.get_node("Bridge")
 	bridge.set_paused(true)
 	defs = bridge.defs()
+
+
+func after_all() -> void:
+	main.free()
 
 
 func _id_of(table: String, name: String) -> int:
