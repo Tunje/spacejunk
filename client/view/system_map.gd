@@ -18,6 +18,9 @@ const QUOTE_REFRESH_MS := 250
 var bridge: SimBridge
 var local_view: LocalView
 var entries: Array[Dictionary] = []
+## Frames (such as a rock cluster) by name, as { label, map_pos }: a small name at
+## the frame's centre, not something to click.
+var frame_labels: Array[Dictionary] = []
 var eta_text := ""
 var _press_position := Vector2.ZERO
 var _pressed := false
@@ -104,6 +107,14 @@ func refresh(delta: float) -> void:
 		var unit: Dictionary = after["units"][id]
 		var from_mm := WorldPosition.of(before["units"].get(id, unit))
 		_add_entry("unit", id, unit["name"], FloatingOrigin.relative_m(from_mm, WorldPosition.of(unit), centre_before, centre_after, alpha))
+	frame_labels.clear()
+	for id: int in after.get("frames", {}):
+		var frame: Dictionary = after["frames"][id]
+		if (frame.get("world_mm", []) as Array).size() != 3:
+			continue
+		var from_mm := WorldPosition.of(before.get("frames", {}).get(id, frame))
+		var relative := FloatingOrigin.relative_m(from_mm, WorldPosition.of(frame), centre_before, centre_after, alpha)
+		frame_labels.append({ "label": frame["name"], "map_pos": SystemMap.project(relative) })
 	_draw_routes(after, centre_after)
 	eta_text = _eta_for_selection(after)
 	camera.update_view(delta)
