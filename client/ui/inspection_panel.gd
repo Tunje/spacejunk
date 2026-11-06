@@ -61,12 +61,17 @@ func _ready() -> void:
 	scroll.add_child(_parts_box)
 
 
-func bind(new_bridge: SimBridge, view: LocalView) -> void:
-	bridge = new_bridge
-	local_view = view
+func _reread_defs() -> void:
 	var defs: Dictionary = bridge.defs()
 	_modules = defs["modules"]
 	_items = defs["items"]
+
+
+func bind(new_bridge: SimBridge, view: LocalView) -> void:
+	bridge = new_bridge
+	local_view = view
+	_reread_defs()
+	bridge.defs_changed.connect(_reread_defs)
 	bridge.view_updated.connect(refresh)
 	local_view.selection_changed.connect(refresh)
 	refresh()

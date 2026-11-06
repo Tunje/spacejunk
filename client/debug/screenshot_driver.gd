@@ -29,6 +29,8 @@ class_name ScreenshotDriver extends Node
 ##   --set-down=<body name>,<cell>   (real Sim) puts the commanded craft down on that hex as a landing
 ##                                   ends, for a landed shot where it can't yet fly down
 ##   --look-at=<body name>           turns the camera so that body is behind the craft (after --pitch)
+##   --research=1                    opens the research screen
+##   --research-ideas=<base>:<idea>[,<idea>...]  then picks that base and those ideas in its designer
 ##   --copy=1                        (stub_load) strips two parts off the first ship and
 ##                                   opens fitting there, to show "Fit like this one"
 ##   --fit=<item>  --fit-slot=<connector>  opens fitting after the orders and picks both
@@ -128,6 +130,19 @@ func _run() -> void:
 		await _open_fitting()
 	if parsed.has("jobs"):
 		await _open_jobs()
+	if parsed.has("research"):
+		main.toggle_research()
+		if parsed.has("research-ideas"):
+			var spec: PackedStringArray = parsed["research-ideas"].split(":")
+			main.research_screen.choose_base(spec[0])
+			for idea: String in spec[1].split(","):
+				main.research_screen.toggle_idea(idea, true)
+			main.research_screen._key = ""
+			main.research_screen.refresh()
+			# Down to the designer, once the list has its size.
+			await get_tree().process_frame
+			await get_tree().process_frame
+			main.research_screen.scroll_to_designs()
 	if parsed.has("cycle"):
 		await _start_demo_cycle()
 	if parsed.has("copy"):

@@ -29,6 +29,8 @@ const AUTOSAVE_SECONDS := 300.0
 @onready var system_map: SystemMap = $SystemMap
 @onready var standing_orders: StandingOrdersScreen = %StandingOrders
 @onready var flight_screen: FlightScreen = %FlightScreen
+## Built here rather than in main.tscn: it sits where the industry screen does.
+var research_screen: ResearchScreen
 
 ## False until a game is running, so a failed start never autosaves.
 var _started := false
@@ -58,11 +60,13 @@ func _ready() -> void:
 	goal_panel.bind(bridge, event_log, fitting_screen, scenario)
 	system_map.bind(bridge, local_view)
 	flight_screen.bind(bridge, local_view, system_map)
+	_add_research_screen()
 	time_controls.map_pressed.connect(toggle_map)
 	time_controls.fly_pressed.connect(toggle_flight)
 	time_controls.policy_pressed.connect(standing_orders.toggle)
 	time_controls.fit_pressed.connect(toggle_fitting)
 	time_controls.jobs_pressed.connect(toggle_industry)
+	time_controls.research_pressed.connect(toggle_research)
 	time_controls.save_pressed.connect(save_game)
 	time_controls.load_pressed.connect(load_game)
 	time_controls.auto_pressed.connect(toggle_automation)
@@ -129,6 +133,12 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	elif key.physical_keycode == KEY_O:
 		local_view.set_planet_outlines(not BodyNode.show_outlines)
 		get_viewport().set_input_as_handled()
+	elif key.physical_keycode == KEY_R:
+		toggle_research()
+		get_viewport().set_input_as_handled()
+	elif key.physical_keycode == KEY_ESCAPE and research_screen.visible:
+		toggle_research()
+		get_viewport().set_input_as_handled()
 	elif key.physical_keycode == KEY_J:
 		toggle_industry()
 		get_viewport().set_input_as_handled()
@@ -164,6 +174,21 @@ func toggle_industry() -> void:
 	_open_side_screen(industry_screen)
 
 
+func toggle_research() -> void:
+	_open_side_screen(research_screen)
+
+
+## Same place and size as the industry screen, as a sibling in the overlay.
+func _add_research_screen() -> void:
+	research_screen = ResearchScreen.new()
+	research_screen.name = "ResearchScreen"
+	industry_screen.get_parent().add_child(research_screen)
+	for property: String in ["anchor_left", "anchor_top", "anchor_right", "anchor_bottom", "offset_left",
+			"offset_top", "offset_right", "offset_bottom", "grow_horizontal", "grow_vertical"]:
+		research_screen.set(property, industry_screen.get(property))
+	research_screen.bind(bridge)
+
+
 func toggle_automation() -> void:
 	_open_side_screen(automation_screen)
 
@@ -176,7 +201,7 @@ func toggle_flight() -> void:
 ## One side screen at a time, beside the order panel, which always stays up so
 ## Undock and the other orders are never out of reach.
 func _open_side_screen(screen: Control) -> void:
-	for other: Control in [fitting_screen, industry_screen, automation_screen, flight_screen]:
+	for other: Control in [fitting_screen, industry_screen, automation_screen, flight_screen, research_screen]:
 		if other != screen and other.visible:
 			other.toggle()
 	screen.toggle()
