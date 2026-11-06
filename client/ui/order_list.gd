@@ -4,6 +4,8 @@ class_name OrderList extends RefCounted
 
 const SHOWN_KIND_ASTEROID := "asteroid"
 const PROPELLANT_CLASS := "propellant"
+## A client-side order (D32): the measurements below, one after another, not a Sim command.
+const MEASURE_ALL := "measure_all"
 ## Orders whose operation always runs to its end (autonomy.md section 4), and that operation.
 const ATOMIC_OPS: Dictionary = { "dock": "docking", "undock": "undocking" }
 
@@ -18,6 +20,8 @@ static func build(view: Dictionary, modules: Dictionary, items: Dictionary, comm
 		if view["bodies"][selected_id]["kind"] == SHOWN_KIND_ASTEROID:
 			_add_asteroid_orders(orders, view, modules, items, commanded, selected_id)
 		_add_measure_orders(orders, view["bodies"][selected_id]["kind"], science, commanded, selected_id)
+		if OrderList.measure_everything(view, science, commanded, selected_id).size() > 1:
+			_add(orders, "Measure everything here", commanded, MEASURE_ALL, { "target": selected_id })
 	elif selected_kind == "unit" and selected_id != commanded and view["units"].has(selected_id):
 		_add(orders, "Move to", commanded, "move_to", { "target": selected_id })
 		var used := OrderList.ports_in_use(view)
@@ -128,6 +132,26 @@ static func docked_partner(view: Dictionary, unit_id: int) -> int:
 		if id != unit_id and not other.is_empty() and other["target_unit"] == unit_id:
 			return id
 	return 0
+
+
+## Every measurement of a body not yet paid, as Sim commands in order: Scan (which
+## pays survey) first at a rock, then each Measure kind that suits the body. Whether
+## the unit is in the right place is still Sim.check's to say.
+static func measure_everything(view: Dictionary, science: Dictionary, commanded: int, body: int) -> Array[Dictionary]:
+	var paid: Dictionary = view.get("science", {}).get("paid", {})
+	var commands: Array[Dictionary] = []
+	var kind_of_body: String = view["bodies"][body]["kind"]
+	if kind_of_body == SHOWN_KIND_ASTEROID and not paid.has("survey:%d" % body):
+		commands.append({ "type": "scan", "unit": commanded, "args": { "target": body } })
+	var orders: Array[Dictionary] = []
+	_add_measure_orders(orders, kind_of_body, science, commanded, body)
+	for order: Dictionary in orders:
+		var kind: String = order["command"]["args"]["kind"]
+		var key := "%s:%d" % [kind, body]
+		var paid_already := paid.keys().any(func(paid_key: String) -> bool: return paid_key == key or paid_key.begins_with(key + ":"))
+		if not paid_already:
+			commands.append(order["command"])
+	return commands
 
 
 static func _add(orders: Array[Dictionary], label: String, unit: int, type: String, args: Dictionary, key: String = "") -> void:
