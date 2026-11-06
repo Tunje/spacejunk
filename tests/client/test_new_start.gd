@@ -47,6 +47,9 @@ func test_the_map_shows_frost_the_planet_and_the_rocks() -> void:
 	var labels: Array = main.system_map.entries.map(func(entry: Dictionary) -> String: return entry["label"])
 	for name: String in ["Frost", "Planet", "Red Rock", "White Rock", "Probe"]:
 		assert_has(labels, name)
+	assert_eq(main.system_map.frame_labels.map(func(frame: Dictionary) -> String: return frame["label"]), ["Cluster"],
+		"the cluster is named, apart from the clickable entries")
+	assert_false(labels.has("Cluster"))
 
 
 func test_it_ticks_and_every_screen_opens_without_a_station() -> void:
