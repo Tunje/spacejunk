@@ -128,7 +128,7 @@
   {
     "id": "stub_refinery", "name": "Ore Refinery", "mass_kg": 9000, "volume_m3": 120, "power_kw": 400, "heat_kw": 300,
     "priority": 3, "durability": 2000, "min_ai_tier": 1, "realism": "extrapolation",
-    "capabilities": { "facility": { "type": "refinery" } },
+    "capabilities": { "facility": { "type": "refinery", "work_per_tick": 100 } },
     "fabrication": { "recipe": "stub_refinery" },
     "connectors": [
       { "id": "mount", "type": "stack", "size": "large", "pos_mm": [0, 0, 0], "facing": "-y", "up": "+z", "load_limit_kg": 90000 },
