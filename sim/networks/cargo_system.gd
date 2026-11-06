@@ -282,8 +282,8 @@ func _transfer_rate(ctx: SimContext, from: int, to: int) -> int:
 
 
 ## A docked unit takes its host's position, whenever the host moves.
-## Coast (A33): a route, docking or a cargo transfer moves every tick, so it is stepped. A flown
-## transfer waits for its arrival, and a waiting one for its departure.
+## Coast (A33): docking or a cargo transfer is stepped. A flown transfer waits for its arrival, and
+## a waiting one for its departure. A route coasts to the tick before its arrival (A37).
 func horizon(ctx: SimContext) -> int:
 	var skip := NO_LIMIT
 	var now: int = ctx.state["tick"]
@@ -292,8 +292,7 @@ func horizon(ctx: SimContext) -> int:
 		var unit: Dictionary = units[id]
 		var op: Dictionary = unit["op"]
 		if not unit["route"].is_empty():
-			ctx.coast_cap = "moving_in_frame"
-			return 0
+			skip = mini(skip, route_horizon(unit["route"]))
 		match op["type"]:
 			TransferStep.OP_LOADING, TransferStep.OP_UNLOADING, DockStep.OP_DOCKING, UndockStep.OP_UNDOCKING:
 				ctx.coast_cap = "docking_or_cargo"
@@ -310,9 +309,37 @@ func horizon(ctx: SimContext) -> int:
 	return maxi(skip, 0)
 
 
-## Coast (A33): docked units are where their hosts are.
-func coast(ctx: SimContext, _ticks: int) -> void:
+## Coast (A33): docked units are where their hosts are. A route's progress over the ticks is the sum
+## of its per-tick amounts, with its remainder carried, as _advance would add them one by one (A37).
+## route_horizon keeps the coast short of arrival, so _advance's cap at the length never applies.
+func coast(ctx: SimContext, ticks: int) -> void:
+	var units: Dictionary = ctx.state["units"]
+	for id: int in _sorted(units):
+		var unit: Dictionary = units[id]
+		var route: Dictionary = unit["route"]
+		if route.is_empty():
+			continue
+		var total: int = int(route["speed_mm_s"]) * ticks + int(route["speed_remainder"])
+		route["progress_mm"] += total / Sim.TICKS_PER_SECOND
+		route["speed_remainder"] = total % Sim.TICKS_PER_SECOND
+		for axis in 3:
+			unit["pos_mm"][axis] = Travel.along(route["from_mm"][axis], route["to_mm"][axis],
+				route["progress_mm"], route["length_mm"])
 	_follow_hosts(ctx)
+
+
+## The most ticks a route can be summed over and still be short of its length, so the tick it
+## arrives on, with its event, is stepped.
+static func route_horizon(route: Dictionary) -> int:
+	var speed: int = route["speed_mm_s"]
+	if speed <= 0:
+		return NO_LIMIT
+	var room: int = (int(route["length_mm"]) - int(route["progress_mm"])) * Sim.TICKS_PER_SECOND \
+		- int(route["speed_remainder"])
+	if room <= 0:
+		return 0
+	# k ticks leave it short while k * speed < room.
+	return (room + speed - 1) / speed - 1
 
 
 func _follow_hosts(ctx: SimContext) -> void:
