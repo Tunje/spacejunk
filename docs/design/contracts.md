@@ -1,6 +1,6 @@
 # Simulation Contracts
 
-Contract version: 4. Signed off by the Lead (task L7) after review by Agents A, C and D. Version 2 added the job queue (C9). Version 3 adds orbits and frames ([orbital_flight.md](orbital_flight.md) section 11, task A10). Version 4 makes jobs take work points, not time (C11). Version 5 adds research: science, theories, prototypes and variants (C12). Changes go through the Lead.
+Contract version: 5. Signed off by the Lead (task L7) after review by Agents A, C and D. Version 2 added the job queue (C9). Version 3 adds orbits and frames ([orbital_flight.md](orbital_flight.md) section 11, task A10). Version 4 makes jobs take work points, not time (C11). Version 5 adds research: science, theories, prototypes and variants (C12). Changes go through the Lead.
 
 These contracts expand section 5 of `plan/workplan.md`. If the two disagree, raise it with the Lead.
 
@@ -154,7 +154,8 @@ Every command has this envelope. `submit` fills in `id` and `tick`.
 
 | Type | Args | Meaning |
 | ---- | ---- | ------- |
-| `scan` | `target` | Scan a body for deposits |
+| `scan` | `target` | Scan a body for deposits. A finished scan also pays `survey` points |
+| `measure` | `target`, `kind` | Take a measurement of a body for science points (C12) |
 | `move_to` | `target` | Travel to an entity along a route. Inside the unit's frame, or in the old world, as today. A target on an orbit or in another frame is refused with `unsupported_orbit` until A13's planner, which waits for a window and flies an atomic transfer. |
 | `dock` | `port`, `target_port` | Dock at a port |
 | `undock` | none | Leave the current port |
@@ -170,6 +171,7 @@ Every command has this envelope. `submit` fills in `id` and `tick`.
 | `copy_fit` | `source`, `from` | Fit this unit like `source`, with parts from `from` |
 | `detach_part` | `part`, `to` | Remove a part and everything below it |
 | `assign_core` | `core` | Set a core installed on this unit |
+| `design_variant` | `base`, `ideas` | Design a variant of a qualified module with up to four of its ideas. Sent with unit 0 (C12) |
 | `set_cycle` | `steps` | Set the repeating cycle for tier 2 |
 | `set_priority` | `module`, `priority` | Change a module's power priority |
 
@@ -206,6 +208,38 @@ Running shortfalls are still handled by shedding and faults.
 - A shed or faulted facility does no work that tick. The run pauses with its inputs and `work_left` held, and resumes when power returns. A cancelled run loses its progress.
 - A run that builds a unit claims its port on its last tick of work, when `work_left <= work_per_tick`.
 - A running job draws `ceil(recipe power_w * work_per_tick / 100)`, so a run uses the same energy on any size of facility, and full-size facilities draw the recipe's figure.
+
+**Science (C12).** A finished measurement pays science points, held in `state.science = { points, earned, spent, paid }`.
+- `measure` kinds come from `data/science.json`. `survey` is the scan step itself, and a finished scan pays it.
+  - `composition` is taken at an asteroid, undocked, with the part that has `scan`.
+  - `surface` is taken landed on the target body, with that part.
+  - `gravity_field` is taken on an elliptic orbit round the target, with an assigned core and no other part. It lasts one period of that orbit, rounded up to whole ticks. Its op keeps the orbit it started on, and any change to the unit's orbit ends it unpaid with `orbit_changed`.
+  - The time is the kind's `ticks`, or the scan part's own when it has none. The op type is `measuring`, with the op's `kind`.
+  - A kind with no points for the target's class (`asteroid`, `moon` for a body round a planet, or `planet`) is refused with `invalid_target`. Placement gives `out_of_range`, `docked`, `no_core` or `tier_too_low`.
+  - Like a scan, a part shed on the last tick does no work, and an interrupted measurement pays nothing. `measure` may be a cycle step when its kind is taken at an asteroid.
+- A payment happens in phase 6 of the op's last tick, in ascending unit ID. Its key is `kind:body`, or `surface:body:default`. The nth payment of a key, counting from 0, is `base >> n`, so a key pays at most just under twice its base. `paid` counts payments per key, and canonical order sorts the keys as strings. No RNG is used.
+- `science_gained` reports every payment, including 0 points.
+- A theory's evidence entry `{ kind, count }` is met when `count` different keys of that kind have paid at least once.
+
+**Research (C12).** Research state is `state.research = { theories, designs, variants, discovered }`.
+- `theories` maps a proven theory to the tick it was proven, and `designs` maps a design to `prototype` or `qualified`. A design in neither is `locked` if a theory unlocks it, and `qualified` if none does. A scenario's `research.theories` are proven at tick 0, with their unlocks qualified.
+- **Recipes and their gates.** A recipe proves a theory if it has the output `{ theory }`, and qualifies a design if it has `{ qualifies }`. Each weighs nothing and sits only beside sink routes. Research derives `prototype:<design>`, an item and a recipe, and `qualify:<design>`, a bench test at a `lab` (contracts section 3). A recipe whose output item is a module builds that design. `start_job` and `queue_job` refuse:
+  - `theory_locked`: a theory whose `requires` are unproven, or a normal, prototype or bench-test recipe of a locked design;
+  - `already_proven`: a theory already proven;
+  - `already_qualified`: a bench test of a qualified design;
+  - `design_unqualified`: the normal recipe of a design still in `prototype`;
+  - `tier_too_low`: a theory of era N at a lab whose unit's assigned core is below tier N - 1. No core is tier 0.
+- **Running.** A lab run's blockers come after `module_fault`, in this order: `tier_too_low`, `missing_evidence`, `missing_points`, then `missing_inputs` and `output_full` as for any job. A recipe's optional `points` leave `science.points` when the run starts and are held on the job as `points_held`. They count as `spent` on delivery, and go back to `points` when the run is cancelled.
+- **A job already done.** When a waiting lab job's theory is already proven, or its design already qualified, by another job, it leaves the queue in phase 4 before its run would start. It fires `job_cancelled` with `reason` `already_proven` or `already_qualified`, and it holds nothing.
+- **Delivery,** in phase 6 in ascending job ID. `{ theory }` proves the theory, makes each design it unlocks a `prototype`, and fires `theory_proven`. `{ qualifies }` makes the design `qualified` and fires `design_qualified`.
+- **Variants.** `design_variant { base, ideas }` is sent with unit 0. It is refused, in this order, with:
+  - `malformed_command`: an unknown base or idea, a base that is itself a variant, no ideas, more than four, a repeated idea, or a unit other than 0. Variants are of authored designs only, so more ideas make a new variant of the same base;
+  - `design_unqualified`: the base is not qualified;
+  - `idea_locked`: an idea needs an unproven theory, or is hidden and not yet discovered;
+  - `variant_exists`;
+  - `stat_out_of_range`: a changed field would be 0 or less.
+  The variant's ID is the base and its sorted ideas joined by `+`. It starts as a `prototype`, recorded in `research.variants[id] = { base, ideas, complexity }`, and `variant_designed` fires with unit 0. Its stats, recipes, prototype and bench test are derived as in research.md section 4, and its prototype recipe takes the ideas' points. A part's `def` and an inventory key may be a variant ID, and `copy_fit` copies variants by exact ID.
+- **Discovery.** When a variant's bench test delivers, and its base has hidden ideas not yet in `research.discovered`, the sim draws once from the `research` stream, a number from 0 to 999999. It walks those ideas in ID order, adding each one's `discover_ppm` up to 1000000, and discovers the first whose running total exceeds the draw. That sets `research.discovered["<base>:<idea>"]` to the tick and fires `idea_discovered`. With no hidden ideas left, nothing is drawn.
 
 **Job queue.**
 - A facility holds up to 16 jobs in order, by `queue_pos`. The job at 0 is active and has the statuses of [autonomy.md](autonomy.md) section 9. The rest are `queued` at 1 to n, hold no matter and reserve nothing. Positions stay contiguous.
@@ -260,11 +294,16 @@ Events are ordered by phase, then the event's `unit`, then emission order. Unit 
 | `arrived`, `docked`, `undocked` | `target` |
 | `transfer_done` | `from`, `to`, `item`, `grams` (actual amount moved) |
 | `job_started` | `job`, `command` |
-| `job_finished`, `job_cancelled` | `job`, `recipe`, `facility` |
+| `job_finished`, `job_cancelled` | `job`, `recipe`, `facility`, and on `job_cancelled` an optional `reason`, set only when the sim removes a lab job already done (C12) |
 | `job_paused`, `job_resumed` | `job`, `reason` |
 | `job_queued` | `job`, `command`, `position` |
 | `job_moved` | `job`, `position` |
 | `unit_created` | `unit`, `def`, `job` |
+| `science_gained` | `kind`, `target`, `key`, `points` |
+| `theory_proven` | `theory` |
+| `design_qualified` | `design` |
+| `variant_designed` | `variant`, `base`, `ideas` (unit 0) |
+| `idea_discovered` | `base`, `idea` |
 | `part_attached`, `part_detached` | `part` |
 | `fit_copied` | `source`, `attached` (new part IDs), `missing` (`{ item: count }`), `refused` (list of `{ source_part, item, reason }`) |
 | `power_shed` | `module`, `reason` |
@@ -276,7 +315,7 @@ Each failure emits exactly one event. Fitting failures emit `attach_failed`, and
 
 `reason` is a stable lowercase code, with display text held in the client. `detail` is an optional Dictionary of integers, such as `{ need_w, have_w }`, so the player sees numbers as well as a code.
 
-Known reason codes: `over_mass_limit`, `over_power_budget`, `over_heat_budget`, `over_heat_limit`, `over_load_limit`, `connector_type_mismatch`, `connector_size_mismatch`, `connector_occupied`, `not_whole_unit`, `no_free_port`, `no_propellant`, `cargo_full`, `deposit_exhausted`, `root_part`, `part_busy`, `float_in_command`, `unknown_unit`, `unknown_part`, `invalid_target`, `unknown_command`, `malformed_command`, `queue_full`, `job_busy`, `fit_mismatch`, `parent_not_fitted`. Autonomy adds its own codes, job statuses and view fields in `docs/design/autonomy.md` sections 3, 8, 9 and 10. `connector_size_mismatch` means a `core` connector met a non-core one.
+Known reason codes: `over_mass_limit`, `over_power_budget`, `over_heat_budget`, `over_heat_limit`, `over_load_limit`, `connector_type_mismatch`, `connector_size_mismatch`, `connector_occupied`, `not_whole_unit`, `no_free_port`, `no_propellant`, `cargo_full`, `deposit_exhausted`, `root_part`, `part_busy`, `float_in_command`, `unknown_unit`, `unknown_part`, `invalid_target`, `unknown_command`, `malformed_command`, `queue_full`, `job_busy`, `fit_mismatch`, `parent_not_fitted`, and for research `theory_locked`, `already_proven`, `already_qualified`, `design_unqualified`, `idea_locked`, `variant_exists`, `stat_out_of_range`, `missing_points`, `missing_evidence` and `orbit_changed` (C12). Autonomy adds its own codes, job statuses and view fields in `docs/design/autonomy.md` sections 3, 8, 9 and 10. `connector_size_mismatch` means a `core` connector met a non-core one.
 
 Orbit reason codes:
 - `unsupported_orbit`: a `move_to` target that is on an orbit or in another frame, a burn whose result is exactly parabolic (which neither orbit form can hold, and which rounding makes vanishingly rare), and later the planner's limits.
@@ -330,18 +369,23 @@ This shape is frozen. Fields may be added, but changes or removals go through th
   deposits = { 12: { body = 3, item = "hematite", remaining_g = 0, hardness = 0 } },
   jobs = { 30: { unit = 2, facility = 8, recipe = "...", count_left = 1, status = "running",
                  reason = "", start_tick = 0, queue_pos = 0, work_left = 0, work = 0,
-                 work_per_tick = 0 } },
+                 work_per_tick = 0, points_held = 0 } },
   tasks = {},
+  science = { points = 0, earned = 0, spent = 0, paid = { "survey:3": 1 }, evidence = { survey = 1 } },
+  research = { theories = { "...": 0 }, designs = { "...": "prototype" },
+               variants = { "base+idea": { base = "...", ideas = [], complexity = 0 } },
+               discovered = { "base:idea": 0 } },
 }
 ```
 
 - `power.supply_w` is what the generators give this tick. Generators are solar, so it is 0 while `in_shadow`: a body with gravity stands between the unit and the star, by a cylinder test (from A16).
-- `op.type`: `idle`, `moving`, `waiting`, `docking`, `undocking`, `loading`, `unloading`, `mining`, `scanning` or `burning`. A `move_to` between places is `waiting` until its window. Its op carries `depart_tick`, and `end_tick` is `depart_tick - 1`. Nothing is paid while waiting, and `stop` cancels it freely. From departure it is `moving`, with the unit's `transfer` set to `{ target, depart_tick, arrive_tick, legs }` and `route` left `{}`. A paid transfer is atomic and runs to arrival.
+- `op.type`: `idle`, `moving`, `waiting`, `docking`, `undocking`, `loading`, `unloading`, `mining`, `scanning`, `measuring` or `burning`. A `move_to` between places is `waiting` until its window. Its op carries `depart_tick`, and `end_tick` is `depart_tick - 1`. Nothing is paid while waiting, and `stop` cancels it freely. From departure it is `moving`, with the unit's `transfer` set to `{ target, depart_tick, arrive_tick, legs }` and `route` left `{}`. A paid transfer is atomic and runs to arrival.
 - A trip across a sphere of influence (from A18) is a chain of orbits. `transfer.legs` lists the legs still to come, each `{ orbit, from_tick }`, and the unit's `orbit` switches to each in turn in phase 2 of its tick. That is a Hohmann ellipse, then a hyperbola around the moon or planet, then a phasing orbit, or the reverse. A trip within one sphere has `legs = []`. A trip two levels apart (from A22), such as from a star orbit to a moon of its planet, is two such chains joined at a parking circle around the planet, six legs in all. Its approach to the moon may be an ellipse rather than a hyperbola.
 - While waiting, the op keeps the trip it will fly as `plan`. It is the same dictionary `quote` gives, so a save mid-wait leaves on exactly the same legs. While `burning`, `part` is the thruster, which draws power and gives heat like any running load. A shed thruster gives no thrust that tick.
 - A unit also shows `vel_um_s`, its local velocity in a frame. It shows `burns`, its planned burns in tick order as `{ id, tick, prograde_um_s, normal_um_s, radial_um_s }`. And it shows `burn`, the running burn as `{ id, dv_um_s, done_um_s, start_tick }`, or `{}`.
 - A part's `state`: `on`, `shed` or `fault`.
-- A job's `status`: `queued`, `waiting`, `running`, `paused` or `cancelling`. `queue_pos` is its place in its facility's queue, 0 for the active job. `work_left` is the current run's work still to do, 0 until a run starts. `work` is one run's total, from the recipe, and `work_per_tick` is the facility's rate, so a client shows progress as `1 - work_left / work` and the time left as `ceil(work_left / work_per_tick)` ticks.
+- A job's `status`: `queued`, `waiting`, `running`, `paused` or `cancelling`. `queue_pos` is its place in its facility's queue, 0 for the active job. `work_left` is the current run's work still to do, 0 until a run starts. `work` is one run's total, from the recipe, and `work_per_tick` is the facility's rate, so a client shows progress as `1 - work_left / work` and the time left as `ceil(work_left / work_per_tick)` ticks. `points_held` is the science points a lab run holds.
+- `science.evidence` counts, per kind, the different keys that have paid. `research` is the state's research map as it is.
 - Each unit has one inventory, keyed by item. Capacity is by cargo class, summed across its storage modules.
 - `pos_mm` is in the object's own place (section 1): relative to its orbit's parent, local to its frame, or in the old world. `world_mm` adds up the chain to the root body, for drawing a system map. Floats are for drawing only: an orbit is drawn from its record with 64-bit floats as `position_float` in tests/sim/kernel/test_orbit_math.gd does, never Godot's 32-bit `Vector3`.
 - Unfound deposits stay out of the view. Decorative asteroids are client-only, generated from `seed`; only targetable bodies appear here.
@@ -385,7 +429,8 @@ Task B3 owns the schemas. These fields are fixed here because other agents depen
 - **`realism`:** `established`, `extrapolation`, `speculative` or `fictional`.
 - **Connectors:** `id` (unique within a module), `type` (`stack`, `side`, `dock`), `size`, `pos_mm`, `facing`, `up`, `load_limit_kg`. `facing` and `up` are axis values (+/-x, +/-y, +/-z), written in the module's own frame. A child part is turned as it mates, so that in the craft's frame the connectors have opposite facings and equal ups. `load_limit_kg` is the mass carried below the connector.
 - **Collision:** `{ shape, center_mm, size_mm }`, where `shape` is `box` or `cylinder`, with the cylinder axis along the module's Y. `size_mm` is full extents `[x, y, z]`; a cylinder's diameter is `x` and its height is `y`. Placeholders use the same shape. B3 may extend it.
-- **Recipes:** `id`, `facility`, `work`, `power_kw`, `inputs`, `outputs`, `abstract`. `work` is a whole number of work points, at least 1. Every facility capability has `work_per_tick`, a whole number of at least 1. An output may route straight to a declared sink, such as `slag_vent`, instead of an inventory. B3 defines how.
+- **Recipes:** `id`, `facility`, `work`, `power_kw`, `inputs`, `outputs`, `abstract`. `work` is a whole number of work points, at least 1. Every facility capability has `work_per_tick`, a whole number of at least 1. An output may route straight to a declared sink, such as `slag_vent`, instead of an inventory. The validator requires a route only for waste, an item no recipe takes as an input, such as slag. Any other route, such as a test's goods to `test_consumed`, is the recipe's choice. A recipe may also take `points`, a whole number above 0, and may have the outputs `{ theory }` and `{ qualifies }` (section 5).
+- **No nulls.** Data holds no null values. An optional field is left out, so an idea that needs no theory has no `theory`.
 - `visual` is read by the client only. The simulation never reads it.
 
 ## 11. Client rules

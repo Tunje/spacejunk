@@ -96,6 +96,7 @@ func test_a_run_turns_inputs_into_outputs_in_its_ticks() -> void:
 		"unit": STATION, "facility": FABRICATOR, "recipe": "wiring", "count_left": 1,
 		"status": "running", "reason": "", "start_tick": 1, "queue_pos": 0,
 		"work_left": (RUN_TICKS - 1) * FULL_RATE, "work": RUN_TICKS * FULL_RATE, "work_per_tick": FULL_RATE,
+		"points_held": 0,
 	})
 	_step_balanced(RUN_TICKS - 2)
 	assert_eq(_stock("wiring"), 0)
