@@ -190,6 +190,7 @@ func _run(data: Dictionary) -> Array[String]:
 	for scenario: Dictionary in _scenarios:
 		_cross_scenario(scenario)
 	_check_coverage()
+	_check_buildable()
 	return _errors
 
 
@@ -749,6 +750,10 @@ func _check_sink_route(where: String, entry: Dictionary) -> void:
 		elif not id in _sinks[entry["sink"]]["items"]:
 			_err("sink_refuses_item", where, "%s does not accept %s" % [entry["sink"], id])
 		return
+	# Waste such as slag has no use but its sink, so it must always go there. Propellant also has a
+	# sink, the exhaust, but it is a product too since ice refines into it (B11), so it may be kept.
+	if _items.has(id) and _items[id]["cargo_class"] == "propellant":
+		return
 	for sink_id: String in _sorted(_sinks):
 		if id in _sinks[sink_id]["items"]:
 			_err("sink_route_missing", where, "%s must route to a sink" % id)
@@ -884,6 +889,28 @@ func _check_fit(where: String, template: Dictionary, parts: Array[Dictionary], m
 		_err("heat_capacity_missing", where, "units that make heat need a limit")
 	if _any_part_has(parts, "thruster") and not _stores_propellant(parts):
 		_err("propellant_storage_missing", where, template["id"])
+
+
+## Everything is buildable (owner ruling, 2026-11-04): every module is a recipe's output, or a
+## part of a template that a recipe outputs. A root part comes only from a template.
+func _check_buildable() -> void:
+	var built := {}
+	for id: String in _sorted(_recipes):
+		for entry: Dictionary in _recipes[id]["outputs"]:
+			if entry.has("unit_template"):
+				if _templates.has(entry["unit_template"]):
+					_mark_built(_templates[entry["unit_template"]]["root"], built)
+			elif _modules.has(entry["item"]):
+				built[entry["item"]] = true
+	for id: String in _sorted(_modules):
+		if not built.has(id):
+			_err("not_buildable", "modules.json:%s" % id, "no recipe or buildable template makes it")
+
+
+func _mark_built(node: Dictionary, built: Dictionary) -> void:
+	built[node["part"]] = true
+	for child: Dictionary in node["children"]:
+		_mark_built(child, built)
 
 
 func _any_part_has(parts: Array[Dictionary], capability: String) -> bool:

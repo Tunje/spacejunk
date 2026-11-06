@@ -74,6 +74,13 @@
       "unit_mass_kg": 50
     },
     {
+      "id": "water_ice",
+      "name": "Water Ice",
+      "stage": 2,
+      "cargo_class": "ore",
+      "density_kg_m3": 920
+    },
+    {
       "id": "wiring",
       "name": "Wiring",
       "stage": 5,
