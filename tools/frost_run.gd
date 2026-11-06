@@ -220,7 +220,12 @@ func _flown_landing() -> void:
 	var deorbit := sqrt(gm_frost / r_c) - sqrt(gm_frost * (2.0 / r_c - 1.0 / a_t))
 	var at_ground := sqrt(gm_frost * (2.0 / (radius + PERIAPSIS_ALT_M) - 1.0 / a_t))
 	var start := sim.current_tick()
-	var total := _burn(-roundi(deorbit * 1e6), 0)
+	var total := 0
+	if _quiet:
+		_onto_descent(radius + PERIAPSIS_ALT_M, r_c)
+		total = roundi(deorbit * 1e6)  # the deorbit burn, taken as flown impulsively
+	else:
+		total = _burn(-roundi(deorbit * 1e6), 0)
 	# Coast down to the braking height.
 	while true:
 		var s: Array = _now()
@@ -282,10 +287,10 @@ var _result := {}
 ## Frost's surface. Run: godot --headless --path . -s tools/frost_run.gd -- --sweep
 func _sweep() -> void:
 	_quiet = true
-	var landing_profiles := [[0.1, 400.0], [0.2, 300.0], [0.3, 250.0], [0.4, 200.0], [0.5, 150.0], [0.6, 100.0]]
-	var climbs := [[10.0, 1000.0, 3.0], [20.0, 2000.0, 5.0], [40.0, 3000.0, 10.0], [60.0, 5000.0, 15.0]]
+	var landing_profiles := [[0.2, 300.0], [0.3, 250.0], [0.4, 200.0], [0.5, 150.0]]
+	var climbs := [[10.0, 1000.0, 3.0], [20.0, 2000.0, 5.0], [40.0, 3000.0, 10.0]]
 	print("thrust kN, n landing, best landing factor (profile, flown m/s, touchdown m/s), n take-off, best take-off factor (climb, flown m/s)")
-	for thrust_n: int in [5_000, 6_500, 8_000, 10_000, 13_000, 16_000, 20_000, 30_000]:
+	for thrust_n: int in [6_000, 8_000, 10_000, 12_000, 15_000, 20_000, 30_000, 45_000]:
 		var best_land := {}
 		var n_land := 0.0
 		for profile: Array in landing_profiles:
@@ -318,6 +323,25 @@ func _sweep() -> void:
 		print("%5.1f  %.2f  %s  %.2f  %s" % [thrust_n / 1000.0, n_land,
 			"none safe" if best_land.is_empty() else "%.3f (%s, %.0f, %.1f)" % [best_land["factor"], str(best_land["profile"]), best_land["flown"], best_land["speed"]],
 			n_up, "none" if best_up.is_empty() else "%.3f (%s, %.0f)" % [best_up["factor"], str(best_up["climb"]), best_up["flown"]]])
+
+
+## Puts the probe on the descent ellipse from the cluster's height, ten minutes short of its
+## periapsis, as the deorbit burn and the coast would have left it.
+func _onto_descent(periapsis_m: float, apoapsis_m: float) -> void:
+	var gm := int(gm_frost / 1000.0)
+	var a_mm := roundi((periapsis_m + apoapsis_m) / 2.0 * 1000.0)
+	var e := roundi((apoapsis_m - periapsis_m) / (apoapsis_m + periapsis_m) * OrbitMath.ONE)
+	var frame_orbit: Dictionary = _frame()["orbit"]
+	var orbit := OrbitMath.make_orbit(gm, a_mm, e, frame_orbit["p_q30"], frame_orbit["q_q30"], 0, sim.current_tick())
+	var period_ticks: float = orbit["period_subticks"] / float(OrbitMath.SUB_TICKS)
+	orbit["m0_angle"] = (OrbitMath.TURN - roundi(6000.0 / period_ticks * OrbitMath.TURN)) & OrbitMath.ANGLE_MASK
+	orbit["parent"] = keys["Frost"]
+	var probe := _probe()
+	probe["frame"] = 0
+	probe["orbit"] = orbit
+	probe["pos_mm"] = OrbitMath.position_at(orbit, sim.current_tick())
+	probe["vel_um_s"] = [0, 0, 0]
+	sim._ctx.index.clear()
 
 
 func _set_thrust(thrust_n: int) -> void:
@@ -367,6 +391,16 @@ func _flown_take_off() -> void:
 		var want_vz: float = _climb[0] if alt < _climb[1] else _climb[2]
 		var a_up := gm_frost / (r * r) - h * h / r + (want_vz - vz) / 2.0
 		total += _guided(a_up, _accel(), 1.0)
+	if _quiet:
+		# The circling burn at the top, worked out from the path rather than coasted to.
+		var now: Array = _now()
+		var r0: float = now[0].length()
+		var a_path: float = 1.0 / (2.0 / r0 - now[1].length_squared() / gm_frost)
+		var e_path := sqrt(maxf(0.0, 1.0 - now[0].cross(now[1]).length_squared() / (gm_frost * a_path)))
+		var top := a_path * (1.0 + e_path)
+		var circle_at_top := sqrt(gm_frost / top) - sqrt(gm_frost * (2.0 / top - 1.0 / a_path))
+		_result = { "flown": total / 1e6 + circle_at_top, "low_km": top / 1000.0 }
+		return
 	# Coast to the top, then circle there.
 	while true:
 		var s: Array = _now()
