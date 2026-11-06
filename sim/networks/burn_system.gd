@@ -140,6 +140,87 @@ func run(ctx: SimContext) -> void:
 			_try_join(ctx, id)
 
 
+## Coast (A33): a running burn, low flight and drift in a frame change every tick, so they are
+## stepped. A planned burn starts on its tick. A unit on an orbit coasts until it could reach a
+## sphere of influence, a frame's join distance or low flight, by CoastBounds.
+func horizon(ctx: SimContext) -> int:
+	var skip := NO_LIMIT
+	var now: int = ctx.state["tick"]
+	var units: Dictionary = ctx.state["units"]
+	for id: int in _sorted(units):
+		var unit: Dictionary = units[id]
+		if not unit["burn"].is_empty():
+			ctx.coast_cap = "burning"
+			return 0
+		if not unit["burns"].is_empty():
+			skip = mini(skip, int(unit["burns"][0]["tick"]) - now - 1)
+		if not unit["dock"].is_empty() or not unit["route"].is_empty() or not unit["transfer"].is_empty():
+			continue
+		if unit["low_flight"] != 0:
+			ctx.coast_cap = "low_flight"
+			return 0
+		if not unit["landed"].is_empty():
+			continue
+		if unit["orbit"].is_empty():
+			if unit["vel_um_s"] != [0, 0, 0]:
+				ctx.coast_cap = "drifting"
+				return 0
+			continue
+		skip = mini(skip, _orbit_horizon(ctx, unit))
+		if skip <= 0:
+			ctx.coast_cap = "near_a_boundary"
+			return 0
+	if skip <= 0:
+		ctx.coast_cap = "planned_burn"
+	return maxi(skip, 0)
+
+
+## The ticks a unit on an orbit can coast before it could need _cross_soi, _try_join or low flight.
+func _orbit_horizon(ctx: SimContext, unit: Dictionary) -> int:
+	var orbit: Dictionary = unit["orbit"]
+	if orbit.get("hyperbolic", false):
+		return 0
+	var bodies: Dictionary = ctx.state["bodies"]
+	var parent_id: int = orbit["parent"]
+	var parent: Dictionary = bodies[parent_id]
+	var periapsis := CoastBounds.periapsis_mm(orbit)
+	var apoapsis := apoapsis_mm(orbit)
+	if parent["gm"] > 0 and periapsis - int(parent["radius_mm"]) < LowFlight.ENTER_MM:
+		return 0
+	var speed := CoastBounds.orbit_max_um_s(parent["gm"], orbit)
+	var here: Array = unit["pos_mm"]
+	var skip := NO_LIMIT
+	var soi: int = parent.get("soi_mm", 0)
+	if soi > 0 and not parent["orbit"].is_empty() and apoapsis >= soi:
+		skip = mini(skip, CoastBounds.ticks_to_close(soi - IntMath.dist(here, [0, 0, 0]), speed))
+	for child_id: int in _sorted(bodies):
+		var child: Dictionary = bodies[child_id]
+		if child["orbit"].is_empty() or child["orbit"]["parent"] != parent_id or child["gm"] <= 0:
+			continue
+		var reach: int = child.get("soi_mm", 0)
+		skip = mini(skip, _approach_horizon(here, periapsis, apoapsis, speed, child["pos_mm"], child["orbit"],
+			parent["gm"], reach))
+	var frames: Dictionary = ctx.state["frames"]
+	for frame_id: int in _sorted(frames):
+		var frame: Dictionary = frames[frame_id]
+		if frame["orbit"]["parent"] != parent_id:
+			continue
+		var reach: int = frame["radius_mm"] + join_margin_mm(ctx, frame) + JOIN_SLACK_MM
+		skip = mini(skip, _approach_horizon(here, periapsis, apoapsis, speed, frame["pos_mm"], frame["orbit"],
+			parent["gm"], reach))
+	return skip
+
+
+## The ticks before a unit could come within reach of something on another orbit round the same
+## parent: never if their distance bands from the parent can't meet, else the gap over both speeds.
+static func _approach_horizon(here: Array, periapsis: int, apoapsis: int, speed: int, there: Array,
+		other: Dictionary, gm: int, reach: int) -> int:
+	if CoastBounds.periapsis_mm(other) - reach > apoapsis or apoapsis_mm(other) + reach < periapsis:
+		return NO_LIMIT
+	var gap := IntMath.dist([here[0] - there[0], here[1] - there[1], here[2] - there[2]], [0, 0, 0]) - reach
+	return CoastBounds.ticks_to_close(gap, speed + CoastBounds.orbit_max_um_s(gm, other))
+
+
 func apply_delta(ctx: SimContext, payload: Dictionary) -> void:
 	Units.remove_stock(ctx.state["units"][payload["unit"]]["inventory"], Travel.PROPELLANT, payload["grams"])
 	var sink: Dictionary = ctx.state["sinks"].get_or_add(Travel.SINK, {})

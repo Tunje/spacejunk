@@ -279,6 +279,39 @@ func _transfer_rate(ctx: SimContext, from: int, to: int) -> int:
 
 
 ## A docked unit takes its host's position, whenever the host moves.
+## Coast (A33): a route, docking or a cargo transfer moves every tick, so it is stepped. A flown
+## transfer waits for its arrival, and a waiting one for its departure.
+func horizon(ctx: SimContext) -> int:
+	var skip := NO_LIMIT
+	var now: int = ctx.state["tick"]
+	var units: Dictionary = ctx.state["units"]
+	for id: int in _sorted(units):
+		var unit: Dictionary = units[id]
+		var op: Dictionary = unit["op"]
+		if not unit["route"].is_empty():
+			ctx.coast_cap = "moving_in_frame"
+			return 0
+		match op["type"]:
+			TransferStep.OP_LOADING, TransferStep.OP_UNLOADING, DockStep.OP_DOCKING, UndockStep.OP_UNDOCKING:
+				ctx.coast_cap = "docking_or_cargo"
+				return 0
+			MoveStep.OP_WAITING:
+				skip = mini(skip, int(op["depart_tick"]) - now - 1)
+			MoveStep.OP_MOVING:
+				if int(op["start_tick"]) > now:
+					skip = mini(skip, int(op["start_tick"]) - now - 1)
+		if not unit["transfer"].is_empty():
+			skip = mini(skip, int(unit["transfer"]["arrive_tick"]) - now - 1)
+	if skip <= 0:
+		ctx.coast_cap = "departure_or_arrival"
+	return maxi(skip, 0)
+
+
+## Coast (A33): docked units are where their hosts are.
+func coast(ctx: SimContext, _ticks: int) -> void:
+	_follow_hosts(ctx)
+
+
 func _follow_hosts(ctx: SimContext) -> void:
 	var units: Dictionary = ctx.state["units"]
 	for id: int in _sorted(units):

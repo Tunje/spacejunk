@@ -77,6 +77,7 @@ static func last_error() -> String   # corrupt, version_mismatch, data_mismatch,
 func submit(command: Dictionary) -> int      # queues for the next tick, returns command ID
 func check(command: Dictionary) -> Dictionary  # side-effect-free validation
 func step(tick_count: int = 1) -> void
+func coast(max_ticks: int) -> Dictionary     # time warp: { ticks, capped_by }; see section 4
 func current_tick() -> int
 func view() -> Dictionary                    # read-only copy of state; see section 7
 func defs() -> Dictionary                    # read-only definitions in sim units
@@ -130,6 +131,16 @@ Each tick runs these phases in order.
 6. Apply deltas in ascending entity ID, including deposit depletion and job outputs. Update battery charge and heat.
 7. Detect and clear damage, faults and shutdowns, and set them in the state.
 8. Emit events and commit.
+
+**Coast (A33, [orbital_flight.md](orbital_flight.md) 11.22).** `coast(max_ticks)` is the time warp above batch speed. It advances between 1 and `max_ticks` ticks and returns `{ ticks, capped_by }`.
+- **Bit-identical to stepping.** After it, the state, `to_save`, `state_hash` and the events are exactly what `step(ticks)` gives.
+- **How it skips.** It steps a tick, then asks each system for its horizon: how many coming ticks nothing discrete can happen in, so that they can be summed in closed form. It skips those ticks and steps the next.
+- **It returns early:**
+  - just after any tick with events, so the client sees each event on its own tick and can drop the warp;
+  - when a system can't coast yet, after one stepped tick, with `capped_by` saying why.
+- **`capped_by` codes:** `command` (one is queued), `burning`, `low_flight`, `drifting`, `near_a_boundary` (a sphere, a frame's join distance or low flight is close), `planned_burn`, `transfer_leg`, `departure_or_arrival`, `landing_or_takeoff`, `moving_in_frame`, `docking_or_cargo`, `power`, `heat`, `tasks` and `jobs`. It is `""` when not capped.
+- **Strict mode** (tests) steps every tick, so the per-tick checks still run on every tick.
+- **Systems** take part through `SimSystem.horizon(ctx)` and `coast(ctx, ticks)`. A system without a closed form keeps the default horizon of 0, which steps.
 
 Rules:
 - Within a phase, order follows the phase's list, then ascending entity ID.

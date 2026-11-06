@@ -600,3 +600,12 @@ func _sorted(table: Dictionary) -> Array:
 	var keys: Array = table.keys()
 	keys.sort()
 	return keys
+
+
+## Coast (A33, idle only until C17): with no jobs at all, nothing here changes from tick to tick.
+## Any job steps the world, until C17 gives running jobs a closed form.
+func horizon(ctx: SimContext) -> int:
+	if ctx.state["jobs"].is_empty():
+		return NO_LIMIT
+	ctx.coast_cap = "jobs"
+	return 0
