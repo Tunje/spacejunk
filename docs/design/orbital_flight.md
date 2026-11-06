@@ -988,7 +988,10 @@ The kernel caps; the client drops.
   - JobSystem and TaskSystem can't be skipped while any job or task exists;
   - ConstructionSystem acts only on a job's delivery;
   - FitCopySystem, FittingSystem and UnitSystem act only on commands.
-- **C17** gives jobs, tasks, mining and cycles their closed forms. Until then a `move_to` (a task) and any job cap the world at batch speed.
+- **C17** gives jobs, tasks, mining and cycles their closed forms. Until then a `move_to` (a task) and any job cap the world at batch speed. C's review notes for it:
+  - **ConstructionSystem** stays at NO_LIMIT only while a build lasts no longer than the tick its job delivers. A build kept pending across ticks needs a horizon.
+  - **A move left after a cancel** (op `moving` with task 0) settles through CargoSystem's arrival horizon today. If C17 gives MoveStep transfers a closed form, that state needs its own horizon.
+- **`departed { target, arrive_tick }`** (A34) fires when a trip between places leaves on its window, so a warping client can drop there.
 
 **Proof:** `tests/sim/kernel/test_coast.gd` steps one copy and coasts another, then compares their saves byte for byte and their events one for one.
 - **The cases:**
