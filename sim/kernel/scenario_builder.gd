@@ -76,6 +76,24 @@ static func _place_bodies(ctx: SimContext, scenario: Dictionary, keys: Dictionar
 			if not ctx.state["frames"].has(keys.get(entry["frame"], 0)):
 				return "body %s is in an unknown frame" % entry["key"]
 			body["frame"] = keys[entry["frame"]]
+	for entry: Dictionary in scenario.get("frames", []):
+		var problem := _frame_fits(ctx, ctx.state["frames"][keys[entry["key"]]])
+		if problem != "":
+			return "frame %s %s" % [entry["key"], problem]
+	return ""
+
+
+## "" if a frame, with the least leave margin past its radius, stays inside its parent's sphere of
+## influence all round its orbit (orbital_flight.md 11.20). A frame has no gravity, so a unit
+## drifting in it must become an orbit again before it could pass the SOI.
+static func _frame_fits(ctx: SimContext, frame: Dictionary) -> String:
+	var parent: Dictionary = ctx.state["bodies"][frame["orbit"]["parent"]]
+	var soi: int = parent.get("soi_mm", 0)
+	if soi <= 0:
+		return ""
+	var reach := BurnSystem.apoapsis_mm(frame["orbit"]) + int(frame["radius_mm"]) 		+ 2 * BurnSystem.MIN_LEAVE_MARGIN_MM
+	if reach > soi:
+		return "reaches past the sphere of influence of %s" % parent["name"]
 	return ""
 
 

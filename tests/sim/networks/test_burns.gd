@@ -175,11 +175,11 @@ func test_the_thruster_is_a_load_while_burning() -> void:
 
 
 func test_a_burn_in_a_frame_drifts_in_a_straight_line() -> void:
-	sim.submit(_burn("Scout", 1, 2_000_000))
+	sim.submit(_burn("Scout", 1, 1_500_000))  # under LEAVE_SPEED_UM_S, so it stays in the frame
 	_until("burn_done", 5000)
 	var scout := _unit("Scout")
 	var vel: Array = scout["vel_um_s"]
-	assert_almost_eq(IntMath.dist(vel, [0, 0, 0]), 2_000_000, 2)
+	assert_almost_eq(IntMath.dist(vel, [0, 0, 0]), 1_500_000, 2)
 	var start: Array = scout["pos_mm"].duplicate()
 	sim.step(100)
 	for axis in 3:
