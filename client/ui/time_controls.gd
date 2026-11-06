@@ -97,23 +97,16 @@ func _ready() -> void:
 	warp_label.visible = false
 	warp_label.add_theme_color_override("font_outline_color", Color.BLACK)
 	warp_label.add_theme_constant_override("outline_size", 6)
-	# Floats in the overlay just under the bar, clear of the panel at the left.
-	_place_warp_label.call_deferred()
+	# A child the bar's container doesn't lay out: it floats just under the bar,
+	# clear of the panel at the left, and is freed with the bar.
+	warp_label.top_level = true
+	add_child(warp_label)
 	_through_jobs = CheckBox.new()
 	_through_jobs.text = "Warp past jobs"
 	_through_jobs.tooltip_text = "Above 8×, keep warping when a job finishes instead of dropping to 1×"
 	_through_jobs.focus_mode = Control.FOCUS_NONE
 	_through_jobs.toggled.connect(func(on: bool) -> void: bridge.warp_through_jobs = on)
 	row.add_child(_through_jobs)
-
-
-## The bar has a fixed height, so the readout is a sibling under it, starting
-## right of the inspection panel, over open sky.
-func _place_warp_label() -> void:
-	if get_parent() == null:
-		return
-	get_parent().add_child(warp_label)
-	warp_label.position = position + Vector2(WARP_LABEL_LEFT_PX, size.y + 6)
 
 
 func bind(new_bridge: SimBridge) -> void:
@@ -144,6 +137,7 @@ func _refresh() -> void:
 	_clock.text = WarpLogic.clock_text(floori(bridge.game_seconds()))
 	warp_label.visible = bridge.speed > WarpLogic.STEP_MAX and not bridge.paused
 	if warp_label.visible:
+		warp_label.global_position = global_position + Vector2(WARP_LABEL_LEFT_PX, size.y + 6)
 		var cap := bridge.shown_cap()
 		warp_label.text = "Warp %s%s" % [WarpLogic.achieved_text(bridge.achieved_speed),
 			"" if cap.is_empty() else ", held back: %s" % WarpLogic.cap_text(cap)]

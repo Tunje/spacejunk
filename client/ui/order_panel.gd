@@ -11,6 +11,12 @@ var local_view: LocalView
 var _modules: Dictionary = {}
 var _items: Dictionary = {}
 var _science: Dictionary = {}
+## Unload and Load move this much: a count for whole items (processors, parts), kilograms
+## for bulk cargo, or everything at 0.
+var amount: SpinBox
+## "Take command of <unit>", for a selected unit that isn't the one given orders.
+var take_command: Button
+var _amount_row: HBoxContainer
 var _orders: Array[Dictionary] = []
 var _buttons: Dictionary = {}
 ## An atomic order just pressed, shown as started until the next tick runs it.
@@ -38,6 +44,26 @@ func _ready() -> void:
 	_selection_label = _add_label(column)
 	_detail_label = _add_label(column)
 	_detail_label.modulate = ClientTheme.MID_GREY.lightened(0.3)
+	take_command = Button.new()
+	take_command.focus_mode = Control.FOCUS_NONE
+	take_command.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	take_command.visible = false
+	take_command.pressed.connect(func() -> void: local_view.command(local_view.selected_id))
+	column.add_child(take_command)
+	_amount_row = HBoxContainer.new()
+	_amount_row.visible = false
+	column.add_child(_amount_row)
+	var amount_label := _add_label(_amount_row)
+	amount_label.text = "Amount (0 = all)"
+	amount_label.tooltip_text = "How much Unload and Load move: whole items, or kilograms of bulk cargo"
+	amount_label.mouse_filter = Control.MOUSE_FILTER_PASS
+	amount_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	amount = SpinBox.new()
+	amount.min_value = 0
+	amount.max_value = 1_000_000
+	amount.value = 0
+	amount.value_changed.connect(func(_value: float) -> void: refresh())
+	_amount_row.add_child(amount)
 	_button_box = VBoxContainer.new()
 	_button_box.add_theme_constant_override("separation", 4)
 	column.add_child(_button_box)
@@ -74,6 +100,16 @@ func refresh() -> void:
 	_detail_label.text = _selection_detail(view)
 	_detail_label.visible = not _detail_label.text.is_empty()
 	_orders = OrderList.build(view, _modules, _items, commanded, local_view.selected_kind, local_view.selected_id, _science)
+	var moves := false
+	for order: Dictionary in _orders:
+		if ["unload_cargo", "load_cargo"].has(order["command"]["type"]):
+			moves = true
+			OrderList.set_amount(order["command"], int(amount.value), _items)
+	_amount_row.visible = moves
+	var other: bool = local_view.selected_kind == "unit" and local_view.selected_id != commanded 		and view["units"].has(local_view.selected_id)
+	take_command.visible = other
+	if other:
+		take_command.text = "Take command of %s" % view["units"][local_view.selected_id]["name"]
 	_sync_buttons()
 
 

@@ -2,8 +2,11 @@
 # Refuses to run during a GPU hold, because any Godot process can corrupt pipeline output.
 # -Quick skips tests/slow, the long shared runs, for use while working. Run the full suite before
 # reporting a task, and always before a merge: only it proves the whole chain.
+# -Playthrough runs only tests/playthrough, the client playing the new start through research
+# (D31), which the other modes skip. Run it before merging anything that touches the new
+# start's UI, its snapshots or the order and jobs panels.
 
-param([switch]$Quick)
+param([switch]$Quick, [switch]$Playthrough)
 
 $ErrorActionPreference = 'Stop'
 
@@ -33,7 +36,9 @@ $ErrorActionPreference = 'Stop'
 
 # GUT skips a test file it cannot parse and still reports success, so check for that here.
 $ErrorActionPreference = 'Continue'
-$config = if ($Quick) { ' -gconfig=res://.gutconfig.quick.json' } else { '' }
+# The full run lists every tests folder but tests/playthrough, and the smoke test at the top.
+$full = ' -gdir=res://tests/bot,res://tests/client,res://tests/sim,res://tests/slow,res://tests/tools -gtest=res://tests/test_smoke.gd'
+$config = if ($Playthrough) { ' -gdir=res://tests/playthrough' } elseif ($Quick) { ' -gconfig=res://.gutconfig.quick.json' } else { $full }
 # GUT's JUnit report gives each file's time, for the slow-file warning below.
 $junit = Join-Path ([System.IO.Path]::GetTempPath()) "newmanprobe-gut-$PID.xml"
 # Each run gets its own user:// folder. Godot puts user:// under %APPDATA%, and every
@@ -77,6 +82,11 @@ if ($scriptErrors -gt 0) {
     exit 4
 }
 $testFiles = @(Get-ChildItem (Join-Path $projectRoot 'tests') -Recurse -Filter 'test_*.gd')
+if ($Playthrough) {
+    $testFiles = @($testFiles | Where-Object { $_.Directory.Name -eq 'playthrough' })
+} else {
+    $testFiles = @($testFiles | Where-Object { $_.Directory.Name -ne 'playthrough' })
+}
 if ($Quick) {
     $testFiles = @($testFiles | Where-Object { $_.Directory.Name -ne 'slow' })
 }
