@@ -215,7 +215,7 @@ This replaces Part F of start_and_build section 4, and fixes what starts locked.
 
 1. **Prospect.** Survey Red Rock (10 points) and mine. Survey the other two rocks on the ore trips (+20), and take composition on each pass (+60). That's 90 points, and two pieces of evidence, from things the probe does anyway.
 2. **Seed factory and first station**, as in start_and_build section 4. The station gets a `research_lab_mk1` and a Basic Core. Fitting the lab is a natural fail-and-fix: the small station's power budget refuses it until a second solar panel or a battery is fitted.
-3. **Gravity field.** The probe flies one lap of its low orbit round the icy moon before it lands (+40). That's 130 points. A low orbit about a tenth of the radius up takes about 42 minutes at half Kerbin's density, and about 30 at Kerbin's. A lap at the cluster's 300 km would take about 7 hours. The probe's facilities keep running during the lap.
+3. **Gravity field.** The probe stays docked at the station and measures Frost's gravity field from inside the cluster, over one lap of the cluster's 300 km orbit (+40, C18). The lap is 245,692 ticks, about 6.8 game hours, played warped (C17). The facilities keep running during it. With 4 surveys and 3 compositions that's 140 points, and no landing is needed (new_start_chain.md Part D, C18b).
 4. **Prove Autonomous Navigation** at the lab (-80 points), with the station's Basic Core: era II needs tier 1.
 5. **Prototype and test the Assisted Core:** about 2× its 6 processors and its basic core, then a bench test. It is qualified.
 6. **Build and fit the Assisted Core in the drone**, then `set_cycle` and hand over.
@@ -223,6 +223,20 @@ This replaces Part F of start_and_build section 4, and fixes what starts locked.
 Goals 9 ("Prove a new tech") and 10 to 12 in start_and_build section 4.1 stay. Goal 9's trigger becomes `design_qualified` of `assisted_core`.
 
 The other two theories and the first idea are for after the handover. They give the expansion phase an aim: a `surface` sample from the moon for the solar farm, and composition data for the big refinery. The Assisted Core stays gated, because the owner's ruling says nothing is click-and-it's-yours (Lead, 2026-11-06).
+
+### 5.1 Design note: the first landing is for Photovoltaic Arrays (B23, approved by the Lead 2026-11-06)
+
+Since C18b, the research route never lands. The landing and take-off come back with the first theory that needs a `surface` sample. **Photovoltaic Arrays is already that theory.** Its only evidence is 1 `surface`, so no new theory is needed. This note proposes making it the reason for the first landing, and checks that the figures work.
+
+- **Points.** Autonomous Navigation leaves 60 of the 140 points. Photovoltaic Arrays costs 120.
+  - A landing on Frost pays 50 for its surface sample. White Rock's composition, the one rock C18b doesn't take, pays 20. That's 130, enough with 10 to spare.
+  - Without the landing, the cluster can't pay for it soon. Second compositions pay 10 each, second surveys 5, and a second 6.8 h gravity lap 20. Repeats can't reach 120 in reasonable time, so the landing is the natural route, as intended.
+- **Large-Scale Refining** (100 points) already has its evidence from the three compositions. So after the handover the player has a real choice: save for the big refinery from the cluster, or land for the solar farm. Doing both needs the belt or another body. That's the push outwards (section 1.2).
+- **Propellant.** The landing is the new start's propellant crunch. Following the goal hint (top up from White Rock's ice, empty the goods hold, leave straight from the station), the probe docks back with about 226 m/s spare. Without the ice it strands (new_start_chain.md, the optional landing in Part D). The land check's `cannot_return` warning (A36, A39) prices the take-off plus the leg back to the cluster, so it catches the no-ice case.
+- **What the hint says.** The Photovoltaic Arrays goal, or the research panel when that theory is selected, carries the landing advice that D31's research hint carries today: fill the tank from White Rock's ice first, empty the goods hold, leave straight from the station, and heed the land check's warning.
+- **Later, the drone.** Once the Assisted Core flies the drone, a lander drone could take surface samples instead of the probe. That's a reason to fit landing legs to a small craft, and it stays optional.
+
+Nothing here changes data: the theory, its 120 points and its evidence are already in `data/theories.json`. The proposal is about the route, the goal and the hint. The Lead approved it on 2026-11-06. D adds the landing advice to the PV goal or research panel after D35.
 
 **Rough cost** of research before the handover:
 

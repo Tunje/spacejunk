@@ -1016,7 +1016,9 @@ func _shape_scenario(scenario: Variant) -> void:
 		return
 	if scenario.has("research"):
 		var research: Variant = scenario["research"]
-		if not research is Dictionary or not _has_fields(where + ".research", research, ["theories"]) 				or not research["theories"] is Array 				or not research["theories"].all(func(v: Variant) -> bool: return v is String):
+		if not research is Dictionary or not _has_fields(where + ".research", research, ["theories"]) \
+				or not research["theories"] is Array \
+				or not research["theories"].all(func(v: Variant) -> bool: return v is String):
 			_err("bad_scenario", where, "research is { theories: [IDs] }")
 	if scenario["schema_version"] != SCHEMA_VERSION:
 		_err("bad_schema_version", where, str(scenario["schema_version"]))
@@ -1480,7 +1482,8 @@ func _cross_research() -> void:
 	if _bench_test is Dictionary:
 		_check_research_inputs("theories.json:bench_test", _bench_test["inputs"])
 		for id: String in _sorted(_modules):
-			if _modules[id]["capabilities"].get("facility", {}).get("type") == "lab" 					and float(_bench_test["power_kw"]) > float(_modules[id]["power_kw"]):
+			if _modules[id]["capabilities"].get("facility", {}).get("type") == "lab" \
+					and float(_bench_test["power_kw"]) > float(_modules[id]["power_kw"]):
 				_err("recipe_over_power", "theories.json:bench_test", "above the rating of %s" % id)
 	for scenario: Dictionary in _scenarios:
 		for id: String in scenario.get("research", {}).get("theories", []):
