@@ -20,8 +20,7 @@ func _part(id: int, def: String, at: String, children: Array = []) -> Dictionary
 		"fault": "", "draw_w": 0, "priority": 0, "children": children }
 
 
-## The starter ship's middle: the hull (a model), its core (no model in data), the
-## tank (named, but not generated yet) and the thruster under it (a model).
+## The starter ship's middle: the hull, tank and thruster (models) and its core (no model in data).
 func _build() -> void:
 	var root := _part(1, "starter_hull", "", [
 		_part(2, "basic_core", "core"),
@@ -33,7 +32,7 @@ func _build() -> void:
 
 
 func craft_def(id: int) -> String:
-	return { 1: "starter_hull", 4: "chemical_thruster_mk1" }[id]
+	return { 1: "starter_hull", 3: "propellant_tank_mk1", 4: "chemical_thruster_mk1" }[id]
 
 
 ## Every generated model, as placed, sits on its part's collision box: a model off
@@ -79,7 +78,7 @@ func test_model_path_needs_a_name_and_a_file() -> void:
 
 func test_a_part_with_a_model_shows_it_and_one_without_keeps_its_placeholder() -> void:
 	_build()
-	for id: int in [1, 4]:
+	for id: int in [1, 3, 4]:
 		var shown: Node3D = craft._meshes[id]
 		assert_false(shown is MeshInstance3D and (shown as MeshInstance3D).mesh is PrimitiveMesh,
 			"part %d is its model, not a block" % id)
@@ -87,7 +86,7 @@ func test_a_part_with_a_model_shows_it_and_one_without_keeps_its_placeholder() -
 		assert_eq(shown.position, CraftNode.MODEL_SHIFTS.get(modules[craft_def(id)]["visual"]["model"], Vector3.ZERO),
 			"on the part's data origin")
 		assert_true(_metallic_ok(shown), "through ModelLook")
-	for id: int in [2, 3]:
+	for id: int in [2]:
 		var block: MeshInstance3D = craft._meshes[id]
 		assert_true(block.mesh is PrimitiveMesh, "part %d keeps its placeholder" % id)
 		assert_eq(block.material_override, craft._materials[id])
