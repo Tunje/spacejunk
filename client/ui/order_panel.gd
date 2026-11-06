@@ -11,6 +11,12 @@ var local_view: LocalView
 var _modules: Dictionary = {}
 var _items: Dictionary = {}
 var _science: Dictionary = {}
+## "Measure everything here" (D32): the measurements still to send, each when the unit
+## it's for is idle again. Any other order the player gives ends it.
+var measuring: Array[Dictionary] = []
+## The tick the last one was sent: it starts on the next tick, so idle before then means
+## not started yet, not done.
+var _measure_sent_tick := -10
 ## Unload and Load move this much: a count for whole items (processors, parts), kilograms
 ## for bulk cargo, or everything at 0.
 var amount: SpinBox
@@ -84,6 +90,7 @@ func bind(new_bridge: SimBridge, view: LocalView) -> void:
 	_reread_defs()
 	bridge.defs_changed.connect(_reread_defs)
 	bridge.view_updated.connect(refresh)
+	bridge.view_updated.connect(_continue_measuring)
 	local_view.selection_changed.connect(refresh)
 	refresh()
 
@@ -150,7 +157,7 @@ func _sync_buttons() -> void:
 			shown.disabled = true
 			shown.tooltip_text = ""
 			continue
-		var check: Dictionary = bridge.check(order["command"])
+		var check: Dictionary = _check_order(order)
 		shown.text = order["label"]
 		shown.disabled = not check["ok"]
 		shown.tooltip_text = "" if check["ok"] else _refusal_text(check)
@@ -158,6 +165,38 @@ func _sync_buttons() -> void:
 			why = shown.tooltip_text
 	_why_label.text = why
 	_why_label.visible = not why.is_empty()
+
+
+## Sim.check, or for Measure everything, the first of its measurements the Sim takes.
+func _check_order(order: Dictionary) -> Dictionary:
+	if order["command"]["type"] != OrderList.MEASURE_ALL:
+		return bridge.check(order["command"])
+	var first := {}
+	for command: Dictionary in OrderList.measure_everything(bridge.current_view, _science, order["command"]["unit"],
+			order["command"]["args"]["target"]):
+		var check: Dictionary = bridge.check(command)
+		if check["ok"]:
+			return check
+		if first.is_empty():
+			first = check
+	return first if not first.is_empty() else { "ok": false, "reason": "invalid_target", "detail": {} }
+
+
+## Sends the next measurement once the unit is idle again, skipping any the Sim won't take.
+func _continue_measuring() -> void:
+	if measuring.is_empty():
+		return
+	var unit: Dictionary = bridge.current_view["units"].get(measuring[0]["unit"], {})
+	if bridge.current_view["tick"] < _measure_sent_tick + 2:
+		return
+	if unit.is_empty() or unit["op"]["type"] != "idle" or int(unit.get("task", 0)) != 0:
+		return
+	while not measuring.is_empty():
+		var command: Dictionary = measuring.pop_front()
+		if bridge.check(command)["ok"]:
+			bridge.submit(command)
+			_measure_sent_tick = bridge.current_view["tick"]
+			return
 
 
 func _refusal_text(check: Dictionary) -> String:
@@ -190,6 +229,12 @@ func _show_running(button: Button, running: bool) -> void:
 func _issue(key: String) -> void:
 	for order: Dictionary in _orders:
 		if order["key"] == key:
+			measuring.clear()
+			if order["command"]["type"] == OrderList.MEASURE_ALL:
+				measuring = OrderList.measure_everything(bridge.current_view, _science, order["command"]["unit"],
+					order["command"]["args"]["target"])
+				_continue_measuring()
+				return
 			bridge.submit(order["command"])
 			order_issued.emit(order["command"])
 			if OrderList.ATOMIC_OPS.has(order["command"]["type"]):
