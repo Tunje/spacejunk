@@ -753,8 +753,8 @@
       ],
       "collision": {
         "shape": "box",
-        "center_mm": [0, -1250, 800],
-        "size_mm": [800, 3100, 1600]
+        "center_mm": [0, -1213, 800],
+        "size_mm": [800, 3174, 1600]
       },
       "visual": {
         "model": "landing_legs_mk1",
@@ -1188,7 +1188,7 @@
         "size_mm": [2000, 3600, 2000]
       },
       "visual": {
-        "model": null,
+        "model": "propellant_tank_mk2",
         "tint": "#e8e4d8"
       }
     },
@@ -1674,7 +1674,7 @@
         "size_mm": [1000, 1600, 1000]
       },
       "visual": {
-        "model": null,
+        "model": "small_hull",
         "tint": "#e8e4d8"
       }
     },
