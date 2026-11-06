@@ -152,6 +152,8 @@ func test_faults_take_lowest_priority_and_highest_id_first() -> void:
 	_set_reject(5000)
 	_set_heat(LIMIT_J)
 	_run_op(LASER)
+	sim._ctx.defs = sim._ctx.defs.duplicate(true)
+	sim._ctx.defs["modules"]["lidar_mk1"]["capabilities"]["facility"] = { "type": "fabricator", "work_per_tick": 100 }
 	state["jobs"][40] = JobFixture.record(state, LIDAR, "wiring", "running")
 	sim.step()
 	var faulted: Array = _events_of("fault").map(func(event: Dictionary) -> int:

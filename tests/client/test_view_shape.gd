@@ -32,7 +32,7 @@ const BODY_FIELDS: Array[String] = [
 const FRAME_FIELDS: Array[String] = ["name", "radius_mm", "orbit", "pos_mm", "world_mm"]
 const DEPOSIT_FIELDS: Array[String] = ["body", "item", "remaining_g", "hardness"]
 const JOB_FIELDS: Array[String] = [
-	"unit", "facility", "recipe", "count_left", "status", "reason", "start_tick", "end_tick", "queue_pos",
+	"unit", "facility", "recipe", "count_left", "status", "reason", "start_tick", "queue_pos", "work_left", "work", "work_per_tick",
 ]
 
 

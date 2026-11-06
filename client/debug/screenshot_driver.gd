@@ -10,6 +10,7 @@ class_name ScreenshotDriver extends Node
 ##   --last=<order key>              pressed --last-delay frames after --then
 ##   --cycle=1                       fits a tier 2 core and starts a short cycle at once
 ##   --jobs=<recipe id>[,<id>...]    opens the jobs screen and starts or queues each recipe
+##   --jobs-run=<seconds>            then runs about that many game seconds, to show a run part done
 ##   --fly=<m/s>[,<normal>,<radial>]  opens flight on the commanded craft with that burn typed in
 ##   --fly-at=peri|apo|<seconds>     places it at an apsis or so many seconds ahead
 ##   --fly-delay=<frames>            waits first, such as for an undock to finish
@@ -285,6 +286,8 @@ func _open_jobs() -> void:
 					screen.choose_facility(entry)
 					screen.start(recipe)
 	ScreenshotDriver._step(main.bridge)
+	for i in roundi(float(parsed.get("jobs-run", "0")) / (RUN_STEP_S * SimBridge.SPEEDS[-1])):
+		ScreenshotDriver._step(main.bridge)
 	main.bridge.set_paused(true)
 	screen.refresh()
 

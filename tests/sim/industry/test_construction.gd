@@ -10,6 +10,8 @@ const FABRICATOR := 14
 const SHIP := 23
 const HULL := 24
 const RUN_TICKS := 3
+## A full-size facility's work_per_tick, so a recipe of RUN_TICKS * FULL_RATE work takes RUN_TICKS.
+const FULL_RATE := 100
 const CRAFT_G := 120000
 const STATION_ORE_G := 50000000
 
@@ -25,7 +27,7 @@ func before_each() -> void:
 	sim._ctx.defs = sim._ctx.defs.duplicate(true)
 	defs = sim._ctx.defs
 	for recipe: String in ["small_craft", "ore_storage_mk1", "heat_radiator_mk1", "assisted_core"]:
-		defs["recipes"][recipe]["ticks"] = RUN_TICKS
+		defs["recipes"][recipe]["work"] = RUN_TICKS * FULL_RATE
 
 
 ## Puts a recipe's inputs for `runs` runs in the station, counted as starting matter.
@@ -195,7 +197,7 @@ func test_with_no_free_port_the_run_waits_with_its_inputs_held() -> void:
 	var shown: Dictionary = sim.view()["jobs"][job]
 	assert_eq(shown["status"], "paused")
 	assert_eq(shown["reason"], "no_free_port")
-	assert_eq(shown["end_tick"], 0)
+	assert_eq(shown["work_left"], FULL_RATE, "held with its last tick of work still to do")
 	assert_eq(sim.ledger()["matter"]["jobs_g"], CRAFT_G)
 	assert_eq(state["jobs"][job]["since_tick"], RUN_TICKS)
 	var events := sim.take_events()
@@ -239,7 +241,7 @@ func test_cancelling_a_claimed_port_releases_it() -> void:
 	var job: int = sim.view()["jobs"].keys()[0]
 	state["parts"][FABRICATOR]["shed"] = true
 	state["parts"][FABRICATOR]["shed_until_tick"] = 1000
-	state["jobs"][job]["remaining_tick"] = 1
+	state["jobs"][job]["work_left"] = FULL_RATE
 	sim.step()
 	assert_eq(state["jobs"][job]["port"], FREE_PORT, "claimed, but the facility has no power")
 	sim.submit({ "type": "cancel_job", "unit": STATION, "args": { "job": job } })
@@ -254,7 +256,7 @@ func test_a_build_shed_on_its_last_tick_finishes_when_power_returns() -> void:
 	var job: int = sim.view()["jobs"].keys()[0]
 	state["parts"][FABRICATOR]["shed"] = true
 	state["parts"][FABRICATOR]["shed_until_tick"] = sim.current_tick() + 3
-	state["jobs"][job]["remaining_tick"] = 1
+	state["jobs"][job]["work_left"] = FULL_RATE
 	_step_balanced(5)
 	assert_true(_types(sim.take_events()).has("unit_created"))
 
