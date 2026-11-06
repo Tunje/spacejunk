@@ -41,14 +41,16 @@ func _small_world() -> int:
 				"deposits": [], "gm": GM_MOON, "orbit": { "parent": "planet", "a_mm": 5_000_000_000 },
 				"planet": { "seed": 7, "height_range_m": 500 } },
 		],
-		"frames": [],
+		"frames": [{ "key": "ring", "name": "Ring", "radius_mm": 1_000_000,
+			"orbit": { "parent": "planet", "a_mm": ORBIT_MM } }],
 		"units": [],
 	}, {}), "")
 	sim._strict = true
 	state = sim._state
 	keys = {}
-	for id: int in state["bodies"]:
-		keys[state["bodies"][id]["name"]] = id
+	for table: String in ["bodies", "frames"]:
+		for id: int in state[table]:
+			keys[state[table][id]["name"]] = id
 	var ship := Units.create(sim._ctx, "starter_ship", "Ship", [0, 0, 0])
 	var orbit := OrbitMath.make_orbit(GM_PLANET, ORBIT_MM, 0, [0, 0, ONE], [ONE, 0, 0], 0, 0)
 	orbit["parent"] = keys["Planet"]
@@ -57,8 +59,12 @@ func _small_world() -> int:
 	unit["orbit"] = orbit
 	unit["pos_mm"] = OrbitMath.position_at(orbit, 0)
 	for part: int in Units.sorted_part_ids(state, ship):
-		if Units.module_of(state, sim._ctx.defs, part)["capabilities"].has("ai_core"):
+		var capabilities: Dictionary = Units.module_of(state, sim._ctx.defs, part)["capabilities"]
+		if capabilities.has("ai_core"):
 			unit["core"] = part
+		if capabilities.has("battery"):
+			# Charged, as a scenario's units start, so the core runs through the planet's shadow.
+			state["parts"][part]["stored_j"] = capabilities["battery"]["capacity_j"]
 	sim._ctx.index.clear()
 	state["matter_start_g"] = sim.ledger()["matter"]["total_g"]
 	return ship
@@ -168,6 +174,50 @@ func test_a_change_of_orbit_ends_a_gravity_field_unpaid() -> void:
 	assert_eq(ended.get("data", {}).get("reason"), "orbit_changed")
 	assert_eq(state["science"]["paid"], {})
 	assert_eq(state["science"]["points"], 0)
+
+
+## C18: a unit in a frame whose orbit is round the body measures over one of the frame's laps.
+func _into_the_ring(ship: int) -> void:
+	var unit: Dictionary = state["units"][ship]
+	unit["orbit"] = {}
+	unit["frame"] = keys["Ring"]
+	unit["pos_mm"] = [100_000, 0, 0]
+	sim._ctx.index.clear()
+
+
+func test_a_gravity_field_is_taken_from_a_frame_round_the_body() -> void:
+	var ship := _small_world()
+	_into_the_ring(ship)
+	var ring: Dictionary = state["frames"][keys["Ring"]]["orbit"]
+	var period: int = (ring["period_subticks"] + OrbitMath.SUB_TICKS - 1) / OrbitMath.SUB_TICKS
+	assert_eq(sim.check({ "type": "measure", "unit": ship, "args": { "target": keys["Moon"], "kind": "gravity_field" } })["reason"],
+		"out_of_range", "the ring orbits the planet, not the moon")
+	var start := sim.current_tick()
+	assert_eq(_order(ship, "measure", { "target": keys["Planet"], "kind": "gravity_field" })["type"], "task_finished")
+	assert_eq(sim.current_tick() - start, period + 1, "one lap of the frame, then the task ends on the next tick")
+	assert_eq(state["science"]["paid"], { "gravity_field:%d" % keys["Planet"]: 1 })
+	assert_eq(state["science"]["points"], 60)
+
+
+func test_leaving_the_frame_ends_a_gravity_field_unpaid() -> void:
+	var ship := _small_world()
+	_into_the_ring(ship)
+	sim.submit({ "type": "measure", "unit": ship, "args": { "target": keys["Planet"], "kind": "gravity_field" } })
+	sim.step(50)
+	var unit: Dictionary = state["units"][ship]
+	unit["frame"] = 0
+	unit["orbit"] = OrbitMath.make_orbit(GM_PLANET, ORBIT_MM, 0, [0, 0, ONE], [ONE, 0, 0], 0, 0)
+	unit["orbit"]["parent"] = keys["Planet"]
+	unit["pos_mm"] = OrbitMath.position_at(unit["orbit"], sim.current_tick())
+	sim._ctx.index.clear()
+	var ended := {}
+	for i in 5:
+		sim.step()
+		for event in sim.take_events():
+			if event["type"] == "task_cancelled":
+				ended = event
+	assert_eq(ended.get("data", {}).get("reason"), "orbit_changed")
+	assert_eq(state["science"]["paid"], {})
 
 
 func test_a_surface_sample_is_taken_landed() -> void:
