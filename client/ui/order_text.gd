@@ -213,6 +213,10 @@ static func event(entry: Dictionary, unit_name: String, items: Dictionary, bodie
 			return "%s drifted out of its frame onto an orbit" % unit_name
 		"frame_joined":
 			return "%s joined a frame" % unit_name
+		"departed":
+			var seconds := float(int(data["arrive_tick"]) - int(entry.get("tick", data["arrive_tick"]))) / Sim.TICKS_PER_SECOND
+			var where: String = bodies.get(data["target"], {}).get("name", "")
+			return "%s departed%s, arriving in %s" % [unit_name, "" if where.is_empty() else " for %s" % where, duration(seconds)]
 		"transfer_done":
 			var moved: String = items.get(data["item"], {}).get("name", data["item"])
 			return "%s: moved %s of %s" % [unit_name, tonnes(data["grams"]), moved]
