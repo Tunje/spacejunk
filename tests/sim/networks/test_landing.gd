@@ -343,7 +343,9 @@ func test_the_land_check_warns_when_the_ship_cannot_get_back_up() -> void:
 	assert_gt(detail["return_propellant_g"], 0)
 	assert_eq(detail["cannot_return"], have - detail["propellant_g"] < detail["return_propellant_g"])
 
-	# The same figure a take_off plans once down, at that mass, to just clear of low flight.
+	# With no frame round the planet there is nothing to fly back to, so the price is the take_off a
+	# landed ship plans at that mass to the lowest orbit it may take off to (A39).
+	assert_eq(detail["return_target"], 0)
 	var copy := Sim.from_save(sim.to_save())
 	copy._ctx.defs = sim._ctx.defs
 	var ship: Dictionary = copy._state["units"][keys["Ship"]]
@@ -351,7 +353,7 @@ func test_the_land_check_warns_when_the_ship_cannot_get_back_up() -> void:
 	LandingSystem._set_down(copy._ctx, keys["Ship"], keys["Planet"], 4242)
 	copy._ctx.index.clear()
 	# The take_off's own plan, since the check would refuse it here for want of propellant.
-	var up := LandingSystem._plan(copy._ctx, keys["Ship"], "take_off", { "altitude_mm": LowFlight.ENTER_MM })
+	var up := LandingSystem._plan(copy._ctx, keys["Ship"], "take_off", { "altitude_mm": LowFlight.LEAVE_MM })
 	assert_eq(up.get("cost_g", -1), detail["return_propellant_g"], str(up))
 
 	# Plenty: no warning. Only enough to get down: warned, and still allowed.
@@ -366,3 +368,19 @@ func test_the_land_check_warns_when_the_ship_cannot_get_back_up() -> void:
 	assert_true(short["ok"], "a warning, not a refusal: %s" % str(short))
 	assert_true(short["detail"]["cannot_return"], str(short["detail"]))
 	assert_lt(inventory["propellant"] - short["detail"]["propellant_g"], short["detail"]["return_propellant_g"])
+
+
+## A39: a take_off below LowFlight.LEAVE_MM would make an orbit that drops straight into low flight
+## and stays there, so it is refused; at LEAVE_MM it is quoted, and the ship stays on its orbit.
+func test_take_off_must_clear_the_low_flight_band() -> void:
+	_strong_thruster()
+	LandingSystem._set_down(sim._ctx, keys["Ship"], keys["Planet"], 4242)
+	sim._ctx.index.clear()
+	for altitude: int in [LowFlight.ENTER_MM, LowFlight.LEAVE_MM - 1]:
+		var low := sim.check({ "type": "take_off", "unit": keys["Ship"], "args": { "altitude_mm": altitude } })
+		assert_eq(low.get("reason", ""), "invalid_target", "refused at %d mm" % altitude)
+	var at_leave := { "type": "take_off", "unit": keys["Ship"], "args": { "altitude_mm": LowFlight.LEAVE_MM } }
+	assert_true(sim.check(at_leave)["ok"], str(sim.check(at_leave)))
+	# The orbit it would reach is clear of low flight all the way round.
+	var orbit := LandingSystem.lift_orbit(sim._ctx, keys["Planet"], 4242, LowFlight.LEAVE_MM, 0)
+	assert_gte(CoastBounds.periapsis_mm(orbit) - RADIUS_MM, LowFlight.ENTER_MM)
