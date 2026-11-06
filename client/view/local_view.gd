@@ -333,7 +333,8 @@ func _is_crowded(unit: Dictionary, id: int, view: Dictionary) -> bool:
 		return false
 	for other: int in view["units"]:
 		var neighbour: Dictionary = view["units"][other]
-		if other != id and neighbour["kind"] != "station" and neighbour["dock"].is_empty() 				and WorldPosition.same_place(unit, neighbour):
+		if other != id and neighbour["kind"] != "station" and neighbour["dock"].is_empty() \
+				and WorldPosition.same_place(unit, neighbour):
 			if IntMath.dist(unit["pos_mm"], neighbour["pos_mm"]) < CROWD_MM:
 				return true
 	return false
