@@ -276,3 +276,19 @@ func test_real_sim_check_gives_the_same_detail_keys_as_the_stub() -> void:
 	var real_result := real.check(FittingLogic.detach_command(unit_id, state["units"][unit_id]["parts"]["children"][0]["id"], from_id))
 	for key: String in stub_result["detail"]:
 		assert_true(real_result["detail"].has(key), key)
+
+
+## D34: a station fits parts from a ship docked at it, not only a ship from its host.
+func test_a_station_reaches_the_stock_of_a_ship_docked_at_it() -> void:
+	var modules: Dictionary = bridge.defs()["modules"]
+	var view_now: Dictionary = bridge.current_view.duplicate(true)
+	view_now["units"][ship]["dock"] = { "target_unit": station }
+	view_now["units"][station]["dock"] = {}
+	assert_eq(FittingLogic.docked_with(view_now, station), [ship] as Array[int], "the ship holds the dock")
+	assert_eq(FittingLogic.docked_with(view_now, ship), [station] as Array[int])
+	var item: String = modules.keys()[0]
+	view_now["units"][ship]["inventory"][item] = modules[item]["mass_g"]
+	var from_ship := FittingLogic.stock(view_now, station, modules).filter(func(entry: Dictionary) -> bool:
+		return entry["from"] == ship)
+	assert_eq(from_ship.size(), 1, "the ship's part is on offer to the station")
+	assert_eq(from_ship[0]["item"], item)

@@ -27,6 +27,7 @@ class_name ScreenshotDriver extends Node
 ##   --descent-demo=<m/s>,<seconds>  (reference) a light 250 km world on the real Sim: the probe, with
 ##                                   legs, lifts off straight up at that speed and flies that long
 ##   --snapshot=<res:// save>        (real Sim) loads that save first, such as a bot stage's
+##   --prove=<theory>                (real Sim) marks it proven and its designs prototype, as a lab test would
 ##   --run=<seconds>                 (real Sim) steps the game that long first, such as out of a shadow
 ##   --set-down=<body name>,<cell>   (real Sim) puts the commanded craft down on that hex as a landing
 ##                                   ends, for a landed shot where it can't yet fly down
@@ -88,6 +89,12 @@ func _run() -> void:
 		if loaded != null:
 			main.bridge.start(loaded)
 			main.local_view.rebuild()
+	if parsed.has("prove"):
+		var research: Dictionary = main.bridge.sim._state["research"]
+		research["theories"][parsed["prove"]] = main.bridge.current_view["tick"]
+		for design: String in main.bridge.defs()["theories"][parsed["prove"]]["unlocks"]:
+			research["designs"][design] = "prototype"
+		main.bridge.start(main.bridge.sim)
 	if parsed.has("run"):
 		(main.bridge.sim as Sim).step(roundi(float(parsed["run"]) * Sim.TICKS_PER_SECOND))
 		main.bridge.start(main.bridge.sim)
@@ -149,6 +156,10 @@ func _run() -> void:
 		screen.open_picker(recipe)
 	if parsed.has("research"):
 		main.toggle_research()
+		if parsed.has("research-designs"):
+			await get_tree().process_frame
+			await get_tree().process_frame
+			main.research_screen.scroll_to_designs()
 		if parsed.has("research-ideas"):
 			var spec: PackedStringArray = parsed["research-ideas"].split(":")
 			main.research_screen.choose_base(spec[0])
