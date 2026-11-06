@@ -69,9 +69,10 @@ func test_a_scan_takes_its_data_time_and_reveals_the_deposit() -> void:
 
 	sim.step()
 	var events := sim.take_events()
-	assert_eq(_types(events), ["deposit_found", "scan_finished"])
+	assert_eq(_types(events), ["deposit_found", "scan_finished", "science_gained"])
 	assert_eq(events[0]["data"], { "deposit": DEPOSIT, "item": "hematite", "grams": 200000000 })
 	assert_eq(events[1]["data"], { "target": ROCK, "deposits": [DEPOSIT] })
+	assert_eq(events[2]["data"], { "kind": "survey", "target": ROCK, "key": "survey:%d" % ROCK, "points": 10 })
 	var view := sim.view()
 	assert_true(view["bodies"][ROCK]["scanned"])
 	assert_eq(view["deposits"][DEPOSIT], {
@@ -99,8 +100,9 @@ func test_scanning_again_finds_nothing_new() -> void:
 	sim.submit(_scan())
 	sim.step(SCAN_TICKS)
 	var events := sim.take_events()
-	assert_eq(_types(events), ["task_started", "scan_finished"])
+	assert_eq(_types(events), ["task_started", "scan_finished", "science_gained"])
 	assert_eq(events[1]["data"]["deposits"], [])
+	assert_eq(events[2]["data"]["points"], 5, "a second survey of the same rock pays half")
 
 
 func test_a_scan_changes_no_matter() -> void:

@@ -1,7 +1,8 @@
 class_name ScanStep
 extends TaskStep
-## The `scan` order. A finished scan marks the body scanned and reveals its deposits. A scan has no
-## partial result, so an interrupted one starts again from nothing.
+## The `scan` order. A finished scan marks the body scanned, reveals its deposits and pays survey
+## points (research.md section 1). A scan has no partial result, so an interrupted one starts again
+## from nothing.
 
 const OP_SCANNING := "scanning"
 const CAPABILITY := "scan"
@@ -63,3 +64,4 @@ func _reveal(ctx: SimContext, unit_id: int, body_id: int) -> void:
 			"deposit": id, "item": deposit["item"], "grams": deposit["remaining_g"],
 		})
 	ctx.emit_event("scan_finished", unit_id, { "target": body_id, "deposits": found })
+	Science.pay(ctx, unit_id, Science.SURVEY, body_id)

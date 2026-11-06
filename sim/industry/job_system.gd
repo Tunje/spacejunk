@@ -8,6 +8,11 @@ extends SimSystem
 ## Work left over on the last tick is lost. A run that builds a unit claims a port only on its last
 ## tick, so a long build never shuts other craft out.
 ##
+## Lab jobs follow research's rules (ResearchRules): a recipe may need a proven theory or a qualified
+## design to start, a test needs its evidence and science points to run, and a finished run may
+## prove a theory or qualify a design. A run holds its points as it holds its inputs. The player's
+## design_variant command lives here too, since it makes recipes for these jobs.
+##
 ## A facility holds an ordered queue of jobs. The job at queue_pos 0 is active and has the states
 ## above. The rest are queued at 1..n, hold nothing, and wait their turn. When the active job ends,
 ## the next one becomes active straight away and can start its first run in the next phase 4.
@@ -38,14 +43,21 @@ const REASON_QUEUE_FULL := "queue_full"
 const REASON_JOB_BUSY := "job_busy"
 const VIEW_FIELDS: Array[String] = [
 	"unit", "facility", "recipe", "count_left", "status", "reason", "start_tick", "queue_pos", "work_left",
+	"points_held",
 ]
 
 
 func commands() -> PackedStringArray:
-	return PackedStringArray([START, CANCEL, QUEUE, MOVE])
+	return PackedStringArray([START, CANCEL, QUEUE, MOVE, ResearchRules.DESIGN_VARIANT])
+
+
+func unitless_commands() -> PackedStringArray:
+	return PackedStringArray([ResearchRules.DESIGN_VARIANT])
 
 
 func validate(ctx: SimContext, command: Dictionary) -> Dictionary:
+	if command["type"] == ResearchRules.DESIGN_VARIANT:
+		return ResearchRules.validate_variant(ctx, command)
 	if command["type"] == START or command["type"] == QUEUE:
 		return _validate_start(ctx, command)
 	var job_id: Variant = command["args"].get("job")
@@ -68,6 +80,8 @@ func apply(ctx: SimContext, command: Dictionary) -> void:
 			_create(ctx, command)
 		MOVE:
 			_move(ctx, ctx.state["jobs"][command["args"]["job"]], command["args"]["position"])
+		ResearchRules.DESIGN_VARIANT:
+			ResearchRules.apply_variant(ctx, command)
 		_:
 			_cancel(ctx, ctx.state["jobs"][command["args"]["job"]])
 
@@ -80,12 +94,20 @@ func update_tasks(ctx: SimContext) -> void:
 			_try_return(ctx, jobs[id])
 
 
-## Phase 4. A waiting job starts its next run if it can.
+## Phase 4. A waiting job starts its next run if it can. A lab job whose theory or design another
+## job has already proven or qualified leaves the queue instead, holding nothing.
 func allocate(ctx: SimContext) -> void:
 	var jobs: Dictionary = ctx.state["jobs"]
 	for id: int in _sorted(jobs):
+		if not jobs.has(id):
+			continue
 		var job: Dictionary = jobs[id]
 		if job["status"] == STATUS_WAITING:
+			var done := ResearchRules.done_reason(ctx, _recipe(ctx, job))
+			if done != "":
+				_emit_ended(ctx, job, "job_cancelled", done)
+				_remove(ctx, job)
+				continue
 			var reason := _blocker(ctx, job)
 			if reason == "":
 				_start_run(ctx, job)
@@ -113,12 +135,18 @@ func apply_delta(ctx: SimContext, payload: Dictionary) -> void:
 		if output.has("unit_template"):
 			ConstructionSystem.queue(ctx, job["unit"], job["port"], output["unit_template"], job["id"])
 			_release_port(ctx, job)
+		elif output.has("theory"):
+			ResearchRules.prove(ctx, job["unit"], output["theory"])
+		elif output.has("qualifies"):
+			ResearchRules.qualify(ctx, job["unit"], output["qualifies"])
 		elif output.has("sink"):
 			var sink: Dictionary = ctx.state["sinks"].get_or_add(output["sink"], {})
 			sink[output["item"]] = sink.get(output["item"], 0) + output["grams"]
 		else:
 			Units.add_stock(unit["inventory"], output["item"], output["grams"])
 	job["held"] = {}
+	ctx.state["science"]["spent"] += job["points_held"]
+	job["points_held"] = 0
 	_emit_ended(ctx, job, "job_finished")
 	job["count_left"] -= 1
 	if job["count_left"] == 0:
@@ -137,6 +165,7 @@ func fill_view(ctx: SimContext, view: Dictionary) -> void:
 		shown["work"] = _recipe(ctx, jobs[id])["work"]
 		shown["work_per_tick"] = work_per_tick(ctx, jobs[id]["facility"])
 		view["jobs"][id] = shown
+	ResearchRules.fill_view(ctx, view)
 
 
 func _validate_start(ctx: SimContext, command: Dictionary) -> Dictionary:
@@ -156,6 +185,9 @@ func _validate_start(ctx: SimContext, command: Dictionary) -> Dictionary:
 		return SimSystem.reject(REASON_WRONG_FACILITY)
 	if parts[part_id]["fault"] != "":
 		return SimSystem.reject(REASON_MODULE_FAULT)
+	var refusal := ResearchRules.start_refusal(ctx, command["unit"], recipes[args["recipe"]])
+	if refusal != "":
+		return SimSystem.reject(refusal)
 	var queued := _queue_of(ctx, part_id).size()
 	if command["type"] == START and queued > 0:
 		return SimSystem.reject(REASON_FACILITY_BUSY)
@@ -172,7 +204,7 @@ func _create(ctx: SimContext, command: Dictionary) -> void:
 		"id": id, "unit": command["unit"], "facility": args["facility"], "recipe": args["recipe"],
 		"count_left": args["count"], "status": STATUS_WAITING if position == 0 else STATUS_QUEUED,
 		"reason": "", "start_tick": 0, "work_left": 0, "since_tick": ctx.tick,
-		"command": command["id"], "started": false, "held": {}, "reserved": {}, "port": 0,
+		"command": command["id"], "started": false, "held": {}, "reserved": {}, "port": 0, "points_held": 0,
 		"queue_pos": position,
 	}
 	if command["type"] == QUEUE:
@@ -241,6 +273,9 @@ func _blocker(ctx: SimContext, job: Dictionary) -> String:
 	if ctx.state["parts"][job["facility"]]["fault"] != "":
 		return REASON_MODULE_FAULT
 	var recipe := _recipe(ctx, job)
+	var research := ResearchRules.run_blocker(ctx, job["unit"], recipe)
+	if research != "":
+		return research
 	var inventory: Dictionary = ctx.state["units"][job["unit"]]["inventory"]
 	var change := {}
 	for input: Dictionary in recipe["inputs"]:
@@ -263,6 +298,8 @@ func _start_run(ctx: SimContext, job: Dictionary) -> void:
 		Units.remove_stock(inventory, input["item"], input["grams"])
 		job["held"][input["item"]] = job["held"].get(input["item"], 0) + input["grams"]
 	_reserve_outputs(ctx, job, recipe)
+	job["points_held"] = recipe.get("points", 0)
+	ctx.state["science"]["points"] -= job["points_held"]
 	job["status"] = STATUS_RUNNING
 	job["reason"] = ""
 	job["work_left"] = recipe["work"]
@@ -385,6 +422,8 @@ func _cancel(ctx: SimContext, job: Dictionary) -> void:
 	_release_outputs(ctx, job)
 	_release_port(ctx, job)
 	job["work_left"] = 0
+	ctx.state["science"]["points"] += job["points_held"]
+	job["points_held"] = 0
 	_try_return(ctx, job)
 	if ctx.state["jobs"].has(job["id"]):
 		_set_reason(ctx, job, STATUS_CANCELLING, REASON_CARGO_FULL)
@@ -403,10 +442,12 @@ func _try_return(ctx: SimContext, job: Dictionary) -> void:
 	_remove(ctx, job)
 
 
-func _emit_ended(ctx: SimContext, job: Dictionary, type: String) -> void:
-	ctx.emit_event(type, job["unit"], {
-		"job": job["id"], "recipe": job["recipe"], "facility": job["facility"],
-	})
+## A job's end. `reason` is set only when the sim cancels a job itself (contracts section 6).
+func _emit_ended(ctx: SimContext, job: Dictionary, type: String, reason: String = "") -> void:
+	var data := { "job": job["id"], "recipe": job["recipe"], "facility": job["facility"] }
+	if reason != "":
+		data["reason"] = reason
+	ctx.emit_event(type, job["unit"], data)
 
 
 ## The work points a facility part does per tick it runs.
