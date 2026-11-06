@@ -233,7 +233,7 @@ Running shortfalls are still handled by shedding and faults.
 - **A job already done.** When a waiting lab job's theory is already proven, or its design already qualified, by another job, it leaves the queue in phase 4 before its run would start. It fires `job_cancelled` with `reason` `already_proven` or `already_qualified`, and it holds nothing.
 - **Delivery,** in phase 6 in ascending job ID. `{ theory }` proves the theory, makes each design it unlocks a `prototype`, and fires `theory_proven`. `{ qualifies }` makes the design `qualified` and fires `design_qualified`.
 - **Variants.** `design_variant { base, ideas }` is sent with unit 0. It is refused, in this order, with:
-  - `malformed_command`: an unknown base or idea, no ideas, more than four, a repeated idea, or a unit other than 0;
+  - `malformed_command`: an unknown base or idea, a base that is itself a variant, no ideas, more than four, a repeated idea, or a unit other than 0. Variants are of authored designs only, so more ideas make a new variant of the same base;
   - `design_unqualified`: the base is not qualified;
   - `idea_locked`: an idea needs an unproven theory, or is hidden and not yet discovered;
   - `variant_exists`;

@@ -115,8 +115,12 @@ func test_design_variant_refuses_what_it_must() -> void:
 	defs["modules"]["assisted_core"]["ideas"] = defs["modules"][SOLAR]["ideas"].duplicate(true)
 	defs["modules"]["assisted_core"]["ideas"][0]["deltas"] = { "power_w": 100_000, "durability": -100_000 }
 	assert_eq(sim.check(_design("assisted_core", ["thin_cells"]))["reason"], "design_unqualified")
-	_designed(LASER, ["focused_beam"])
+	var variant := _designed(LASER, ["focused_beam"])
 	assert_eq(sim.check(_design(LASER, ["focused_beam"]))["reason"], "variant_exists")
+	state["research"]["designs"][variant] = "qualified"
+	assert_eq(sim.check(_design(variant, ["light_frame"]))["reason"], "malformed_command",
+		"a variant of a variant: design the base with both ideas instead")
+	assert_true(sim.check(_design(LASER, ["focused_beam", "light_frame"]))["ok"])
 	defs["modules"][LASER]["ideas"].append({ "id": "no_beam", "name": "No Beam", "points": 1, "complexity": 1,
 		"deltas": { "capabilities.mine.rate_g_per_s": -1_000_000, "mass_g": -100_000 } })
 	assert_eq(sim.check(_design(LASER, ["no_beam"]))["reason"], "stat_out_of_range")

@@ -178,6 +178,9 @@ static func validate_variant(ctx: SimContext, command: Dictionary) -> Dictionary
 	var args: Dictionary = command["args"]
 	if command["unit"] != 0 or typeof(args.get("base")) != TYPE_STRING or typeof(args.get("ideas")) != TYPE_ARRAY:
 		return SimSystem.reject(REASON_MALFORMED)
+	# Variants are of authored designs only: more ideas make a new variant of the same base.
+	if args["base"].contains(ResearchDefs.VARIANT_SEPARATOR):
+		return SimSystem.reject(REASON_MALFORMED)
 	var made := ResearchDefs.derive_variant(ctx.defs, args["base"], args["ideas"])
 	if made.get("reason", "") == ResearchDefs.REASON_MALFORMED:
 		return SimSystem.reject(REASON_MALFORMED)
