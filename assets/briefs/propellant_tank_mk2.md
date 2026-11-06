@@ -1,0 +1,18 @@
+# Large propellant tank
+Priority 19 (Newman Probe batch B12). Image: `newmanprobe_propellant_tank_mk2.png`. Model: `propellant_tank_mk2.glb`
+
+SHAPE, read this first: a long CAPSULE-SHAPED PRESSURE TANK: long straight sides with big rounded DOMES at the top and bottom, which curve in to smaller mounting rings, a little over half the tank's width, at each end. It is NOT a straight can: no flat lids as wide as the tank, no raised hoops or bands.
+
+A large fuel tank that stacks between a hull and a thruster, a longer version of the standard tank: an off-white pressure vessel 2.0 m across and 3.6 m tall, with long straight sides and smoothly domed shoulders top and bottom, each about 0.5 m tall, curving in to a thick, flat mid-grey mounting ring about 1.2 m across at each end. Two crisp weld-seam grooves run round it, at 1.2 m and 2.4 m down. Four flat mid-grey straps, each about 0.2 m wide and set flush, run straight down the four diagonal sides from shoulder to shoulder. Low on the +X, -X, +Z and -Z sides, 0.4 m above the bottom, are four flat square mid-grey mounting pads about 0.5 m across, set flush, where landing legs bolt on. Simple, sturdy and clean, clearly a long rocket propellant tank with domed ends, never a drum or paint tin.
+
+Real size: 3.6 m tall (Y), 2.0 m in diameter (X and Z), the widest point. Scale by the longest side.
+Placement (set after generation): origin at the centre of the flat top face, which points along +Y. The tank hangs below it, with its flat bottom face at Y = -3.6 m.
+Materials: satin painted metal; anything gold is satin gold, non-mirror: a soft painted sheen, never a polished reflective metal. Colours: off-white #e8e4d8 for the tank, mid grey #8a8d91 for the mounting rings, straps and pads.
+Every collar, band, rib, rim and groove has crisp machined edges: true circles and straight lines, evenly thick all the way round, with no hand-moulded lumps, dents or wobble.
+Connectors (from data/modules.json, metres from the origin): mount at (0, 0, 0) facing +Y; side_nx at (-1, -3.2, 0) facing -X; side_nz at (0, -3.2, -1) facing -Z; side_px at (1, -3.2, 0) facing +X; side_pz at (0, -3.2, 1) facing +Z; stack_bottom at (0, -3.6, 0) facing -Y. Each is a flat spot square to its facing direction, flush with the surface there. If generation bends one, flatten it afterwards; core spots sit in the recessed core bay.
+View: 3/4 view from slightly above, standing upright, so the top mounting ring, the domed shoulder, one mounting pad and the long side of the tank all show.
+Triangle target: 6000. Set this before generation; it cannot be reduced afterwards. One solid closed shape with no moving parts.
+
+Off-white on white: keep the off-white areas clearly darker than the pure white background everywhere, with a soft mid-tone shade towards their edges, so the outline stays easy to separate. No outline stroke.
+
+Picture rules (for the 3D step): whole object in frame, 3/4 view, pure white background, nothing else in the picture, no floor, no floor shadow, even soft lighting. Solid readable mid-tone colours, not near-black. At least 1024 px. No thin parts: anything that would be thin must be drawn thick and solid. No lattices, grilles, rails, pipes, cables or antennas. No windows, hatches, ladders or people. No stripes, decals, logos, lettering or numbers. No rust, dirt or damage. Original design: not based on any existing game, film or real spacecraft.
