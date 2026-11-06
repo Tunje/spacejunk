@@ -17,17 +17,19 @@ const WHITE_ROCK := 10
 ## How much longer than planned a step may run before the bot gives up.
 const ORDER_LIMIT_TICKS := 6000
 const RANGE_CHECK_TICKS := 100
-const WAIT_LIMIT_TICKS := 200_000
-## Pauses a queued job may take: waiting for another job's output, or a short power shed.
-const ALLOWED_PAUSES: Array[String] = ["missing_inputs", "no_power"]
+const WAIT_LIMIT_TICKS := 100_000
+## Pauses a queued job may take: waiting for another job's output, a short power shed, or a full
+## hold until the station is built and takes its goods.
+const ALLOWED_PAUSES: Array[String] = ["missing_inputs", "no_power", "output_full"]
 ## Ore mined on the second trip, in grams, beyond the first trip's full hold of hematite.
-## 400 kg of that hematite is refined; the other 300 kg is hauled into the station.
+## 200 kg of that hematite is refined; the other 150 kg is hauled into the station. It all fits
+## the probe's 2 t ore hold with room for the mining stop's overshoot.
 const SECOND_TRIP_G := {
-	"hematite": 700_000, "chalcopyrite": 500_000, "olivine": 300_000, "water_ice": 200_000,
+	"hematite": 350_000, "chalcopyrite": 900_000, "olivine": 300_000, "water_ice": 100_000,
 }
 ## Runs of each refining recipe, sized to the parts below.
 const REFINE_RUNS := {
-	"refine_hematite": 24, "refine_chalcopyrite": 5, "refine_olivine": 3, "refine_water_ice": 2,
+	"refine_hematite": 22, "refine_chalcopyrite": 9, "refine_olivine": 3, "refine_water_ice": 1,
 }
 
 static var _shared: NewStartBot
@@ -80,8 +82,10 @@ func run() -> void:
 		[refinery, "refine_chalcopyrite", REFINE_RUNS["refine_chalcopyrite"]],
 		[refinery, "refine_olivine", REFINE_RUNS["refine_olivine"]],
 		[refinery, "refine_water_ice", REFINE_RUNS["refine_water_ice"]],
-		[fabricator, "structural_frame", 6], [fabricator, "wiring", 15], [fabricator, "processor", 4],
-		[fabricator, "small_station", 1], [fabricator, "lidar_mk1", 1], [fabricator, "solar_panel_mk1", 1],
+		# The station takes only frames and wiring, and building it empties most of the goods hold,
+		# so it goes before the processors, whose silicon the refinery can't store until then.
+		[fabricator, "structural_frame", 3], [fabricator, "wiring", 18], [fabricator, "small_station", 1],
+		[fabricator, "processor", 4], [fabricator, "lidar_mk1", 1], [fabricator, "solar_panel_mk1", 1],
 	])
 	_wait_for(["refine_water_ice"])
 	mark("ice_refined")
@@ -149,23 +153,30 @@ func _find_station() -> void:
 	mark("station_built")
 
 
-## Fits the station from the probe's hold: the LIDAR first, which the unpowered station refuses,
-## then a solar panel, then the LIDAR again. Then an ore container, made once the hold has room.
+## Fits the station from the probe's hold, as a player learns its limits: the bare station refuses
+## the LIDAR for power, then with a solar panel for heat, and takes it once a radiator is on. Each
+## fix is fitted as soon as it is made, since parts are bulky in the probe's goods hold. Then an ore
+## container, made once the hold has room.
 func _fit_station() -> void:
 	if not problems.is_empty():
 		return
-	var refusal := _attach_refused(station, "lidar_mk1", station_hub, "side_a_px")
-	if refusal == "":
-		problems.append("the unpowered station took the LIDAR")
-		return
-	refused_fits.append({ "item": "lidar_mk1", "reason": refusal })
-	mark("fit_failed")
-	_attach(station, "solar_panel_mk1", station_hub, "side_a_nx")
+	for fix: Array in [["solar_panel_mk1", "side_a_nx"], ["heat_radiator_mk1", "side_a_nz"]]:
+		var refusal := _attach_refused(station, "lidar_mk1", station_hub, "side_a_px")
+		if refusal == "":
+			problems.append("the station took the LIDAR before %s" % fix[0])
+			return
+		refused_fits.append({ "item": "lidar_mk1", "reason": refusal })
+		mark("fit_failed")
+		if sim._state["units"][PROBE]["inventory"].get(fix[0], 0) == 0:
+			_queue([[fabricator, fix[0], 1]])
+			_wait_for([])
+		_attach(station, fix[0], station_hub, fix[1])
 	_attach(station, "lidar_mk1", station_hub, "side_a_px")
 	mark("fit_fixed")
-	_queue([[fabricator, "ore_container_mk1", 1]])
+	# The small container: a 6000 L ore_container_mk1 cannot fit the probe's 4000 L goods hold.
+	_queue([[fabricator, "small_ore_container_mk1", 1]])
 	_wait_for([])
-	_attach(station, "ore_container_mk1", station_hub, "side_a_pz")
+	_attach(station, "small_ore_container_mk1", station_hub, "side_a_pz")
 
 
 func _haul() -> void:
@@ -337,7 +348,7 @@ func _attach(unit: int, item: String, parent: int, connector: String) -> int:
 	for event in _step():
 		if event["type"] == "part_attached":
 			return event["data"]["part"]
-		if event["type"] == "command_rejected" and event["data"]["command"] == id:
+		if _is_refusal(event, id):
 			problems.append("%s refused: %s" % [item, event["data"]["reason"]])
 	return 0
 
@@ -346,9 +357,14 @@ func _attach(unit: int, item: String, parent: int, connector: String) -> int:
 func _attach_refused(unit: int, item: String, parent: int, connector: String) -> String:
 	var id := _command("attach_part", unit, _attach_args(item, parent, connector))
 	for event in _step():
-		if event["type"] == "command_rejected" and event["data"]["command"] == id:
+		if _is_refusal(event, id):
 			return event["data"]["reason"]
 	return ""
+
+
+## attach_part reports a refusal as attach_failed, with the command's ID like command_rejected.
+func _is_refusal(event: Dictionary, id: int) -> bool:
+	return event["type"] in ["command_rejected", FittingSystem.FAILED_EVENT] and event["data"]["command"] == id
 
 
 func _attach_args(item: String, parent: int, connector: String) -> Dictionary:

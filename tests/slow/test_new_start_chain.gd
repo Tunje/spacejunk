@@ -2,6 +2,11 @@ extends GutTest
 ## The new start played by a bot up to research (C14): nothing before research can dead-end.
 ## One shared run; each test asserts on a part of it. Prints the chain's timings for B.
 
+const MILESTONES: Array[String] = [
+	"start", "scanned", "mined", "refined", "prospected", "ice_refined", "station_built", "fit_failed",
+	"fit_fixed", "hauled", "end",
+]
+
 var bot: NewStartBot
 
 
@@ -11,6 +16,16 @@ func before_all() -> void:
 	for step: Dictionary in bot.steps:
 		gut.p("  %s: %d ticks from %d" % [step["label"], step["ticks"], step["start_tick"]])
 	gut.p("  tank free before ice: %d g" % bot.marks.get("tank_free_g_before_ice", -1))
+	gut.p("  probe holds at the end: %s" % str(bot.sim._state["units"][NewStartBot.PROBE]["inventory"]))
+	for job: Dictionary in bot.sim._state["jobs"].values():
+		gut.p("  open job: %s %s %s" % [job["recipe"], job["status"], job["reason"]])
+	gut.p("  milestone: tick, propellant kg, ore kg, goods kg in the probe")
+	for label: String in MILESTONES:
+		if bot.marks.has(label):
+			var view: Dictionary = bot.marks[label]
+			var cargo: Dictionary = view["units"][NewStartBot.PROBE]["cargo"]
+			gut.p("  %s: %d, %d, %d, %d" % [label, view["tick"], cargo["propellant"]["used_g"] / 1000,
+				cargo["ore"]["used_g"] / 1000, cargo["goods"]["used_g"] / 1000])
 
 
 func test_the_chain_runs_to_the_end_with_every_ledger_balanced() -> void:
@@ -29,8 +44,8 @@ func test_the_probe_scans_and_mines_every_rock() -> void:
 func test_ice_refines_into_propellant() -> void:
 	var before: Dictionary = bot.marks["prospected"]["units"][NewStartBot.PROBE]["inventory"]
 	var after: Dictionary = bot.marks["ice_refined"]["units"][NewStartBot.PROBE]["inventory"]
-	assert_gte(bot.marks["tank_free_g_before_ice"], 180_000, "room in the tank for two runs")
-	assert_eq(after["propellant"] - before["propellant"], 180_000, "two runs of 90 kg")
+	assert_gte(bot.marks["tank_free_g_before_ice"], 90_000, "room in the tank for a run")
+	assert_eq(after["propellant"] - before["propellant"], 90_000, "one run of 90 kg")
 
 
 func test_a_small_station_is_built_docked_at_the_probe() -> void:
@@ -39,13 +54,14 @@ func test_a_small_station_is_built_docked_at_the_probe() -> void:
 	assert_eq(station["dock"]["target_unit"], NewStartBot.PROBE)
 
 
-func test_the_unpowered_station_refuses_a_powered_part_until_it_has_solar() -> void:
-	assert_eq(bot.refused_fits.size(), 1)
-	assert_true(bot.refused_fits[0]["reason"] in ["over_power_budget", "over_heat_budget"], bot.refused_fits[0]["reason"])
+func test_the_bare_station_refuses_a_powered_part_until_it_has_solar_and_a_radiator() -> void:
+	var reasons := bot.refused_fits.map(func(fit: Dictionary) -> String: return fit["reason"])
+	assert_eq(reasons, ["over_power_budget", "over_heat_budget"])
 	var defs: Array = InspectText.flatten(bot.marks["fit_fixed"]["units"][bot.station]["parts"]) \
 		.map(func(part: Dictionary) -> String: return part["def"])
 	assert_has(defs, "lidar_mk1")
 	assert_has(defs, "solar_panel_mk1")
+	assert_has(defs, "heat_radiator_mk1")
 
 
 func test_ore_is_hauled_into_the_station() -> void:
