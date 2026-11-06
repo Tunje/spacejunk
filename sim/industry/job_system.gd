@@ -13,6 +13,11 @@ extends SimSystem
 ## prove a theory or qualify a design. A run holds its points as it holds its inputs. The player's
 ## design_variant command lives here too, since it makes recipes for these jobs.
 ##
+## A job whose recipe makes a module may be built in place (C15): `install_to` names a connector on
+## the facility's unit or one docked to it, and the finished part is attached there instead of going
+## into a hold, so a part too big for any hold can still be made. A fit that fails at delivery holds
+## the part on the job, paused with install_blocked, and is tried again each phase 6.
+##
 ## A facility holds an ordered queue of jobs. The job at queue_pos 0 is active and has the states
 ## above. The rest are queued at 1..n, hold nothing, and wait their turn. When the active job ends,
 ## the next one becomes active straight away and can start its first run in the next phase 4.
@@ -41,10 +46,19 @@ const REASON_NO_FREE_PORT := "no_free_port"
 const REASON_CARGO_FULL := "cargo_full"
 const REASON_QUEUE_FULL := "queue_full"
 const REASON_JOB_BUSY := "job_busy"
+const REASON_INSTALL_BLOCKED := "install_blocked"
+const REASON_NOT_DOCKED := "not_docked"
+const REASON_CONNECTOR_OCCUPIED := "connector_occupied"
+const INSTALL_FIELDS := {
+	"unit": TYPE_INT, "parent_part": TYPE_INT, "parent_connector": TYPE_STRING, "part_connector": TYPE_STRING,
+}
 const VIEW_FIELDS: Array[String] = [
 	"unit", "facility", "recipe", "count_left", "status", "reason", "start_tick", "queue_pos", "work_left",
-	"points_held",
+	"points_held", "install_to",
 ]
+
+## Builds in place through attach_part's own rules.
+var _fitter := FittingSystem.new()
 
 
 func commands() -> PackedStringArray:
@@ -71,6 +85,11 @@ func validate(ctx: SimContext, command: Dictionary) -> Dictionary:
 			return SimSystem.reject(REASON_MALFORMED)
 		if _has_run(jobs[job_id]):
 			return SimSystem.reject(REASON_JOB_BUSY)
+	elif jobs[job_id]["reason"] == REASON_INSTALL_BLOCKED:
+		# Cancelling hands the built part back; refused rather than overfill the hold.
+		var table := Units.cargo(ctx.state, ctx.defs, jobs[job_id]["unit"], [] as Array[int], jobs[job_id]["held"])
+		if not Units.over_capacity(table).is_empty():
+			return SimSystem.reject(REASON_CARGO_FULL)
 	return SimSystem.ok()
 
 
@@ -122,8 +141,28 @@ func run(ctx: SimContext) -> void:
 	var jobs: Dictionary = ctx.state["jobs"]
 	for id: int in _sorted(jobs):
 		var job: Dictionary = jobs[id]
-		if job["status"] == STATUS_RUNNING or job["status"] == STATUS_PAUSED:
+		if (job["status"] == STATUS_RUNNING or job["status"] == STATUS_PAUSED) \
+				and job["reason"] != REASON_INSTALL_BLOCKED:
 			_count_down(ctx, job)
+
+
+## Phase 6, after deliveries: a built part held by a blocked install is fitted once it can be.
+func update_stores(ctx: SimContext) -> void:
+	var jobs: Dictionary = ctx.state["jobs"]
+	for id: int in _sorted(jobs):
+		var job: Dictionary = jobs[id]
+		if job["reason"] != REASON_INSTALL_BLOCKED:
+			continue
+		var item: String = job["held"].keys()[0]
+		var attach := _install_command(job, item)
+		Units.add_stock(ctx.state["units"][job["unit"]]["inventory"], item, job["held"][item])
+		if _fitter.validate(ctx, attach)["ok"]:
+			job["held"] = {}
+			_resume(ctx, job)
+			_fitter.apply(ctx, attach)
+			_end_run(ctx, job)
+		else:
+			Units.remove_stock(ctx.state["units"][job["unit"]]["inventory"], item, job["held"][item])
 
 
 ## Phase 6. Delivers a finished run.
@@ -145,6 +184,44 @@ func apply_delta(ctx: SimContext, payload: Dictionary) -> void:
 		else:
 			Units.add_stock(unit["inventory"], output["item"], output["grams"])
 	job["held"] = {}
+	if not job["install_to"].is_empty() and not _install(ctx, job):
+		return
+	_end_run(ctx, job)
+
+
+## Fits a just-built part where the job names, from the facility unit's hold where delivery put it.
+## Returns false, with the part held on the job and the job paused, if the fit is refused.
+func _install(ctx: SimContext, job: Dictionary) -> bool:
+	var item := _module_output(ctx, _recipe(ctx, job))
+	var attach := _install_command(job, item)
+	var result := _fitter.validate(ctx, attach)
+	if result["ok"]:
+		_fitter.apply(ctx, attach)
+		return true
+	var mass_g: int = ctx.defs["modules"][item]["mass_g"]
+	Units.remove_stock(ctx.state["units"][job["unit"]]["inventory"], item, mass_g)
+	job["held"] = { item: mass_g }
+	job["status"] = STATUS_PAUSED
+	job["reason"] = REASON_INSTALL_BLOCKED
+	ctx.emit_event("job_paused", job["unit"], {
+		"job": job["id"], "reason": REASON_INSTALL_BLOCKED, "detail": result["reason"],
+	})
+	return false
+
+
+func _install_command(job: Dictionary, item: String) -> Dictionary:
+	var target: Dictionary = job["install_to"]
+	return {
+		"id": job["command"], "tick": 0, "type": FittingSystem.ATTACH, "unit": target["unit"],
+		"args": {
+			"item": item, "from": job["unit"], "parent_part": target["parent_part"],
+			"parent_connector": target["parent_connector"], "part_connector": target["part_connector"],
+		},
+	}
+
+
+## Ends a delivered run: points spent, job_finished, and the next run or the end of the job.
+func _end_run(ctx: SimContext, job: Dictionary) -> void:
 	ctx.state["science"]["spent"] += job["points_held"]
 	job["points_held"] = 0
 	_emit_ended(ctx, job, "job_finished")
@@ -193,7 +270,49 @@ func _validate_start(ctx: SimContext, command: Dictionary) -> Dictionary:
 		return SimSystem.reject(REASON_FACILITY_BUSY)
 	if queued >= QUEUE_LIMIT:
 		return SimSystem.reject(REASON_QUEUE_FULL, { "need": queued + 1, "have": QUEUE_LIMIT })
+	if args.has("install_to"):
+		return _validate_install(ctx, command, recipes[args["recipe"]])
 	return SimSystem.ok()
+
+
+## install_to (C15): a module recipe run once, onto a free connector of this unit or one docked to
+## it, where attach_part would accept the finished part. The fit is dry-run on a throwaway state
+## that already holds the part.
+func _validate_install(ctx: SimContext, command: Dictionary, recipe: Dictionary) -> Dictionary:
+	var target: Variant = command["args"]["install_to"]
+	if typeof(target) != TYPE_DICTIONARY or command["args"]["count"] != 1:
+		return SimSystem.reject(REASON_MALFORMED)
+	for field: String in INSTALL_FIELDS:
+		if typeof(target.get(field)) != INSTALL_FIELDS[field]:
+			return SimSystem.reject(REASON_MALFORMED)
+	var item := _module_output(ctx, recipe)
+	if item == "":
+		return SimSystem.reject(REASON_MALFORMED)
+	var unit: int = command["unit"]
+	if target["unit"] != unit and not Units.are_docked(ctx.state, unit, target["unit"]):
+		return SimSystem.reject(REASON_NOT_DOCKED)
+	var jobs: Dictionary = ctx.state["jobs"]
+	for id: int in _sorted(jobs):
+		var other: Dictionary = jobs[id]["install_to"]
+		if other.get("parent_part", 0) == target["parent_part"] \
+				and other.get("parent_connector", "") == target["parent_connector"]:
+			return SimSystem.reject(REASON_CONNECTOR_OCCUPIED)
+	var trial := SimContext.new(ctx.state.duplicate(true), ctx.defs)
+	Units.add_stock(trial.state["units"][unit]["inventory"], item, ctx.defs["modules"][item]["mass_g"])
+	var fake_job := { "command": command.get("id", 0), "unit": unit, "install_to": target }
+	var result := _fitter.validate(trial, _install_command(fake_job, item))
+	if not result["ok"]:
+		return result
+	return SimSystem.ok()
+
+
+## The module a recipe makes, when it is the recipe's one stored output, or "".
+func _module_output(ctx: SimContext, recipe: Dictionary) -> String:
+	var stored: Array = recipe["outputs"].filter(func(output: Dictionary) -> bool: return _is_stored(output))
+	if stored.size() != 1 or recipe["outputs"].any(func(output: Dictionary) -> bool: return output.has("unit_template")):
+		return ""
+	var item: String = stored[0]["item"]
+	return item if ctx.defs["modules"].has(item) else ""
 
 
 func _create(ctx: SimContext, command: Dictionary) -> void:
@@ -205,7 +324,7 @@ func _create(ctx: SimContext, command: Dictionary) -> void:
 		"count_left": args["count"], "status": STATUS_WAITING if position == 0 else STATUS_QUEUED,
 		"reason": "", "start_tick": 0, "work_left": 0, "since_tick": ctx.tick,
 		"command": command["id"], "started": false, "held": {}, "reserved": {}, "port": 0, "points_held": 0,
-		"queue_pos": position,
+		"queue_pos": position, "install_to": args.get("install_to", {}).duplicate(),
 	}
 	if command["type"] == QUEUE:
 		ctx.emit_event("job_queued", command["unit"], {
@@ -283,7 +402,7 @@ func _blocker(ctx: SimContext, job: Dictionary) -> String:
 			return REASON_MISSING_INPUTS
 		change[input["item"]] = change.get(input["item"], 0) - input["grams"]
 	for output: Dictionary in recipe["outputs"]:
-		if _is_stored(output):
+		if _takes_space(job, output):
 			change[output["item"]] = change.get(output["item"], 0) + output["grams"]
 	var table := Units.cargo(ctx.state, ctx.defs, job["unit"], [] as Array[int], change)
 	return REASON_OUTPUT_FULL if not Units.over_capacity(table).is_empty() else ""
@@ -313,7 +432,7 @@ func _start_run(ctx: SimContext, job: Dictionary) -> void:
 func _reserve_outputs(ctx: SimContext, job: Dictionary, recipe: Dictionary) -> void:
 	var outputs := {}
 	for output: Dictionary in recipe["outputs"]:
-		if _is_stored(output):
+		if _takes_space(job, output):
 			outputs[output["item"]] = outputs.get(output["item"], 0) + output["grams"]
 	var before := Units.cargo(ctx.state, ctx.defs, job["unit"])
 	var after := Units.cargo(ctx.state, ctx.defs, job["unit"], [] as Array[int], outputs)
@@ -462,6 +581,11 @@ func _recipe(ctx: SimContext, job: Dictionary) -> Dictionary:
 ## True for an output that goes into the unit's inventory.
 func _is_stored(output: Dictionary) -> bool:
 	return output.has("item") and not output.has("sink")
+
+
+## True for an output that needs hold space: a stored output, unless it is the part built in place.
+func _takes_space(job: Dictionary, output: Dictionary) -> bool:
+	return _is_stored(output) and job["install_to"].is_empty()
 
 
 ## The unit template a recipe builds, or "".

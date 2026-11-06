@@ -163,9 +163,9 @@ Every command has this envelope. `submit` fills in `id` and `tick`.
 | `unload_cargo` | `to`, `item`, `grams` (optional) | Transfer out of this unit |
 | `start_mining` | `deposit`, `module` | Begin mining with a laser |
 | `stop` | none | Stop the current operation |
-| `start_job` | `facility`, `recipe`, `count` | Begin a recipe at a facility part |
+| `start_job` | `facility`, `recipe`, `count`, `install_to` (optional) | Begin a recipe at a facility part. With `install_to`, the part is built in place (C15) |
 | `cancel_job` | `job` | Cancel and return held matter. A queued job ends at once with nothing to return |
-| `queue_job` | `facility`, `recipe`, `count` | Add a job to the end of the facility's queue. On an idle facility it is the same as `start_job` |
+| `queue_job` | `facility`, `recipe`, `count`, `install_to` (optional) | Add a job to the end of the facility's queue. On an idle facility it is the same as `start_job` |
 | `move_job` | `job`, `position` | Move a job to a position in its facility's queue |
 | `attach_part` | `item`, `from`, `parent_part`, `parent_connector`, `part_connector` | Install a part |
 | `copy_fit` | `source`, `from` | Fit this unit like `source`, with parts from `from` |
@@ -241,6 +241,15 @@ Running shortfalls are still handled by shedding and faults.
   The variant's ID is the base and its sorted ideas joined by `+`. It starts as a `prototype`, recorded in `research.variants[id] = { base, ideas, complexity }`, and `variant_designed` fires with unit 0. Its stats, recipes, prototype and bench test are derived as in research.md section 4, and its prototype recipe takes the ideas' points. A part's `def` and an inventory key may be a variant ID, and `copy_fit` copies variants by exact ID.
 - **Discovery.** When a variant's bench test delivers, and its base has hidden ideas not yet in `research.discovered`, the sim draws once from the `research` stream, a number from 0 to 999999. It walks those ideas in ID order, adding each one's `discover_ppm` up to 1000000, and discovers the first whose running total exceeds the draw. That sets `research.discovered["<base>:<idea>"]` to the tick and fires `idea_discovered`. With no hidden ideas left, nothing is drawn.
 
+**Fabricating in place (C15).** A job may name `install_to { unit, parent_part, parent_connector, part_connector }`, and its finished part is attached there instead of going into a hold. This is how a part too big for any hold is made.
+- It is allowed only on a recipe whose one stored output is a module, normal or variant, with `count` 1. Otherwise the command is refused with `malformed_command`. `unit` must be the facility's own unit or a unit docked to it, or it is refused with `not_docked`.
+- At `start_job` and `queue_job`, the fit is dry-run, as `copy_fit`'s check is: `attach_part`'s own validation runs on a throwaway copy of the state that already holds the finished part, and any reason it gives refuses the command. Another job already aiming at the same `parent_part` and `parent_connector` gives `connector_occupied`.
+- The run reserves no hold space for the part, so `output_full` never applies to it.
+- On delivery in phase 6, in ascending job ID, the part is attached through `attach_part`'s rules, taken from the facility unit. `part_attached` fires on the target unit, then `job_finished`.
+- If that fit is refused, the run does not finish. Its inputs have become the finished part, held on the job, and the job is `paused` with `install_blocked`. Its `job_paused` carries `detail`, the attach refusal's reason. In each later phase 6, after deliveries, the attach is tried again. When it succeeds, `job_resumed`, `part_attached` and `job_finished` fire. A blocked run holds its facility, like `no_free_port`.
+- Cancelling an `install_blocked` job returns the part to the facility unit's hold. If it does not fit there, `cancel_job` is refused with `cargo_full`, so nothing is lost or overfilled.
+- A job without `install_to` is unchanged.
+
 **Job queue.**
 - A facility holds up to 16 jobs in order, by `queue_pos`. The job at 0 is active and has the statuses of [autonomy.md](autonomy.md) section 9. The rest are `queued` at 1 to n, hold no matter and reserve nothing. Positions stay contiguous.
 - When the active job ends, by finishing or by cancelling, the next job becomes active at once and can start its first run in the next phase 4. So the next job starts on the tick after the last one finishes, the same gap as between two runs of one job, and on the same tick when the active job is cancelled in phase 1.
@@ -295,7 +304,7 @@ Events are ordered by phase, then the event's `unit`, then emission order. Unit 
 | `transfer_done` | `from`, `to`, `item`, `grams` (actual amount moved) |
 | `job_started` | `job`, `command` |
 | `job_finished`, `job_cancelled` | `job`, `recipe`, `facility`, and on `job_cancelled` an optional `reason`, set only when the sim removes a lab job already done (C12) |
-| `job_paused`, `job_resumed` | `job`, `reason` |
+| `job_paused`, `job_resumed` | `job`, `reason`, and on `job_paused` with `install_blocked` a `detail` naming the refused fit's reason (C15) |
 | `job_queued` | `job`, `command`, `position` |
 | `job_moved` | `job`, `position` |
 | `unit_created` | `unit`, `def`, `job` |
@@ -315,7 +324,7 @@ Each failure emits exactly one event. Fitting failures emit `attach_failed`, and
 
 `reason` is a stable lowercase code, with display text held in the client. `detail` is an optional Dictionary of integers, such as `{ need_w, have_w }`, so the player sees numbers as well as a code.
 
-Known reason codes: `over_mass_limit`, `over_power_budget`, `over_heat_budget`, `over_heat_limit`, `over_load_limit`, `connector_type_mismatch`, `connector_size_mismatch`, `connector_occupied`, `not_whole_unit`, `no_free_port`, `no_propellant`, `cargo_full`, `deposit_exhausted`, `root_part`, `part_busy`, `float_in_command`, `unknown_unit`, `unknown_part`, `invalid_target`, `unknown_command`, `malformed_command`, `queue_full`, `job_busy`, `fit_mismatch`, `parent_not_fitted`, and for research `theory_locked`, `already_proven`, `already_qualified`, `design_unqualified`, `idea_locked`, `variant_exists`, `stat_out_of_range`, `missing_points`, `missing_evidence` and `orbit_changed` (C12). Autonomy adds its own codes, job statuses and view fields in `docs/design/autonomy.md` sections 3, 8, 9 and 10. `connector_size_mismatch` means a `core` connector met a non-core one.
+Known reason codes: `over_mass_limit`, `over_power_budget`, `over_heat_budget`, `over_heat_limit`, `over_load_limit`, `connector_type_mismatch`, `connector_size_mismatch`, `connector_occupied`, `not_whole_unit`, `no_free_port`, `no_propellant`, `cargo_full`, `deposit_exhausted`, `root_part`, `part_busy`, `float_in_command`, `unknown_unit`, `unknown_part`, `invalid_target`, `unknown_command`, `malformed_command`, `queue_full`, `job_busy`, `fit_mismatch`, `parent_not_fitted`, and for research `theory_locked`, `already_proven`, `already_qualified`, `design_unqualified`, `idea_locked`, `variant_exists`, `stat_out_of_range`, `missing_points`, `missing_evidence` and `orbit_changed` (C12), and `install_blocked` (C15). Autonomy adds its own codes, job statuses and view fields in `docs/design/autonomy.md` sections 3, 8, 9 and 10. `connector_size_mismatch` means a `core` connector met a non-core one.
 
 Orbit reason codes:
 - `unsupported_orbit`: a `move_to` target that is on an orbit or in another frame, a burn whose result is exactly parabolic (which neither orbit form can hold, and which rounding makes vanishingly rare), and later the planner's limits.
@@ -369,7 +378,7 @@ This shape is frozen. Fields may be added, but changes or removals go through th
   deposits = { 12: { body = 3, item = "hematite", remaining_g = 0, hardness = 0 } },
   jobs = { 30: { unit = 2, facility = 8, recipe = "...", count_left = 1, status = "running",
                  reason = "", start_tick = 0, queue_pos = 0, work_left = 0, work = 0,
-                 work_per_tick = 0, points_held = 0 } },
+                 work_per_tick = 0, points_held = 0, install_to = {} } },
   tasks = {},
   science = { points = 0, earned = 0, spent = 0, paid = { "survey:3": 1 }, evidence = { survey = 1 } },
   research = { theories = { "...": 0 }, designs = { "...": "prototype" },
@@ -384,7 +393,7 @@ This shape is frozen. Fields may be added, but changes or removals go through th
 - While waiting, the op keeps the trip it will fly as `plan`. It is the same dictionary `quote` gives, so a save mid-wait leaves on exactly the same legs. While `burning`, `part` is the thruster, which draws power and gives heat like any running load. A shed thruster gives no thrust that tick.
 - A unit also shows `vel_um_s`, its local velocity in a frame. It shows `burns`, its planned burns in tick order as `{ id, tick, prograde_um_s, normal_um_s, radial_um_s }`. And it shows `burn`, the running burn as `{ id, dv_um_s, done_um_s, start_tick }`, or `{}`.
 - A part's `state`: `on`, `shed` or `fault`.
-- A job's `status`: `queued`, `waiting`, `running`, `paused` or `cancelling`. `queue_pos` is its place in its facility's queue, 0 for the active job. `work_left` is the current run's work still to do, 0 until a run starts. `work` is one run's total, from the recipe, and `work_per_tick` is the facility's rate, so a client shows progress as `1 - work_left / work` and the time left as `ceil(work_left / work_per_tick)` ticks. `points_held` is the science points a lab run holds.
+- A job's `status`: `queued`, `waiting`, `running`, `paused` or `cancelling`. `queue_pos` is its place in its facility's queue, 0 for the active job. `work_left` is the current run's work still to do, 0 until a run starts. `work` is one run's total, from the recipe, and `work_per_tick` is the facility's rate, so a client shows progress as `1 - work_left / work` and the time left as `ceil(work_left / work_per_tick)` ticks. `points_held` is the science points a lab run holds. `install_to` is `{}`, or where the job builds its part in place.
 - `science.evidence` counts, per kind, the different keys that have paid. `research` is the state's research map as it is.
 - Each unit has one inventory, keyed by item. Capacity is by cargo class, summed across its storage modules.
 - `pos_mm` is in the object's own place (section 1): relative to its orbit's parent, local to its frame, or in the old world. `world_mm` adds up the chain to the root body, for drawing a system map. Floats are for drawing only: an orbit is drawn from its record with 64-bit floats as `position_float` in tests/sim/kernel/test_orbit_math.gd does, never Godot's 32-bit `Vector3`.
