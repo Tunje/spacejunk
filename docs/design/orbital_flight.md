@@ -785,3 +785,71 @@ The planner's trip, using A22's two-level route, from the cluster round Frost to
 - **The out trip's time is mostly the catch-up.** A22's two-level route doesn't time the departure to where the field will be (it phases at the planet's level only). It arrives on the field's orbit at the wrong place and rides a slightly larger orbit round to it.
   - With many fields, a trip can go to whichever is near on arrival, about 475 days.
   - Timing the departure to the field is a planner change, not made.
+
+### 11.21 A30 design: timing a belt trip to its field
+
+A design note, so no code yet. It is for the Lead to approve before A31 builds it.
+
+#### What happens today
+
+A trip from the cluster round Frost to a belt field is A22's two-level route in reverse, through `SoiTransfer._two_levels`:
+- It climbs from Frost to a parking circle round the planet, escapes the planet at the first chance, and flies a Hohmann ellipse to the field's distance from the star.
+- Nothing times the departure to where the field will be. The last leg, `Transfer._phasing`, then catches the field up along its own orbit. It does that on an orbit only slightly larger than the field's, because a faster catch-up costs a lot of delta-v.
+- At 2.7 AU, from today's start, that is 475 days to the field's orbit, then about **1,620 days** catching up (11.20).
+
+A faster catch-up at the belt is out:
+- Gaining a phase φ in one orbit of 4.4 years needs a period change of φ/2π, and that costs about v·(φ/2π)/3 in two burns, where v is 18.1 km/s at 2.7 AU.
+- Half a turn is therefore about **3 km/s**. Spread over N orbits it is 3/N km/s, but each orbit takes 4.4 years.
+
+So the phase has to be right on departure.
+
+#### The windows
+
+A Hohmann trip from the planet's orbit to a field arrives on time only if it leaves when the field leads the planet by the right angle. That angle is π(1 − ((1 + r)/2r)^1.5), for a field at r AU. Such windows come once every synodic period of the planet and the field.
+
+| Field at | Field's year | Window every | Wait, average and worst | In flight | To the field, average and worst | Today, untimed |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2.2 AU | 1,192 d | 527 d | 263 d, 527 d | 370 d | 633 d, 896 d | |
+| 2.7 AU | 1,621 d | 472 d | 236 d, 472 d | 460 d | 696 d, 931 d | 2,096 d (A26) |
+| 3.2 AU | 2,091 d | 443 d | 221 d, 443 d | 556 d | 777 d, 998 d | |
+
+- **Getting to the escape point** adds hardly anything. The climb from Frost to the parking circle takes under a day, and the parking circle comes round in hours.
+- **Belt.md's six fields** sit at their own distances and phases, so their windows are spread out. If they are spread evenly through the window cycle, the nearest window to *some* field is on average about S/7, where S is the synodic period: about **65 days** at 2.7 AU.
+- **The trip home** is timed already. The planner waits at the field for the planet's window and arrives at Frost's cluster through A13's cheap phasing round the moon. That is 232 days of waiting plus 462 in flight in A26's run.
+- **The coast warp:** these are years of game time either way. Belt.md's coast warp is what makes them playable, not this design.
+
+#### The planner change (A31)
+
+For an outward trip whose target is a frame round the star:
+
+1. **Find the departure.** Find the first tick t_d at or after the earliest the probe can reach the parking circle, when the star-level Hohmann from the planet's position arrives at the field's position.
+   - The angle between the planet and the field changes steadily, so the window is found in closed form and then refined by bisection on the tick.
+   - Each try runs the real patched-conic legs, so the escape from the planet's sphere is included.
+2. **Hit the field, not just its orbit.** A day's error in leaving is about 0.77° of the field's orbit, which is 5 million km at 2.7 AU, and a frame is joined only within 1,000 km of its edge. So the escape burn is refined twice.
+   - **Burn pass:** the burn's tick is moved to the parking circle's nearest pass of the escape point.
+   - **Burn size:** its size is adjusted by bisection until the miss at arrival is under the join margin. A slightly faster or slower ellipse arrives a little sooner or later, for a few m/s.
+   - At about 6 km of miss per tick, refining to the tick is enough.
+3. **Leave the cluster late, not early.** The probe stays in the cluster, working, until the latest departure that still reaches the parking circle before t_d. In between, its op is `waiting`, as for any windowed trip (contracts section 7). There is no new op, and stop still cancels freely.
+4. **Fallback.** If no refined trip hits the field within one synodic period, the planner falls back to today's untimed route and catch-up phasing, and says so with `phased: true` in the quote.
+
+All of this is integer and deterministic like the rest of the planner. It changes only what `quote` and `move_to` choose, not the leg format, so no contract change is needed.
+
+Tests:
+- arrival within the join margin of a field at 2.7 AU;
+- the wait is under one synodic period;
+- the delta-v is no more than today's less the catch-up's, plus 10 m/s;
+- a quote and the flight agree to the tick;
+- save and load while waiting.
+
+#### The player rule
+
+**"Go to whichever field is near on arrival" is the right default, but the player chooses it rather than having it applied silently.** Belt.md makes each field lean one way (native metals, or zinc and nickel, or ammonia and carbon), so a silent switch could take the player somewhere they did not mean to go.
+
+- **The planner** always times a trip to the field it was given.
+- **The client (D)** lists each known field's next trip: depart, arrive, delta-v and what it leans to. It sorts them by arrival and marks the earliest. That is a `quote` per field, the same call it makes today.
+- **A core's autopilot** (tier 3, which chooses and re-plans) picks the earliest arrival among the fields that hold what its order needs.
+
+#### Open points for the Lead
+
+- (a) Should the quote's wait be shown with the coast warp's speed, so 236 days reads as hours of play? That is D's, and it waits for the warp.
+- (b) Whether the fallback to untimed phasing should exist at all, or the quote should simply say `no_window`. I'd keep it, since a field that can't be timed is a bug to see, not a trip to refuse.
