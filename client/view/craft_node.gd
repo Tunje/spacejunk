@@ -1,6 +1,7 @@
 class_name CraftNode extends Node3D
-## One unit drawn as labelled placeholder parts built from `collision` data.
-## Models replace the meshes later; layout and selection stay data-driven.
+## One unit drawn part by part: the generated model its `visual.model` names, or a
+## labelled placeholder built from `collision` data while it has none. Either way,
+## layout, picking and the resting height come from data, never from the model.
 
 const FLANGE_M := 0.16
 const SELECT_ENERGY := 0.45
@@ -11,6 +12,11 @@ const HEAT_COOL := Color(0.75, 0.12, 0.04)
 const HEAT_HOT := Color(1.0, 0.62, 0.22)
 const GROW_SECONDS := 1.4
 const PLUME_LENGTH_FACTOR := 2.6
+## Generated models are `<visual.model>.glb` here, placed on the part's data origin.
+const MODEL_DIR := "res://assets/models/"
+## Models made before the data-origin rule, and the shift that puts them on it. The
+## B9 test hull is centred on its middle, not its base; B16 replaces it.
+const MODEL_SHIFTS := { "starter_hull": Vector3(0, 3, 0) }
 
 var unit_id := 0
 var signature := ""
@@ -28,6 +34,8 @@ var dock_start := Transform3D.IDENTITY
 var undock_from := Transform3D.IDENTITY
 
 var _materials: Dictionary = {}
+## A model part's own materials, which _paint gives the same glow as `_materials`.
+var _model_materials: Dictionary = {}
 var _meshes: Dictionary = {}
 var _labels: Dictionary = {}
 var _hovered_part := 0
@@ -55,12 +63,22 @@ static func tint_of(visual: Dictionary) -> Color:
 	return Color.html(tint) if Color.html_is_valid(tint) else ClientTheme.OFF_WHITE
 
 
+## The generated model a part's data names, or "" while it has none.
+static func model_path(visual: Dictionary) -> String:
+	var model: Variant = visual.get("model")
+	if not model is String or (model as String).is_empty():
+		return ""
+	var path := MODEL_DIR + (model as String) + ".glb"
+	return path if ResourceLoader.exists(path) else ""
+
+
 func build(id: int, root: Dictionary, modules: Dictionary) -> void:
 	unit_id = id
 	signature = signature_of(root)
 	for child: Node in get_children():
 		child.queue_free()
 	_materials.clear()
+	_model_materials.clear()
 	_meshes.clear()
 	_labels.clear()
 	_tips.clear()
@@ -154,6 +172,10 @@ func _paint() -> void:
 		material.emission_enabled = energy > 0.0
 		material.emission = colour
 		material.emission_energy_multiplier = energy
+		for own: BaseMaterial3D in _model_materials.get(id, []):
+			own.emission_enabled = material.emission_enabled
+			own.emission = colour
+			own.emission_energy_multiplier = energy
 
 
 func _add_part(part: Dictionary, modules: Dictionary) -> void:
@@ -182,33 +204,31 @@ func _add_part(part: Dictionary, modules: Dictionary) -> void:
 
 	var shape := CollisionShape3D.new()
 	shape.position = centre
-	var mesh := MeshInstance3D.new()
-	mesh.position = centre
-	mesh.material_override = material
-	_meshes[part["id"]] = mesh
 	if Feedback.has_capability(module, "radiator"):
 		_radiators.append(part["id"])
 	_record_tip(part, module, xform, centre, size)
-	if collision["shape"] == "cylinder":
+	var cylinder: bool = collision["shape"] == "cylinder"
+	if cylinder:
 		var cylinder_shape := CylinderShape3D.new()
 		cylinder_shape.radius = size.x * 0.5
 		cylinder_shape.height = size.y
 		shape.shape = cylinder_shape
-		var cylinder := CylinderMesh.new()
-		cylinder.top_radius = size.x * 0.5
-		cylinder.bottom_radius = size.x * 0.5
-		cylinder.height = size.y
-		mesh.mesh = cylinder
-		_add_flanges(mesh, size)
 	else:
 		var box_shape := BoxShape3D.new()
 		box_shape.size = size
 		shape.shape = box_shape
-		var box := BoxMesh.new()
-		box.size = size
-		mesh.mesh = box
 	body.add_child(shape)
-	body.add_child(mesh)
+	var path := CraftNode.model_path(module["visual"])
+	var model: Node3D = ModelLook.instantiate(path) if path != "" else null
+	if model != null:
+		model.position = MODEL_SHIFTS.get(module["visual"]["model"], Vector3.ZERO)
+		_model_materials[part["id"]] = CraftNode._own_materials(model)
+		_meshes[part["id"]] = model
+		body.add_child(model)
+	else:
+		var mesh := _placeholder(material, centre, size, cylinder)
+		_meshes[part["id"]] = mesh
+		body.add_child(mesh)
 
 	var label := Label3D.new()
 	label.text = module["name"]
@@ -225,6 +245,43 @@ func _add_part(part: Dictionary, modules: Dictionary) -> void:
 
 	for child: Dictionary in part["children"]:
 		_add_part(child, modules)
+
+
+## The labelled block a part shows until it has a model: its collision shape, tinted.
+func _placeholder(material: StandardMaterial3D, centre: Vector3, size: Vector3, cylinder: bool) -> MeshInstance3D:
+	var mesh := MeshInstance3D.new()
+	mesh.position = centre
+	mesh.material_override = material
+	if cylinder:
+		var shape := CylinderMesh.new()
+		shape.top_radius = size.x * 0.5
+		shape.bottom_radius = size.x * 0.5
+		shape.height = size.y
+		mesh.mesh = shape
+		_add_flanges(mesh, size)
+	else:
+		var box := BoxMesh.new()
+		box.size = size
+		mesh.mesh = box
+	return mesh
+
+
+## A model's materials, made its own so its glow (selection, work, heat) lights this
+## part only: ModelLook already copied the ones it capped, and the rest are copied here.
+## The glow goes on these rather than an overlay, which headless renderers can't free.
+static func _own_materials(model: Node3D) -> Array[BaseMaterial3D]:
+	var own: Array[BaseMaterial3D] = []
+	for node: Node in model.find_children("*", "MeshInstance3D", true, false):
+		var mi := node as MeshInstance3D
+		for surface in mi.mesh.get_surface_count():
+			var material := mi.get_active_material(surface) as BaseMaterial3D
+			if material == null:
+				continue
+			if mi.get_surface_override_material(surface) == null:
+				material = material.duplicate() as BaseMaterial3D
+				mi.set_surface_override_material(surface, material)
+			own.append(material)
+	return own
 
 
 ## The far end of a part from its mount, which is where effects start. A root
