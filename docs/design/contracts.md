@@ -1,6 +1,6 @@
 # Simulation Contracts
 
-Contract version: 4. Signed off by the Lead (task L7) after review by Agents A, C and D. Version 2 added the job queue (C9). Version 3 adds orbits and frames ([orbital_flight.md](orbital_flight.md) section 11, task A10). Version 4 makes jobs take work points, not time (C11). Changes go through the Lead.
+Contract version: 4. Signed off by the Lead (task L7) after review by Agents A, C and D. Version 2 added the job queue (C9). Version 3 adds orbits and frames ([orbital_flight.md](orbital_flight.md) section 11, task A10). Version 4 makes jobs take work points, not time (C11). Version 5 adds research: science, theories, prototypes and variants (C12). Changes go through the Lead.
 
 These contracts expand section 5 of `plan/workplan.md`. If the two disagree, raise it with the Lead.
 
@@ -111,7 +111,9 @@ Rules:
   - `arrive_tick` is the tick `arrived` fires, `depart_tick + ticks - 1`.
 - `next_window(unit, target, from_tick, cap_g) -> Dictionary` gives the same as `quote` if it costs at most `cap_g`, otherwise `{ reason: "no_window" }`.
 - Sim code prices a leg the unit hasn't reached yet, such as a cycle's lap gate, with `Travel.quote_leg(ctx, unit, from_place, target, mass_g, from_tick)`. That gives the same dictionary, from the place of a body or unit at a given mass.
-- `defs()` returns `{ modules, items, recipes, templates, sinks }`, each keyed by definition ID, including connectors, collision and visual, so clients never parse data units. Fields are renamed to their sim unit: `mass_kg` to `mass_g`, `power_kw` to `power_w`, `heat_kw` to `heat_w`, `volume_m3` to `volume_l`, `load_limit_kg` to `load_limit_g`, `density_kg_m3` to `density_g_l`, `seconds` to `ticks` (except on recipes, which have `work` instead), and likewise for any other unit-suffixed field (`docs/design/schemas.md` section 2).
+- `defs()` returns `{ modules, items, recipes, templates, sinks, theories, science, bench_test }`, each keyed by definition ID except the single `bench_test`, including connectors, collision and visual, so clients never parse data units. Fields are renamed to their sim unit: `mass_kg` to `mass_g`, `power_kw` to `power_w`, `heat_kw` to `heat_w`, `volume_m3` to `volume_l`, `load_limit_kg` to `load_limit_g`, `density_kg_m3` to `density_g_l`, `seconds` to `ticks` (except on recipes, which have `work` instead), and likewise for any other unit-suffixed field (`docs/design/schemas.md` section 2).
+  - An idea's `deltas` keep their parts-per-million values unscaled; only each path's last field is renamed, so `capabilities.battery.capacity_kj` becomes `capabilities.battery.capacity_j`. A delta naming a field that is missing or not whole in its module fails the load (C12).
+  - `defs()` is the game's own definitions: the authored ones, plus the `prototype:<design>` items and recipes and `qualify:<design>` recipes of every theory-unlocked module, plus the module, items and recipes of each variant the game has designed. The derived entries are never saved, and the data hash covers the authored definitions only. A loaded game rebuilds its variants from `research.variants` before anything reads its definitions. A client refreshes its copy on `variant_designed`.
 - Scenario `"empty"` is built into the kernel for tests that precede `data/`.
 - The event queue is bounded (A1 sets the bound) and starts empty on load.
 - The client drains events before calling `to_save`, because undrained events are not saved.
@@ -232,6 +234,8 @@ A burn whose tick comes while the unit has another operation, a route or a task 
 A unit on an orbit whose position falls below its parent body's radius crashes. It comes down landed on the cell below, a running burn ends with `burn_short` reason `crashed`, a transfer ends, and `crashed` fires. Damage is not modelled yet. Landing doesn't yet check a cell's surface type or slope, which waits for planets.md's rule tables in `data/`.
 
 New command types go through the Lead. C0 may refine autonomy commands, events, reason codes and task view fields without a separate change, and tells the Lead what changed.
+
+- **Unit 0** in a command means the player rather than a unit. Only a command type its system lists in `unitless_commands()` may use it, such as `design_variant` (C12). Any other command with unit 0 is refused with `unknown_unit`, and events and refusals for a unitless command carry unit 0.
 
 ## 6. Events
 
@@ -360,7 +364,7 @@ The save excludes undrained events and the command log. Replay harnesses step to
 
 ## 9. Ledgers
 
-`ledger()` is rebuilt each tick, is not saved, and is for tests only. It returns `{ tick, matter, energy, heat, violations }`, with the matter fields of `accounting.md` section 6 under `matter`, plus a `sinks` map of grams per sink, so tests can assert each sink separately. Each check runs every tick in tests and fails on any difference.
+`ledger()` is rebuilt each tick, is not saved, and is for tests only. It returns `{ tick, matter, energy, heat, science, violations }`, with the matter fields of `accounting.md` section 6 under `matter`, plus a `sinks` map of grams per sink, so tests can assert each sink separately. `science` is `{ points, earned, spent, held }`, where `held` sums the running lab jobs' `points_held`, and its check is earned = points + spent + held, with points and spent never below 0 (C12). Each check runs every tick in tests and fails on any difference.
 
 Commit-time range checks match state by key name, so state fields keep their unit suffix (`_g`, `_w`, `_j`, `_l`, `_mm`, `_tick`, `_remainder`).
 

@@ -27,6 +27,9 @@ static func populate(ctx: SimContext, scenario: Dictionary, deposits: Dictionary
 			problem = _dock(ctx, entry, keys)
 			if problem != "":
 				return problem
+	problem = Research.start_theories(ctx, scenario.get("research", {}).get("theories", []))
+	if problem != "":
+		return problem
 	return _set_world_total(ctx)
 
 
