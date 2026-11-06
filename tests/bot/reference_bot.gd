@@ -283,7 +283,8 @@ func _job(facility: int, recipe: String, count: int) -> void:
 		return
 	var id := _command("start_job", STATION, { "facility": facility, "recipe": recipe, "count": count })
 	var start := sim.current_tick() + 1
-	var rate: int = sim.defs()["modules"][_def_of(sim.view()["units"][STATION]["parts"], facility)]["capabilities"] 		["facility"]["work_per_tick"]
+	var rate: int = sim.defs()["modules"][_def_of(sim.view()["units"][STATION]["parts"], facility)]["capabilities"] \
+		["facility"]["work_per_tick"]
 	var limit: int = ceili(float(sim.defs()["recipes"][recipe]["work"]) / rate) * count + ORDER_LIMIT_TICKS
 	var job := 0
 	var left := count

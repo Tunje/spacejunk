@@ -108,6 +108,9 @@ func _rebuild(view: Dictionary) -> void:
 		var name_line := _add_label(_body, "%s: %s" % [theory["name"], status])
 		name_line.modulate = ClientTheme.GOLD if status == "Ready to prove" else Color.WHITE
 		_add_detail("Evidence: %s" % ResearchLogic.evidence_text(theory, view))
+		var advice := ResearchLogic.landing_advice(theory, view)
+		if advice != "":
+			_add_detail(advice).modulate = ClientTheme.GOLD.lightened(0.2)
 		if status != "Proven":
 			_add_detail("%s." % ResearchLogic.test_cost(theory, _defs))
 			_add_facility_button("Start at a lab", theory.get("test", ""), view, "lab")

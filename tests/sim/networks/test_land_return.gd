@@ -26,8 +26,9 @@ func _check_after_leaving(bot: NewStartBot) -> Dictionary:
 	return detail
 
 
-## The probe at the station after the lab stage, its goods taken off and its tank at `propellant_g`,
-## undocked and ready to leave.
+## The probe at the station after the lab stage, its goods taken off, moved to White Rock, where the
+## old stage 3's ice top-up left it, and undocked. Then its tank is set to `propellant_g`, so that is
+## what leaves for Frost.
 func _from_the_station(propellant_g: int) -> NewStartBot:
 	var bot := NewStartBot.from_snapshot(NewStartBot.STAGE_LAB)
 	var inventory: Dictionary = bot.sim._state["units"][PROBE]["inventory"]
@@ -37,10 +38,17 @@ func _from_the_station(propellant_g: int) -> NewStartBot:
 	for item: String in keys:
 		if items[item]["cargo_class"] == "goods":
 			Units.remove_stock(inventory, item, inventory[item])
-	Units.remove_stock(inventory, "propellant", inventory["propellant"] - propellant_g)
 	bot.sim._state["matter_start_g"] = bot.sim.ledger()["matter"]["total_g"]
 	bot.sim._ctx.index.clear()
+	bot._order("move_to", PROBE, { "target": NewStartBot.WHITE_ROCK })
 	bot._order("undock", bot.station, {})
+	var held: int = inventory.get("propellant", 0)
+	if held > propellant_g:
+		Units.remove_stock(inventory, "propellant", held - propellant_g)
+	else:
+		Units.add_stock(inventory, "propellant", propellant_g - held)
+	bot.sim._state["matter_start_g"] = bot.sim.ledger()["matter"]["total_g"]
+	bot.sim._ctx.index.clear()
 	return bot
 
 
@@ -55,12 +63,45 @@ func test_a_full_tank_from_the_start_can_get_back() -> void:
 func test_the_hint_case_with_the_ice_top_up_can_get_back() -> void:
 	var detail := _check_after_leaving(_from_the_station(2_477_626))
 	assert_false(detail["cannot_return"])
-	assert_between(detail["return_propellant_g"], 810_000, 840_000, "about 826 kg, as flown")
+	# 826 kg was flown from the old stage 3, which had topped up with ice at White Rock. The C18b
+	# route leaves the probe lighter, and the check prices it at about 800 kg; not flown again.
+	assert_between(detail["return_propellant_g"], 785_000, 815_000, "about 800 kg, the check's price")
 
 
-func test_without_the_ice_top_up_it_cannot_get_back() -> void:
-	var detail := _check_after_leaving(_from_the_station(1_701_000))
-	assert_true(detail["cannot_return"], "745 kg left after landing, against about 758 kg to get back")
+## The land check, read-only, at this tick and place with `grams` of propellant aboard.
+func _check_with(bot: NewStartBot, grams: int) -> Dictionary:
+	var inventory: Dictionary = bot.sim._state["units"][PROBE]["inventory"]
+	Units.remove_stock(inventory, "propellant", inventory["propellant"])
+	Units.add_stock(inventory, "propellant", grams)
+	bot.sim._ctx.index.clear()
+	var cell := LandingSystem.cell_below(bot.sim._ctx, FROST, bot.sim._state["units"][PROBE]["pos_mm"])
+	var checked := bot.sim.check({ "type": "land", "unit": PROBE, "args": { "body": FROST, "cell": cell } })
+	assert_true(checked["ok"], str(checked))
+	return checked["detail"]
+
+
+## Self-calibrating, so a route change cannot break it: the least tank the check does not warn about
+## is found by halving, and there landing plus the way back must just fit. Both prices fall with
+## the tank's own mass, so the edge is found where the check is, not from the full tank's prices.
+func test_a_tank_short_of_the_way_back_is_warned() -> void:
+	var bot := _from_the_station(2_477_626)
+	# Less than the landing itself is refused with no_propellant, so the search starts at the full
+	# tank's landing price: the lighter probe can still land on it, but has nothing to get back on.
+	var short: int = _check_after_leaving(bot)["propellant_g"]
+	var enough := 2_477_626
+	assert_false(_check_with(bot, enough)["cannot_return"])
+	assert_true(_check_with(bot, short)["cannot_return"])
+	while enough - short > 1_000:
+		var middle := (short + enough) / 2
+		if _check_with(bot, middle)["cannot_return"]:
+			short = middle
+		else:
+			enough = middle
+	var at_edge := _check_with(bot, enough)
+	gut.p("warned below %d kg: %s" % [enough / 1000, str(at_edge)])
+	var need: int = at_edge["propellant_g"] + at_edge["return_propellant_g"]
+	assert_between(enough - need, 0, 1_000, "the edge is where landing plus the way back just fit")
+	assert_true(_check_with(bot, short)["cannot_return"], "a kilogram short is warned")
 
 
 ## B's crash (A39): a move_to waiting for its window from a unit that then drops into low flight is

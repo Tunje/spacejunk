@@ -176,8 +176,8 @@ func measure(body: int, kind: String) -> void:
 	order("Measure %s" % kind)
 
 
-## Mines until the hold holds `target_g` of the item, then presses Stop; 0 means until
-## the hold fills. There is no amount on Mine, so a player watches the bar at 1×.
+## Mines until the hold holds `target_g` of the item, or until the hold fills for 0:
+## the order panel's amount box sets Mine's grams (C19), as a player would.
 func mine(rock: String, item: String, target_g: int) -> void:
 	select("body", rocks[rock])
 	var deposit := 0
@@ -185,17 +185,16 @@ func mine(rock: String, item: String, target_g: int) -> void:
 		var shown: Dictionary = bridge.current_view["deposits"][id]
 		if shown["body"] == rocks[rock] and shown["item"] == item:
 			deposit = id
-	if deposit == 0 or not press("Mine %d" % deposit):
+	if deposit == 0:
+		_problem("no %s deposit shown on %s" % [item, rock])
 		return
-	_kick()
-	if target_g > 0:
-		note("Mine has no amount: to take part of a hold, a player slows to 1x, watches the ore bar and presses Stop.")
-		warp_until(func() -> bool: return held(probe, item) >= target_g or _idle(probe), "mining %s" % item, 1)
-		if not _idle(probe):
-			press("Stop")
-			warp_until(_idle.bind(probe), "stop mining")
-	else:
-		warp_until(_idle.bind(probe), "mining %s" % item)
+	var to_mine := target_g - held(probe, item) if target_g > 0 else 0
+	if target_g > 0 and to_mine <= 0:
+		return
+	orders.amount.value = ceili(to_mine / 1000.0)
+	orders.refresh()
+	order("Mine %d" % deposit)
+	orders.amount.value = 0
 
 
 func unload(item_name: String, count: int) -> void:
@@ -379,18 +378,9 @@ func stage_prep() -> void:
 	wait_jobs(["refine_olivine"])
 
 
-## Stage 3: the tank topped up from ice, the lab built into the station, and the
-## station's core assigned through Auto.
+## Stage 3: the lab built into the station once its second solar panel is on, and the
+## station's core assigned through Auto; the processors and cores for research queued.
 func stage_lab() -> void:
-	fly_to("body", rocks["White Rock"])
-	for i in 2:
-		var free_g := _cargo_free("propellant")
-		if free_g < 90_000:
-			break
-		mine("White Rock", "water_ice", 0)
-		var runs := mini(free_g / 90_000, held(probe, "water_ice") / 100_000)
-		queue(probe, "refinery", "refine_water_ice", runs)
-		wait_jobs(["refine_water_ice"])
 	wait_jobs(["solar_panel_mk1"])
 	queue(probe, "fabricator", "research_lab_mk1", 1, [station, "side_b_px"])
 	wait_jobs(["research_lab_mk1"])
@@ -403,68 +393,14 @@ func stage_lab() -> void:
 	queue(probe, "fabricator", "basic_core", 2)
 
 
-## Stage 4: the station undocks; the probe burns out of the cluster from the flight
-## screen, lands on Frost and takes a surface sample.
-func stage_frost_down() -> void:
-	take_command(station)
-	order("Undock")
-	fly_to("body", rocks["Red Rock"])
+## Stage 4 (C18b): Frost's gravity field mapped from the cluster, docked at the station,
+## over one lap of the cluster's orbit, warped; the fabricator runs on meanwhile.
+func stage_lap() -> void:
 	take_command(probe)
-	if not flight.visible:
-		main.toggle_flight()
-	flight.burn_now()
-	flight.set_components(-20.0)
-	if not flight.preview.get("ok", false):
-		_problem("the leaving burn: %s" % str(flight.preview))
-		return
-	flight.plan()
-	warp_until(_left_cluster, "the leaving burn")
-	if int(unit(probe)["orbit"].get("parent", 0)) != frost:
-		_problem("not on an orbit round Frost after the burn")
-		return
-	flight.choose_cell(LandingSystem.cell_below(bridge.sim._ctx, frost, bridge.sim._state["units"][probe]["pos_mm"]))
-	if not flight.land_preview.get("ok", false):
-		_problem("land: %s" % str(flight.land_preview))
-		return
-	flight.land()
-	_kick()
-	warp_until(func() -> bool: return not unit(probe)["landed"].is_empty(), "landing")
-	main.toggle_flight()
-	measure(frost, "surface")
-
-
-func _left_cluster() -> bool:
-	var shown := unit(probe)
-	return int(shown.get("frame", 0)) == 0 and shown["burns"].is_empty() and shown["burn"].is_empty()
-
-
-## Stage 5: back up to a low orbit from the flight screen, and a lap of it to map
-## Frost's gravity field.
-func stage_frost_lap() -> void:
-	take_command(probe)
-	main.toggle_flight()
-	flight._altitude.value = 35.0
-	flight._land_ms = -FlightScreen.PATH_REFRESH_MS
-	flight._settle_until = 0
-	flight.refresh()
-	if not flight.takeoff_preview.get("ok", false):
-		_problem("take off: %s" % str(flight.takeoff_preview))
-		return
-	flight.take_off()
-	_kick()
-	warp_until(func() -> bool: return unit(probe)["landed"].is_empty() and _idle(probe), "the climb")
-	main.toggle_flight()
 	measure(frost, "gravity_field")
 
 
-## Stage 6: home to the station, and docked.
-func stage_return() -> void:
-	fly_to("unit", station)
-	select("unit", station)
-	order("Dock")
-
-
-## Stage 7: the theory proven at the station's lab, the Assisted Core prototyped on
+## Stage 5: the theory proven at the station's lab, the Assisted Core prototyped on
 ## the probe and bench-tested at the lab.
 func stage_research() -> void:
 	wait_jobs()

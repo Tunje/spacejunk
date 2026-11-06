@@ -1,6 +1,6 @@
 extends GutTest
-## D31, stage 7 in the real client (NewStartPlayer): the theory proven at the lab, the Assisted Core prototyped and bench-tested. Starts from the bot's
-## snapshot after stage 6 and plays this stage by the client's own controls.
+## D31, stage 5 in the real client (NewStartPlayer): the theory proven at the lab, the Assisted Core prototyped and bench-tested. Starts from the bot's
+## snapshot after stage 4 and plays this stage by the client's own controls.
 
 var main: Node
 var player: NewStartPlayer
@@ -10,7 +10,7 @@ func before_all() -> void:
 	main = load("res://client/main.tscn").instantiate()
 	main.scenario = Main.NEW_START
 	add_child(main)
-	player = NewStartPlayer.new(main, NewStartBot.STAGE_RETURN)
+	player = NewStartPlayer.new(main, NewStartBot.STAGE_LAP)
 	player.stage_research()
 	for line in player.friction:
 		gut.p("friction: " + line)
