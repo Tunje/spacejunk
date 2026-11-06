@@ -61,6 +61,7 @@ func test_a_module_is_built_straight_onto_its_connector() -> void:
 	_give(STORAGE)
 	sim.submit(_job(STORAGE, _target()))
 	sim.step()
+	assert_eq(_types(sim.take_events()), ["job_started"])
 	var job: int = state["jobs"].keys()[0]
 	assert_eq(sim.view()["jobs"][job]["install_to"], _target())
 	var events := _steps(RUN_TICKS - 1)
@@ -92,8 +93,8 @@ func test_a_job_built_in_place_is_refused_where_attach_part_would_be() -> void:
 	var lone := Units.create(sim._ctx, "small_craft", "Lone", [1_000_000, 0, 0])
 	assert_eq(sim.check(_job(STORAGE, _target(lone, state["units"][lone]["root"], "side_a_px")))["reason"],
 		"not_docked")
-	var occupied := Units.sorted_part_ids(state, STATION).filter(func(id: int) -> bool:
-		return state["parts"][id]["parent"] == HUB)[0]
+	var occupied: int = Units.sorted_part_ids(state, STATION).filter(func(id: int) -> bool:
+		return state["parts"][id]["parent"] == HUB and state["parts"][id]["parent_connector"].begins_with("side"))[0]
 	assert_eq(sim.check(_job(STORAGE, _target(STATION, HUB, state["parts"][occupied]["parent_connector"])))["reason"],
 		"connector_occupied")
 	assert_eq(sim.check(_job("mining_laser_mk1", _target(SHIP, HULL, "side_b_nz")))["reason"], "over_heat_budget",
