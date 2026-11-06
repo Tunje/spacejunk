@@ -17,6 +17,8 @@ const ATTENTION: Array[String] = [
 ]
 ## Kept warping through when the player chose to.
 const JOB_EVENTS: Array[String] = ["job_finished"]
+## A queued job waiting on another job's output is the plan working, not news.
+const QUIET_PAUSES: Array[String] = ["missing_inputs"]
 
 ## Why the Sim (A33) or the bridge capped a warp, in plain words.
 const CAP_TEXT: Dictionary = {
@@ -52,9 +54,16 @@ static func mode(speed: int) -> String:
 	return "batch" if speed <= BATCH else "coast"
 
 
-static func needs_attention(events: Array, through_jobs := false) -> bool:
+## `live_jobs`, the view's jobs after these events: a finished run counts only when it
+## was its job's last (the job has left the view), not every run of a 24-run job.
+static func needs_attention(events: Array, through_jobs := false, live_jobs: Dictionary = {}) -> bool:
 	for event: Dictionary in events:
-		if ATTENTION.has(event["type"]) or (not through_jobs and JOB_EVENTS.has(event["type"])):
+		var data: Dictionary = event.get("data", {})
+		if event["type"] == "job_paused" and QUIET_PAUSES.has(data.get("reason", "")):
+			continue
+		if ATTENTION.has(event["type"]):
+			return true
+		if not through_jobs and JOB_EVENTS.has(event["type"]) and not live_jobs.has(data.get("job", 0)):
 			return true
 	return false
 

@@ -27,7 +27,9 @@ static func build(view: Dictionary, modules: Dictionary, items: Dictionary, comm
 			_add(orders, "Dock", commanded, "dock", { "port": port, "target_port": target_port })
 	if not unit["dock"].is_empty():
 		_add(orders, "Undock", commanded, "undock", {})
-		_add_transfer_orders(orders, view, items, commanded)
+	var partner := OrderList.docked_partner(view, commanded)
+	if partner != 0:
+		_add_transfer_orders(orders, view, items, commanded, partner)
 	_add_stop_order(orders, view, commanded)
 	return orders
 
@@ -54,9 +56,9 @@ static func _is_dock_order(order: Dictionary) -> bool:
 
 ## Unload everything aboard except propellant, and refill from the host what
 ## this unit has room for. Amounts are left out, which moves all that fits.
-static func _add_transfer_orders(orders: Array[Dictionary], view: Dictionary, items: Dictionary, commanded: int) -> void:
+static func _add_transfer_orders(orders: Array[Dictionary], view: Dictionary, items: Dictionary, commanded: int,
+		host_id: int) -> void:
 	var unit: Dictionary = view["units"][commanded]
-	var host_id: int = unit["dock"]["target_unit"]
 	var held: Array = unit["inventory"].keys()
 	held.sort()
 	for item: String in held:
@@ -111,6 +113,21 @@ static func set_amount(command: Dictionary, count: int, items: Dictionary) -> vo
 		return
 	var unit_g: int = items.get(command["args"]["item"], {}).get("unit_mass_g", 0)
 	command["args"]["grams"] = count * (unit_g if unit_g > 0 else 1000)
+
+
+## The unit cargo moves to and from: the one this unit is docked at, or else the
+## first, by ID, docked at it (a station built at a ship's port docks to the ship).
+static func docked_partner(view: Dictionary, unit_id: int) -> int:
+	var dock: Dictionary = view["units"][unit_id]["dock"]
+	if not dock.is_empty():
+		return dock["target_unit"]
+	var ids: Array = view["units"].keys()
+	ids.sort()
+	for id: int in ids:
+		var other: Dictionary = view["units"][id]["dock"]
+		if id != unit_id and not other.is_empty() and other["target_unit"] == unit_id:
+			return id
+	return 0
 
 
 static func _add(orders: Array[Dictionary], label: String, unit: int, type: String, args: Dictionary, key: String = "") -> void:

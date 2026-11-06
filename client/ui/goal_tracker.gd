@@ -116,6 +116,11 @@ func observe_view(view: Dictionary, items: Dictionary, modules: Dictionary) -> A
 	var finished: Array[String] = []
 	if not view["deposits"].is_empty():
 		_finish(finished, "scan")
+	# C12 and C13's goals that the view alone shows, so a loaded game is right too.
+	if int(view.get("science", {}).get("earned", 0)) > 0:
+		_finish(finished, "science")
+	if view.get("research", {}).get("designs", {}).get("assisted_core", "") == "qualified":
+		_finish(finished, "research")
 	for id: int in view["units"]:
 		var unit: Dictionary = view["units"][id]
 		if unit["kind"] == "drone" and GoalTracker._is_working_drone(unit, modules):
@@ -124,6 +129,8 @@ func observe_view(view: Dictionary, items: Dictionary, modules: Dictionary) -> A
 			_finish(finished, "mine")
 		if unit["kind"] == "station" and GoalTracker._holds_ore(unit, items):
 			_finish(finished, "haul")
+		if unit["kind"] == "station":
+			_finish(finished, "station")
 	return finished
 
 

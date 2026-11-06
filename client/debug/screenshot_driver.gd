@@ -25,6 +25,7 @@ class_name ScreenshotDriver extends Node
 ##                                   to the moon's ring; -1 shows it waiting, else that far through
 ##   --descent-demo=<m/s>,<seconds>  (reference) a light 250 km world on the real Sim: the probe, with
 ##                                   legs, lifts off straight up at that speed and flies that long
+##   --snapshot=<res:// save>        (real Sim) loads that save first, such as a bot stage's
 ##   --run=<seconds>                 (real Sim) steps the game that long first, such as out of a shadow
 ##   --set-down=<body name>,<cell>   (real Sim) puts the commanded craft down on that hex as a landing
 ##                                   ends, for a landed shot where it can't yet fly down
@@ -81,6 +82,11 @@ func _run() -> void:
 		await _descent_demo(parsed["descent-demo"])
 	if parsed.has("landing-demo"):
 		await _landing_demo(parsed["landing-demo"])
+	if parsed.has("snapshot"):
+		var loaded := Sim.from_save(FileAccess.get_file_as_string(parsed["snapshot"]))
+		if loaded != null:
+			main.bridge.start(loaded)
+			main.local_view.rebuild()
 	if parsed.has("run"):
 		(main.bridge.sim as Sim).step(roundi(float(parsed["run"]) * Sim.TICKS_PER_SECOND))
 		main.bridge.start(main.bridge.sim)

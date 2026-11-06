@@ -28,6 +28,8 @@ var previous_view: Dictionary = {}
 var current_view: Dictionary = {}
 ## Keep warping when a job finishes, rather than dropping to 1×.
 var warp_through_jobs := false
+## FRAME_BUDGET_MS for play; a headless test may allow more, to warp through hours fast.
+var frame_budget_ms := FRAME_BUDGET_MS
 ## Game speed actually reached, smoothed, and why it was held back ("" when not).
 var achieved_speed := 1.0
 var capped_by := ""
@@ -106,7 +108,7 @@ func advance(delta: float) -> void:
 	_note_speed(advanced, delta, cap)
 	previous_view = current_view
 	current_view = sim.view()
-	if speed > WarpLogic.STEP_MAX and WarpLogic.needs_attention(events, warp_through_jobs):
+	if speed > WarpLogic.STEP_MAX and WarpLogic.needs_attention(events, warp_through_jobs, current_view.get("jobs", {})):
 		set_speed(SPEEDS[0])
 		_ticks_owed = 0.0
 	view_updated.emit()
@@ -125,7 +127,7 @@ func _warp(due: int, events: Array[Dictionary]) -> Dictionary:
 	var cap := "no_coast" if WarpLogic.mode(speed) == "coast" and not coasting else ""
 	var advanced := 0
 	while advanced < due:
-		if (Time.get_ticks_usec() - started) / 1000.0 >= FRAME_BUDGET_MS:
+		if (Time.get_ticks_usec() - started) / 1000.0 >= frame_budget_ms:
 			if cap.is_empty():
 				cap = "busy_world"
 			break
@@ -146,7 +148,8 @@ func _warp(due: int, events: Array[Dictionary]) -> Dictionary:
 			advanced += batch
 		var got: Array[Dictionary] = sim.take_events()
 		events.append_array(got)
-		if WarpLogic.needs_attention(got, warp_through_jobs):
+		# A finished run is judged against the view after the frame, so not here.
+		if WarpLogic.needs_attention(got, true):
 			break
 	return { "ticks": advanced, "capped_by": cap }
 

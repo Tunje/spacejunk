@@ -54,7 +54,9 @@ func _ready() -> void:
 	_amount_row.visible = false
 	column.add_child(_amount_row)
 	var amount_label := _add_label(_amount_row)
-	amount_label.text = "Amount (items, or kg; 0 = all)"
+	amount_label.text = "Amount (0 = all)"
+	amount_label.tooltip_text = "How much Unload and Load move: whole items, or kilograms of bulk cargo"
+	amount_label.mouse_filter = Control.MOUSE_FILTER_PASS
 	amount_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	amount = SpinBox.new()
 	amount.min_value = 0
