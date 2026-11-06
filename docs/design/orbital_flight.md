@@ -403,7 +403,7 @@ Sizes compare with earlier kernel tasks: **S** is about A7's size, **M** about A
 - **Each tick's delta-v** is thrust over the unit's mass at the start of the tick, with a carried remainder.
 - **Propellant** flows at thrust / exhaust speed, also with a remainder. It is claimed against reservations and leaves in phase 6 through `propellant_exhaust`, so the matter ledger holds.
 - **Drift:** in a frame, a burn changes `vel_um_s`, and the unit drifts in a straight line, with a carry in tenths of a micrometre so the drift is exact. A `move_to` in a frame stops the drift.
-- **Frame margins,** a change from 11.2: a drifting unit leaves at the frame's radius + **2000 km**, and joins at radius + 1000 km under 1 m/s. The gap stops a slow unit at the edge flapping in and out.
+- **Frame margins,** a change from 11.2: a drifting unit leaves at the frame's radius + **2000 km**, and joins at radius + 1000 km under 1 m/s. The gap stops a slow unit at the edge flapping in and out. A26 shrinks both inside a small sphere of influence, and a unit drifting over 2 m/s leaves at once (11.20).
 - **Measured:**
   - The first Hohmann burn from 700 km (45.7 m/s), flown as a finite burn of 844 ticks, gives an apoapsis of 759.3 km, against 760 km for an instant impulse.
   - The delta-v delivered matches the request within the rounding of its direction.
@@ -687,3 +687,66 @@ The cluster round the moon is the only placement where the probe's first landing
 Then add station battery capacity and a drone battery in data, so the chain is as quick as today's.
 
 Planets round the star are a later goal. They need propellant made on the surface, and a coast warp before they are playable at all.
+
+### 11.20 A26 results: frames in a small sphere of influence, and the new start's figures
+
+#### Frame margins
+
+A frame has no gravity. A unit drifting in one moves in a straight line until it passes the leave margin, then becomes an orbit. Round the star the 2000 km margin is tiny against the orbit. Round Frost, whose sphere of influence is 573 km, it reached four times past the sphere.
+
+The rule now:
+- **Leave margin:** 2000 km, or half the room left in the parent's sphere, whichever is less. The room is the sphere less the frame's apoapsis and radius. The margin is never under 2 km.
+- **Join margin:** always half the leave margin, so a slow unit at the edge still can't flap in and out.
+- **No sphere:** a frame round the star keeps 2000 km and 1000 km.
+- **Refused at load:** a frame whose apoapsis, radius and twice the 2 km floor reach past its parent's sphere. ScenarioBuilder refuses it, so the floor never puts the leave point outside the sphere.
+- **new_start's cluster:** 300 km from Frost's centre and 60 km in radius. It leaves 106 km past its edge and joins 53 km past it. The floor is not used.
+
+**Leaving at speed.** Capping the margin was not enough near Frost.
+- In D's D25 run, a 20 m/s retrograde burn from the cluster would still drift about 2.3 hours to the capped leave point, in a straight line with no gravity.
+- A 31 m/s burn, as for a landing, drifted 90 minutes (22% of a cluster orbit). It then left on an orbit with its periapsis 25 km from Frost's centre, under the surface. The same burn made on an orbit gives 65 km.
+- The cluster is 120 km across, 40% of its orbit's radius, so no margin fixes that.
+
+The rule now:
+- A unit drifting in a frame faster than **2 m/s** (`LEAVE_SPEED_UM_S`, twice the join speed) leaves it on that tick, even mid-burn, onto the orbit the frame's motion plus its own velocity give.
+- The rest of the burn is flown on that orbit, in the direction the burn started with.
+- Only a nudge under 2 m/s still drifts in a straight line, and leaves by the margin.
+- The hysteresis is unchanged: a unit joins under 1 m/s and leaves over 2 m/s.
+- `tests/slow/test_new_start_landing.gd` flies D's case on new_start. It moves to a rock, burns 20 m/s retrograde, leaves on the burn's first ticks onto an orbit round Frost, and lands with the land command.
+
+#### The probe on new_start
+
+Measured on the sim from new_start.json:
+- **Mass:** the probe is **5,480 kg dry** with 2,000 kg of propellant, so **933 m/s** on a full tank. That is not the 7.38 t in the A26 brief. At 7.38 t dry the tank gives 719 m/s.
+- **Thruster:** 10 kN at 3000 m/s exhaust, so 1.34 to 1.8 m/s² as the tank empties. Frost's surface gravity is 0.49 m/s².
+- **Legs:** four, with a 6 m/s touchdown limit.
+
+`tools/frost_run.gd` flies the landing as a player would. Every second it places a short burn: level thrust against the level speed, plus enough vertical thrust to follow a descent rate it can still stop. It starts on the cluster's orbit, half a turn from the cluster, which is what leaving at speed now gives.
+
+| | Flown | Impulsive | Quoted by the command |
+| --- | --- | --- | --- |
+| Deorbit and land, careful (20% of thrust held for stopping vertically) | 333 m/s, landed at 1.4 m/s | 242 m/s | `land`: 261 m/s |
+| The same, bolder (40%) | 323 m/s, landed at 1.5 m/s | 242 m/s | |
+| Bolder still (60%) | 311 m/s, **crashed** at 8.7 m/s | 242 m/s | |
+| Take off and circle at the cluster's height | 302 m/s | about 242 m/s | `take_off`: 261 m/s |
+| Rejoin the cluster from that circle | 3 m/s, 62 h | | |
+
+- **A flown landing loses 33 to 38%,** not the 3% the land and take_off commands allow. The burns are long against the descent: about 2.5 minutes at full thrust to stop 211 m/s, while gravity pulls.
+- **The round trip flown is about 630 to 640 m/s,** leaving about **295 m/s spare** on today's 5.48 t probe.
+  - At 7.38 t dry it would be about 80 m/s spare.
+  - With the commands' figures it would be 525 m/s, and 408 m/s spare.
+- **The commands are cheaper than flying.** That is a choice for the Lead and B: either the commands' 3% stands as "the autopilot flies perfectly", or GRAVITY_LOSS_PERMILLE goes up to about 1300 so the commands match a pilot.
+
+#### The belt
+
+The planner's trip, using A22's two-level route, from the cluster round Frost to a belt field at 2.7 AU, and back:
+
+| | Delta-v | In flight |
+| --- | --- | --- |
+| Out | 10,650 m/s | 475 days to the belt's orbit, then about 1,620 days catching up with the field |
+| Back | 10,828 m/s | 461 days, leaving on day 232 |
+| Both ways | 21,478 m/s | |
+
+- **Mass ratio:** 1,286 at 3000 m/s exhaust and 2.05 at 30,000 m/s. One way is a mass ratio of 35 at 3000 m/s, which matches belt.md's 39 from the planet's orbit, less the Oberth gain from leaving Frost and the planet low.
+- **The out trip's time is mostly the catch-up.** A22's two-level route doesn't time the departure to where the field will be (it phases at the planet's level only). It arrives on the field's orbit at the wrong place and rides a slightly larger orbit round to it.
+  - With many fields, a trip can go to whichever is near on arrival, about 475 days.
+  - Timing the departure to the field is a planner change, not made.
