@@ -603,10 +603,33 @@ func _sorted(table: Dictionary) -> Array:
 	return keys
 
 
-## Coast (A33, idle only until C17): with no jobs at all, nothing here changes from tick to tick.
-## Any job steps the world, until C17 gives running jobs a closed form.
+## Coast (A33, C17). A running job works work_per_tick a tick, so it coasts until its run's last
+## tick, which is stepped, and with it a build's port claim. A queued, paused or cancelling job, or a
+## waiting one held for a reason, changes nothing until something else does, which is stepped. But
+## a job about to start its next run (waiting, no reason) steps, and so does one waiting while its
+## own unit mines, whose ore could clear missing_inputs mid-skip.
 func horizon(ctx: SimContext) -> int:
-	if ctx.state["jobs"].is_empty():
-		return NO_LIMIT
-	ctx.coast_cap = "jobs"
-	return 0
+	var skip := NO_LIMIT
+	var jobs: Dictionary = ctx.state["jobs"]
+	for id: int in _sorted(jobs):
+		var job: Dictionary = jobs[id]
+		match job["status"]:
+			STATUS_RUNNING:
+				var rate := work_per_tick(ctx, job["facility"])
+				skip = mini(skip, (job["work_left"] + rate - 1) / rate - 1)
+			STATUS_WAITING:
+				if job["reason"] == "" or ctx.state["units"][job["unit"]]["op"]["type"] == MiningStep.OP_MINING:
+					skip = 0
+		if skip <= 0:
+			ctx.coast_cap = "jobs"
+			return 0
+	return skip
+
+
+## Coast (C17): each running job does its work for the skipped ticks.
+func coast(ctx: SimContext, ticks: int) -> void:
+	var jobs: Dictionary = ctx.state["jobs"]
+	for id: int in _sorted(jobs):
+		var job: Dictionary = jobs[id]
+		if job["status"] == STATUS_RUNNING:
+			job["work_left"] -= ticks * work_per_tick(ctx, job["facility"])
