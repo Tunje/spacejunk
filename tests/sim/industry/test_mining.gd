@@ -114,6 +114,46 @@ func test_a_full_hold_finishes_the_order_on_the_next_tick() -> void:
 	assert_eq(sim.view()["units"][SHIP]["op"]["type"], "idle")
 
 
+## C19: an order for an amount.
+func _mine_grams(grams: Variant) -> Dictionary:
+	var command := _mine()
+	command["args"]["grams"] = grams
+	return command
+
+
+func test_an_amount_stops_exactly_on_it() -> void:
+	sim.submit(_mine_grams(5_500))
+	_step_balanced(3)
+	assert_eq(_held(), 5_500, "two full ticks, then a third cut to the amount")
+	sim.take_events()
+	sim.step(5)
+	var events := sim.take_events()
+	assert_eq(_types(events), ["mining_stopped", "task_finished"])
+	assert_eq(events[0]["data"], { "deposit": DEPOSIT, "grams": 5_500, "reason": "amount_mined" })
+	assert_eq(_held(), 5_500, "nothing after the amount")
+	assert_eq(state["deposits"][DEPOSIT]["remaining_g"], DEPOSIT_G - 5_500)
+
+
+func test_an_amount_on_a_tick_boundary_stops_there() -> void:
+	sim.submit(_mine_grams(3 * TICK_YIELD_G))
+	sim.step(4)
+	assert_eq(_held(), 3 * TICK_YIELD_G)
+	assert_eq(_first(sim.take_events(), "mining_stopped")["data"]["reason"], "amount_mined")
+
+
+func test_a_hold_that_fills_first_ends_as_it_does_without_an_amount() -> void:
+	_fill_hold(FULL_HOLD_G - 3_000)
+	sim.submit(_mine_grams(10_000))
+	sim.step(4)
+	var stopped := _first(sim.take_events(), "mining_stopped")
+	assert_eq(stopped["data"], { "deposit": DEPOSIT, "grams": 3_000, "reason": "cargo_full" })
+
+
+func test_an_amount_must_be_a_whole_number_above_zero() -> void:
+	for grams: Variant in [0, -5, "5000"]:
+		_assert_refused(_mine_grams(grams), "malformed_command")
+
+
 func test_nothing_more_is_mined_after_the_hold_fills() -> void:
 	sim.submit(_mine())
 	sim.step(FULL_TICKS + 5)

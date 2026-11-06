@@ -1,6 +1,6 @@
 # Simulation Contracts
 
-Contract version: 6. Signed off by the Lead (task L7) after review by Agents A, C and D. Version 2 added the job queue (C9). Version 3 adds orbits and frames ([orbital_flight.md](orbital_flight.md) section 11, task A10). Version 4 makes jobs take work points, not time (C11). Version 5 adds research: science, theories, prototypes and variants (C12). Version 6 adds fabricating in place, `install_to` on jobs (C15). Changes go through the Lead.
+Contract version: 7. Signed off by the Lead (task L7) after review by Agents A, C and D. Version 2 added the job queue (C9). Version 3 adds orbits and frames ([orbital_flight.md](orbital_flight.md) section 11, task A10). Version 4 makes jobs take work points, not time (C11). Version 5 adds research: science, theories, prototypes and variants (C12). Version 6 adds fabricating in place, `install_to` on jobs (C15). Version 7 adds an optional `grams` to `start_mining` (C19). Changes go through the Lead.
 
 These contracts expand section 5 of `plan/workplan.md`. If the two disagree, raise it with the Lead.
 
@@ -172,7 +172,7 @@ Every command has this envelope. `submit` fills in `id` and `tick`.
 | `undock` | none | Leave the current port |
 | `load_cargo` | `from`, `item`, `grams` (optional) | Transfer into this unit |
 | `unload_cargo` | `to`, `item`, `grams` (optional) | Transfer out of this unit |
-| `start_mining` | `deposit`, `module` | Begin mining with a laser |
+| `start_mining` | `deposit`, `module`, `grams` (optional) | Begin mining with a laser. With `grams`, the task finishes once it has mined that many, or sooner if the hold fills or the deposit empties. `grams` must be above 0, or the order is `malformed_command` (C19) |
 | `stop` | none | Stop the current operation |
 | `start_job` | `facility`, `recipe`, `count`, `install_to` (optional) | Begin a recipe at a facility part. With `install_to`, the part is built in place (C15) |
 | `cancel_job` | `job` | Cancel and return held matter. A queued job ends at once with nothing to return |
@@ -311,7 +311,7 @@ Events are ordered by phase, then the event's `unit`, then emission order. Unit 
 | `task_cycle_done` | `task`, `cycle` |
 | `scan_finished` | `target`, `deposits` |
 | `deposit_found` | `deposit`, `item`, `grams` |
-| `mining_stopped` | `deposit`, `grams`, `reason` |
+| `mining_stopped` | `deposit`, `grams`, `reason`: `cargo_full`, `deposit_exhausted`, `amount_mined` when the order's `grams` were mined (C19), or the task's cancel reason |
 | `arrived`, `docked`, `undocked` | `target` |
 | `departed` | `target`, `arrive_tick`: a trip between places leaves on its window, paid (A34) |
 | `transfer_done` | `from`, `to`, `item`, `grams` (actual amount moved) |
