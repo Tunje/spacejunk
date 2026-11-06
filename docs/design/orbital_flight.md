@@ -594,6 +594,8 @@ perf_budget.md section 5a has the figures.
 
 ### 11.19 A23 results: can the probe reach a first planet's moon?
 
+*Superseded for the new start by 11.20. The landings here used the flat 3% gravity loss that A27 replaced, so they are cheaper than the game now charges.*
+
 All figures are measured by two scripts, which fly nothing and change nothing:
 - `tools/reach_run.gd` quotes real-planner trips (A13, A18, A22). It works out landings with LandingSystem's own sums and samples shadow with A16's test.
 - `tools/moon_power_run.gd` runs B's ReferenceBot over today's reference game, with the cluster moved round a moon.
@@ -733,6 +735,17 @@ Measured on the sim from new_start.json:
 - **A flown landing loses 33 to 38%,** not the 3% the land and take_off commands allowed. The burns are long against the descent: about 2.5 minutes at full thrust to stop 211 m/s, while gravity pulls.
 - **The round trip flown is about 630 to 640 m/s,** leaving about **295 m/s spare** on that 5.48 t probe. At B11b's 7.43 t, 2.5 t tank and 15 kN, rerun the figures with `tools/frost_run.gd`.
 
+**B11b's probe** (7.43 t dry, 2.5 t of propellant, 15 kN, so 870 m/s on a full tank), from `tools/frost_run.gd` with A27's command costs:
+
+| | Flown, careful | Commands |
+| --- | --- | --- |
+| Land from the cluster's orbit | 295 m/s, landed at 1.5 m/s | 302 m/s |
+| Take off to the cluster's height | 295 m/s | 280 m/s |
+| Rejoin the cluster | 3 m/s, 7.6 h | 3 m/s |
+| **Round trip** | **593 m/s, 277 m/s spare** | **585 m/s, 285 m/s spare** |
+
+Leaving the cluster with the landing's 32 m/s burn now gives the orbit gravity gives: a periapsis of 62.5 km, both ways. A bolder pilot crashed at 11.2 m/s.
+
 #### Gravity loss by thrust over weight (A27)
 
 The land and take_off commands now charge what a good pilot loses, not a flat 3%. `tools/frost_run.gd -- --sweep` flies B11b's probe down from the cluster and back up at thrusts from 6 to 45 kN. That is n, thrust over weight at Frost's datum, from 1.2 to 9. For each thrust it keeps the cheapest safe flight: a landing touching down at no more than 3 m/s, half the legs' limit, and a take-off reaching the cluster's height. The factor is what that flight cost, less the impulsive burn at the top, over the command's surface speed.
@@ -772,3 +785,193 @@ The planner's trip, using A22's two-level route, from the cluster round Frost to
 - **The out trip's time is mostly the catch-up.** A22's two-level route doesn't time the departure to where the field will be (it phases at the planet's level only). It arrives on the field's orbit at the wrong place and rides a slightly larger orbit round to it.
   - With many fields, a trip can go to whichever is near on arrival, about 475 days.
   - Timing the departure to the field is a planner change, not made.
+
+### 11.21 A30 design: timing a belt trip to its field
+
+A design note, so no code yet. It is for the Lead to approve before A31 builds it.
+
+#### What happens today
+
+A trip from the cluster round Frost to a belt field is A22's two-level route in reverse, through `SoiTransfer._two_levels`:
+- It climbs from Frost to a parking circle round the planet, escapes the planet at the first chance, and flies a Hohmann ellipse to the field's distance from the star.
+- Nothing times the departure to where the field will be. The last leg, `Transfer._phasing`, then catches the field up along its own orbit. It does that on an orbit only slightly larger than the field's, because a faster catch-up costs a lot of delta-v.
+- At 2.7 AU, from today's start, that is 475 days to the field's orbit, then about **1,620 days** catching up (11.20).
+
+A faster catch-up at the belt is out:
+- Gaining a phase φ in one orbit of 4.4 years needs a period change of φ/2π, and that costs about v·(φ/2π)/3 in two burns, where v is 18.1 km/s at 2.7 AU.
+- Half a turn is therefore about **3 km/s**. Spread over N orbits it is 3/N km/s, but each orbit takes 4.4 years.
+
+So the phase has to be right on departure.
+
+#### The windows
+
+A Hohmann trip from the planet's orbit to a field arrives on time only if it leaves when the field leads the planet by the right angle. That angle is π(1 − ((1 + r)/2r)^1.5), for a field at r AU. Such windows come once every synodic period of the planet and the field.
+
+| Field at | Field's year | Window every | Wait, average and worst | In flight | To the field, average and worst | Today, untimed |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2.2 AU | 1,192 d | 527 d | 263 d, 527 d | 370 d | 633 d, 896 d | |
+| 2.7 AU | 1,621 d | 472 d | 236 d, 472 d | 460 d | 696 d, 931 d | 2,096 d (A26) |
+| 3.2 AU | 2,091 d | 443 d | 221 d, 443 d | 556 d | 777 d, 998 d | |
+
+- **Getting to the escape point** adds hardly anything. The climb from Frost to the parking circle takes under a day, and the parking circle comes round in hours.
+- **Belt.md's six fields** sit at their own distances and phases, so their windows are spread out. If they are spread evenly through the window cycle, the nearest window to *some* field is on average about S/7, where S is the synodic period: about **65 days** at 2.7 AU.
+- **The trip home** is timed already. The planner waits at the field for the planet's window and arrives at Frost's cluster through A13's cheap phasing round the moon. That is 232 days of waiting plus 462 in flight in A26's run.
+- **The coast warp:** these are years of game time either way. Belt.md's coast warp is what makes them playable, not this design.
+
+#### The planner change (A31)
+
+For an outward trip whose target is a frame round the star:
+
+1. **Find the departure.** Find the first tick t_d at or after the earliest the probe can reach the parking circle, when the star-level Hohmann from the planet's position arrives at the field's position.
+   - The angle between the planet and the field changes steadily, so the window is found in closed form and then refined by bisection on the tick.
+   - Each try runs the real patched-conic legs, so the escape from the planet's sphere is included.
+2. **Hit the field, not just its orbit.** A day's error in leaving is about 0.77° of the field's orbit, which is 5 million km at 2.7 AU, and a frame is joined only within 1,000 km of its edge. So the escape burn is refined twice.
+   - **Burn pass:** the burn's tick is moved to the parking circle's nearest pass of the escape point.
+   - **Burn size:** its size is adjusted by bisection until the miss at arrival is under the join margin. A slightly faster or slower ellipse arrives a little sooner or later, for a few m/s.
+   - At about 6 km of miss per tick, refining to the tick is enough.
+3. **Leave the cluster late, not early.** The probe stays in the cluster, working, until the latest departure that still reaches the parking circle before t_d. In between, its op is `waiting`, as for any windowed trip (contracts section 7). There is no new op, and stop still cancels freely.
+4. **Fallback.** If no refined trip hits the field within one synodic period, the planner falls back to today's untimed route and catch-up phasing, and says so with `phased: true` in the quote.
+
+All of this is integer and deterministic like the rest of the planner. It changes only what `quote` and `move_to` choose, not the leg format, so no contract change is needed.
+
+Tests:
+- arrival within the join margin of a field at 2.7 AU;
+- the wait is under one synodic period;
+- the delta-v is no more than today's less the catch-up's, plus 10 m/s;
+- a quote and the flight agree to the tick;
+- save and load while waiting.
+
+#### The player rule
+
+**"Go to whichever field is near on arrival" is the right default, but the player chooses it rather than having it applied silently.** Belt.md makes each field lean one way (native metals, or zinc and nickel, or ammonia and carbon), so a silent switch could take the player somewhere they did not mean to go.
+
+- **The planner** always times a trip to the field it was given.
+- **The client (D)** lists each known field's next trip: depart, arrive, delta-v and what it leans to. It sorts them by arrival and marks the earliest. That is a `quote` per field, the same call it makes today.
+- **A core's autopilot** (tier 3, which chooses and re-plans) picks the earliest arrival among the fields that hold what its order needs.
+
+#### Open points for the Lead
+
+- (a) Should the quote's wait be shown with the coast warp's speed, so 236 days reads as hours of play? That is D's, and it waits for the warp.
+- (b) Whether the fallback to untimed phasing should exist at all, or the quote should simply say `no_window`. I'd keep it, since a field that can't be timed is a bug to see, not a trip to refuse.
+
+### 11.22 A32 design: the coast time warp
+
+A design note, so no code yet. It is for the Lead to approve before the kernel and client tasks start. It replaces 11.3's "not proposed": the new start and the belt both need it.
+
+**What needs it:**
+- the new start's gravity-field lap of about 42 minutes;
+- a landing half-ellipse of about 2 hours;
+- refinery and lab queues of hours;
+- the belt's 460-day coasts.
+
+At today's 8×, those take 5 minutes, 15 minutes, hours and 57 days of play.
+
+#### The ladder
+
+| Speed | How the sim runs | When it's allowed |
+| --- | --- | --- |
+| 1×, 2×, 4×, 8× | One `step` per tick, as today | Always |
+| 50× | **Batch:** `step(n)` many ticks per frame, one `view()` per frame | Always, unless the measured step cost would break the frame budget (below) |
+| 1,000×, 10,000×, 100,000× | **Coast:** `Sim.coast(max_ticks)` jumps to the next tick where anything can happen, in closed form | Only while every unit and system can coast. Otherwise it runs as 50× |
+
+100,000× is there for the belt. A 460-day coast is about 6.6 minutes of play at that speed, against 66 minutes at 10,000×. A coast jump costs the same however many ticks it skips, so the top rung is nearly free when nothing happens.
+
+#### Determinism: a coast is exactly a run of steps
+
+`Sim.coast(max_ticks)` returns having advanced k ticks, with 1 ≤ k ≤ max_ticks:
+- **The jump:** the kernel asks every system for its **horizon**, the ticks until something discrete could happen, and takes h as the smallest.
+  - It advances every continuous quantity to tick now + h − 1 in closed form.
+  - It then runs tick now + h as a normal `step`, so every event fires on the tick and in the order stepping gives.
+- **The contract:** after a coast, the state, its hash, its save and the events are bit-identical to `step(k)`. Nothing that would happen is skipped. A coast may only stop early, which costs speed, never correctness.
+- **Two hooks** on SimSystem:
+  - `horizon(ctx) -> int`, the ticks this system can safely skip, with 0 meaning it can't coast now;
+  - `coast(ctx, ticks)`, its closed-form advance.
+  The default horizon is **0**, so any system not yet given a closed form blocks coasting: safe by default.
+- **Closed forms exist because every rate in the sim is integer with a carried remainder** (`Rate.amount` and `Rate.carry`). For k ticks of rate r and remainder c, the total is (k·r + c) / 10, and the new remainder is (k·r + c) mod 10. That is exactly the sum of k single ticks.
+- **Positions:** rails, bodies, frames and units on orbits are already functions of the tick.
+
+**What each system needs.** A horizon may be conservative: early is fine, late never is.
+
+| System | Coasts when | Horizon |
+| --- | --- | --- |
+| Rails, orbits | always | none of its own, but see the SOI, frame, ground and shadow rows |
+| SOI crossing (BurnSystem) | a unit on an orbit | the crossing tick, from A18's `_entry_tick`, or never if the orbit stays inside |
+| Frame join | orbiting units far from every frame | a bound: the gap to the join distance over the largest relative speed |
+| Low-flight entry | periapsis above `ENTER_MM`, otherwise never | otherwise the tick it drops below, from the orbit |
+| Shadow (power) | always | the next entry or exit of any unit with solar panels. Bounded per unit from its angular rate, then bisected, as A16 samples |
+| Transfers, `waiting` | always | the next leg's `from_tick`, `depart_tick` or `arrive_tick` |
+| `landing`, `taking_off`, measuring, scanning ops | always | the op's end tick |
+| Planned burns | not while one runs | the burn's tick |
+| Jobs | steady power | the next run's last tick, ceil(work_left / work_per_tick), or the next queue start |
+| Power and batteries | supply and loads steady | a battery full or empty, from the linear stored_j, or the shadow horizon |
+| Heat | steady | the store reaching a part's limit or the clear threshold, from the linear heat_stored_j |
+| Low flight, a running burn, routes and drift in a frame, docking, loading, mining, cycle tasks | **not in the first version** | 0, so the world runs as 50× |
+
+The last row is what the Lead listed as "a frame with moving units". Mining and loading are linear too and can join later.
+
+**RNG:** the only draw is research discovery, at a bench test's delivery, which is a horizon tick and so stepped. Nothing draws per tick.
+
+**Proof by harness, not argument.** A test runs scenarios each way and compares the state hash and the save bytes at every horizon, plus the event lists:
+- strictly stepped;
+- coasted, not strict.
+The scenarios: the new start's measure, land and job queue; a transfer; a belt leg; eclipses with batteries; a heat limit. Every new coastable system joins the harness before its horizon may be non-zero.
+
+#### Strict checks stay every tick
+
+In strict mode, used only by tests, `coast` runs `step` for every tick. It gives the same result by the contract, so the per-tick invariants and ledgers run on every tick, as you ruled. The harness is what proves the non-strict coast matches. So nothing about strict mode changes.
+
+#### What forces a drop or a cap
+
+The kernel caps; the client drops.
+
+- **The kernel caps to batch speed** while any horizon is 0:
+  - a burn is running;
+  - a unit is in low flight;
+  - something moves inside a frame (a route, drift, docking);
+  - a mining, loading or cycle task is under way;
+  - any system without a closed form yet.
+  `coast` then steps one tick at a time to max_ticks, so it is never wrong, only slow. It reports the cap's reason in its return as `{ ticks, capped_by }` for the client to show.
+- **The client drops to 1×** on events that need attention. That is D's list. I'd suggest:
+  - burn tick reached;
+  - arrived;
+  - landed or crashed;
+  - entering low flight;
+  - job_finished at a facility the player is watching, and any job_paused;
+  - power_shed and fault;
+  - theory_proven, design_qualified and idea_discovered;
+  - a window opening for a queued move;
+  - every refusal.
+  Since a coast always stops on the tick of a horizon, the client sees each event on its own tick and can drop before anything further happens.
+
+#### The client (D)
+
+- **The ladder control:** 1, 2, 4, 8, 50, 1k, 10k, 100k. It shows the requested speed and the speed actually achieved, with `capped_by` in plain words ("burning", "landing gear down", "ships moving in the cluster").
+- **Drop to 1× on attention events,** with an option to keep warping through job_finished.
+- **Above 8×, hand-flying controls are disabled:** burn planning stays, burn execution forces a drop at its tick.
+- **A clock readout in days and hours.**
+- **One `view()` per frame, not per tick,** and interpolation across a whole jump. Orbits draw from their records, so a 1,000-tick jump still animates smoothly.
+- **Saves:** the save is identical either way, so a save made mid-warp needs nothing special.
+
+#### Performance budget (perf_budget.md)
+
+- **Batch, 50×:** 500 ticks a second. At the slice's real size a tick costs about 0.23 ms with a view every 8 ticks (A17), so about 115 ms of CPU a real second, or 1.9 ms in a 60 fps frame. At 20 times the slice the same measurement gives about 7× in total, so the bridge must measure its step time. It caps batch speed to keep step and view inside one frame (16 ms), and shows "capped: busy world".
+- **Coast:** a jump's cost is one horizon pass, one closed-form pass over units and parts, and one normal step.
+  - The budget is **2 ms a jump at slice size and 8 ms at 20 times the slice**. A new `test_perf` line measures it.
+  - Horizons come from eclipses (twice per 6.8-hour cluster orbit), job runs and transfer legs. A 460-day belt coast with nothing else running is a few dozen jumps.
+- **Queries are unchanged.** `quote` and `predict` are not per-tick work.
+
+#### Tasks
+
+- **A33 (kernel):**
+  - `Sim.coast`, the two SimSystem hooks, and the horizons and closed forms for the coastable rows above;
+  - the equivalence harness and the perf line;
+  - contracts §3 (`coast`) and §4 (the coast rule).
+  - Size: L. It touches every network system, through the hooks, by agreement with each owner where the system is C's.
+- **D (client):** the ladder, `capped_by` and attention drops, a view per frame, the clock and the disabled controls. Size: M.
+- **Later:** mining, loading and routes inside frames as coastable rows, then low flight is the last that never coasts.
+
+#### Open points for the Lead
+
+- (a) Is 100,000× wanted now, or with the belt?
+- (b) Should the client's attention list be owned in contracts (as event types), or is it D's call?
+- (c) The systems that are C's (jobs, construction, tasks): should their closed forms be A33's, with C reviewing, or C's own small task beside A33?
