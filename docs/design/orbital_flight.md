@@ -1098,3 +1098,24 @@ A **jump** is one round of `coast`: a stepped tick, a horizon pass, and the clos
 - **BurnSystem** works out each parent's neighbours once per pass: bodies by their spheres, frames by their join reach, with their periapses, apoapses and top speeds.
 
 **The rest.** The stepped tick is three quarters of the budget by itself, and every jump must step one, since events fire only on stepped ticks. The Lead accepted 9.1 ms at 20 times the slice for now: the new start is far below that scale. Profiling the step at 20 times idle load is logged as A40. A horizon cache carried between calls was ruled out, since it would make the call pattern depend on history.
+
+### 11.28 A41a: plane changes on autopilot trips
+
+Before A41a, a trip between orbits round one parent whose planes were more than a degree apart was refused with `unsupported_orbit`. So a take-off from a cell far from Frost's equator, whose orbit is tilted by the cell's latitude, could never fly back to the cluster, and the land check said `cannot_return` (A39).
+
+**The trip.** Between near-circular orbits round one parent in different planes, `Transfer.plan_between` plans legs, ridden on rails as A18's are:
+1. **Ride to the node.** The unit rides its own orbit to the next crossing of the target's plane. That is the first tick on which the sign of its position along the target's normal has changed: a coarse walk, a 64th of a turn at a time so no crossing is stepped over, then bisection.
+2. **Burn into the plane.** On that tick it burns onto the circle in the target's plane through its position. The burn is the exact difference between the velocity it has and the circle's: 2·v·sin(θ/2) for a circle, plus any small eccentricity.
+3. **Fly the coplanar trip.** The Hohmann or phasing trip from that circle follows, planned from the next tick.
+
+**The price.** It is every burn by the rocket equation in turn, all paid at departure, as for other trips. `plane_change_dv_um_s` in the quote is the first burn; it is 0 in one plane.
+
+**The jump.** The node is crossed between ticks, so on the node tick the unit is up to one tick's motion out of the target's plane. The circle is built through its position moved into the plane, so the leg starts up to a few metres from where the unit was: one tick's motion times the sine of the angle. It is deterministic and in the save. It sits beside the arrival snap (11.12), which moves a unit to its stop point in the target's frame by far more.
+
+**Not yet** (A41b): changing the plane low down costs more than doing it high. A combined plane change and circularisation at the transfer's apoapsis would be cheaper. For 30 degrees at Frost it is about 40 m/s, against about 72 m/s from the 30 km circle. It needs the node, the apoapsis and the target's phase to line up, so it adds a phasing leg.
+
+**Measured** (`tests/sim/networks/test_plane_change.gd`, `test_land_return.gd`):
+- Quoted plane changes match 2·v·sin(θ/2) to 1% from 3 to 170 degrees.
+- A 3-degree trip flies, arrives in the tilted frame and pays exactly its quote, with the ledger strict.
+- A 10-degree trip saves byte-exact mid-flight, and coasts byte-equal to stepping.
+- From Frost, the way back to the cluster from a cell at 40 degrees latitude is priced at 1,045 kg, against 803 kg from the equator. Before A41a it was -1, which meant cannot_return.
