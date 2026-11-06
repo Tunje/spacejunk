@@ -63,10 +63,14 @@ func validate(ctx: SimContext, command: Dictionary) -> Dictionary:
 	var result := SimSystem.ok()
 	result["detail"] = { "dv_um_s": plan["dv_um_s"], "propellant_g": plan["cost_g"], "ticks": plan["ticks"] }
 	if command["type"] == LAND:
-		# A warning, not a refusal: whether the propellant left after landing gets back up (A36).
-		var back := return_g(ctx, unit_id, plan["body"], plan["mass_g"] - plan["cost_g"])
-		result["detail"]["return_propellant_g"] = back
-		result["detail"]["cannot_return"] = back < 0 or free - plan["cost_g"] < back
+		# A warning, not a refusal: whether the propellant left after landing gets back up to the
+		# nearest frame round the body (A36, A39).
+		var back := return_plan(ctx, unit_id, plan["body"], plan["cell"], plan["mass_g"] - plan["cost_g"],
+			int(ctx.state["tick"]) + int(plan["ticks"]))
+		var need: int = back["propellant_g"]
+		result["detail"]["return_target"] = back["target"]
+		result["detail"]["return_propellant_g"] = need
+		result["detail"]["cannot_return"] = need < 0 or free - plan["cost_g"] < need
 	return result
 
 
@@ -161,6 +165,10 @@ static func _plan(ctx: SimContext, unit_id: int, type: String, args: Dictionary)
 			return { "reason": REASON_NOT_LANDED }
 		if typeof(args.get("altitude_mm")) != TYPE_INT or args["altitude_mm"] <= 0:
 			return { "reason": REASON_MALFORMED }
+		# Below the height where low flight hands back to an orbit, the orbit would drop straight into
+		# low flight and stay there (A39).
+		if args["altitude_mm"] < LowFlight.LEAVE_MM:
+			return { "reason": REASON_INVALID }
 		body_id = unit["landed"]["body"]
 		cell = unit["landed"]["cell"]
 		altitude = args["altitude_mm"]
@@ -195,17 +203,55 @@ static func _cost(gm: int, type: String, low_mm: int, high_mm: int, found: Dicti
 	}
 
 
-## The propellant for an atomic take_off from a body to the lowest safe orbit, just clear of low
-## flight, at a mass, or -1 if the take-off would be refused. For the land check (A36).
-static func return_g(ctx: SimContext, unit_id: int, body_id: int, mass_g: int) -> int:
+## The way back up for the land check (A36, A39), as { target, propellant_g }: an atomic take_off
+## from the cell to the lowest orbit take_off allows, LowFlight.LEAVE_MM, at the landed mass, then
+## Transfer's leg from that orbit to the return target, leaving when the take-off is done. The
+## target is the frame round the body whose ring is nearest the unit's orbit now, lowest ID on a tie,
+## or 0 when no frame circles it, which prices the take-off alone. propellant_g is -1 if either part
+## would be refused.
+static func return_plan(ctx: SimContext, unit_id: int, body_id: int, cell: int, mass_g: int,
+		from_tick: int) -> Dictionary:
+	var target := return_target(ctx, unit_id, body_id)
+	var result := { "target": target, "propellant_g": -1 }
 	var found := BurnSystem.thruster(ctx, unit_id)
 	var body: Dictionary = ctx.state["bodies"][body_id]
 	var low_mm: int = body["radius_mm"]
-	var high_mm := low_mm + LowFlight.ENTER_MM
+	var high_mm := low_mm + LowFlight.LEAVE_MM
 	if found.is_empty() or (body.get("soi_mm", 0) > 0 and high_mm >= body["soi_mm"]):
-		return -1
-	var cost := _cost(body["gm"], TAKE_OFF, low_mm, high_mm, found, mass_g)
-	return -1 if cost.has("reason") else int(cost["cost_g"])
+		return result
+	var climb := _cost(body["gm"], TAKE_OFF, low_mm, high_mm, found, mass_g)
+	if climb.has("reason"):
+		return result
+	if target == 0:
+		result["propellant_g"] = climb["cost_g"]
+		return result
+	var up := lift_orbit(ctx, body_id, cell, LowFlight.LEAVE_MM, from_tick + int(climb["ticks"]))
+	var leg := Transfer.plan_between(ctx, unit_id, up, ctx.state["frames"][target]["orbit"], target,
+		mass_g - int(climb["cost_g"]), from_tick + int(climb["ticks"]))
+	if not leg.has("reason"):
+		result["propellant_g"] = int(climb["cost_g"]) + int(leg["cost_g"])
+	return result
+
+
+## The frame a land check prices the way back to: of the frames round the body, the one whose ring
+## is nearest the unit's orbit, lowest ID on a tie, or 0 if none circles it.
+static func return_target(ctx: SimContext, unit_id: int, body_id: int) -> int:
+	var orbit: Dictionary = ctx.state["units"][unit_id]["orbit"]
+	var here: int = absi(int(orbit.get("a_mm", 0)))
+	var best := 0
+	var best_gap := 0
+	var frames: Dictionary = ctx.state["frames"]
+	var ids: Array = frames.keys()
+	ids.sort()
+	for id: int in ids:
+		var ring: Dictionary = frames[id]["orbit"]
+		if ring.is_empty() or ring["parent"] != body_id:
+			continue
+		var gap := absi(int(ring["a_mm"]) - here)
+		if best == 0 or gap < best_gap:
+			best = id
+			best_gap = gap
+	return best
 
 
 ## Thrust over weight at a body's datum, in parts per million: thrust / mass over GM / r^2.
@@ -287,9 +333,17 @@ static func _set_down(ctx: SimContext, unit_id: int, body_id: int, cell: int) ->
 ## Onto a circular orbit at the altitude, through the cell's direction, moving east around +Y.
 static func _lift(ctx: SimContext, unit_id: int, altitude_mm: int) -> void:
 	var unit: Dictionary = ctx.state["units"][unit_id]
-	var body_id: int = unit["landed"]["body"]
+	var orbit := lift_orbit(ctx, unit["landed"]["body"], unit["landed"]["cell"], altitude_mm, ctx.tick)
+	unit["orbit"] = orbit
+	unit["landed"] = {}
+	unit["pos_mm"] = OrbitMath.position_at(orbit, ctx.tick)
+
+
+## The orbit a take_off from a cell reaches at a tick: circular at the altitude, through the cell's
+## direction, moving east around +Y.
+static func lift_orbit(ctx: SimContext, body_id: int, cell: int, altitude_mm: int, tick: int) -> Dictionary:
 	var body: Dictionary = ctx.state["bodies"][body_id]
-	var dir := PlanetGrid.direction(unit["landed"]["cell"], _grid_n(ctx, body_id))
+	var dir := PlanetGrid.direction(cell, _grid_n(ctx, body_id))
 	var east := OrbitMath.unit(OrbitMath.cross([0, OrbitMath.ONE, 0], dir))
 	if east == [0, 0, 0]:
 		east = [OrbitMath.ONE, 0, 0]  # at a pole, any direction is east
@@ -300,11 +354,9 @@ static func _lift(ctx: SimContext, unit_id: int, altitude_mm: int) -> void:
 	for axis in 3:
 		r.append(OrbitMath.smul_div(dir[axis], a, OrbitMath.ONE))
 		v.append(OrbitMath.smul_div(east[axis], speed, OrbitMath.ONE))
-	var orbit := OrbitMath.from_state(r, v, body["gm"], ctx.tick)
+	var orbit := OrbitMath.from_state(r, v, body["gm"], tick)
 	orbit["parent"] = body_id
-	unit["orbit"] = orbit
-	unit["landed"] = {}
-	unit["pos_mm"] = OrbitMath.position_at(orbit, ctx.tick)
+	return orbit
 
 
 ## A unit on an orbit below its parent's surface comes down on the cell beneath it.
