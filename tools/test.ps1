@@ -30,8 +30,20 @@ $ErrorActionPreference = 'Continue'
 $config = if ($Quick) { ' -gconfig=res://.gutconfig.quick.json' } else { '' }
 # GUT's JUnit report gives each file's time, for the slow-file warning below.
 $junit = Join-Path ([System.IO.Path]::GetTempPath()) "newmanprobe-gut-$PID.xml"
-$output = & cmd /c "`"$godot`" --headless --path `"$projectRoot`" -s addons/gut/gut_cmdln.gd$config -gjunit_xml_file=`"$junit`" 2>&1"
-$gutExit = $LASTEXITCODE
+# Each run gets its own user:// folder. Godot puts user:// under %APPDATA%, and every
+# worktree has the same project name, so runs side by side would share save slots and
+# load each other's saves. The import above keeps the real APPDATA and its editor settings.
+$userData = Join-Path ([System.IO.Path]::GetTempPath()) "newmanprobe-user-$PID-$([guid]::NewGuid().ToString('N').Substring(0, 8))"
+New-Item -ItemType Directory -Path $userData -Force | Out-Null
+$realAppData = $env:APPDATA
+$env:APPDATA = $userData
+try {
+    $output = & cmd /c "`"$godot`" --headless --path `"$projectRoot`" -s addons/gut/gut_cmdln.gd$config -gjunit_xml_file=`"$junit`" 2>&1"
+    $gutExit = $LASTEXITCODE
+} finally {
+    $env:APPDATA = $realAppData
+    Remove-Item $userData -Recurse -Force -ErrorAction SilentlyContinue
+}
 $output
 
 # A warning, never a failure: any test file over 20 s, so the gate's time doesn't creep up unseen.
