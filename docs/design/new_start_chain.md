@@ -1,6 +1,6 @@
 # New Start Chain
 
-Status: **draft**, task B23. Sections 1 and 2 are measured on the real `Sim`, from [data/scenarios/new_start.json](../../data/scenarios/new_start.json) on `main` at d85aac6. Section 3's timings and section 4's end state wait for C14's bot playthrough, and the TBD cells are filled from it. This page is to the new start what [reference_scenario.md](reference_scenario.md) is to today's station game. When `reference.json` becomes the new start, the two pages swap names. Until then `reference_scenario.md` stays as the station fixture's worked chain, which many tests cite.
+Status: **draft**, task B23. Sections 1 and 2 are measured on the real `Sim`, from [data/scenarios/new_start.json](../../data/scenarios/new_start.json) on `main` at d85aac6. Section 3, Parts A to C, is measured by C14's bot (gameplay/C14 at adf431a, seed 12345). Parts D to F wait for research (C12) and fabricate-in-place (C15) on `main`. This page is to the new start what [reference_scenario.md](reference_scenario.md) is to today's station game. When `reference.json` becomes the new start, the two pages swap names. Until then `reference_scenario.md` stays as the station fixture's worked chain, which many tests cite.
 
 The chain follows [start_and_build.md](start_and_build.md) section 4 and the research route of [research.md](research.md) section 5.
 
@@ -72,52 +72,91 @@ A trip costs about 1 kg a second at full mass, and less as the tank empties. Tri
 
 ## 3. The chain
 
-Each part names the goals of [start_and_build.md](start_and_build.md) section 4.1 that it meets. Ticks are TBD from C14.
+Each part names the goals of [start_and_build.md](start_and_build.md) section 4.1 that it meets. A tick is 0.1 s, and 36,000 ticks are one game hour. The bot gives each order as soon as it can and keeps the refinery and fabricator queues busy while the probe travels, so its times are a floor for a person.
 
-### Part A: prospect (goals 1 and 2)
+**Run lengths on the compact facilities** at 50 work a tick: frame 600 ticks, wiring 400, processor 1200, refine_hematite 1200, refine_chalcopyrite 1200, refine_olivine 1800, refine_water_ice 1200, small_station 12,000. A full-size facility at 100 a tick takes half as long.
 
-1. Survey Red Rock: a `scan` that also pays 10 science points.
-2. Take its composition (`measure` kind `composition`, 120 s, 20 points).
-3. Mine 2,000 kg of hematite.
+### Part A: prospect (goals 1 and 2), measured
 
-### Part B: the seed factory (goals 3 and 4)
+| Step | Start tick | Ticks |
+| ---- | ---------- | ----- |
+| Fly to Red Rock | 1 | 988 |
+| Scan it (survey) | 989 | 301 |
+| Mine 2,000 kg of hematite | 1290 | 1001 |
 
-1. Refine the hematite on `compact_refinery_mk1`: 100 kg runs, 60000 work each at 50 a tick, so 120 s a run, 200 kW drawn at half, so 100 kW.
-2. Fabricate frames and wiring on `compact_fabricator_mk1`.
-3. Make trips to Brass Rock and Green Rock for copper and silicon, surveying and taking composition at each. Then make processors.
-4. Make a trip to White Rock to survey it, and mine ice to top up the propellant.
+Goal 1 is at tick 1289 and goal 2 at 2290, about 4 game minutes in.
 
-### Part C: the first station (goals 5, 6, 7 and 8)
+### Part B: the seed factory (goals 3 and 4), measured
 
-1. Fly to a site near Red Rock and build `small_station` there: 24 frames and 10 wiring.
-2. Fit a solar panel, `ore_storage_mk1`, a propellant tank, a Basic Core, a second battery bank (for Frost's eclipses) and `research_lab_mk1`.
-3. The lab's fit is refused for power until the battery or a second panel is fitted. That is goal 7, fail and fix.
-4. Unload ore into the station: goal 8, haul.
+From tick 2291 both queues run while the probe works:
+- Refine 20 runs of hematite: 24,000 ticks.
+- From tick 3491, as iron arrives, make 27 frames: 23,400 ticks.
 
-### Part D: research (goal 9)
+Trip 2 is one mixed hold, with the fabricator still running:
 
-1. The probe lands on Frost and comes back, flying one lap of the low orbit first for `gravity_field` (40 points). The landing also allows a `surface` sample (50 points).
-2. Prove Autonomous Navigation at the station's lab: 80 points, with the evidence of 3 surveys and 1 gravity field. The station's Basic Core meets era II's gate.
-3. Prototype the Assisted Core (`prototype:assisted_core`), then bench-test it (`qualify:assisted_core`). `design_qualified` is goal 9.
+| Step | Start tick | Ticks |
+| ---- | ---------- | ----- |
+| Mine 350 kg more hematite | 26291 | 176 |
+| Fly to Brass Rock, scan, mine 900 kg of chalcopyrite | | 879 + 301 + 451 |
+| Fly to Green Rock, scan, mine 300 kg of olivine | | 1111 + 301 + 151 |
+| Fly to White Rock, scan, mine 100 kg of ice | | 1148 + 301 + 51, ending at 31161 |
 
-### Part E: the drone and the handover (goals 10 and 11)
+From tick 31161:
+- Refining: hematite ×2 (2,400), chalcopyrite ×9 (10,800), olivine ×3 (5,400) and ice ×1 (1,200), done at 50,960.
+- Fabricating: frames ×3, wiring ×18, `small_station` (12,000 ticks, built at tick 53,961), processors ×4, a LIDAR and a solar panel.
 
-1. Docked at the station, the probe builds `small_craft`, which appears at the station's spare port.
-2. Fit its six parts, plus `small_battery_bank_mk1` for eclipses, and an Assisted Core.
-3. `set_cycle` between Red Rock and the station's ore storage. Stop at the third lap.
+### Part C: the first station (goals 5 to 8), measured
 
-### Part F: expand (goal 12)
+The probe builds `small_station` at its own position, and the station appears docked to it.
 
-The cycle's ore is refined, and a second `ore_storage_mk1` is fitted to the station.
+1. **Fail and fix, goal 7.** From tick 63,560, fitting a LIDAR to the station is refused for `over_power_budget`. A solar panel is fitted. The LIDAR is refused again, for `over_heat_budget`. A heat radiator is fabricated (1,800 ticks) and fitted, and the LIDAR fits at tick 65,365.
+2. **Haul, goal 8.** A `small_ore_container_mk1` is fabricated (600 ticks) and fitted to the station. 150 kg of hematite is unloaded into it, ending at tick 65,997, which is 1.8 game hours.
+
+**The probe at each step:**
+
+| Milestone | Tick | Propellant | Ore | Goods |
+| --------- | ---- | ---------- | --- | ----- |
+| Start | 0 | 2,500 kg | 0 | 0 |
+| Scanned | 1,289 | 2,401 | 0 | 0 |
+| Mined | 2,290 | 2,401 | 2,000 | 0 |
+| Refined | 26,290 | 2,401 | 0 | 1,380 |
+| Prospected | 31,160 | 2,020 | 1,650 | 1,380 |
+| Ice refined | 50,960 | 2,110 | 150 | 581 |
+| Station built | 63,560 | 2,110 | 150 | 581 |
+| Fit fixed | 65,365 | | | 131 |
+| Hauled | 65,997 | 2,110 | 0 | 51 |
+
+No step was stopped by shadow or a power shortfall.
+
+**The goods hold sets the order.** The probe's goods container holds 4 m³, and fabricated parts go into it. A solar panel (1.5 m³) and a radiator (2 m³) nearly fill it, so parts are fitted as they're made. The lab, the ore storage and every other part bigger than 4 m³ can't go through the hold at all. The Lead has ruled C15, "fabricate in place": a module job delivers straight onto a free connector of the facility's unit or a docked unit, through the normal fit. Parts D to F depend on it.
+
+### Part D: research (goal 9), planned
+
+1. The probe lands on Frost and comes back, flying one lap of its low orbit first for `gravity_field` (40 points). The landing also allows a `surface` sample (50 points).
+2. The station gets `research_lab_mk1`, fabricated in place (C15), and a second battery bank for Frost's eclipses.
+3. Prove Autonomous Navigation at the lab: 80 points, with 3 surveys and 1 gravity field as evidence. The bot's four surveys already pay 40 points, and compositions add the rest.
+4. Prototype and bench-test the Assisted Core. `design_qualified` is goal 9.
+
+### Part E: the drone and the handover (goals 10 and 11), planned
+
+1. Build `small_craft` at the station.
+2. Fit its six parts, plus `small_battery_bank_mk1` and an Assisted Core.
+3. `set_cycle` from Red Rock to the station's ore storage, which is fabricated in place. Stop at the third lap.
+
+### Part F: expand (goal 12), planned
+
+Fit a second ore storage to the station.
 
 ## 4. End state
 
-TBD from C14: matter by place, science points earned and spent, and propellant used and made from ice.
+Pending the full run through Part F. What's measured to the haul is in section 3.
 
 ## 5. Propellant for a person playing
 
-TBD from C14 and person_run. The questions this section answers:
-- How much of the 2,500 kg the chain burns.
-- How much ice refining makes back.
-- How much a person's mistakes can cost before the ice chain is running.
-- Whether the Frost trip's 230 m/s spare holds when flown in the chain's order.
+Measured to the haul:
+- **Trips in the cluster:** the four trips cost about 480 kg.
+- **Ice:** one 100 kg ice run gave back 90 kg.
+- **Margin:** the probe ended Part C with 2,110 kg, and its tank has room for 390 kg more.
+- **Making it back:** ice is cheap to make. 100 kg of ice is 51 ticks of mining and 1,200 of refining for 90 kg of propellant. So a person who wastes propellant in the cluster can always make it back once the compact refinery runs.
+
+**Still to measure:** the Frost round trip, about 640 m/s flown, from a tank that should be topped up first, and the drone's laps. Those come from Parts D to F.
