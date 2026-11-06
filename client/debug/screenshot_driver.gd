@@ -25,6 +25,10 @@ class_name ScreenshotDriver extends Node
 ##                                   to the moon's ring; -1 shows it waiting, else that far through
 ##   --descent-demo=<m/s>,<seconds>  (reference) a light 250 km world on the real Sim: the probe, with
 ##                                   legs, lifts off straight up at that speed and flies that long
+##   --run=<seconds>                 (real Sim) steps the game that long first, such as out of a shadow
+##   --set-down=<body name>,<cell>   (real Sim) puts the commanded craft down on that hex as a landing
+##                                   ends, for a landed shot where it can't yet fly down
+##   --look-at=<body name>           turns the camera so that body is behind the craft (after --pitch)
 ##   --copy=1                        (stub_load) strips two parts off the first ship and
 ##                                   opens fitting there, to show "Fit like this one"
 ##   --fit=<item>  --fit-slot=<connector>  opens fitting after the orders and picks both
@@ -74,6 +78,11 @@ func _run() -> void:
 		await _descent_demo(parsed["descent-demo"])
 	if parsed.has("landing-demo"):
 		await _landing_demo(parsed["landing-demo"])
+	if parsed.has("run"):
+		(main.bridge.sim as Sim).step(roundi(float(parsed["run"]) * Sim.TICKS_PER_SECOND))
+		main.bridge.start(main.bridge.sim)
+	if parsed.has("set-down"):
+		_set_down(parsed["set-down"])
 	if parsed.has("planet-wait"):
 		while PlanetMesh.busy():
 			await get_tree().process_frame
@@ -105,6 +114,8 @@ func _run() -> void:
 		if parsed.has("zoom"):
 			camera.target_distance_m = float(parsed["zoom"])
 			camera.distance_m = camera.target_distance_m
+	if parsed.has("look-at"):
+		await _look_at(parsed["look-at"], float(parsed.get("pitch", "0")))
 	if parsed.has("policy"):
 		main.standing_orders.toggle()
 	if parsed.has("order"):
@@ -290,6 +301,44 @@ func _open_jobs() -> void:
 		ScreenshotDriver._step(main.bridge)
 	main.bridge.set_paused(true)
 	screen.refresh()
+
+
+## Puts the camera on the far side of the craft from a body, so both are in view;
+## `extra_pitch` then tips it up or down. Waits for the camera's up to settle first.
+func _look_at(name: String, extra_pitch: float) -> void:
+	for i in 30:
+		await get_tree().process_frame
+	var view: LocalView = main.local_view
+	var body := 0
+	for id: int in main.bridge.current_view["bodies"]:
+		if main.bridge.current_view["bodies"][id]["name"] == name:
+			body = id
+	if not view.bodies.has(body) or not view.crafts.has(view.commanded_unit):
+		return
+	var towards: Vector3 = (view.bodies[body] as Node3D).global_position - (view.crafts[view.commanded_unit] as Node3D).global_position
+	var camera: OrbitCamera = view.camera
+	var tilt := Basis(Quaternion(Vector3.UP, camera.up_dir.normalized())) if not camera.up_dir.is_equal_approx(Vector3.UP) else Basis.IDENTITY
+	var away := (tilt.inverse() * -towards).normalized()
+	camera.yaw = atan2(away.x, away.z)
+	camera.pitch = -asin(clampf(away.y, -1.0, 1.0)) + extra_pitch
+
+
+## Sets the commanded craft down on a hex through the sim's own landing end, then
+## restarts the bridge on the changed state so the view rebuilds round it.
+func _set_down(spec: String) -> void:
+	var parts := spec.split(",")
+	var sim: Sim = main.bridge.sim
+	var body := 0
+	for id: int in sim._state["bodies"]:
+		if sim._state["bodies"][id]["name"] == parts[0]:
+			body = id
+	var unit: int = main.local_view.commanded_unit
+	LandingSystem._set_down(sim._ctx, unit, body, int(parts[1]))
+	sim._ctx.index.clear()
+	sim.step(1)
+	main.bridge.start(sim)
+	main.local_view.rebuild()
+	main.local_view.focus_on("unit", unit)
 
 
 ## The descent test's world: 250 km, light enough (0.16 m/s^2) for the starter ship to

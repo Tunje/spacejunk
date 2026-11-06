@@ -1,12 +1,17 @@
-extends Node3D
+class_name Main extends Node3D
 ## Client root: starts the backend and wires the bridge to the view and overlay.
 
 const SCENARIO := "reference"
+## The new start: only the probe, in the rock cluster round the icy moon Frost.
+const NEW_START := "new_start"
+## The real starts, chosen with `--scenario=<id>` after `--` until there is a start menu.
+const STARTS: Array[String] = [SCENARIO, NEW_START]
 const SEED_VALUE := 1
 ## Real seconds between autosaves, counted whether or not the game is paused.
 const AUTOSAVE_SECONDS := 300.0
 
-## The stub stays reachable for tests and tools, with `--scenario=stub` after `--`.
+## Which start: `reference` by default, `new_start` with `--scenario=new_start` after
+## `--`. The stub stays reachable for tests and tools, with `--scenario=stub`.
 @export var scenario := SCENARIO
 
 @onready var bridge: SimBridge = $Bridge

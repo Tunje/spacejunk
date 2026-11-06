@@ -3,6 +3,7 @@ class_name MapOverlay extends Control
 
 var map: SystemMap
 var _shown: Array[Dictionary] = []
+var _frames: Array[Dictionary] = []
 
 
 func _ready() -> void:
@@ -17,6 +18,10 @@ func update_entries() -> void:
 			var shown: Dictionary = entry.duplicate()
 			shown["at"] = map.camera.unproject_position(position_3d)
 			_shown.append(shown)
+	_frames.clear()
+	for frame: Dictionary in map.frame_labels:
+		if not map.camera.is_position_behind(frame["map_pos"]):
+			_frames.append({ "label": frame["label"], "at": map.camera.unproject_position(frame["map_pos"]) })
 	queue_redraw()
 
 
@@ -31,6 +36,8 @@ func _draw() -> void:
 		if not map.camera.is_position_behind(edge):
 			var at := map.camera.unproject_position(edge)
 			draw_string(font, at, SystemMap.ring_label(km), HORIZONTAL_ALIGNMENT_CENTER, -1, 12, ClientTheme.MID_GREY)
+	for frame: Dictionary in _frames:
+		draw_string(font, frame["at"] + Vector2(0, -14), frame["label"], HORIZONTAL_ALIGNMENT_CENTER, -1, 11, ClientTheme.MID_GREY)
 	EntityMarkers.draw_entries(self, _shown)
 	if map.eta_text.is_empty():
 		return
