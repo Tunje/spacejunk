@@ -13,9 +13,16 @@ const METALLIC_CAP := 0.55
 const TOLERANCE := 0.001
 
 
+## Loaded models, kept so a craft rebuilt later doesn't decode the model and its
+## textures again once the last instance is gone.
+static var _scenes: Dictionary = {}
+
+
 ## Loads a generated model and tames its materials. Null if the path doesn't load.
 static func instantiate(path: String) -> Node3D:
-	var scene := load(path) as PackedScene
+	if not _scenes.has(path):
+		_scenes[path] = load(path) as PackedScene
+	var scene: PackedScene = _scenes[path]
 	if scene == null:
 		return null
 	var root := scene.instantiate() as Node3D
