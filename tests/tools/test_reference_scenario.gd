@@ -35,7 +35,9 @@ var modules: Dictionary = {}
 
 func before_all() -> void:
 	data = DataValidator.load_dir()
-	scenario = data["scenarios"][0]
+	for entry: Dictionary in data["scenarios"]:
+		if entry["id"] == "reference":
+			scenario = entry
 	for entry: Dictionary in data["modules"]["entries"]:
 		modules[entry["id"]] = entry
 

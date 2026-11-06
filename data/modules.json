@@ -141,7 +141,7 @@
           "propellant_kg_per_s": 1,
           "rated_mass_kg": 10000,
           "exhaust_m_s": 3000,
-          "thrust_kn": 3
+          "thrust_kn": 10
         }
       },
       "fabrication": {
@@ -481,6 +481,49 @@
       }
     },
     {
+      "id": "goods_container_mk1",
+      "name": "Goods Container",
+      "mass_kg": 300,
+      "volume_m3": 1.5,
+      "power_kw": 0,
+      "heat_kw": 0,
+      "priority": 0,
+      "durability": 1000,
+      "min_ai_tier": 1,
+      "realism": "established",
+      "capabilities": {
+        "storage": {
+          "goods": {
+            "mass_kg": 2000,
+            "volume_m3": 4
+          }
+        }
+      },
+      "fabrication": {
+        "recipe": "goods_container_mk1"
+      },
+      "connectors": [
+        {
+          "id": "mount",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [0, 0, 0],
+          "facing": "-z",
+          "up": "+y",
+          "load_limit_kg": 1000
+        }
+      ],
+      "collision": {
+        "shape": "box",
+        "center_mm": [0, 0, 500],
+        "size_mm": [1200, 1200, 1000]
+      },
+      "visual": {
+        "model": null,
+        "tint": "#8a8d91"
+      }
+    },
+    {
       "id": "goods_storage_mk1",
       "name": "Goods Storage",
       "mass_kg": 1000,
@@ -566,8 +609,8 @@
     {
       "id": "landing_legs_mk1",
       "name": "Landing Legs",
-      "mass_kg": 100,
-      "volume_m3": 0.5,
+      "mass_kg": 150,
+      "volume_m3": 0.75,
       "power_kw": 0,
       "heat_kw": 0,
       "priority": 0,
@@ -595,8 +638,8 @@
       ],
       "collision": {
         "shape": "box",
-        "center_mm": [0, -580, 675],
-        "size_mm": [1000, 2000, 1350]
+        "center_mm": [0, -1250, 800],
+        "size_mm": [800, 3100, 1600]
       },
       "visual": {
         "model": "landing_legs_mk1",
@@ -851,6 +894,42 @@
           "facing": "-y",
           "up": "+z",
           "load_limit_kg": 1000
+        },
+        {
+          "id": "side_px",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [1000, -2600, 0],
+          "facing": "+x",
+          "up": "+y",
+          "load_limit_kg": 500
+        },
+        {
+          "id": "side_nx",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [-1000, -2600, 0],
+          "facing": "-x",
+          "up": "+y",
+          "load_limit_kg": 500
+        },
+        {
+          "id": "side_pz",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [0, -2600, 1000],
+          "facing": "+z",
+          "up": "+y",
+          "load_limit_kg": 500
+        },
+        {
+          "id": "side_nz",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [0, -2600, -1000],
+          "facing": "-z",
+          "up": "+y",
+          "load_limit_kg": 500
         }
       ],
       "collision": {
@@ -861,6 +940,49 @@
       "visual": {
         "model": "propellant_tank_mk1",
         "tint": "#e8e4d8"
+      }
+    },
+    {
+      "id": "small_battery_bank_mk1",
+      "name": "Small Battery Bank",
+      "mass_kg": 60,
+      "volume_m3": 0.3,
+      "power_kw": 0,
+      "heat_kw": 0,
+      "priority": 0,
+      "durability": 1000,
+      "min_ai_tier": 1,
+      "realism": "established",
+      "capabilities": {
+        "battery": {
+          "capacity_kj": 72000,
+          "max_charge_kw": 12,
+          "max_discharge_kw": 30,
+          "charge_efficiency_ppm": 900000
+        }
+      },
+      "fabrication": {
+        "recipe": "small_battery_bank_mk1"
+      },
+      "connectors": [
+        {
+          "id": "mount",
+          "type": "side",
+          "size": "small",
+          "pos_mm": [0, 0, 0],
+          "facing": "-z",
+          "up": "+y",
+          "load_limit_kg": 500
+        }
+      ],
+      "collision": {
+        "shape": "box",
+        "center_mm": [0, 0, 200],
+        "size_mm": [600, 600, 400]
+      },
+      "visual": {
+        "model": null,
+        "tint": "#8a8d91"
       }
     },
     {
@@ -992,6 +1114,153 @@
         "shape": "box",
         "center_mm": [0, 0, 75],
         "size_mm": [1500, 1000, 150]
+      },
+      "visual": {
+        "model": null,
+        "tint": "#e8e4d8"
+      }
+    },
+    {
+      "id": "small_hub",
+      "name": "Small Hub",
+      "mass_kg": 1000,
+      "volume_m3": 10,
+      "power_kw": 0,
+      "heat_kw": 0,
+      "priority": 0,
+      "durability": 1000,
+      "min_ai_tier": 1,
+      "realism": "established",
+      "capabilities": {
+        "max_mass_kg": 50000,
+        "heat_capacity": {
+          "limit_kj": 20000
+        }
+      },
+      "fabrication": null,
+      "connectors": [
+        {
+          "id": "core",
+          "type": "side",
+          "size": "core",
+          "pos_mm": [0, 1500, 1500],
+          "facing": "+z",
+          "up": "+y",
+          "load_limit_kg": 100
+        },
+        {
+          "id": "stack_bottom",
+          "type": "stack",
+          "size": "medium",
+          "pos_mm": [0, 0, 0],
+          "facing": "-y",
+          "up": "+z",
+          "load_limit_kg": 3000
+        },
+        {
+          "id": "stack_top",
+          "type": "stack",
+          "size": "medium",
+          "pos_mm": [0, 3000, 0],
+          "facing": "+y",
+          "up": "+z",
+          "load_limit_kg": 3000
+        },
+        {
+          "id": "stack_px",
+          "type": "stack",
+          "size": "medium",
+          "pos_mm": [1500, 1500, 0],
+          "facing": "+x",
+          "up": "+y",
+          "load_limit_kg": 3000
+        },
+        {
+          "id": "stack_nx",
+          "type": "stack",
+          "size": "medium",
+          "pos_mm": [-1500, 1500, 0],
+          "facing": "-x",
+          "up": "+y",
+          "load_limit_kg": 3000
+        },
+        {
+          "id": "side_a_px",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [1500, 750, 0],
+          "facing": "+x",
+          "up": "+y",
+          "load_limit_kg": 3000
+        },
+        {
+          "id": "side_a_nx",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [-1500, 750, 0],
+          "facing": "-x",
+          "up": "+y",
+          "load_limit_kg": 3000
+        },
+        {
+          "id": "side_a_pz",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [0, 750, 1500],
+          "facing": "+z",
+          "up": "+y",
+          "load_limit_kg": 3000
+        },
+        {
+          "id": "side_a_nz",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [0, 750, -1500],
+          "facing": "-z",
+          "up": "+y",
+          "load_limit_kg": 3000
+        },
+        {
+          "id": "side_b_px",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [1500, 2250, 0],
+          "facing": "+x",
+          "up": "+y",
+          "load_limit_kg": 3000
+        },
+        {
+          "id": "side_b_nx",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [-1500, 2250, 0],
+          "facing": "-x",
+          "up": "+y",
+          "load_limit_kg": 3000
+        },
+        {
+          "id": "side_b_pz",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [0, 2250, 1500],
+          "facing": "+z",
+          "up": "+y",
+          "load_limit_kg": 3000
+        },
+        {
+          "id": "side_b_nz",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [0, 2250, -1500],
+          "facing": "-z",
+          "up": "+y",
+          "load_limit_kg": 3000
+        }
+      ],
+      "collision": {
+        "shape": "cylinder",
+        "center_mm": [0, 1500, 0],
+        "size_mm": [3000, 3000, 3000]
       },
       "visual": {
         "model": null,

@@ -222,7 +222,7 @@ This replaces Part F of start_and_build section 4, and fixes what starts locked.
 
 Goals 9 ("Prove a new tech") and 10 to 12 in start_and_build section 4.1 stay. Goal 9's trigger becomes `design_qualified` of `assisted_core`.
 
-The other two theories and the first idea are for after the handover. They give the expansion phase an aim: a `surface` sample from the moon for the solar farm, and composition data for the big refinery. If the owner finds one theory before the handover too much, the gate can move from `assisted_core` to `solar_farm_mk1`, and the chain skips steps 4 and 5.
+The other two theories and the first idea are for after the handover. They give the expansion phase an aim: a `surface` sample from the moon for the solar farm, and composition data for the big refinery. The Assisted Core stays gated, because the owner's ruling says nothing is click-and-it's-yours (Lead, 2026-11-06).
 
 **Rough cost** of research before the handover:
 
@@ -278,5 +278,6 @@ Order: B's data and A's state first, then C's jobs and step, then D's panel. Not
 ## 7. Open questions for the owner
 
 1. **"A chance to reduce complexity":** random, a choice, or both? Proposed: both. Simplification ideas are always a choice, and a variant's test has a seeded chance to discover new ones (section 4.4).
-2. **Should the first theory gate the Assisted Core**, so one theory is proven before the handover, or only the solar farm, which comes after it? Proposed: the Assisted Core, as section 5 sets out.
-3. **Do points count as soon as a measurement finishes?** Proposed: yes. The alternative is that data has to be carried back to a station first. That adds hauling, but no new decision for the player.
+Settled by the Lead on 2026-11-06:
+- **The Assisted Core is gated.** The ruling that nothing is click-and-it's-yours decides it, so one theory is proven before the handover.
+- **Points count when a measurement finishes.** They aren't carried back to a station first. This will be revisited if the owner objects.

@@ -18,6 +18,12 @@
       "item": "olivine",
       "mass_kg": 50000,
       "hardness": 7
+    },
+    {
+      "id": "water_ice_deposit",
+      "item": "water_ice",
+      "mass_kg": 300000,
+      "hardness": 2
     }
   ]
 }

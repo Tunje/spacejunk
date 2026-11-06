@@ -19,35 +19,38 @@ Status: **proposal**, task B10. Nothing in `data/`, `sim/`, the client or the co
 
 ### 1.1 What the ship carries
 
-The scenario holds the star, the three rocks and one unit: the probe. There's no station, no other unit and no starting goods. The rocks keep their positions in the co-moving cluster frame of [orbital_flight.md](orbital_flight.md).
+This section follows the owner's rulings on the new start of 2026-11-06. The data is in `data/scenarios/new_start.json` (task B11). `reference.json` stays as today's station game until the chain and goals move over.
 
-| Connector | Today's starter ship | Proposed probe |
-| --------- | -------------------- | -------------- |
+**The world.** A star; a 600 km planet at Kerbin's density, at 1 AU; and its moon Frost, 60 km across at half Kerbin's density, 12,000 km out. The rock cluster is a frame orbiting Frost at 300 km. It holds four rocks: Red, Brass and Green Rock as today, plus White Rock, which is water ice. The only unit is the probe, in the cluster, with a full 2 t tank. The asteroid belt round the star, with its own resources, is a later destination (task B18).
+
+| Connector | Today's starter ship | The probe |
+| --------- | -------------------- | --------- |
 | `core` | `basic_core` | `basic_core` |
 | `stack_top` | `docking_port_mk1` | `docking_port_mk1` |
-| `stack_bottom` | `propellant_tank_mk1`, then `chemical_thruster_mk1` | Same |
-| Sides (12) | 2 solar panels, 2 battery banks, ore container, radiator, mining laser, LIDAR. 4 free | The same 8, plus **a second radiator, `compact_refinery_mk1`, `compact_fabricator_mk1` and `goods_container_mk1`**. None free |
+| `stack_bottom` | `propellant_tank_mk1`, then `chemical_thruster_mk1` | The same, at 10 kN. The tank also carries **four `landing_legs_mk1`** on its low side connectors |
+| Sides (12) | 2 solar panels, 2 battery banks, ore container, radiator, mining laser, LIDAR. 4 free | The same 8, plus `goods_container_mk1` (B11). B11b adds **`compact_refinery_mk1`, `compact_fabricator_mk1` and a second radiator**, once their work rates are set. None free then |
 
-| Figure | Today | Proposed |
-| ------ | ----- | -------- |
-| Dry mass | 4580 kg | 6780 kg (within `max_mass_kg` 12000) |
-| Rated power | 172 of 420 kW | 322 of 420 kW |
-| Rated heat | 160 of 200 kW | 275 of 400 kW |
-| Propellant | 1000 kg | 2000 kg, a full tank (section 8, decision 1) |
-| Holds | 2000 kg ore | 2000 kg ore, 2000 kg goods |
+| Figure | Today | The probe in B11 | With B11b's facilities |
+| ------ | ----- | ---------------- | ---------------------- |
+| Dry mass | 4580 kg | 5480 kg | 7380 kg (within `max_mass_kg` 12000) |
+| Rated power | 172 of 420 kW | 172 of 420 kW | 322 of 420 kW |
+| Propellant | 1000 kg | 2000 kg, a full tank, then made from ice | The same |
+| Holds | 2000 kg ore | 2000 kg ore, 2000 kg goods | The same |
+| Thrust when full | 3 kN | 10 kN: 1.34 m/s², 2.7 times Frost's 0.49 m/s² | 1.07 m/s², 2.2 times |
 
-With all 12 sides used, the probe cannot grow by fitting more parts. To get more capability, the player has to build another craft or a station, which is the point. The thruster is rated for 10000 kg, so a loaded probe pays a little more per trip: that is the existing trip formula, and nothing is refused.
+With all 12 sides used, the probe cannot grow by fitting more parts. To get more capability, the player has to build another craft or a station, which is the point.
 
-**Where the probe can land.** The probe carries about 775 m/s on a full 2 t tank, at 3000 m/s exhaust speed. That is less than today's 4.58 t ship, which has about 1090 m/s. By A's landing model ([orbital_flight.md](orbital_flight.md) section 11.13), a round trip from an orbit a tenth of the radius up costs, at Kerbin's density:
+**Propellant from ice** (owner's ruling). `refine_water_ice` turns 100 kg of water ice into 90 kg of propellant and 10 kg of slag, which is vented. So the game can never run dry once a refinery runs. Helium, and other propellants that electric thrusters might use, are for later.
 
-| Body | Round trip | Probe on a full tank |
-| ---- | ---------- | -------------------- |
-| 60 km moon | About 370 m/s | Lands and returns |
-| About 89 km moon | About 775 m/s | The limit |
-| 200 km moon | About 1230 m/s | Can't return |
-| 600 km planet | About 5.2 km/s | Can't return without refuelling on the surface |
+**Where the probe can land.** A landing round trip costs in proportion to radius × √density. A correction to the first draft: its 370 m/s for a 60 km moon assumed half Kerbin's density. At Kerbin's density the figure is 523 m/s (A23, [orbital_flight.md](orbital_flight.md) section 11.19).
 
-Those figures leave out the trip from the cluster to the moon and back. So a first scenario that wants the probe to land should put a small moon of 60 km or less within reach. Anything bigger needs propellant made on the surface, which is decision 1 option A, or a purpose-built lander.
+| Body | Round trip, from an orbit a tenth of the radius up |
+| ---- | -------------------------------------------------- |
+| Frost: 60 km, half density | About 370 m/s |
+| A 60 km moon at Kerbin's density | About 523 m/s |
+| The 600 km planet | About 5.2 km/s. Can't return without refuelling on the surface |
+
+**From the cluster.** A23 put the trip from the cluster at 300 km down to Frost, back up and rejoining at about 536 m/s. With B11b's facilities the probe has 719 m/s on a full tank at 3000 m/s exhaust, which leaves about 183 m/s spare. In B11's lighter fit it has 933 m/s. A23's power findings are met in data: a station needs a second battery bank to run its refinery through Frost's eclipses, and the drone carries `small_battery_bank_mk1` so its core stays alive in shadow. Both are fitted parts in the chain, not template parts.
 
 ### 1.2 Refining and fabricating with no station
 
@@ -265,9 +268,9 @@ These are now in [schemas.md](schemas.md) sections 2, 5 and 14, in the shapes A1
 | Field | `chemical_thruster_mk1` | `small_chemical_thruster_mk1` | Why |
 | ----- | ----------------------- | ----------------------------- | --- |
 | `exhaust_m_s` | 3000 | 3000 | A's working figure |
-| `thrust_kn` | 3 | 0.15 | Today's propellant flow times exhaust speed: 1 kg/s and 0.05 kg/s. Propellant per second therefore stays as it is |
+| `thrust_kn` | 10 | 0.15 | 10 kN for lift-off from Frost at over twice its gravity (B11). The small thruster keeps today's flow times exhaust speed, 0.05 kg/s |
 
-- **Burn times.** The loaded probe, about 8.8 t with a full tank, accelerates at about 0.34 m/s², so a 100 m/s burn takes about 5 minutes. The drone, at about 0.68 t, accelerates at about 0.22 m/s². These are first figures for B6.
+- **Burn times.** The probe with B11b's facilities, about 9.4 t with a full tank, accelerates at about 1.07 m/s² at 10 kN, so a 100 m/s burn takes about 95 seconds and burns about 3.3 kg/s. The drone, at about 0.68 t, accelerates at about 0.22 m/s². These are first figures for B6.
 - **The old fields stay.** Agreed with A: `speed_m_s`, `propellant_kg_per_s` and `rated_mass_kg` are kept, because in-frame trips still read them ([networks.md](networks.md) section 6). Burns outside a frame read only `exhaust_m_s` and `thrust_kn`. A is correcting orbital_flight.md section 11.4, which said `speed_m_s` goes.
 
 ### 9.2 Bodies, frames and scenarios
