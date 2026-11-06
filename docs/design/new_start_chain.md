@@ -179,17 +179,17 @@ Landing and take-off are off the research route until a theory that needs a surf
 - Landing straight from 300 km cost about 1,000 kg, the climb to 35 km about 690, and the trip home 159. That's about 540 to 600 m/s, depending on the 0.5 to 1.65 t of cargo carried.
 - Docking with 364 kg is about 120 to 135 m/s spare, under the 150 m/s line.
 - On the bot's first try, without a full tank from ice, the probe was stranded on Frost: it landed with 604 kg and needed 619.
-- The bot spent about 260 kg before leaving the cluster, on a trip to Red Rock and the 20 m/s departure burn. Leaving straight from the station with a full tank and an empty goods hold should keep about 190 m/s spare. That's the advice for a person. Measured below, it keeps about 226 m/s.
+- The bot spent about 260 kg before leaving the cluster, on a trip to Red Rock and the 20 m/s departure burn. Leaving straight from the station with a full tank and an empty goods hold should keep about 190 m/s spare. That's the advice for a person. Measured below, it keeps about 227 m/s.
 
 **The Lead's rulings on this, 2026-11-06:** no data change.
 - **C18:** the gravity-field measurement can be taken from inside the cluster frame, so Autonomous Navigation needs no landing. The Lead keeps the full lap.
 - **A36 and A39:** the land check warns before a landing the probe can't get back from, pricing the take-off to 30 km plus the leg back to the frame round Frost nearest the probe's orbit, the cluster.
 - **For a person who lands:** top up from White Rock's ice, leave the goods hold empty, and leave straight from the station. The goal hint says so, and the hint keeps it.
 
-**The human landing, measured after A36** (main at 0a361a3).
-- **The flight.** A 20 m/s retrograde burn out of the cluster, `land` on the cell below, a surface sample, then `take_off` to 35 km, then `move_to` home. Flown on the real `Sim` with no lap, since C18 takes the gravity field in the cluster.
+**The human landing, measured after A39** (main at 48e2a79, merged into B23 at 4104325).
+- **The flight.** A 20 m/s retrograde burn out of the cluster, `land` on the cell below, a surface sample, then `take_off` to 30 km (`LowFlight.LEAVE_MM`, the lowest A39 allows), then `move_to` home. Flown on the real `Sim` with no lap, since C18 takes the gravity field in the cluster.
 - **The three cases.**
-  - Case A starts the game that way: it leaves from the start, at the cluster's origin, with the full 2,500 kg tank and no station.
+  - Case A is the game's start: it leaves from the cluster's origin with the full 2,500 kg tank and no station.
   - Case B starts from the C16 save after the lab stage, at tick 179,732. The goods are unloaded to the station: copper, iron, silicon and wiring, 451 kg in all. The tank is as topped up from ice, at 2,477 kg. The probe leaves straight from the station.
   - Case C is case B with the tank as it was before the ice top-up, at 1,701 kg.
 - **Δv conversion.** Exhaust speed is about 3,000 m/s, from the measured landing.
@@ -199,23 +199,21 @@ Landing and take-off are off the research route until a theory that needs a surf
 | Mass leaving | 9,930 kg | 10,197 kg | 9,421 kg |
 | 20 m/s burn out of the cluster | 66 kg | 68 kg | 63 kg |
 | Land check: down | 942 kg, 301 m/s | 978 kg, 304 m/s | 892 kg, 301 m/s |
-| Land check: `return_propellant_g` | 619 kg | 637 kg | 584 kg |
-| Land check: `cannot_return` | false | false | false |
+| Land check: `return_propellant_g`, to the cluster | 803 kg | 825 kg | 758 kg |
+| Land check: `cannot_return` | false | false | **true** |
 | Landed with | 1,492 kg | 1,432 kg | 745 kg |
-| Take off to 35 km | 654 kg, 229 m/s | 673 kg, 229 m/s | 618 kg, 227 m/s |
-| In low orbit with | 837 kg | 758 kg | 128 kg |
-| Home, 35 km to the cluster | 151 kg | 154 kg | refused, `no_propellant` |
-| Docked with | 686 kg, about 265 m/s spare | 604 kg, about 226 m/s spare | stranded at 35 km |
+| Take off to 30 km | 644 kg, 225 m/s | 662 kg, 225 m/s | 608 kg, 223 m/s |
+| In low orbit with | 848 kg | 769 kg | 138 kg |
+| Home, 30 km to the cluster | 159 kg | 163 kg | refused, `no_propellant` |
+| Used from landed to home | 803 kg | 826 kg | |
+| Docked with | 689 kg, about 266 m/s spare | 606 kg, about 227 m/s spare | stranded at 30 km |
 
-- **The hint's ice top-up advice still holds, and is needed.**
-  - Following it, the probe docks with about 226 m/s spare, above the 150 m/s line. That's better than the 190 m/s estimated, because the goods unload saves about 450 kg of mass.
-  - Without the top-up, the probe lands and climbs back, then is stranded in low orbit with 128 kg, needing about 154.
-  - From the start, with a full tank and nothing built, the trip is also safe, at about 265 m/s spare.
-- **The A36 warning under-warned, and A39 fixes it.**
-  - Under A36, `return_propellant_g` priced the climb to `LowFlight.ENTER_MM`, 20 km. But `move_to` home from a 20 km orbit was refused for `unsupported_orbit` in case A, and in case B the route crashed the script. Getting home took the climb to 35 km plus the trip: 673 + 154 = 827 kg in case B, against the 637 kg checked. In case C it said `cannot_return: false`, since 745 kg ≥ 584 kg, but the probe stranded.
-  - A39 (on `kernel/A39`, approved by the Lead) refuses `take_off` below `LowFlight.LEAVE_MM`, 30 km, cancels a waiting move that loses its orbit instead of crashing, and prices the return as the take-off to 30 km plus the leg up to the cluster.
-  - A's run of these three cases on A39, with a 30 km take-off: A priced 803 kg and flew home on 803; B priced 825 kg and docked on 826; C priced 758 kg against 745 left, so `cannot_return` is true, and it stranded. The warning now agrees with each.
-  - **To do:** rerun the three cases here once A39 is on `main`, and replace the table above with the 30 km figures.
+- **The warning agrees with every case.** In A and B the price matches what the flight home used, to the kilogram. In C it warns, since 745 kg is under 758 kg, and the probe does strand. The price covers only the way back to the cluster, not a trip on to elsewhere, so the hint keeps its ice advice.
+- **The hint's ice top-up advice holds, and is needed.**
+  - Following it, the probe docks with about 227 m/s spare, above the 150 m/s line. That's better than the 190 m/s first estimated, because unloading the goods saves about 450 kg.
+  - Without the top-up, the probe lands, climbs back, and is stranded in low orbit with 138 kg.
+  - From the start, with a full tank and nothing built, the trip is also safe, at about 266 m/s spare.
+- **History.** Under A36, `return_propellant_g` priced the climb to `LowFlight.ENTER_MM` (20 km), from which `move_to` home was refused for `unsupported_orbit` and once crashed the script. In case C it said `cannot_return: false`, and the probe stranded. A39 refuses `take_off` below 30 km, cancels a move that loses its orbit, and prices the take-off plus the leg up to the cluster (`return_target`, ID 12).
 
 ### Part E: the drone and the handover (goals 10 and 11), planned
 
@@ -241,6 +239,6 @@ Measured to the haul:
 - **Margin:** the probe ended Part C with 2,110 kg, and its tank has room for 390 kg more.
 - **Making it back:** ice is cheap to make. 100 kg of ice is 51 ticks of mining and 1,200 of refining for 90 kg of propellant. So a person who wastes propellant in the cluster can always make it back once the compact refinery runs.
 
-**Through research (Part D):** the probe never burns after Part C, and reaches goal 9 with 1,701 kg. Landing on Frost is optional, and the optional part of Part D prices it: following the hint, about 226 m/s spare; without the ice top-up, stranded.
+**Through research (Part D):** the probe never burns after Part C, and reaches goal 9 with 1,701 kg. Landing on Frost is optional, and the optional part of Part D prices it: following the hint, about 227 m/s spare; without the ice top-up, stranded.
 
 **Still to measure:** the drone's laps, from Parts E and F.
