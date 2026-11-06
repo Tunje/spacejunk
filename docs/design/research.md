@@ -224,7 +224,7 @@ Goals 9 ("Prove a new tech") and 10 to 12 in start_and_build section 4.1 stay. G
 
 The other two theories and the first idea are for after the handover. They give the expansion phase an aim: a `surface` sample from the moon for the solar farm, and composition data for the big refinery. The Assisted Core stays gated, because the owner's ruling says nothing is click-and-it's-yours (Lead, 2026-11-06).
 
-### 5.1 Design note: the first landing is for Photovoltaic Arrays (proposal, B23)
+### 5.1 Design note: the first landing is for Photovoltaic Arrays (B23, approved by the Lead 2026-11-06)
 
 Since C18b, the research route never lands. The landing and take-off come back with the first theory that needs a `surface` sample. **Photovoltaic Arrays is already that theory.** Its only evidence is 1 `surface`, so no new theory is needed. This note proposes making it the reason for the first landing, and checks that the figures work.
 
@@ -236,7 +236,7 @@ Since C18b, the research route never lands. The landing and take-off come back w
 - **What the hint says.** The Photovoltaic Arrays goal, or the research panel when that theory is selected, carries the landing advice that D31's research hint carries today: fill the tank from White Rock's ice first, empty the goods hold, leave straight from the station, and heed the land check's warning.
 - **Later, the drone.** Once the Assisted Core flies the drone, a lander drone could take surface samples instead of the probe. That's a reason to fit landing legs to a small craft, and it stays optional.
 
-Nothing here changes data: the theory, its 120 points and its evidence are already in `data/theories.json`. The proposal is about the route, the goal and the hint. It needs the Lead's ruling, and D's goal text if approved.
+Nothing here changes data: the theory, its 120 points and its evidence are already in `data/theories.json`. The proposal is about the route, the goal and the hint. The Lead approved it on 2026-11-06. D adds the landing advice to the PV goal or research panel after D35.
 
 **Rough cost** of research before the handover:
 
