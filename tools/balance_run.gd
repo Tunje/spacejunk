@@ -8,6 +8,8 @@ const GOAL_ORDER: Array[String] = [
 ]
 const THINK_PRACTISED := 4
 const THINK_FIRST_TIME := 15
+## A full-size facility's work_per_tick, at which an option's ticks become work.
+const FULL_RATE_WORK_PER_TICK := 100
 const OPTIONS: Array[Dictionary] = [
 	{ "name": "base" },
 	{ "name": "rocks at half distance", "rocks": { "num": 1, "den": 2 } },
@@ -75,8 +77,10 @@ func _init() -> void:
 func _apply(option: Dictionary) -> void:
 	var defs: Dictionary = DataLoader._defs_cache
 	var recipes: Dictionary = option.get("recipes", {})
+	# Options give a recipe's run in ticks at a full-size facility. Jobs run on work since C11,
+	# so that becomes work at the full rate of 100 per tick.
 	for id: String in recipes:
-		defs["recipes"][id]["ticks"] = recipes[id]
+		defs["recipes"][id]["work"] = recipes[id] * FULL_RATE_WORK_PER_TICK
 	if option.has("scan"):
 		defs["modules"]["lidar_mk1"]["capabilities"]["scan"]["ticks"] = option["scan"]
 
