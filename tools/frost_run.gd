@@ -272,7 +272,7 @@ Landing on Frost from the cluster's orbit, holding %.0f%% of thrust for stopping
 		(sim.current_tick() - start) / 600.0, (sim.current_tick() - braking) / 600.0])
 	print("  delta-v flown %.0f m/s; impulsive %.0f m/s (deorbit %.0f, then %.0f at the ground), so %.1f%% lost" % [
 		total / 1e6, ideal, deorbit, at_ground, 100.0 * (total / 1e6 - ideal) / ideal])
-	print("  the land command quotes %.0f m/s from the same orbit (3%% allowance)" % (quote[0] / 1e6))
+	print("  the land command quotes %.0f m/s from the same orbit (A27 loss)" % (quote[0] / 1e6))
 	_landed_dv = total
 
 
