@@ -6,6 +6,8 @@ extends GutTest
 const SHIPS := 76
 const SETTLE_TICKS := 40
 const MEASURED_TICKS := 120
+## How long the coast PERF line keeps the CPU busy before its sustained-clock window (A40).
+const SUSTAIN_MS := 6_000
 const MEAN_ALARM_USEC := 50_000
 const SPIKE_ALARM_USEC := 100_000
 const GM_STAR := 132_712_440_018_000_000
@@ -183,6 +185,27 @@ func test_a_coast_jump_at_twenty_times_the_slice() -> void:
 		unit["pos_mm"] = OrbitMath.position_at(unit["orbit"], 0)
 	sim._ctx.index.clear()
 	sim.step(SETTLE_TICKS)
+	# The budget is judged at the clock a long session runs at (A40). A CPU's turbo lasts a few
+	# seconds: the first window is at turbo only if the CPU was idle before it, as when this test
+	# runs alone, and the second, after SUSTAIN_MS more of the same work, is at the sustained clock.
+	# Both are reports: gate machines run loaded.
+	var first := _coast_window()
+	var busy := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - busy < SUSTAIN_MS:
+		sim.coast(100_000)
+	var later := _coast_window()
+	for window: Array in [["at the start (turbo if the CPU was idle)", first], ["after 6 s of work (sustained clock)", later]]:
+		var figures: Dictionary = window[1]
+		print("PERF ORBITS coast at 20x slice, %s: %.2f ms a jump (a stepped tick and a horizon pass, budget 8 ms at the sustained clock), %.2f ms a call, %d ticks a call, capped by %s; a plain step %.2f ms" % [
+			window[0], figures["per_round"], figures["per_call"], figures["ticks_per_call"], str(figures["caps"]),
+			figures["per_step"]])
+	assert_gt(first["ticks_per_call"], 1, "the world coasts rather than stepping")
+	assert_lt(later["per_call"], 80.0, "ten times the budget fails; the PERF line is the measure")
+
+
+## Some ticks stepped, then 40 coast calls, timed: { per_step, per_call, per_round, ticks_per_call,
+## caps }.
+func _coast_window() -> Dictionary:
 	var stepped := Time.get_ticks_usec()
 	sim.step(20)
 	var per_step := (Time.get_ticks_usec() - stepped) / 1000.0 / 20
@@ -197,9 +220,5 @@ func test_a_coast_jump_at_twenty_times_the_slice() -> void:
 		calls += 1
 		caps[done["capped_by"]] = caps.get(done["capped_by"], 0) + 1
 	var spent_ms := (Time.get_ticks_usec() - start) / 1000.0
-	var per_call := spent_ms / calls
-	var per_round := spent_ms / (sim.coast_rounds - rounds)
-	print("PERF ORBITS coast at 20x slice: %.2f ms a jump (a stepped tick and a horizon pass, budget 8 ms), %.2f ms a call, %d ticks a call, capped by %s; a plain step %.2f ms" % [
-		per_round, per_call, ticks / calls, str(caps), per_step])
-	assert_gt(ticks / calls, 1, "the world coasts rather than stepping")
-	assert_lt(per_call, 80.0, "ten times the budget fails; the PERF line is the measure")
+	return { "per_step": per_step, "per_call": spent_ms / calls, "per_round": spent_ms / (sim.coast_rounds - rounds),
+		"ticks_per_call": ticks / calls, "caps": caps }
