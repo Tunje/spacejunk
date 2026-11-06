@@ -7,6 +7,7 @@ signal fly_pressed
 signal policy_pressed
 signal fit_pressed
 signal jobs_pressed
+signal research_pressed
 signal auto_pressed
 signal save_pressed
 signal load_pressed
@@ -56,6 +57,11 @@ func _ready() -> void:
 	jobs_button.focus_mode = Control.FOCUS_NONE
 	jobs_button.pressed.connect(func() -> void: jobs_pressed.emit())
 	row.add_child(jobs_button)
+	var research_button := Button.new()
+	research_button.text = "Research"
+	research_button.focus_mode = Control.FOCUS_NONE
+	research_button.pressed.connect(func() -> void: research_pressed.emit())
+	row.add_child(research_button)
 	var auto_button := Button.new()
 	auto_button.text = "Auto"
 	auto_button.focus_mode = Control.FOCUS_NONE

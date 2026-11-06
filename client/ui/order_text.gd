@@ -4,6 +4,18 @@ class_name OrderText extends RefCounted
 
 const REASONS: Dictionary = {
 	"cargo_full": "Cargo hold is full",
+	# C12's research reasons.
+	"theory_locked": "A theory it needs isn't proven yet",
+	"already_proven": "Already proven",
+	"already_qualified": "Already qualified",
+	"design_unqualified": "The design isn't qualified yet: prototype and bench-test it first",
+	"idea_locked": "That idea isn't available yet",
+	"variant_exists": "That variant is already designed",
+	"stat_out_of_range": "Those ideas push a figure to zero or below",
+	"missing_points": "Not enough science points",
+	"install_blocked": "Built, but it can't be fitted there yet",
+	"missing_evidence": "The theory's evidence isn't gathered yet",
+	"orbit_changed": "The orbit changed, so the measurement stopped",
 	"corrupt": "The save file is damaged",
 	"data_mismatch": "The save was made with different game data",
 	"no_save": "No saved game yet",
@@ -77,6 +89,7 @@ const OPERATIONS: Dictionary = {
 	"unloading": "Unloading",
 	"mining": "Mining",
 	"scanning": "Scanning",
+	"measuring": "Measuring",
 }
 
 
@@ -89,6 +102,23 @@ static func reason(code: String, detail: Dictionary = {}) -> String:
 	elif detail.has("need_g") and detail.has("have_g"):
 		text += ": needs %s, has %s" % [tonnes(detail["need_g"]), tonnes(detail["have_g"])]
 	return text
+
+
+## "Survey", "Composition", "Gravity Field", "Surface Sample" for a science kind.
+static func science_kind(kind: String) -> String:
+	return { "surface": "Surface Sample" }.get(kind, kind.capitalize())
+
+
+## "Battery Bank (Dense Cells, Simpler Casing)" for "battery_bank_mk1+dense_cells+simple_casing".
+static func variant_name(variant: String, items: Dictionary) -> String:
+	var parts := variant.split("+")
+	var base: String = items.get(parts[0], {}).get("name", parts[0].capitalize())
+	if parts.size() == 1:
+		return base
+	var ideas: PackedStringArray = []
+	for idea in parts.slice(1):
+		ideas.append(idea.capitalize())
+	return "%s (%s)" % [base, ", ".join(ideas)]
 
 
 static func operation(code: String) -> String:
@@ -134,9 +164,23 @@ static func event(entry: Dictionary, unit_name: String, items: Dictionary, bodie
 		"job_finished":
 			return "%s: finished %s" % [unit_name, data["recipe"].replace("_", " ").capitalize()]
 		"job_cancelled":
-			return "%s: cancelled %s" % [unit_name, data["recipe"].replace("_", " ").capitalize()]
+			var cancelled := "%s: cancelled %s" % [unit_name, data["recipe"].replace("_", " ").capitalize()]
+			return cancelled if not data.has("reason") else "%s, %s" % [cancelled, reason(data["reason"]).to_lower()]
+		"science_gained":
+			if int(data["points"]) == 0:
+				return "%s: %s measured again, no new science" % [unit_name, OrderText.science_kind(data["kind"])]
+			return "%s: +%d science (%s)" % [unit_name, data["points"], OrderText.science_kind(data["kind"])]
+		"theory_proven":
+			return "Theory proven: %s" % String(data["theory"]).capitalize()
+		"design_qualified":
+			return "Design qualified: %s" % items.get(data["design"], {}).get("name", String(data["design"]).capitalize())
+		"variant_designed":
+			return "New design: %s" % OrderText.variant_name(data["variant"], items)
+		"idea_discovered":
+			return "Idea discovered for %s: %s" % [items.get(data["base"], {}).get("name", data["base"]), String(data["idea"]).capitalize()]
 		"job_paused":
-			return "%s: job held. %s" % [unit_name, reason(data["reason"])]
+			var held := "%s: job held. %s" % [unit_name, reason(data["reason"])]
+			return held if not data.has("detail") or not data["detail"] is String else "%s: %s" % [held, reason(data["detail"])]
 		"fit_copied":
 			return OrderText.fit_copied(data, unit_name, items)
 		"burn_started":

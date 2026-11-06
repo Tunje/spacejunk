@@ -6,6 +6,9 @@ class_name SimBridge extends Node
 signal view_updated
 signal events_received(events: Array[Dictionary])
 signal time_changed
+## The defs grew (C12: a designed variant adds its module, item and recipes), so any
+## screen holding a copy should read them again. Sent before that tick's events.
+signal defs_changed
 
 const SPEEDS: Array[int] = [1, 2, 4, 8]
 const MAX_STEPS_PER_FRAME := 8
@@ -32,6 +35,8 @@ func start(new_sim: RefCounted) -> void:
 	_last_span = 1
 	current_view = sim.view()
 	previous_view = current_view
+	# A new backend, such as a loaded save, may hold designed variants of its own.
+	defs_changed.emit()
 	view_updated.emit()
 
 
@@ -63,6 +68,8 @@ func advance(delta: float) -> void:
 	current_view = sim.view()
 	view_updated.emit()
 	var events: Array[Dictionary] = sim.take_events()
+	if events.any(func(event: Dictionary) -> bool: return event["type"] == "variant_designed"):
+		defs_changed.emit()
 	if not events.is_empty():
 		events_received.emit(events)
 

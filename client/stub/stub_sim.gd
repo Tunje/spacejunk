@@ -30,7 +30,7 @@ const PLANET_SEA_LEVEL_M := -400
 ## C9: jobs on one facility, counting the active one.
 const QUEUE_LIMIT := 16
 const JOB_VIEW_FIELDS: Array[String] = [
-	"unit", "facility", "recipe", "count_left", "status", "reason", "start_tick", "queue_pos", "work_left",
+	"unit", "facility", "recipe", "count_left", "status", "reason", "start_tick", "queue_pos", "work_left", "install_to",
 ]
 ## Statuses of an active job that move_job refuses with job_busy.
 const BUSY_STATUSES: Array[String] = ["running", "paused", "cancelling"]
@@ -116,11 +116,17 @@ func view() -> Dictionary:
 		"deposits": _state["deposits"].duplicate(true),
 		"jobs": _jobs_view(),
 		"tasks": _state["tasks"].duplicate(true),
+		# C12: the stub has no research, so both start and stay empty.
+		"science": { "points": 0, "earned": 0, "spent": 0, "paid": {}, "evidence": {} },
+		"research": { "theories": {}, "designs": {}, "variants": {}, "discovered": {} },
 	}
 
 
 func defs() -> Dictionary:
-	return _defs.duplicate(true)
+	var copy := _defs.duplicate(true)
+	copy["theories"] = {}
+	copy["science"] = {}
+	return copy
 
 
 func take_events() -> Array[Dictionary]:
@@ -973,6 +979,7 @@ func _jobs_view() -> Dictionary:
 			job[field] = _state["jobs"][id][field]
 		job["work"] = _defs["recipes"][job["recipe"]]["work"]
 		job["work_per_tick"] = _work_per_tick(job["facility"])
+		job["points_held"] = 0
 		shown[id] = job
 	return shown
 
@@ -1035,6 +1042,7 @@ func _apply_queue(unit: Dictionary, command: Dictionary) -> void:
 	_state["jobs"][id] = {
 		"unit": unit["id"], "facility": args["facility"], "recipe": args["recipe"], "count_left": args["count"],
 		"status": "waiting" if position == 0 else "queued", "reason": "", "start_tick": 0, "work_left": 0,
+		"install_to": args.get("install_to", {}).duplicate(),
 		"queue_pos": position, "held": {}, "started": false,
 	}
 	_emit("job_queued", unit["id"], { "job": id, "command": command["id"], "position": position })
@@ -1134,6 +1142,13 @@ func _finish_run(id: int) -> bool:
 	job["held"] = {}
 	for output: Dictionary in recipe["outputs"]:
 		stock[output["item"]] = stock.get(output["item"], 0) + output["grams"]
+	# C15, simplified: the part goes into the hold, then straight onto its target
+	# (the stub doesn't dry-run the fit or block).
+	var target: Dictionary = job["install_to"]
+	if not target.is_empty() and _defs["modules"].has(recipe["outputs"][0]["item"]):
+		_apply_attach(_state["units"][target["unit"]], { "item": recipe["outputs"][0]["item"], "from": job["unit"],
+			"parent_part": target["parent_part"], "parent_connector": target["parent_connector"],
+			"part_connector": target["part_connector"] })
 	_emit("job_finished", job["unit"], { "job": id, "recipe": job["recipe"], "facility": job["facility"] })
 	job["count_left"] -= 1
 	job["start_tick"] = 0

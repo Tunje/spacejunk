@@ -1,6 +1,8 @@
 class_name IndustryLogic extends RefCounted
 ## Works out facilities, recipes and job text from the view and defs. Starting
 ## and cancelling stay Sim commands; nothing here decides what is allowed.
+## Sinks that take a lab or prototype run's spent inputs, which aren't products.
+const TEST_SINKS: Array[String] = ["test_consumed", "fab_scrap"]
 
 ## C9: jobs on one facility, counting the active one.
 const QUEUE_LIMIT := 16
@@ -79,9 +81,45 @@ static func queue_on(view: Dictionary, facility_part: int) -> Array[Dictionary]:
 
 ## queue_job adds to the end of the queue and starts an idle facility.
 ## start_job is the pre-C9 order, kept for a Sim without the queue.
-static func start_command(unit_id: int, facility_part: int, recipe: Dictionary, count: int, idle := true) -> Dictionary:
+## `install_to`, when given, builds the part straight onto a unit (C15).
+static func start_command(unit_id: int, facility_part: int, recipe: Dictionary, count: int, idle := true,
+		install_to: Dictionary = {}) -> Dictionary:
 	var args := { "facility": facility_part, "recipe": recipe["id"], "count": count }
+	if not install_to.is_empty():
+		args["install_to"] = install_to
 	return { "type": "start_job" if idle else "queue_job", "unit": unit_id, "args": args }
+
+
+## C15: the module a recipe makes, if its one stored output is a module with count
+## 1, so it can be built straight onto a unit; otherwise "".
+static func module_output(recipe: Dictionary, defs: Dictionary) -> String:
+	var stored: Array = recipe.get("outputs", []).filter(func(output: Dictionary) -> bool:
+		return output.has("item") and not output.has("sink"))
+	if stored.size() != 1 or int(stored[0].get("count", 1)) != 1:
+		return ""
+	return stored[0]["item"] if defs["modules"].has(stored[0]["item"]) else ""
+
+
+## Units a part made here can be built onto: this unit, then any docked to it
+## either way, in ID order.
+static func install_units(view: Dictionary, unit_id: int) -> Array[int]:
+	var found: Array[int] = [unit_id]
+	var ids: Array = view["units"].keys()
+	ids.sort()
+	var own_dock: Dictionary = view["units"][unit_id]["dock"]
+	for id: int in ids:
+		if id == unit_id:
+			continue
+		var dock: Dictionary = view["units"][id]["dock"]
+		if (not dock.is_empty() and dock["target_unit"] == unit_id) or (not own_dock.is_empty() and own_dock["target_unit"] == id):
+			found.append(id)
+	return found
+
+
+## The job's install_to for a free slot on a unit, mating the new part by its mount.
+static func install_to(unit_id: int, slot: Dictionary) -> Dictionary:
+	return { "unit": unit_id, "parent_part": slot["part"], "parent_connector": slot["connector"],
+		"part_connector": FittingLogic.ROOT_MOUNT }
 
 
 ## Moves a job to a 1-based place among the queued jobs. Out of range is clamped.
@@ -95,15 +133,22 @@ static func cancel_command(unit_id: int, job_id: int) -> Dictionary:
 
 ## A recipe or item's display name, whichever definition holds it.
 static func name_of(id: String, defs: Dictionary) -> String:
+	if id.begins_with("qualify:"):
+		return "Bench Test: %s" % IndustryLogic.name_of(id.trim_prefix("qualify:"), defs)
+	if id.contains("+"):
+		return OrderText.variant_name(id, defs["items"])
 	for section: String in ["items", "modules", "templates"]:
 		if defs[section].has(id):
 			return defs[section][id]["name"]
 	return id.capitalize()
 
 
-## "Iron 2.0 t of 5.0 t" for each input, against this unit's stock.
-static func inputs_line(recipe: Dictionary, stock: Dictionary, defs: Dictionary) -> String:
+## "Iron 2.0 t of 5.0 t" for each input, against this unit's stock, and a lab
+## recipe's science points against the points banked (when known).
+static func inputs_line(recipe: Dictionary, stock: Dictionary, defs: Dictionary, points := -1) -> String:
 	var lines: PackedStringArray = []
+	if recipe.has("points"):
+		lines.append("Science %d of %d points" % [points, recipe["points"]] if points >= 0 else "Science %d points" % recipe["points"])
 	for input: Dictionary in recipe["inputs"]:
 		var have: int = stock.get(input["item"], 0)
 		lines.append("%s %s of %s" % [IndustryLogic.name_of(input["item"], defs), OrderText.tonnes(have), OrderText.tonnes(input["grams"])])
@@ -120,8 +165,14 @@ static func has_inputs(recipe: Dictionary, stock: Dictionary) -> bool:
 static func outputs_line(recipe: Dictionary, defs: Dictionary) -> String:
 	var lines: PackedStringArray = []
 	for output: Dictionary in recipe["outputs"]:
+		if TEST_SINKS.has(output.get("sink", "")):
+			continue
 		if output.has("grams"):
 			lines.append("%s %s" % [OrderText.tonnes(output["grams"]), IndustryLogic.name_of(output.get("item", output.get("unit", "")), defs)])
+		elif output.has("theory"):
+			lines.append("proof of %s" % defs.get("theories", {}).get(output["theory"], {}).get("name", String(output["theory"]).capitalize()))
+		elif output.has("qualifies"):
+			lines.append("a qualified %s design" % IndustryLogic.name_of(output["qualifies"], defs))
 		else:
 			lines.append(IndustryLogic.name_of(output.get("item", output.get("unit", "")), defs))
 	return ", ".join(lines)
@@ -132,8 +183,13 @@ static func can_move(job: Dictionary) -> bool:
 	return job.get("queue_pos", 0) > 0 or job["status"] == "waiting"
 
 
-static func job_line(job: Dictionary, defs: Dictionary, ticks_per_second: float) -> String:
+## `units`, the view's units, names where a job builds its part (C15).
+static func job_line(job: Dictionary, defs: Dictionary, ticks_per_second: float, units: Dictionary = {}) -> String:
 	var line := "%s: %s" % [IndustryLogic.name_of(job["recipe"], defs), STATUS_TEXT.get(job["status"], job["status"].capitalize())]
+	var target: Dictionary = job.get("install_to", {})
+	if not target.is_empty():
+		line = "%s into %s: %s" % [IndustryLogic.name_of(job["recipe"], defs),
+			units.get(target["unit"], {}).get("name", "unit %d" % target["unit"]), STATUS_TEXT.get(job["status"], job["status"].capitalize())]
 	if not job["reason"].is_empty():
 		line += ", %s" % OrderText.reason(job["reason"])
 	if job["count_left"] > 1:

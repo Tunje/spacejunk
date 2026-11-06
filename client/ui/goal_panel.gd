@@ -57,10 +57,16 @@ func bind(new_bridge: SimBridge, log_panel: EventLog, fitting: FittingScreen, sc
 	event_log = log_panel
 	_defs = bridge.defs()
 	_items = _defs["items"]
+	bridge.defs_changed.connect(_reread_defs)
 	bridge.view_updated.connect(_on_view)
 	bridge.events_received.connect(_on_events)
 	fitting.fit_blocked.connect(tracker.note_fit_blocked)
 	_on_view()
+
+
+func _reread_defs() -> void:
+	_defs = bridge.defs()
+	_items = _defs["items"]
 
 
 func toggle_list() -> void:
