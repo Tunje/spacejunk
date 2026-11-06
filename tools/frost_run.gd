@@ -14,7 +14,7 @@ extends SceneTree
 
 const BELT_A_MM := 403_914_250_890_000  # 2.7 AU (docs/design/belt.md)
 ## The deorbit burn aims the periapsis this far above Frost's datum, over its highest ground.
-const PERIAPSIS_ALT_M := 5000.0
+const PERIAPSIS_ALT_M := 2500.0
 const TOUCHDOWN_M_S := 1.5
 const GUIDE_TICKS := 10
 
@@ -24,6 +24,14 @@ var gm_frost := 0.0  # m^3/s^2
 
 
 func _init() -> void:
+	if "--sweep" in OS.get_cmdline_user_args():
+		_sweep()
+		quit()
+		return
+	if "--transfer" in OS.get_cmdline_user_args():
+		_transfer_loss()
+		quit()
+		return
 	_new()
 	var probe := _probe()
 	var wet_g := Units.unit_mass(sim._state, sim._ctx.defs, keys["Probe"])
@@ -216,12 +224,17 @@ func _flown_landing() -> void:
 	var deorbit := sqrt(gm_frost / r_c) - sqrt(gm_frost * (2.0 / r_c - 1.0 / a_t))
 	var at_ground := sqrt(gm_frost * (2.0 / (radius + PERIAPSIS_ALT_M) - 1.0 / a_t))
 	var start := sim.current_tick()
-	var total := _burn(-roundi(deorbit * 1e6), 0)
+	var total := 0
+	if _quiet:
+		_onto_descent(radius + PERIAPSIS_ALT_M, r_c)
+		total = roundi(deorbit * 1e6)  # the deorbit burn, taken as flown impulsively
+	else:
+		total = _burn(-roundi(deorbit * 1e6), 0)
 	# Coast down to the braking height.
 	while true:
 		var s: Array = _now()
 		var r: float = s[0].length()
-		if r - _ground_m(s[0]) < PERIAPSIS_ALT_M + 1500.0 or s[0].dot(s[1]) > 0.0:
+		if r - _ground_m(s[0]) < PERIAPSIS_ALT_M + 1000.0 or s[0].dot(s[1]) > 0.0:
 			break
 		_steps(GUIDE_TICKS)
 	var braking := sim.current_tick()
@@ -242,12 +255,16 @@ func _flown_landing() -> void:
 		# Come down no faster than a fifth of the thrust could stop, and while braking, no sooner
 		# than the level speed is gone: reach 300 m as it is.
 		var stoppable := -sqrt(2.0 * _profile[0] * cap * maxf(alt - 20.0, 0.0)) - TOUCHDOWN_M_S
-		var want_vz := maxf(stoppable, -40.0)
+		var want_vz := stoppable
 		if h > 1.0:
 			want_vz = maxf(want_vz, -maxf(alt - _profile[1], 0.0) / maxf(h / (0.9 * cap), 1.0))
 		var a_up := gm_frost / (r * r) - h * h / r + (want_vz - vz) / 2.0
 		total += _guided(a_up, minf(h, cap), -1.0)
 	var ideal := deorbit + at_ground
+	_result = { "outcome": _outcome.get("type", ""), "speed": _outcome.get("data", {}).get("speed_um_s", 0) / 1e6,
+		"flown": total / 1e6 }
+	if _quiet:
+		return
 	print("
 Landing on Frost from the cluster's orbit, holding %.0f%% of thrust for stopping vertically:" % (100.0 * _profile[0]))
 	print("  %s at %.1f m/s after %.1f min, %.1f min of it braking" % [
@@ -260,6 +277,120 @@ Landing on Frost from the cluster's orbit, holding %.0f%% of thrust for stopping
 
 
 var _landed_dv := 0
+## The take-off's climb: vertical speed wanted below a height, and above it.
+var _climb := [20.0, 2000.0, 5.0]
+var _quiet := false
+var _result := {}
+
+
+# ------------------------------------------------------------------------------ the A27 sweep
+
+## Lands and takes off at several thrusts, keeping the cheapest descent that touches down at no
+## more than half the legs' limit and the cheapest climb that reaches the cluster's height. Prints
+## each as a factor on the land and take_off commands' surface speed, against thrust-to-weight at
+## Frost's surface. Run: godot --headless --path . -s tools/frost_run.gd -- --sweep
+func _sweep() -> void:
+	_quiet = true
+	var landing_profiles := [[0.2, 300.0], [0.3, 250.0], [0.4, 200.0], [0.5, 150.0], [0.6, 100.0], [0.7, 80.0]]
+	var climbs := [[10.0, 1000.0, 3.0], [20.0, 2000.0, 5.0], [40.0, 3000.0, 10.0]]
+	print("thrust kN, n landing, best landing factor (profile, flown m/s, touchdown m/s), n take-off, best take-off factor (climb, flown m/s)")
+	for thrust_n: int in [6_000, 8_000, 10_000, 12_000, 15_000, 20_000, 30_000, 45_000]:
+		var best_land := {}
+		var n_land := 0.0
+		for profile: Array in landing_profiles:
+			_profile = profile
+			_new()
+			_set_thrust(thrust_n)
+			_onto_cluster_orbit()
+			n_land = _twr()
+			var parts := _command_parts()
+			_flown_landing()
+			if _result["outcome"] == "landed" and _result["speed"] <= 3.0:
+				var factor: float = (_result["flown"] - parts[0]) / parts[1]
+				if best_land.is_empty() or factor < best_land["factor"]:
+					best_land = { "factor": factor, "profile": profile, "flown": _result["flown"], "speed": _result["speed"] }
+		var best_up := {}
+		var n_up := 0.0
+		for climb: Array in climbs:
+			_climb = climb
+			_new()
+			_set_thrust(thrust_n)
+			LandingSystem._set_down(sim._ctx, keys["Probe"], keys["Frost"], 777)
+			sim._ctx.index.clear()
+			n_up = _twr()
+			var parts := _command_parts()
+			_flown_take_off()
+			if _result.get("low_km", 0.0) > 250.0:
+				var factor: float = (_result["flown"] - parts[0]) / parts[1]
+				if best_up.is_empty() or factor < best_up["factor"]:
+					best_up = { "factor": factor, "climb": climb, "flown": _result["flown"] }
+		print("%5.1f  %.2f  %s  %.2f  %s" % [thrust_n / 1000.0, n_land,
+			"none safe" if best_land.is_empty() else "%.3f (%s, %.0f, %.1f)" % [best_land["factor"], str(best_land["profile"]), best_land["flown"], best_land["speed"]],
+			n_up, "none" if best_up.is_empty() else "%.3f (%s, %.0f)" % [best_up["factor"], str(best_up["climb"]), best_up["flown"]]])
+
+
+## Puts the probe on the descent ellipse from the cluster's height, ten minutes short of its
+## periapsis, as the deorbit burn and the coast would have left it.
+func _onto_descent(periapsis_m: float, apoapsis_m: float) -> void:
+	var gm := int(gm_frost / 1000.0)
+	var a_mm := roundi((periapsis_m + apoapsis_m) / 2.0 * 1000.0)
+	var e := roundi((apoapsis_m - periapsis_m) / (apoapsis_m + periapsis_m) * OrbitMath.ONE)
+	var frame_orbit: Dictionary = _frame()["orbit"]
+	var orbit := OrbitMath.make_orbit(gm, a_mm, e, frame_orbit["p_q30"], frame_orbit["q_q30"], 0, sim.current_tick())
+	var period_ticks: float = orbit["period_subticks"] / float(OrbitMath.SUB_TICKS)
+	orbit["m0_angle"] = (OrbitMath.TURN - roundi(6000.0 / period_ticks * OrbitMath.TURN)) & OrbitMath.ANGLE_MASK
+	orbit["parent"] = keys["Frost"]
+	var probe := _probe()
+	probe["frame"] = 0
+	probe["orbit"] = orbit
+	probe["pos_mm"] = OrbitMath.position_at(orbit, sim.current_tick())
+	probe["vel_um_s"] = [0, 0, 0]
+	sim._ctx.index.clear()
+
+
+## A27: what a finite prograde burn from the cluster's orbit loses against an instant one, by the
+## sim's own preview (BurnSystem flies it tick by tick). The loss is the extra delta-v the instant
+## burn would need to match the finite one's orbital energy, taken the other way round.
+func _transfer_loss() -> void:
+	_new()
+	_onto_cluster_orbit()
+	print("Prograde burns from the cluster's orbit round Frost at %.2f m/s^2:" % _accel())
+	for dv_m_s: int in [10, 20, 30, 100, 300]:
+		var checked := sim.check(_burn_args(dv_m_s * 1_000_000, 0))
+		var finite: Dictionary = checked["detail"].get("orbit", {})
+		var now := OrbitMath.state_at(_probe()["orbit"], int(gm_frost / 1000.0), sim.current_tick() + 1)
+		var r := _vec(now["r"], 1e-3).length()
+		var v := _vec(now["v"], 1e-6).length() + dv_m_s
+		var instant_energy := v * v / 2.0 - gm_frost / r
+		if finite.is_empty():
+			print("  %d m/s: %s" % [dv_m_s, str(checked)])
+			continue
+		# An escape's record keeps a positive semi-major axis; its energy is +GM / 2a.
+		var sign := 1.0 if finite.get("hyperbolic", false) else -1.0
+		var finite_energy: float = sign * gm_frost / (2.0 * finite["a_mm"] / 1000.0)
+		var lost := (instant_energy - finite_energy) / v
+		print("  %d m/s over %d ticks: %.3f m/s lost, %.3f%%" % [dv_m_s, checked["detail"].get("burn_ticks", 0),
+			lost, 100.0 * lost / dv_m_s])
+
+
+func _set_thrust(thrust_n: int) -> void:
+	var part: int = BurnSystem.thruster(sim._ctx, keys["Probe"])["part"]
+	sim._ctx.defs = sim._ctx.defs.duplicate(true)
+	Units.module_of(sim._state, sim._ctx.defs, part)["capabilities"]["thruster"]["thrust_n"] = thrust_n
+
+
+## Thrust over weight at Frost's datum, at the probe's mass now.
+func _twr() -> float:
+	return _accel() / (gm_frost / (60_000.0 * 60_000.0))
+
+
+## The command's sums from the cluster's height: [the burn at the top, the surface speed], m/s.
+func _command_parts() -> Array:
+	var gm: int = sim._state["bodies"][keys["Frost"]]["gm"]
+	var high: int = _frame()["orbit"]["a_mm"]
+	var a_t := (60_000_000 + high) / 2
+	var top := absi(OrbitMath.speed_um_s(gm, high, high) - OrbitMath.speed_um_s(gm, high, a_t))
+	return [top / 1e6, OrbitMath.speed_um_s(gm, 60_000_000, a_t) / 1e6]
 
 
 func _flown_take_off() -> void:
@@ -286,9 +417,19 @@ func _flown_take_off() -> void:
 		var vz := vel.dot(up)
 		var h := (vel - up * vz).length()
 		var alt := r - _ground_m(pos)
-		var want_vz := 20.0 if alt < 2000.0 else 5.0
+		var want_vz: float = _climb[0] if alt < _climb[1] else _climb[2]
 		var a_up := gm_frost / (r * r) - h * h / r + (want_vz - vz) / 2.0
 		total += _guided(a_up, _accel(), 1.0)
+	if _quiet:
+		# The circling burn at the top, worked out from the path rather than coasted to.
+		var now: Array = _now()
+		var r0: float = now[0].length()
+		var a_path: float = 1.0 / (2.0 / r0 - now[1].length_squared() / gm_frost)
+		var e_path := sqrt(maxf(0.0, 1.0 - now[0].cross(now[1]).length_squared() / (gm_frost * a_path)))
+		var top := a_path * (1.0 + e_path)
+		var circle_at_top := sqrt(gm_frost / top) - sqrt(gm_frost * (2.0 / top - 1.0 / a_path))
+		_result = { "flown": total / 1e6 + circle_at_top, "low_km": top / 1000.0 }
+		return
 	# Coast to the top, then circle there.
 	while true:
 		var s: Array = _now()
@@ -299,6 +440,9 @@ func _flown_take_off() -> void:
 	var circle: float = sqrt(gm_frost / s[0].length()) - s[1].length()
 	total += _burn(roundi(circle * 1e6), 0)
 	var orbit: Dictionary = _probe()["orbit"]
+	_result = { "flown": total / 1e6, "low_km": orbit.get("a_mm", 0) * (1.0 - float(orbit.get("e_q30", 0)) / OrbitMath.ONE) / 1e6 }
+	if _quiet:
+		return
 	print("\nTaking off from Frost to the cluster's height, flown the same way:")
 	print("  delta-v flown %.0f m/s in %.1f min, into an orbit of %.1f by %.1f km from the centre" % [
 		total / 1e6, (sim.current_tick() - start) / 600.0,
