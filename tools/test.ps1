@@ -23,7 +23,13 @@ if (-not (Test-Path $godot)) {
     exit 2
 }
 
-& $godot --headless --path $projectRoot --import | Out-Null
+# Godot logs import hiccups, such as a file briefly locked while a .import file is
+# replaced, to stderr and carries on. Under 'Stop' PowerShell made that fatal and ended
+# the gate mid-import, so the import runs under 'Continue'; a real failure still fails
+# the GUT run below.
+$ErrorActionPreference = 'Continue'
+& $godot --headless --path $projectRoot --import 2>&1 | Out-Null
+$ErrorActionPreference = 'Stop'
 
 # GUT skips a test file it cannot parse and still reports success, so check for that here.
 $ErrorActionPreference = 'Continue'
