@@ -189,14 +189,17 @@ func test_a_coast_jump_at_twenty_times_the_slice() -> void:
 	var calls := 0
 	var ticks := 0
 	var caps := {}
+	var rounds := sim.coast_rounds
 	var start := Time.get_ticks_usec()
 	while calls < 40:
 		var done: Dictionary = sim.coast(100_000)
 		ticks += done["ticks"]
 		calls += 1
 		caps[done["capped_by"]] = caps.get(done["capped_by"], 0) + 1
-	var per_call := (Time.get_ticks_usec() - start) / 1000.0 / calls
-	print("PERF ORBITS coast at 20x slice: %.2f ms a call, %d ticks a call on average, capped by %s; a plain step %.2f ms (budget 8 ms a jump)" % [
-		per_call, ticks / calls, str(caps), per_step])
+	var spent_ms := (Time.get_ticks_usec() - start) / 1000.0
+	var per_call := spent_ms / calls
+	var per_round := spent_ms / (sim.coast_rounds - rounds)
+	print("PERF ORBITS coast at 20x slice: %.2f ms a jump (a stepped tick and a horizon pass, budget 8 ms), %.2f ms a call, %d ticks a call, capped by %s; a plain step %.2f ms" % [
+		per_round, per_call, ticks / calls, str(caps), per_step])
 	assert_gt(ticks / calls, 1, "the world coasts rather than stepping")
 	assert_lt(per_call, 80.0, "ten times the budget fails; the PERF line is the measure")
