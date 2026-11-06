@@ -23,7 +23,7 @@
   ],
   "frames": [
     { "key": "cluster", "name": "Cluster", "radius_mm": 60000000,
-      "orbit": { "parent": "moon", "a_mm": 300000000 } }
+      "orbit": { "parent": "moon", "a_mm": 300000000, "mean_anomaly_mdeg": 180000 } }
   ],
   "units": [
     { "key": "probe", "template": "probe", "name": "Probe", "frame": "cluster", "pos_mm": [0, 0, 0],

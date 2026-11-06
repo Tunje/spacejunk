@@ -161,3 +161,15 @@ func test_probe_carries_a_compact_refinery_and_fabricator_at_half_rate() -> void
 		assert_eq(compact["type"], full["type"])
 		assert_eq(compact["work_per_tick"] * 2, full["work_per_tick"])
 	assert_lte(_mass_kg(root), 7380.0)
+
+
+## The game opens in sunlight, between Frost and the star, with Frost's lit side in view.
+func test_probe_starts_in_sunlight() -> void:
+	var sim := Sim.new_game("new_start", int(scenario["seed"]))
+	assert_not_null(sim, Sim.last_error())
+	var view := sim.view()
+	var probe: Dictionary = {}
+	for id: int in view["units"]:
+		probe = view["units"][id]
+	assert_false(probe["power"]["in_shadow"], "the probe starts in Frost's shadow")
+	assert_gt(probe["power"]["supply_w"], 0)
