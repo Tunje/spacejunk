@@ -15,7 +15,7 @@ Status: **proposal**, task B18. Nothing in `data/`, `sim/`, the client or the co
 - **The belt is far.** At 2.7 AU, a transfer from Frost's planet costs about 11 km/s and takes about 15 months each way, with a window every 15 months. On today's chemical thruster that is a mass ratio of about 39, which is impossible. It takes three things:
   - electric propulsion, which is an era III theory;
   - a power source that still works at 14% sunlight;
-  - a long-coast time warp (open question 2).
+  - a long-coast time warp, which the Lead has ruled is needed.
 - **It is a mid-game goal by design.** Reaching the belt is what era III is for. Until then the cluster, Frost and the planet are the whole playing field.
 
 ## 1. Where the belt is
