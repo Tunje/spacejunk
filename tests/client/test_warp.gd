@@ -77,7 +77,7 @@ func test_attention_events_and_the_jobs_option() -> void:
 	assert_true(WarpLogic.needs_attention(finished), "its last run: the job is gone")
 	assert_false(WarpLogic.needs_attention(finished, false, { 7: {} }), "a run of a job with runs left")
 	assert_false(WarpLogic.needs_attention(finished, true), "warp past jobs")
-	assert_eq(WarpLogic.cap_text("moving_in_frame"), "ships moving in the cluster")
+	assert_eq(WarpLogic.cap_text("docking_or_cargo"), "docking or moving cargo")
 	assert_true(WarpLogic.needs_attention([{ "type": "departed" }]), "A34: a window opening")
 	assert_false(WarpLogic.needs_attention([{ "type": "job_paused", "data": { "reason": "missing_inputs" } }]),
 		"waiting on another job's output is the plan")

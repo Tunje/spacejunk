@@ -432,3 +432,10 @@ func test_a_landing_that_cannot_return_is_warned_but_allowed() -> void:
 	assert_eq(FlightLogic.return_warning(stranded, 12_000_000), "", "fine: no warning")
 	assert_eq(FlightLogic.return_warning({ "ok": false, "reason": "no_propellant", "detail": {} }, 0), "",
 		"a refusal says its own reason")
+	# A39: the price is back to the frame round the body, which the warning names.
+	stranded["detail"]["cannot_return"] = true
+	stranded["detail"]["return_target"] = 12
+	stranded["detail"]["return_propellant_g"] = 3_428_000
+	assert_string_starts_with(FlightLogic.return_warning(stranded, 12_000_000, { 12: { "name": "Cluster" } }),
+		"You won't have enough propellant to get back to the Cluster (need ")
+	assert_eq(LowFlight.LEAVE_MM, 30_000_000, "take-off's floor, which the altitude box keeps to")

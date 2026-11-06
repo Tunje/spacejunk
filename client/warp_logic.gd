@@ -31,7 +31,6 @@ const CAP_TEXT: Dictionary = {
 	"transfer_leg": "a trip's next leg",
 	"departure_or_arrival": "a departure or arrival",
 	"landing_or_takeoff": "landing or taking off",
-	"moving_in_frame": "ships moving in the cluster",
 	"docking_or_cargo": "docking or moving cargo",
 	"power": "power changing",
 	"heat": "heat near its limit",

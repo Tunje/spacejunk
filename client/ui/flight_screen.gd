@@ -203,7 +203,8 @@ func _build_landing(column: VBoxContainer) -> void:
 	var label := _add_label(_takeoff_row)
 	label.text = "To orbit at (km)"
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_altitude = _add_spin(_takeoff_row, 10.0, 5000.0, 10.0)
+	# A take-off below LowFlight.LEAVE_MM drops straight back into low flight (A39).
+	_altitude = _add_spin(_takeoff_row, LowFlight.LEAVE_MM / 1_000_000.0, 5000.0, 10.0)
 	_altitude.value = TAKEOFF_KM
 	_altitude.value_changed.connect(func(_value: float) -> void: _edited())
 	_takeoff_button = _add_button(_takeoff_row, "Take off")
@@ -829,6 +830,7 @@ func _show_landing(view: Dictionary, shown: Dictionary) -> void:
 		land_preview = bridge.check(land_command())
 	_land_text.text = "Hex %d. %s" % [land_cell, FlightLogic.trip_cost_text(land_preview, "Descent", bridge.ticks_per_second())]
 	_land_button.disabled = not land_preview.get("ok", false)
-	_return_warning.text = FlightLogic.return_warning(land_preview, int(unit()["inventory"].get("propellant", 0)))
+	_return_warning.text = FlightLogic.return_warning(land_preview, int(unit()["inventory"].get("propellant", 0)),
+		view.get("frames", {}))
 	_return_warning.visible = not _return_warning.text.is_empty()
 
