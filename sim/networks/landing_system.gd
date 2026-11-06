@@ -62,6 +62,11 @@ func validate(ctx: SimContext, command: Dictionary) -> Dictionary:
 		return SimSystem.reject(REASON_NO_PROPELLANT, { "need_g": plan["cost_g"], "have_g": free })
 	var result := SimSystem.ok()
 	result["detail"] = { "dv_um_s": plan["dv_um_s"], "propellant_g": plan["cost_g"], "ticks": plan["ticks"] }
+	if command["type"] == LAND:
+		# A warning, not a refusal: whether the propellant left after landing gets back up (A36).
+		var back := return_g(ctx, unit_id, plan["body"], plan["mass_g"] - plan["cost_g"])
+		result["detail"]["return_propellant_g"] = back
+		result["detail"]["cannot_return"] = back < 0 or free - plan["cost_g"] < back
 	return result
 
 
@@ -164,21 +169,43 @@ static func _plan(ctx: SimContext, unit_id: int, type: String, args: Dictionary)
 		var soi: int = ctx.state["bodies"][body_id].get("soi_mm", 0)
 		if soi > 0 and high_mm >= soi:
 			return { "reason": REASON_INVALID }
-	var gm: int = ctx.state["bodies"][body_id]["gm"]
 	var mass_g := Units.unit_mass(ctx.state, ctx.defs, unit_id)
+	var cost := _cost(ctx.state["bodies"][body_id]["gm"], type, low_mm, high_mm, found, mass_g)
+	if cost.has("reason"):
+		return cost
+	cost.merge({ "body": body_id, "cell": cell, "altitude_mm": altitude, "mass_g": mass_g })
+	return cost
+
+
+## { dv_um_s, ticks, cost_g } for an atomic land or take_off between the datum and an orbit, at a
+## mass, or { reason }.
+static func _cost(gm: int, type: String, low_mm: int, high_mm: int, found: Dictionary, mass_g: int) -> Dictionary:
 	var n_ppm := twr_ppm(gm, low_mm, found["thrust_n"], mass_g)
 	if n_ppm <= 1_000_000:
 		return { "reason": REASON_THRUST_TOO_LOW }
-	var loss := loss_permille(n_ppm, LAND_LOSS_A, LAND_LOSS_B) if type == LAND 		else loss_permille(n_ppm, TAKE_OFF_LOSS_A, TAKE_OFF_LOSS_B)
+	var loss := loss_permille(n_ppm, LAND_LOSS_A, LAND_LOSS_B) if type == LAND \
+		else loss_permille(n_ppm, TAKE_OFF_LOSS_A, TAKE_OFF_LOSS_B)
 	var a_t := (low_mm + high_mm) / 2
 	var surface := IntMath.mul_div_ceil(OrbitMath.speed_um_s(gm, low_mm, a_t), loss, 1000)
 	var orbit_end := absi(OrbitMath.speed_um_s(gm, high_mm, high_mm) - OrbitMath.speed_um_s(gm, high_mm, a_t))
 	var dv := surface + orbit_end
-	var ticks := maxi(1, OrbitMath.period_sub(gm, a_t) / (2 * OrbitMath.SUB_TICKS))
 	return {
-		"body": body_id, "cell": cell, "altitude_mm": altitude, "dv_um_s": dv, "ticks": ticks,
+		"dv_um_s": dv, "ticks": maxi(1, OrbitMath.period_sub(gm, a_t) / (2 * OrbitMath.SUB_TICKS)),
 		"cost_g": OrbitMath.burn_g(mass_g, dv, found["exhaust_mm_s"]),
 	}
+
+
+## The propellant for an atomic take_off from a body to the lowest safe orbit, just clear of low
+## flight, at a mass, or -1 if the take-off would be refused. For the land check (A36).
+static func return_g(ctx: SimContext, unit_id: int, body_id: int, mass_g: int) -> int:
+	var found := BurnSystem.thruster(ctx, unit_id)
+	var body: Dictionary = ctx.state["bodies"][body_id]
+	var low_mm: int = body["radius_mm"]
+	var high_mm := low_mm + LowFlight.ENTER_MM
+	if found.is_empty() or (body.get("soi_mm", 0) > 0 and high_mm >= body["soi_mm"]):
+		return -1
+	var cost := _cost(body["gm"], TAKE_OFF, low_mm, high_mm, found, mass_g)
+	return -1 if cost.has("reason") else int(cost["cost_g"])
 
 
 ## Thrust over weight at a body's datum, in parts per million: thrust / mass over GM / r^2.
@@ -191,7 +218,8 @@ static func twr_ppm(gm: int, radius_mm: int, thrust_n: int, mass_g: int) -> int:
 ## The surface speed's multiplier in permille at thrust over weight n (ppm, over 1):
 ## 1000 + a / n + b / n^2, each term rounded up.
 static func loss_permille(n_ppm: int, a: int, b: int) -> int:
-	return 1000 + IntMath.mul_div_ceil(a, 1_000_000, n_ppm) 		+ IntMath.mul_div_ceil(IntMath.mul_div_ceil(b, 1_000_000, n_ppm), 1_000_000, n_ppm)
+	return 1000 + IntMath.mul_div_ceil(a, 1_000_000, n_ppm) \
+		+ IntMath.mul_div_ceil(IntMath.mul_div_ceil(b, 1_000_000, n_ppm), 1_000_000, n_ppm)
 
 
 ## The grid size of a body, from its radius: about 7 km a hex (A14).

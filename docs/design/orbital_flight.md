@@ -1002,3 +1002,29 @@ The kernel caps; the client drops.
   - an undock task, which caps at `tasks`;
   - strict mode, which steps every tick.
 - **Measured:** the lap takes 21 coast calls, at 1.85 ms a call, or 39 ms for the lap. That is inside the 2 ms budget, and about 100,000× real time for that case.
+
+### 11.24 A35 results: power caps, the soak and the 20× cost
+
+**Two PowerSystem fixes.** Each held coast at 0 one tick at a time:
+- **Shadow edges (D's finding).** `CoastBounds` gave away 10 km of every gap as slack, so on the new start the horizon was 0 for about 1,700 ticks around each edge of the cluster's shadow. The slack is now 1 m. Positions are whole millimetres, and Q30 directions err by well under a millimetre at these distances. New start seed 1 now coasts from tick 110,000 to 140,000 in 16 calls.
+- **A battery at a fixed point (C's finding in C17).** A full battery offered a trickle its losses round to nothing, or an empty one with nothing drawn, hit the "limited by room" or "limited by store" return of 0. A battery that one more tick of its flows leaves exactly as it is, store and both remainders, now gives no limit.
+  - Mining at the reference rock: 912 calls, now 9.
+  - A gravity-field lap: 283 calls, now 16.
+- `tests/sim/kernel/test_coast_power.gd` holds all three cases, stepped against coasted, byte-equal.
+
+**The soak.** `tests/sim/kernel/coast_soak.gd` runs a seeded random game twice, stepped and coasted. It compares state hashes and events after every coast call, and the saves at the end.
+- Most seeds are a probe round a Frost-sized moon, with a random orbit, battery charge and stored heat. Each has a planned burn, or a landing and then a take-off, either of which may be refused.
+- Every fourth seed is the new start from a random tick.
+- Seed 1 is D's edge.
+- The gate runs seeds 1, 4, 6 and 8 in `tests/slow/test_coast_soak.gd`, in about 11 s.
+- `tools/coast_soak.gd -- <first seed> <count> <ticks>` runs more. Seeds that land take 20 to 30 s each, since the descent's half ellipse is stepped too in the reference copy.
+
+**20× the slice** (`test_perf_orbits.gd`): 76 ships with no orders, those on orbits moved out to 2,000 km so they don't share the frames' band. A jump costs about 11 ms against the 8 ms budget:
+
+| Part | Cost |
+| --- | --- |
+| The tick that is stepped | 6.1 ms |
+| Horizons | 4.1 ms, of which PowerSystem 2.9 ms and BurnSystem 1.1 ms |
+| Closed forms | 0.8 ms |
+
+About 40% of rounds end in a horizon of 0, from 38 ships on low orbits crossing the planet's shadow. The step is most of the cost. The power horizon is the next place to cut, with its per-unit relative speeds and battery bisection.

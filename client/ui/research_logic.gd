@@ -74,6 +74,23 @@ static func test_cost(theory: Dictionary, defs: Dictionary) -> String:
 	return "Lab test: %s" % ", ".join(lines)
 
 
+## Every lab facility, as { unit, part }, by unit then part ID.
+static func labs(view: Dictionary, defs: Dictionary) -> Array[Dictionary]:
+	var found: Array[Dictionary] = []
+	var ids: Array = view["units"].keys()
+	ids.sort()
+	for id: int in ids:
+		for entry: Dictionary in IndustryLogic.facilities(view["units"][id], defs["modules"]):
+			if entry["type"] == "lab":
+				found.append({ "unit": id, "part": entry["part"] })
+	return found
+
+
+## queue_job of one run of `recipe` at a lab.
+static func lab_command(lab: Dictionary, recipe: String) -> Dictionary:
+	return { "type": "queue_job", "unit": lab["unit"], "args": { "facility": lab["part"], "recipe": recipe, "count": 1 } }
+
+
 ## Designs worth listing: every one a theory unlocks, then every designed variant.
 static func designs(view: Dictionary, defs: Dictionary) -> Array[String]:
 	var found: Array[String] = []

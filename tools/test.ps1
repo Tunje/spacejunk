@@ -36,8 +36,13 @@ $ErrorActionPreference = 'Stop'
 
 # GUT skips a test file it cannot parse and still reports success, so check for that here.
 $ErrorActionPreference = 'Continue'
-# The full run lists every tests folder but tests/playthrough, and the smoke test at the top.
-$full = ' -gdir=res://tests/bot,res://tests/client,res://tests/sim,res://tests/slow,res://tests/tools -gtest=res://tests/test_smoke.gd'
+# The full run takes every folder under tests/ but playthrough, found here so a new folder
+# is never skipped unseen, and the test files at the top of tests/.
+$folders = @(Get-ChildItem (Join-Path $projectRoot 'tests') -Directory | Where-Object { $_.Name -ne 'playthrough' } |
+    Sort-Object Name | ForEach-Object { "res://tests/$($_.Name)" })
+$topFiles = @(Get-ChildItem (Join-Path $projectRoot 'tests') -File -Filter 'test_*.gd' | Sort-Object Name |
+    ForEach-Object { "res://tests/$($_.Name)" })
+$full = " -gdir=$($folders -join ',')" + $(if ($topFiles.Count -gt 0) { " -gtest=$($topFiles -join ',')" } else { '' })
 $config = if ($Playthrough) { ' -gdir=res://tests/playthrough' } elseif ($Quick) { ' -gconfig=res://.gutconfig.quick.json' } else { $full }
 # GUT's JUnit report gives each file's time, for the slow-file warning below.
 $junit = Join-Path ([System.IO.Path]::GetTempPath()) "newmanprobe-gut-$PID.xml"

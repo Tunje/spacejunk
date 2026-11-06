@@ -8,6 +8,8 @@ const WIDTH_PX := 430
 const LIST_HEIGHT_PX := 520
 
 signal closed
+## A test or bench test was queued from here.
+signal lab_started(recipe: String)
 
 var bridge: SimBridge
 var base := ""
@@ -107,11 +109,14 @@ func _rebuild(view: Dictionary) -> void:
 		name_line.modulate = ClientTheme.GOLD if status == "Ready to prove" else Color.WHITE
 		_add_detail("Evidence: %s" % ResearchLogic.evidence_text(theory, view))
 		if status != "Proven":
-			_add_detail("%s. Run it at a Lab in Jobs (J)." % ResearchLogic.test_cost(theory, _defs))
+			_add_detail("%s." % ResearchLogic.test_cost(theory, _defs))
+			_add_lab_button("Start at a lab", theory.get("test", ""), view)
 	_designs_heading = _heading("Designs")
 	for design: String in ResearchLogic.designs(view, _defs):
 		_add_label(_body, IndustryLogic.name_of(design, _defs))
 		_add_detail(ResearchLogic.next_step(design, view, _defs))
+		if ResearchLogic.design_state(design, view, _defs) == "prototype":
+			_add_lab_button("Bench-test at a lab", "qualify:%s" % design, view)
 	_build_designer(view)
 
 
@@ -154,6 +159,33 @@ func _build_designer(view: Dictionary) -> void:
 	_message = _add_detail("")
 	_message.modulate = ClientTheme.GOLD
 	_show_preview()
+
+
+## Queues one run of a lab recipe at the first lab the Sim would take it at, or says
+## why none can: no lab yet, or each lab's refusal.
+func _add_lab_button(text: String, recipe: String, view: Dictionary) -> void:
+	if recipe == "" or not _defs["recipes"].has(recipe):
+		return
+	var button := Button.new()
+	button.text = text
+	button.focus_mode = Control.FOCUS_NONE
+	var labs := ResearchLogic.labs(view, _defs)
+	var command := {}
+	var why := "No lab yet: build a Research Lab on a station"
+	for lab: Dictionary in labs:
+		var check := bridge.check(ResearchLogic.lab_command(lab, recipe))
+		if check["ok"]:
+			command = ResearchLogic.lab_command(lab, recipe)
+			break
+		why = "%s: %s" % [view["units"][lab["unit"]]["name"], OrderText.reason(check["reason"], check.get("detail", {}))]
+	button.disabled = command.is_empty()
+	button.tooltip_text = why if command.is_empty() else "Queues it at %s's lab" % view["units"][command["unit"]]["name"]
+	button.pressed.connect(func() -> void:
+		bridge.submit(command)
+		lab_started.emit(recipe))
+	_body.add_child(button)
+	if command.is_empty():
+		_add_detail(why)
 
 
 func choose_base(new_base: String) -> void:
