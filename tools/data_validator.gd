@@ -35,6 +35,10 @@ const MODULE_FIELDS := [
 const CONNECTOR_FIELDS := ["id", "type", "size", "pos_mm", "facing", "up", "load_limit_kg"]
 const COLLISION_FIELDS := ["shape", "center_mm", "size_mm"]
 const RECIPE_FIELDS := ["id", "facility", "seconds", "power_kw", "inputs", "outputs", "abstract"]
+## Work points (C11). A recipe needs `work`, and a facility removes `work_per_tick` of it each tick.
+## While recipes still carry `seconds`, work must equal seconds x WORK_PER_SECOND.
+const RECIPE_OPTIONAL := ["work"]
+const WORK_PER_SECOND := 1000
 const DEPOSIT_FIELDS := ["id", "item", "mass_kg", "hardness"]
 const TEMPLATE_FIELDS := ["id", "name", "kind", "root"]
 const SINK_FIELDS := ["id", "name", "items"]
@@ -381,8 +385,10 @@ func _shape_capabilities(where: String, capabilities: Variant) -> void:
 		elif key == "max_mass_kg":
 			_check_positive(at, key, value, 1000, MAX_STACK_G)
 		elif key == "facility":
-			if value is Dictionary and _has_fields(at, value, ["type"]):
+			if value is Dictionary and _has_fields(at, value, ["type"], ["work_per_tick"]):
 				_check_enum(at, "type", value["type"], FACILITIES)
+				if value.has("work_per_tick"):
+					_check_whole(at, "work_per_tick", value["work_per_tick"], 1, MAX_RATE)
 			elif not value is Dictionary:
 				_err("bad_capability", at, "not an object")
 		elif key == "always_on":
@@ -472,10 +478,14 @@ func _shape_connector(where: String, connector: Dictionary) -> void:
 
 func _shape_recipe(recipe: Dictionary) -> void:
 	var where := "recipes.json:%s" % recipe["id"]
-	if not _has_fields(where, recipe, RECIPE_FIELDS):
+	if not _has_fields(where, recipe, RECIPE_FIELDS, RECIPE_OPTIONAL):
 		return
 	_check_enum(where, "facility", recipe["facility"], FACILITIES)
 	_check_whole(where, "seconds", recipe["seconds"], 1, MAX_RATE)
+	if recipe.has("work"):
+		_check_whole(where, "work", recipe["work"], 1, MAX_RATE)
+		if _is_whole(recipe["work"]) and _is_whole(recipe["seconds"]) 				and int(recipe["work"]) != int(recipe["seconds"]) * WORK_PER_SECOND:
+			_err("work_mismatch", where, "work %d, seconds %d" % [recipe["work"], recipe["seconds"]])
 	_check_number(where, "power_kw", recipe["power_kw"], 1000, MAX_RATE)
 	if not recipe["abstract"] is bool:
 		_err("bad_recipe", where, "abstract is not a boolean")
