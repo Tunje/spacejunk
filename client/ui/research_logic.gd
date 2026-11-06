@@ -76,14 +76,55 @@ static func test_cost(theory: Dictionary, defs: Dictionary) -> String:
 
 ## Every lab facility, as { unit, part }, by unit then part ID.
 static func labs(view: Dictionary, defs: Dictionary) -> Array[Dictionary]:
+	return ResearchLogic.facilities_of(view, defs, "lab")
+
+
+## Every facility of a type ("lab", "fabricator"), as { unit, part }, by unit then part ID.
+static func facilities_of(view: Dictionary, defs: Dictionary, facility_type: String) -> Array[Dictionary]:
 	var found: Array[Dictionary] = []
 	var ids: Array = view["units"].keys()
 	ids.sort()
 	for id: int in ids:
 		for entry: Dictionary in IndustryLogic.facilities(view["units"][id], defs["modules"]):
-			if entry["type"] == "lab":
+			if entry["type"] == facility_type:
 				found.append({ "unit": id, "part": entry["part"] })
 	return found
+
+
+## What a recipe still lacks in a unit's hold, and where it is instead, as one line:
+## "Assisted Core Prototype and 10 Processor are on Probe". "" when nothing lacks.
+static func missing_inputs(view: Dictionary, defs: Dictionary, recipe: String, unit_id: int) -> String:
+	var held: Dictionary = view["units"][unit_id]["inventory"]
+	var by_place: Dictionary = {}
+	var nowhere: PackedStringArray = []
+	var ids: Array = view["units"].keys()
+	ids.sort()
+	for input: Dictionary in defs["recipes"].get(recipe, {}).get("inputs", []):
+		var item: String = input["item"]
+		if int(held.get(item, 0)) >= int(input["grams"]):
+			continue
+		var label := IndustryLogic.name_of(item, defs)
+		if int(input.get("count", 1)) > 1:
+			label = "%d %s" % [input["count"], label]
+		var where := ""
+		for id: int in ids:
+			if id != unit_id and where == "" and int(view["units"][id]["inventory"].get(item, 0)) >= int(input["grams"]):
+				where = view["units"][id]["name"]
+		if where == "":
+			nowhere.append(label)
+		else:
+			if not by_place.has(where):
+				by_place[where] = []
+			(by_place[where] as Array).append(label)
+	var lines: PackedStringArray = []
+	var places: Array = by_place.keys()
+	places.sort()
+	for where: String in places:
+		var here: Array = by_place[where]
+		lines.append("%s %s on %s" % [" and ".join(PackedStringArray(here)), "is" if here.size() == 1 else "are", where])
+	if not nowhere.is_empty():
+		lines.append("%s still to make" % " and ".join(nowhere))
+	return "; ".join(lines)
 
 
 ## queue_job of one run of `recipe` at a lab.
