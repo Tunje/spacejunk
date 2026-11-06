@@ -47,6 +47,10 @@ static func load_defs() -> Dictionary:
 	var sinks := _load_table("sinks")
 	if error != "":
 		return {}
+	var problem := work_problem(recipes, modules)
+	if problem != "":
+		_fail(problem)
+		return {}
 	_derive_module_items(modules, items)
 	_add_recipe_grams(recipes, items)
 	if error != "":
@@ -175,6 +179,30 @@ static func _exact(value: float, factor: int, where: String) -> int:
 	if absf(scaled - rounded) > EXACT_TOLERANCE * maxf(1.0, absf(scaled)):
 		_fail("%s = %s does not convert exactly" % [where, value])
 	return rounded
+
+
+## "" if every recipe needs a whole `work` of at least 1 and has no duration left over, and every
+## facility does a whole `work_per_tick` of at least 1 (C11, contracts section 5). Otherwise what is
+## wrong, naming the first entry in ID order. A job on a facility of rate 0 would never end, and one
+## without a rate would fail its first lookup.
+static func work_problem(recipes: Dictionary, modules: Dictionary) -> String:
+	var recipe_ids := recipes.keys()
+	recipe_ids.sort()
+	for id: String in recipe_ids:
+		var recipe: Dictionary = recipes[id]
+		if recipe.has("ticks"):
+			return "recipe %s has seconds; recipes take work points instead" % id
+		if typeof(recipe.get("work")) != TYPE_INT or recipe["work"] < 1:
+			return "recipe %s needs a whole work of at least 1" % id
+	var module_ids := modules.keys()
+	module_ids.sort()
+	for id: String in module_ids:
+		var facility: Variant = modules[id].get("capabilities", {}).get("facility")
+		if facility == null:
+			continue
+		if typeof(facility.get("work_per_tick")) != TYPE_INT or facility["work_per_tick"] < 1:
+			return "module %s's facility needs a whole work_per_tick of at least 1" % id
+	return ""
 
 
 ## One item per module, with the same ID, as schemas.md section 3 sets out.
