@@ -1,6 +1,6 @@
 # Simulation Contracts
 
-Contract version: 3. Signed off by the Lead (task L7) after review by Agents A, C and D. Version 2 added the job queue (C9). Version 3 adds orbits and frames ([orbital_flight.md](orbital_flight.md) section 11, task A10). Changes go through the Lead.
+Contract version: 4. Signed off by the Lead (task L7) after review by Agents A, C and D. Version 2 added the job queue (C9). Version 3 adds orbits and frames ([orbital_flight.md](orbital_flight.md) section 11, task A10). Version 4 makes jobs take work points, not time (C11). Changes go through the Lead.
 
 These contracts expand section 5 of `plan/workplan.md`. If the two disagree, raise it with the Lead.
 
@@ -111,7 +111,7 @@ Rules:
   - `arrive_tick` is the tick `arrived` fires, `depart_tick + ticks - 1`.
 - `next_window(unit, target, from_tick, cap_g) -> Dictionary` gives the same as `quote` if it costs at most `cap_g`, otherwise `{ reason: "no_window" }`.
 - Sim code prices a leg the unit hasn't reached yet, such as a cycle's lap gate, with `Travel.quote_leg(ctx, unit, from_place, target, mass_g, from_tick)`. That gives the same dictionary, from the place of a body or unit at a given mass.
-- `defs()` returns `{ modules, items, recipes, templates, sinks }`, each keyed by definition ID, including connectors, collision and visual, so clients never parse data units. Fields are renamed to their sim unit: `mass_kg` to `mass_g`, `power_kw` to `power_w`, `heat_kw` to `heat_w`, `volume_m3` to `volume_l`, `load_limit_kg` to `load_limit_g`, `density_kg_m3` to `density_g_l`, `seconds` to `ticks`, and likewise for any other unit-suffixed field (`docs/design/schemas.md` section 2).
+- `defs()` returns `{ modules, items, recipes, templates, sinks }`, each keyed by definition ID, including connectors, collision and visual, so clients never parse data units. Fields are renamed to their sim unit: `mass_kg` to `mass_g`, `power_kw` to `power_w`, `heat_kw` to `heat_w`, `volume_m3` to `volume_l`, `load_limit_kg` to `load_limit_g`, `density_kg_m3` to `density_g_l`, `seconds` to `ticks` (except on recipes, which have `work` instead), and likewise for any other unit-suffixed field (`docs/design/schemas.md` section 2).
 - Scenario `"empty"` is built into the kernel for tests that precede `data/`.
 - The event queue is bounded (A1 sets the bound) and starts empty on load.
 - The client drains events before calling `to_save`, because undrained events are not saved.
@@ -198,6 +198,12 @@ Running shortfalls are still handled by shedding and faults.
 **Building units.** A recipe output may name a unit template. When the job finishes, the unit appears docked at a free port of the facility's unit, or failing that of the unit it is docked to, and takes that unit's place (frame, orbit or landed cell). The port is reserved in phase 4, and the job blocks with `no_free_port` if none is free. B4 checks that template part mass equals recipe input mass, and that the template holds a port.
 
 **Jobs.** With `count` above 1, inputs are taken at the start of each run and `job_finished` fires per run.
+
+**Work points.** A recipe has no set duration. A run needs the recipe's `work` points, and its facility does its `facility.work_per_tick` each tick it runs, so a slower facility takes longer at the same recipe. Full-size facilities do 100 a tick, and a recipe's `work` is its old `seconds` times 1000, so every recipe kept its duration on them.
+- A run sets the job's `work_left` to `work` when it starts in phase 4. Each phase 5 tick that the facility runs takes `work_per_tick` off it, floored at 0, and at 0 the run delivers in phase 6 of that tick. So a run takes `ceil(work / work_per_tick)` ticks. Work left over on the last tick is lost: nothing carries to the next run or job.
+- A shed or faulted facility does no work that tick. The run pauses with its inputs and `work_left` held, and resumes when power returns. A cancelled run loses its progress.
+- A run that builds a unit claims its port on its last tick of work, when `work_left <= work_per_tick`.
+- A running job draws `ceil(recipe power_w * work_per_tick / 100)`, so a run uses the same energy on any size of facility, and full-size facilities draw the recipe's figure.
 
 **Job queue.**
 - A facility holds up to 16 jobs in order, by `queue_pos`. The job at 0 is active and has the statuses of [autonomy.md](autonomy.md) section 9. The rest are `queued` at 1 to n, hold no matter and reserve nothing. Positions stay contiguous.
@@ -318,7 +324,8 @@ This shape is frozen. Fields may be added, but changes or removals go through th
   frames = { 6: { name = "...", radius_mm = 0, orbit = {}, pos_mm = [], world_mm = [] } },
   deposits = { 12: { body = 3, item = "hematite", remaining_g = 0, hardness = 0 } },
   jobs = { 30: { unit = 2, facility = 8, recipe = "...", count_left = 1, status = "running",
-                 reason = "", start_tick = 0, end_tick = 0, queue_pos = 0 } },
+                 reason = "", start_tick = 0, queue_pos = 0, work_left = 0, work = 0,
+                 work_per_tick = 0 } },
   tasks = {},
 }
 ```
@@ -329,7 +336,7 @@ This shape is frozen. Fields may be added, but changes or removals go through th
 - While waiting, the op keeps the trip it will fly as `plan`. It is the same dictionary `quote` gives, so a save mid-wait leaves on exactly the same legs. While `burning`, `part` is the thruster, which draws power and gives heat like any running load. A shed thruster gives no thrust that tick.
 - A unit also shows `vel_um_s`, its local velocity in a frame. It shows `burns`, its planned burns in tick order as `{ id, tick, prograde_um_s, normal_um_s, radial_um_s }`. And it shows `burn`, the running burn as `{ id, dv_um_s, done_um_s, start_tick }`, or `{}`.
 - A part's `state`: `on`, `shed` or `fault`.
-- A job's `status`: `queued`, `waiting`, `running`, `paused` or `cancelling`. `queue_pos` is its place in its facility's queue, 0 for the active job.
+- A job's `status`: `queued`, `waiting`, `running`, `paused` or `cancelling`. `queue_pos` is its place in its facility's queue, 0 for the active job. `work_left` is the current run's work still to do, 0 until a run starts. `work` is one run's total, from the recipe, and `work_per_tick` is the facility's rate, so a client shows progress as `1 - work_left / work` and the time left as `ceil(work_left / work_per_tick)` ticks.
 - Each unit has one inventory, keyed by item. Capacity is by cargo class, summed across its storage modules.
 - `pos_mm` is in the object's own place (section 1): relative to its orbit's parent, local to its frame, or in the old world. `world_mm` adds up the chain to the root body, for drawing a system map. Floats are for drawing only: an orbit is drawn from its record with 64-bit floats as `position_float` in tests/sim/kernel/test_orbit_math.gd does, never Godot's 32-bit `Vector3`.
 - Unfound deposits stay out of the view. Decorative asteroids are client-only, generated from `seed`; only targetable bodies appear here.
@@ -373,7 +380,7 @@ Task B3 owns the schemas. These fields are fixed here because other agents depen
 - **`realism`:** `established`, `extrapolation`, `speculative` or `fictional`.
 - **Connectors:** `id` (unique within a module), `type` (`stack`, `side`, `dock`), `size`, `pos_mm`, `facing`, `up`, `load_limit_kg`. `facing` and `up` are axis values (+/-x, +/-y, +/-z), written in the module's own frame. A child part is turned as it mates, so that in the craft's frame the connectors have opposite facings and equal ups. `load_limit_kg` is the mass carried below the connector.
 - **Collision:** `{ shape, center_mm, size_mm }`, where `shape` is `box` or `cylinder`, with the cylinder axis along the module's Y. `size_mm` is full extents `[x, y, z]`; a cylinder's diameter is `x` and its height is `y`. Placeholders use the same shape. B3 may extend it.
-- **Recipes:** `id`, `facility`, `seconds`, `power_kw`, `inputs`, `outputs`, `abstract`. An output may route straight to a declared sink, such as `slag_vent`, instead of an inventory. B3 defines how.
+- **Recipes:** `id`, `facility`, `work`, `power_kw`, `inputs`, `outputs`, `abstract`. `work` is a whole number of work points, at least 1. Every facility capability has `work_per_tick`, a whole number of at least 1. An output may route straight to a declared sink, such as `slag_vent`, instead of an inventory. B3 defines how.
 - `visual` is read by the client only. The simulation never reads it.
 
 ## 11. Client rules
