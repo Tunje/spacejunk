@@ -77,6 +77,26 @@ func test_recipes_give_every_amount_in_grams() -> void:
 	assert_eq(frame["inputs"][0]["grams"], 20 * 50_000)
 
 
+func test_recipes_need_whole_work_and_facilities_a_rate() -> void:
+	assert_eq(DataLoader.work_problem(defs["recipes"], defs["modules"]), "", "today's data passes")
+	var good_recipe := { "id": "r", "work": 300 }
+	var good_module := { "id": "m", "capabilities": { "facility": { "type": "refinery", "work_per_tick": 100 } } }
+	var cases := {
+		"recipe r has seconds": [{ "id": "r", "work": 300, "ticks": 30 }, good_module],
+		"recipe r needs a whole work": [{ "id": "r" }, good_module],
+		"recipe r needs a whole work of at least 1": [{ "id": "r", "work": 0 }, good_module],
+		"module m's facility needs a whole work_per_tick": [good_recipe,
+			{ "id": "m", "capabilities": { "facility": { "type": "refinery" } } }],
+		"module m's facility needs a whole work_per_tick of at least 1": [good_recipe,
+			{ "id": "m", "capabilities": { "facility": { "type": "refinery", "work_per_tick": 0 } } }],
+	}
+	for expected: String in cases:
+		var problem := DataLoader.work_problem({ "r": cases[expected][0] }, { "m": cases[expected][1] })
+		assert_string_contains(problem, expected)
+	assert_eq(DataLoader.work_problem({ "r": good_recipe }, { "m": good_module, "n": { "id": "n" } }), "",
+		"a module with no facility needs no rate")
+
+
 func test_deposit_definitions_stay_out_of_defs() -> void:
 	assert_false(defs.has("deposits"))
 	assert_eq(DataLoader.load_deposits()["hematite_deposit"]["mass_g"], 200_000_000)
