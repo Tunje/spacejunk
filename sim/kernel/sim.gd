@@ -3,7 +3,7 @@ extends RefCounted
 ## The public simulation API (contracts section 3) and the tick loop (section 4).
 
 const TICKS_PER_SECOND := 10
-const CONTRACT_VERSION := 4
+const CONTRACT_VERSION := 5
 const SCENARIO_EMPTY := "empty"
 ## Undrained events past this are dropped, oldest first.
 const MAX_QUEUED_EVENTS := 65536
@@ -26,6 +26,8 @@ var _handlers := {}
 var _events: Array[Dictionary] = []
 ## Test runs set this to check every state range at commit.
 var _strict := false
+## Command types that may be sent with unit 0, meaning the player rather than a unit (C12).
+var _unitless := {}
 var _violations := PackedStringArray()
 
 
@@ -164,8 +166,11 @@ func ledger() -> Dictionary:
 		"start_g": _state["matter_start_g"], "total_g": 0, "deposits_g": 0,
 		"inventories_g": 0, "jobs_g": 0, "installed_g": 0, "sinks_g": sinks_g, "sinks": sinks,
 	}
+	var science: Dictionary = _state["science"]
 	var result := {
 		"tick": _state["tick"], "matter": matter, "energy": {}, "heat": {},
+		"science": { "points": science["points"], "earned": science["earned"], "spent": science["spent"],
+			"held": Research.held_points(_state) },
 		"violations": _violations.duplicate(),
 	}
 	for system in _systems:
@@ -196,13 +201,16 @@ static func _new_state(scenario_id: String, seed_value: int, defs_value: Diction
 		"jobs": {},
 		"tasks": {},
 		"sinks": {},
+		"science": Research.empty_science(),
+		"research": Research.empty_research(),
 	}
 
 
 ## Definitions for a game. Only the built-in `empty` scenario runs without data/.
 static func _load_defs(scenario_id: String) -> Dictionary:
 	if scenario_id == SCENARIO_EMPTY:
-		return { "modules": {}, "items": {}, "recipes": {}, "templates": {}, "sinks": {} }
+		return { "modules": {}, "items": {}, "recipes": {}, "templates": {}, "sinks": {},
+			"theories": {}, "science": {}, "bench_test": {} }
 	var definitions := DataLoader.load_defs()
 	if DataLoader.error != "":
 		push_error("Data did not load: %s" % DataLoader.error)
@@ -233,7 +241,7 @@ static func _has_state_shape(state: Dictionary) -> bool:
 	for key: String in template:
 		if not state.has(key) or typeof(state[key]) != typeof(template[key]):
 			return false
-	return true
+	return Research.has_shape(state)
 
 
 ## Grams per sink.
@@ -249,9 +257,11 @@ func _sink_totals() -> Dictionary:
 	return totals
 
 
+## Builds the game's definitions from the authored ones (Research.overlay), so a loaded game has
+## its derived and designed entries before anything reads them.
 func _setup(state: Dictionary, defs_value: Dictionary) -> void:
 	_state = state
-	_ctx = SimContext.new(state, defs_value)
+	_ctx = SimContext.new(state, Research.overlay(defs_value, state))
 	for system in _default_systems():
 		_register_system(system)
 
@@ -273,6 +283,8 @@ func _register_system(system: SimSystem) -> void:
 	_systems.append(system)
 	for type in system.commands():
 		_handlers[type] = system
+	for type in system.unitless_commands():
+		_unitless[type] = true
 
 
 func _run_tick() -> void:
@@ -331,7 +343,7 @@ func _validate(command: Dictionary) -> Dictionary:
 		return SimSystem.reject(command["invalid"])
 	if not _handlers.has(command["type"]):
 		return SimSystem.reject(REASON_UNKNOWN_COMMAND)
-	if not _state["units"].has(command["unit"]):
+	if not _state["units"].has(command["unit"]) and not (command["unit"] == 0 and _unitless.has(command["type"])):
 		return SimSystem.reject(REASON_UNKNOWN_UNIT)
 	return _handlers[command["type"]].validate(_ctx, command)
 
@@ -393,4 +405,5 @@ func _commit(tick: int) -> void:
 	_state["tick"] = tick
 	if _strict:
 		_violations.append_array(Invariants.violations(_state))
+		_violations.append_array(Research.science_violations(_state))
 		_violations.append_array(Units.broken_stacks(_state, _ctx.defs))

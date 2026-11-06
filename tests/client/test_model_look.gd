@@ -30,17 +30,41 @@ func test_every_generated_model_is_capped() -> void:
 			assert_lte(material.metallic, ModelLook.METALLIC_CAP + ModelLook.TOLERANCE, path)
 
 
-func test_the_imported_model_really_is_fully_metallic() -> void:
-	# What the cap is for: the raw import leaves the map in charge at factor 1.0.
-	var raw: Node3D = autofree((load(MODELS[0]) as PackedScene).instantiate())
-	assert_eq(_materials(raw)[0].metallic, 1.0)
+## A model like an old TRELLIS import: one mesh whose shared material is fully
+## metallic. Delivered models now come with metallic 0, so the cap is a guard, and
+## these tests give it something to cap.
+func _metal_model(mesh: BoxMesh) -> Node3D:
+	var root := Node3D.new()
+	var surface := MeshInstance3D.new()
+	surface.mesh = mesh
+	root.add_child(surface)
+	return autofree(root)
 
 
-func test_the_shared_imported_material_is_left_alone() -> void:
-	var raw: Node3D = autofree((load(MODELS[0]) as PackedScene).instantiate())
-	var before := _materials(raw)[0]
-	autofree(ModelLook.instantiate(MODELS[0]))
-	assert_eq(before.metallic, 1.0, "another instance still sees the import's own")
+func _metal_mesh() -> BoxMesh:
+	var material := StandardMaterial3D.new()
+	material.metallic = 1.0
+	material.albedo_color = Color(0.8, 0.6, 0.2)
+	var mesh := BoxMesh.new()
+	mesh.material = material
+	return mesh
+
+
+func test_a_fully_metallic_model_is_capped() -> void:
+	var model := _metal_model(_metal_mesh())
+	ModelLook.apply(model)
+	var shown := _materials(model)[0]
+	assert_almost_eq(shown.metallic, ModelLook.METALLIC_CAP, ModelLook.TOLERANCE)
+	assert_eq(shown.albedo_color, Color(0.8, 0.6, 0.2), "its colour is kept")
+
+
+func test_the_shared_material_is_left_alone() -> void:
+	var mesh := _metal_mesh()
+	var tamed := _metal_model(mesh)
+	var other := _metal_model(mesh)
+	ModelLook.apply(tamed)
+	assert_eq((mesh.material as BaseMaterial3D).metallic, 1.0, "the mesh's own material is unchanged")
+	assert_eq(_materials(other)[0].metallic, 1.0, "another instance still sees it")
 
 
 func test_colour_and_maps_are_kept() -> void:
