@@ -3,11 +3,8 @@ extends GutTest
 ## labelled placeholder when there is no model; picking, glow and growth work on both.
 
 ## Models allowed off their collision centre, and why. Each is still counted and placed.
-const OFF_CENTRE_OK := {
-	# Provisional collision reaches 2.8 m below the mount until the long-leg model
-	# arrives (B11); remove when it lands.
-	"landing_legs_mk1": true,
-}
+## None now: B16's long-leg model fits its box. The mechanism stays for later.
+const OFF_CENTRE_OK := {}
 
 var modules: Dictionary
 var craft: CraftNode
