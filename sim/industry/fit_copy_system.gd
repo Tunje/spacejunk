@@ -35,7 +35,7 @@ func validate(ctx: SimContext, command: Dictionary) -> Dictionary:
 		return SimSystem.reject(REASON_UNKNOWN_UNIT)
 	if source == unit:
 		return SimSystem.reject(REASON_INVALID_TARGET)
-	if from != unit and not Units.are_docked(ctx.state, unit, from):
+	if from != unit and not Units.docked_group(ctx.state, unit).has(from):
 		return SimSystem.reject(REASON_NOT_DOCKED)
 	var parts: Dictionary = ctx.state["parts"]
 	if parts[units[source]["root"]]["def"] != parts[units[unit]["root"]]["def"]:
