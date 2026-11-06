@@ -293,7 +293,7 @@ Rules:
 - A facility holds an ordered queue of up to 16 jobs (C9). Only the job at `queue_pos` 0 is active. `queue_job` adds to the end, `move_job` reorders and `cancel_job` removes. The queue rules are in [contracts.md](contracts.md) section 5. A job that is `waiting` on `missing_inputs` can be moved back, so a stuck job does not hold up the jobs behind it.
 - `start_job` does not check stock. It is rejected only with `facility_busy` if the facility has a job, or for an unknown recipe or wrong facility. A job can wait for ore that is still being hauled, so a large `count` is how a player sets up a production line.
 - Each entry into `waiting` or `paused` emits `job_paused`, and each exit emits `job_resumed`. Moving to `running` for the first time emits `job_started`, and later runs emit nothing further.
-- Work is counted in remaining ticks, held in the job. `end_tick` is recalculated on resume and is 0 while the job is not running.
+- Work is counted in work points, held in the job as `work_left`. The facility takes its `work_per_tick` off it each tick it runs, and nothing while paused (contracts section 5).
 - A job with `missing_inputs` can run forever. It costs nothing and is not an error.
 - `detach_part` is rejected with `part_busy` if the subtree has a job, including a `cancelling` one. Cancel it first. Matter in a job must have a place to go.
 
@@ -335,7 +335,7 @@ Each failure emits exactly one event (contracts section 6), and the view shows t
 
 ## 11. Save and determinism
 
-All of this is ordinary state, and saves with no special handling: tasks, `moved_g`, reservations, `cycle_task`, `last_cycle` and job remaining ticks. The port queue is not stored. It is derived from `since_tick` and entity ID each tick.
+All of this is ordinary state, and saves with no special handling: tasks, `moved_g`, reservations, `cycle_task`, `last_cycle` and job `work_left`. The port queue is not stored. It is derived from `since_tick` and entity ID each tick.
 
 The order of `steps` has meaning and is kept (contracts section 8).
 

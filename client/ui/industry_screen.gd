@@ -222,7 +222,7 @@ func _sync_recipes() -> void:
 		var outputs := _add_label(row)
 		outputs.text = "Makes %s in %s" % [
 			IndustryLogic.outputs_line(recipe, _defs),
-			OrderText.duration(float(recipe["ticks"]) / bridge.ticks_per_second()),
+			OrderText.duration(IndustryLogic.run_ticks(recipe["work"], facility["rate"]) / bridge.ticks_per_second()),
 		]
 		outputs.modulate = ClientTheme.MID_GREY.lightened(0.3)
 		_recipe_box.add_child(row)
@@ -236,8 +236,8 @@ func _show_job(view: Dictionary) -> void:
 	_back_button.disabled = job.is_empty() or queued == 0 or not IndustryLogic.can_move(job)
 	for row: Dictionary in _rows:
 		(row["start"] as Button).text = "Start" if job.is_empty() and queued == 0 else "Queue"
-	_job_bar.value = 0.0 if job.is_empty() else IndustryLogic.job_progress(job, view["tick"])
-	_job_label.text = "Idle" if job.is_empty() else IndustryLogic.job_line(job, _defs)
+	_job_bar.value = 0.0 if job.is_empty() else IndustryLogic.job_progress(job)
+	_job_label.text = "Idle" if job.is_empty() else IndustryLogic.job_line(job, _defs, bridge.ticks_per_second())
 	_job_label.modulate = ClientTheme.GOLD if not job.is_empty() and not job["reason"].is_empty() else Color.WHITE
 
 
@@ -255,7 +255,9 @@ func _show_queue(view: Dictionary) -> void:
 		_build_queue_rows(queued)
 	for index in range(queued.size()):
 		var row: Dictionary = _queue_rows[index]
-		(row["label"] as Label).text = "%d. %s" % [index + 1, IndustryLogic.job_line(queued[index], _defs)]
+		var label: Label = row["label"]
+		label.text = "%d. %s" % [index + 1, IndustryLogic.queue_line(queued[index], _defs, bridge.ticks_per_second())]
+		label.tooltip_text = label.text
 		(row["up"] as Button).disabled = index == 0
 		(row["down"] as Button).disabled = index == queued.size() - 1
 	_queue_scroll.custom_minimum_size = Vector2(0, mini(queued.size(), QUEUE_ROWS_SHOWN) * QUEUE_ROW_PX)
@@ -271,6 +273,11 @@ func _build_queue_rows(queued: Array[Dictionary]) -> void:
 		_queue_box.add_child(row)
 		var label := _add_label(row)
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		# One line a row: a long name trims, and the whole line is in the tooltip.
+		label.autowrap_mode = TextServer.AUTOWRAP_OFF
+		label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		label.clip_text = true
+		label.mouse_filter = Control.MOUSE_FILTER_PASS
 		var up := _add_button(row, "Up")
 		up.pressed.connect(func() -> void: move(job_id, index))
 		var down := _add_button(row, "Down")

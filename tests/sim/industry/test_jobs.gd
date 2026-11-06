@@ -7,6 +7,8 @@ const REFINERY := 13
 const FABRICATOR := 14
 const SHIP := 23
 const RUN_TICKS := 3
+## A full-size facility's work_per_tick, so a recipe of RUN_TICKS * FULL_RATE work takes RUN_TICKS.
+const FULL_RATE := 100
 const HEMATITE_RUN_G := 100000
 const IRON_RUN_G := 69000
 const SLAG_RUN_G := 31000
@@ -24,8 +26,8 @@ func before_each() -> void:
 	state = sim._state
 	sim._ctx.defs = sim._ctx.defs.duplicate(true)
 	defs = sim._ctx.defs
-	defs["recipes"]["refine_hematite"]["ticks"] = RUN_TICKS
-	defs["recipes"]["wiring"]["ticks"] = RUN_TICKS
+	defs["recipes"]["refine_hematite"]["work"] = RUN_TICKS * FULL_RATE
+	defs["recipes"]["wiring"]["work"] = RUN_TICKS * FULL_RATE
 
 
 ## Puts stock at the station, counted as starting matter.
@@ -92,7 +94,8 @@ func test_a_run_turns_inputs_into_outputs_in_its_ticks() -> void:
 	assert_eq(sim.ledger()["matter"]["jobs_g"], COPPER_RUN_G)
 	assert_eq(sim.view()["jobs"][job], {
 		"unit": STATION, "facility": FABRICATOR, "recipe": "wiring", "count_left": 1,
-		"status": "running", "reason": "", "start_tick": 1, "end_tick": RUN_TICKS, "queue_pos": 0,
+		"status": "running", "reason": "", "start_tick": 1, "queue_pos": 0,
+		"work_left": (RUN_TICKS - 1) * FULL_RATE, "work": RUN_TICKS * FULL_RATE, "work_per_tick": FULL_RATE,
 	})
 	_step_balanced(RUN_TICKS - 2)
 	assert_eq(_stock("wiring"), 0)
@@ -159,7 +162,7 @@ func test_a_later_run_waits_for_inputs_without_restarting() -> void:
 	var job := _started("wiring", 2)
 	sim.step(RUN_TICKS)
 	assert_eq(sim.view()["jobs"][job]["reason"], "missing_inputs")
-	assert_eq(sim.view()["jobs"][job]["end_tick"], 0)
+	assert_eq(sim.view()["jobs"][job]["work_left"], 0, "no run in progress")
 
 
 func test_a_job_waits_for_output_space() -> void:
@@ -205,7 +208,7 @@ func test_a_faulted_facility_pauses_the_run_with_inputs_held() -> void:
 	var shown: Dictionary = sim.view()["jobs"][job]
 	assert_eq(shown["status"], "paused")
 	assert_eq(shown["reason"], "module_fault")
-	assert_eq(shown["end_tick"], 0)
+	assert_eq(shown["work_left"], (RUN_TICKS - 1) * FULL_RATE, "a paused run keeps its progress")
 	assert_eq(sim.ledger()["matter"]["jobs_g"], COPPER_RUN_G)
 	assert_eq(_types(sim.take_events()), ["job_paused"])
 
@@ -214,7 +217,7 @@ func test_a_faulted_facility_pauses_the_run_with_inputs_held() -> void:
 	var events := sim.take_events()
 	assert_eq(_types(events), ["job_resumed"])
 	assert_eq(events[0]["data"]["reason"], "module_fault")
-	assert_eq(sim.view()["jobs"][job]["end_tick"], 7 + RUN_TICKS - 2, "1 of 3 ticks was done")
+	assert_eq(sim.view()["jobs"][job]["work_left"], FULL_RATE, "2 of 3 ticks of work were done")
 	sim.step()
 	assert_eq(_stock("wiring"), WIRING_G)
 
@@ -320,6 +323,7 @@ func test_a_cancel_with_no_room_waits_on_the_job() -> void:
 	var shown: Dictionary = sim.view()["jobs"][job]
 	assert_eq(shown["status"], "cancelling")
 	assert_eq(shown["reason"], "cargo_full")
+	assert_eq(shown["work_left"], 0, "the cancelled run's progress is gone")
 	assert_eq(sim.ledger()["matter"]["jobs_g"], COPPER_RUN_G)
 	assert_eq(sim.view()["units"][STATION]["cargo"]["goods"]["reserved_g"], 0, "the reservation is gone")
 	assert_eq(state["units"][STATION]["demand_w"], 7000, "a cancelling job draws nothing")

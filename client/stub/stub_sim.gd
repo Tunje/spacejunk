@@ -30,7 +30,7 @@ const PLANET_SEA_LEVEL_M := -400
 ## C9: jobs on one facility, counting the active one.
 const QUEUE_LIMIT := 16
 const JOB_VIEW_FIELDS: Array[String] = [
-	"unit", "facility", "recipe", "count_left", "status", "reason", "start_tick", "end_tick", "queue_pos",
+	"unit", "facility", "recipe", "count_left", "status", "reason", "start_tick", "queue_pos", "work_left",
 ]
 ## Statuses of an active job that move_job refuses with job_busy.
 const BUSY_STATUSES: Array[String] = ["running", "paused", "cancelling"]
@@ -971,6 +971,8 @@ func _jobs_view() -> Dictionary:
 		var job: Dictionary = {}
 		for field: String in JOB_VIEW_FIELDS:
 			job[field] = _state["jobs"][id][field]
+		job["work"] = _defs["recipes"][job["recipe"]]["work"]
+		job["work_per_tick"] = _work_per_tick(job["facility"])
 		shown[id] = job
 	return shown
 
@@ -1032,7 +1034,7 @@ func _apply_queue(unit: Dictionary, command: Dictionary) -> void:
 	var id := _next_id(_state)
 	_state["jobs"][id] = {
 		"unit": unit["id"], "facility": args["facility"], "recipe": args["recipe"], "count_left": args["count"],
-		"status": "waiting" if position == 0 else "queued", "reason": "", "start_tick": 0, "end_tick": 0,
+		"status": "waiting" if position == 0 else "queued", "reason": "", "start_tick": 0, "work_left": 0,
 		"queue_pos": position, "held": {}, "started": false,
 	}
 	_emit("job_queued", unit["id"], { "job": id, "command": command["id"], "position": position })
@@ -1082,11 +1084,13 @@ func _advance_jobs() -> void:
 		var job: Dictionary = _state["jobs"][id]
 		if job["queue_pos"] != 0:
 			continue
-		if job["status"] == "running" and _state["tick"] >= job["end_tick"]:
-			if _finish_run(id):
-				emptied.append(job["facility"])
-		elif job["status"] == "waiting":
+		if job["status"] == "waiting":
 			_try_start(id)
+		if job["status"] == "running":
+			# A run starts and works on the same tick, as in the real sim's phases 4 and 5.
+			job["work_left"] = maxi(0, job["work_left"] - _work_per_tick(job["facility"]))
+			if job["work_left"] == 0 and _finish_run(id):
+				emptied.append(job["facility"])
 	for facility: int in emptied:
 		_renumber(_facility_jobs(facility))
 
@@ -1111,10 +1115,15 @@ func _try_start(id: int) -> void:
 	job["status"] = "running"
 	job["reason"] = ""
 	job["start_tick"] = _state["tick"]
-	job["end_tick"] = _state["tick"] + recipe["ticks"]
+	job["work_left"] = recipe["work"]
 	if not job["started"]:
 		job["started"] = true
 		_emit("job_started", job["unit"], { "job": id, "command": 0 })
+
+
+func _work_per_tick(facility: int) -> int:
+	var part := _find_part(_unit_of_part(facility), facility)
+	return _defs["modules"][part["def"]]["capabilities"]["facility"]["work_per_tick"]
 
 
 ## True when that was the job's last run, so it has left the facility.
@@ -1128,10 +1137,9 @@ func _finish_run(id: int) -> bool:
 	_emit("job_finished", job["unit"], { "job": id, "recipe": job["recipe"], "facility": job["facility"] })
 	job["count_left"] -= 1
 	job["start_tick"] = 0
-	job["end_tick"] = 0
+	job["work_left"] = 0
 	if job["count_left"] > 0:
 		job["status"] = "waiting"
-		_try_start(id)
 		return false
 	_state["jobs"].erase(id)
 	return true

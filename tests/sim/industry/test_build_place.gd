@@ -8,6 +8,8 @@ const AU_MM := 149_597_870_700_000
 const RADIUS_MM := 600_000_000
 const ONE := OrbitMath.ONE
 const RUN_TICKS := 3
+## A full-size facility's work_per_tick, so a recipe of RUN_TICKS * FULL_RATE work takes RUN_TICKS.
+const FULL_RATE := 100
 const ORDER_LIMIT_TICKS := 6000
 
 var sim: Sim
@@ -41,7 +43,7 @@ func before_each() -> void:
 	}, {}), "")
 	sim._ctx.defs = sim._ctx.defs.duplicate(true)
 	defs = sim._ctx.defs
-	defs["recipes"]["small_craft"]["ticks"] = RUN_TICKS
+	defs["recipes"]["small_craft"]["work"] = RUN_TICKS * FULL_RATE
 	state = sim._state
 	keys = {}
 	for table: String in ["bodies", "frames", "units"]:

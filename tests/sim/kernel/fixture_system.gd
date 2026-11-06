@@ -73,14 +73,15 @@ func run(ctx: SimContext) -> void:
 			ctx.record_delta(id, self, { "unit": id, "grams": 0, "vent": grams })
 
 
-## A job holds its grams until end_tick, then sends them to the sink.
+## A job holds its grams until its work_left counts down to 0, one per tick, then sends them to the sink.
 func _run_jobs(ctx: SimContext) -> void:
 	var jobs: Dictionary = ctx.state["jobs"]
 	var ids: Array = jobs.keys()
 	ids.sort()
 	for id: int in ids:
 		var job: Dictionary = jobs[id]
-		if job["end_tick"] == ctx.tick:
+		job["work_left"] -= 1
+		if job["work_left"] == 0:
 			var sink: Dictionary = ctx.state["sinks"].get_or_add(SINK, {})
 			sink[ITEM] = sink.get(ITEM, 0) + job["held"][ITEM]
 			jobs.erase(id)
