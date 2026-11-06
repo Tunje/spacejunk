@@ -7,7 +7,8 @@ extends TaskStep
 ##
 ## A gravity field is taken over one period of the unit's orbit round the target. The op keeps the
 ## orbit it started on, and any change to it, such as a burn or a sphere-of-influence change, ends
-## the measurement unpaid with `orbit_changed`.
+## the measurement unpaid with `orbit_changed`. A unit in a frame whose own orbit is round the target
+## takes it over one period of the frame's orbit instead (C18), and leaving the frame ends it.
 
 const OP_MEASURING := "measuring"
 const PLACE_ASTEROID := "asteroid"
@@ -39,7 +40,9 @@ func validate(ctx: SimContext, unit_id: int, args: Dictionary) -> Dictionary:
 		if unit["core"] == 0:
 			return SimSystem.reject(TaskSystem.REASON_NO_CORE)
 		var orbit: Dictionary = unit["orbit"]
-		if orbit.get("parent", 0) != target or orbit.get("hyperbolic", false) or not unit["dock"].is_empty():
+		var on_orbit: bool = orbit.get("parent", 0) == target and not orbit.get("hyperbolic", false) \
+			and unit["dock"].is_empty()
+		if not on_orbit and _frame_round(ctx, unit_id, target) == 0:
 			return SimSystem.reject(TaskSystem.REASON_OUT_OF_RANGE)
 		return SimSystem.ok()
 	var found := TaskStep.find_module(ctx, unit_id, definition["capability"])
@@ -67,9 +70,14 @@ func begin(ctx: SimContext, unit_id: int, args: Dictionary) -> void:
 	var definition: Dictionary = ctx.defs["science"][args["kind"]]
 	var unit: Dictionary = ctx.state["units"][unit_id]
 	if definition["place"] == PLACE_ORBIT:
-		var ticks: int = (unit["orbit"]["period_subticks"] + OrbitMath.SUB_TICKS - 1) / OrbitMath.SUB_TICKS
+		var frame := 0 if unit["orbit"].get("parent", 0) == args["target"] else _frame_round(ctx, unit_id, args["target"])
+		var orbit: Dictionary = unit["orbit"] if frame == 0 else ctx.state["frames"][frame]["orbit"]
+		var ticks: int = (orbit["period_subticks"] + OrbitMath.SUB_TICKS - 1) / OrbitMath.SUB_TICKS
 		TaskStep.set_op(ctx, unit_id, OP_MEASURING, args["target"], unit["core"], ticks)
-		unit["op"]["start_orbit"] = unit["orbit"].duplicate(true)
+		if frame == 0:
+			unit["op"]["start_orbit"] = unit["orbit"].duplicate(true)
+		else:
+			unit["op"]["start_frame"] = frame
 	else:
 		var part: int = TaskStep.find_module(ctx, unit_id, definition["capability"])["part"]
 		var ticks: int = definition.get("ticks", 0)
@@ -86,11 +94,11 @@ func coast_ticks(ctx: SimContext, unit_id: int) -> int:
 	return TaskStep.ticks_before_end(ctx, unit_id)
 
 
-## Phase 5. A gravity field ends as soon as the orbit it is measuring changes.
+## Phase 5. A gravity field ends as soon as the orbit it is measuring changes, or the unit leaves
+## the frame it is measuring from.
 func run(ctx: SimContext, unit_id: int, _system: SimSystem) -> void:
-	var unit: Dictionary = ctx.state["units"][unit_id]
-	if unit["op"].has("start_orbit") and unit["orbit"] != unit["op"]["start_orbit"]:
-		unit["op"]["reason"] = REASON_ORBIT_CHANGED
+	if _moved_off(ctx, unit_id):
+		ctx.state["units"][unit_id]["op"]["reason"] = REASON_ORBIT_CHANGED
 
 
 ## A part shed on the last tick did no work, so the measurement does not finish, and phase 2
@@ -102,10 +110,33 @@ func end_test(ctx: SimContext, unit_id: int) -> bool:
 		return _scan.end_test(ctx, unit_id)
 	if ctx.tick < op["end_tick"] or op.has("reason") or not Units.can_run(ctx.state["parts"][op["part"]]):
 		return false
-	if op.has("start_orbit") and unit["orbit"] != op["start_orbit"]:
+	if _moved_off(ctx, unit_id):
 		return false
 	Science.pay(ctx, unit_id, op["kind"], op["target"])
 	return true
+
+
+## True when a gravity field's unit is no longer on the orbit, or in the frame, it started from.
+func _moved_off(ctx: SimContext, unit_id: int) -> bool:
+	var unit: Dictionary = ctx.state["units"][unit_id]
+	var op: Dictionary = unit["op"]
+	if op.has("start_orbit"):
+		return unit["orbit"] != op["start_orbit"]
+	if op.has("start_frame"):
+		return RailSystem.unit_place(ctx.state, unit_id) != op["start_frame"]
+	return false
+
+
+## The frame the unit is in, or is docked within, if that frame's own orbit is an ellipse round
+## `target`, otherwise 0.
+func _frame_round(ctx: SimContext, unit_id: int, target: int) -> int:
+	var frame := RailSystem.unit_place(ctx.state, unit_id)
+	if not ctx.state["frames"].has(frame):
+		return 0
+	var orbit: Dictionary = ctx.state["frames"][frame]["orbit"]
+	if orbit.get("parent", 0) != target or orbit.get("hyperbolic", false) or not orbit.has("period_subticks"):
+		return 0
+	return frame
 
 
 func references_exist(ctx: SimContext, _unit_id: int, args: Dictionary) -> bool:
