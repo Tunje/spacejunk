@@ -1,6 +1,6 @@
 # New Start Chain
 
-Status: **draft**, task B23. Sections 1 and 2 are measured on the real `Sim`, from [data/scenarios/new_start.json](../../data/scenarios/new_start.json) on `main` at d85aac6. Section 3, Parts A to C, is measured by C14's bot (gameplay/C14 at adf431a, seed 12345). Parts D to F wait for research (C12) and fabricate-in-place (C15) on `main`. This page is to the new start what [reference_scenario.md](reference_scenario.md) is to today's station game. When `reference.json` becomes the new start, the two pages swap names. Until then `reference_scenario.md` stays as the station fixture's worked chain, which many tests cite.
+Status: **draft**, task B23. Sections 1 and 2 are measured on the real `Sim`, from [data/scenarios/new_start.json](../../data/scenarios/new_start.json) on `main` at d85aac6. Section 3, Parts A to D, is measured by C's new-start bot (C14 at adf431a for Parts A to C, and C16 at dce5c55 through research, seed 12345). Parts E and F, the drone and expansion, come with C's next bot task. This page is to the new start what [reference_scenario.md](reference_scenario.md) is to today's station game. When `reference.json` becomes the new start, the two pages swap names. Until then `reference_scenario.md` stays as the station fixture's worked chain, which many tests cite.
 
 The chain follows [start_and_build.md](start_and_build.md) section 4 and the research route of [research.md](research.md) section 5.
 
@@ -130,18 +130,59 @@ No step was stopped by shadow or a power shortfall.
 
 **The goods hold sets the order.** The probe's goods container holds 4 m³, and fabricated parts go into it. A solar panel (1.5 m³) and a radiator (2 m³) nearly fill it, so parts are fitted as they're made. The lab, the ore storage and every other part bigger than 4 m³ can't go through the hold at all. The Lead has ruled C15, "fabricate in place": a module job delivers straight onto a free connector of the facility's unit or a docked unit, through the normal fit. Parts D to F depend on it.
 
-### Part D: research (goal 9), planned
+### Part D: research (goal 9), measured
 
-1. The probe lands on Frost and comes back, flying one lap of its low orbit first for `gravity_field` (40 points). The landing also allows a `surface` sample (50 points).
-2. The station gets `research_lab_mk1`, fabricated in place (C15), and a second battery bank for Frost's eclipses.
-3. Prove Autonomous Navigation at the lab: 80 points, with 3 surveys and 1 gravity field as evidence. The bot's four surveys already pay 40 points, and compositions add the rest.
-4. Prototype and bench-test the Assisted Core. `design_qualified` is goal 9.
+C16 runs on from the end of Part C, which, with C15, ends at tick 71,546 with an `ore_container_mk1` built in place on the station. All ticks are absolute.
+
+**Prep, to tick 159,741.**
+- Take composition at Red, Brass and Green Rock (1,201 ticks each), and mine full holds of hematite, chalcopyrite and olivine.
+- The compact facilities refine and fabricate the frames, wiring and 24 processors.
+- Build into the station (fabricate in place, C15): a Basic Core, a goods container and a solar panel, 2,400 ticks each.
+
+**The lab, to tick 179,537.**
+- Top up the tank from White Rock in two holds. Ice fills the 750 L ore hold at about 690 kg, by volume.
+- `research_lab_mk1` is built in place on the station (6,000 ticks), and the station's core is assigned.
+- The tank is topped up to 2,477 kg at tick 173,536.
+
+**Frost, to tick 384,763.**
+- The probe undocks, flies to Red Rock and burns 20 m/s retrograde. It leaves the cluster at tick 181,571 with 2,217 kg.
+- It lands straight from the cluster's orbit, at tick 240,491, with 1,215 kg, and takes a surface sample (3,001 ticks, 50 points).
+- It takes off to a 35 km orbit (523 kg left), flies one gravity-field lap of 43,790 ticks (40 points), and flies home in 81,150 ticks, docking with 364 kg.
+
+**Proving it, to tick 402,819, which is 11.2 game hours.**
+- Prove Autonomous Navigation at the lab: 3,000 ticks at 100 a tick. It costs 80 of the 190 points.
+- `prototype:assisted_core` on the probe: 12,000 ticks at 50 a tick.
+- `qualify:assisted_core` at the lab: 3,000 ticks. The Assisted Core is qualified at tick 402,819, which is goal 9.
+
+| Milestone | Tick | Propellant | Points |
+| --------- | ---- | ---------- | ------ |
+| Prep refined | 99,542 | 1,927 kg | 60 |
+| Prep done | 159,741 | 1,701 | 100 |
+| Tank topped up | 173,536 | 2,477 | 100 |
+| Left the cluster | 181,571 | 2,217 | 100 |
+| Landed on Frost | 240,491 | 1,215 | 150 |
+| Low orbit | 259,622 | 523 | 150 |
+| Lap done | 303,412 | | 190 |
+| Docked at home | 384,763 | 364 | 190 |
+| Qualified | 402,819 | | 110 left, 80 spent |
+
+**Science:** 4 surveys at 10, 3 compositions at 20, a surface sample at 50 and Frost's gravity field at 40, for 190 earned. The theory takes 80.
+
+**The Frost trip is the propellant crunch.**
+- Landing straight from 300 km cost about 1,000 kg, the climb to 35 km about 690, and the trip home 159. That's about 540 to 600 m/s, depending on the 0.5 to 1.65 t of cargo carried.
+- Docking with 364 kg is about 120 to 135 m/s spare, under the 150 m/s line.
+- On the bot's first try, without a full tank from ice, the probe was stranded on Frost: it landed with 604 kg and needed 619.
+- The bot spent about 260 kg before leaving the cluster, on a trip to Red Rock and the 20 m/s departure burn. Leaving straight from the station with a full tank and an empty goods hold should keep about 190 m/s spare. That's the advice for a person, and it needs measuring in the drone task.
+
+**The long pole is the compact fabricator.** Its 64 processors take about 77,000 ticks, roughly 2.1 game hours, and they run alongside the Frost trip.
 
 ### Part E: the drone and the handover (goals 10 and 11), planned
 
 1. Build `small_craft` at the station.
 2. Fit its six parts, plus `small_battery_bank_mk1` and an Assisted Core.
 3. `set_cycle` from Red Rock to the station's ore storage, which is fabricated in place. Stop at the third lap.
+
+**Fabricating in place needs a free connector.** All 12 of the probe's sides are used, so "Build into…" offers nothing on the probe itself until a station is docked. That's the intended flow: build the small station first, then build big parts into it. A second compact refinery (4.5 m³) or ore container (6 m³) for another craft is also built into a docked station or craft, since neither fits the probe's goods hold.
 
 ### Part F: expand (goal 12), planned
 
