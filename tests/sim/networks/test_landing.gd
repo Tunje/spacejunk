@@ -327,3 +327,42 @@ func test_land_and_take_off_need_thrust_over_weight_above_one() -> void:
 	assert_ne(sim.check(take_off).get("reason", ""), "thrust_too_low")
 	thruster["thrust_n"] = weight_n - 100
 	assert_eq(sim.check(take_off)["reason"], "thrust_too_low")
+
+
+## A36: the land check also prices the take-off back to the lowest safe orbit at the landed mass,
+## and warns, without refusing, when the propellant left after landing won't cover it.
+func test_the_land_check_warns_when_the_ship_cannot_get_back_up() -> void:
+	_strong_thruster()
+	var inventory: Dictionary = _ship()["inventory"]
+	var checked := sim.check(_land(4242))
+	assert_true(checked["ok"], str(checked))
+	var detail: Dictionary = checked["detail"]
+	var have: int = inventory["propellant"]
+	print("LAND from 700 km with %d kg: %d kg down, %d kg back up" % [
+		have / 1000, detail["propellant_g"] / 1000, detail["return_propellant_g"] / 1000])
+	assert_gt(detail["return_propellant_g"], 0)
+	assert_eq(detail["cannot_return"], have - detail["propellant_g"] < detail["return_propellant_g"])
+
+	# The same figure a take_off plans once down, at that mass, to just clear of low flight.
+	var copy := Sim.from_save(sim.to_save())
+	copy._ctx.defs = sim._ctx.defs
+	var ship: Dictionary = copy._state["units"][keys["Ship"]]
+	Units.remove_stock(ship["inventory"], "propellant", detail["propellant_g"])
+	LandingSystem._set_down(copy._ctx, keys["Ship"], keys["Planet"], 4242)
+	copy._ctx.index.clear()
+	# The take_off's own plan, since the check would refuse it here for want of propellant.
+	var up := LandingSystem._plan(copy._ctx, keys["Ship"], "take_off", { "altitude_mm": LowFlight.ENTER_MM })
+	assert_eq(up.get("cost_g", -1), detail["return_propellant_g"], str(up))
+
+	# Plenty: no warning. Only enough to get down: warned, and still allowed.
+	inventory["propellant"] = 50_000_000
+	sim._ctx.index.clear()
+	var plenty := sim.check(_land(4242))
+	assert_true(plenty["ok"])
+	assert_false(plenty["detail"]["cannot_return"], str(plenty["detail"]))
+	inventory["propellant"] = detail["propellant_g"] + detail["return_propellant_g"] / 2
+	sim._ctx.index.clear()
+	var short := sim.check(_land(4242))
+	assert_true(short["ok"], "a warning, not a refusal: %s" % str(short))
+	assert_true(short["detail"]["cannot_return"], str(short["detail"]))
+	assert_lt(inventory["propellant"] - short["detail"]["propellant_g"], short["detail"]["return_propellant_g"])
