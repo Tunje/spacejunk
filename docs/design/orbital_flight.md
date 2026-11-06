@@ -594,6 +594,8 @@ perf_budget.md section 5a has the figures.
 
 ### 11.19 A23 results: can the probe reach a first planet's moon?
 
+*Superseded for the new start by 11.20. The landings here used the flat 3% gravity loss that A27 replaced, so they are cheaper than the game now charges.*
+
 All figures are measured by two scripts, which fly nothing and change nothing:
 - `tools/reach_run.gd` quotes real-planner trips (A13, A18, A22). It works out landings with LandingSystem's own sums and samples shadow with A16's test.
 - `tools/moon_power_run.gd` runs B's ReferenceBot over today's reference game, with the cluster moved round a moon.
@@ -732,6 +734,17 @@ Measured on the sim from new_start.json:
 
 - **A flown landing loses 33 to 38%,** not the 3% the land and take_off commands allowed. The burns are long against the descent: about 2.5 minutes at full thrust to stop 211 m/s, while gravity pulls.
 - **The round trip flown is about 630 to 640 m/s,** leaving about **295 m/s spare** on that 5.48 t probe. At B11b's 7.43 t, 2.5 t tank and 15 kN, rerun the figures with `tools/frost_run.gd`.
+
+**B11b's probe** (7.43 t dry, 2.5 t of propellant, 15 kN, so 870 m/s on a full tank), from `tools/frost_run.gd` with A27's command costs:
+
+| | Flown, careful | Commands |
+| --- | --- | --- |
+| Land from the cluster's orbit | 295 m/s, landed at 1.5 m/s | 302 m/s |
+| Take off to the cluster's height | 295 m/s | 280 m/s |
+| Rejoin the cluster | 3 m/s, 7.6 h | 3 m/s |
+| **Round trip** | **593 m/s, 277 m/s spare** | **585 m/s, 285 m/s spare** |
+
+Leaving the cluster with the landing's 32 m/s burn now gives the orbit gravity gives: a periapsis of 62.5 km, both ways. A bolder pilot crashed at 11.2 m/s.
 
 #### Gravity loss by thrust over weight (A27)
 
