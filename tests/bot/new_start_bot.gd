@@ -43,9 +43,6 @@ const STAGE_PREP := 2
 const STAGE_LAB := 3
 const STAGE_LAP := 4
 const STAGE_RESEARCH := 5
-## The game just before research, as the Frost trip's return used to leave it, for
-## tests/client/test_friction_fixes.gd until D moves it to STAGE_LAP.
-const STAGE_RETURN := STAGE_LAP
 const FROST := 3
 ## A lap of the cluster round Frost is 245,692 ticks.
 const LAP_LIMIT_TICKS := 300_000
