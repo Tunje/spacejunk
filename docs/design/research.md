@@ -1,6 +1,6 @@
 # Research: Science, Theories, Prototypes and Ideas
 
-Status: **proposal**, task B17. Nothing in `data/`, `sim/`, the client or the contracts changes until the Lead and the owner approve it. It follows the owner's ruling on research of 2026-11-06 at the top of [workplan.md](../../plan/workplan.md), and replaces section 5 of [start_and_build.md](start_and_build.md).
+Status: **proposal**, task B17. Contract version 5 (C12) fixes the names and rules; where this page and the contract differ, the contract wins. Derived IDs are `prototype:<design>` and `qualify:<design>`, and a variant is `base+idea+idea`, so authored IDs never hold ':' or '+'. Nothing in `data/`, `sim/`, the client or the contracts changes until the Lead and the owner approve it. It follows the owner's ruling on research of 2026-11-06 at the top of [workplan.md](../../plan/workplan.md), and replaces section 5 of [start_and_build.md](start_and_build.md).
 
 ## The short answer
 
@@ -71,7 +71,7 @@ A theory is proven by **running its test recipe at a research lab**. A test is a
 - **Points are a recipe input.** A new optional recipe field, `points`, gives the science points a run takes. They are deducted when the run starts, as inputs are, and refunded on cancel. A run that can't pay waits with reason `missing_points`.
 - **Evidence is checked when a run starts.** A test whose theory's evidence isn't met waits with reason `missing_evidence`. The view shows which entries are still missing.
 - **Inputs are real goods.** A test uses some materials and components, which go to a new sink, `test_consumed`. That is the cost of building the apparatus and running the experiment.
-- **The output is the proof.** A new output form, `{ "theory": id }`, marks it proven when the run finishes. That fires a new event, `theory_proven { theory }`. A recipe with this output may not have any other output.
+- **The output is the proof.** A new output form, `{ "theory": id }`, marks it proven when the run finishes. That fires a new event, `theory_proven { theory }`. The theory weighs nothing, so its only companions are sink routes, which carry the test's inputs to `test_consumed`.
 - **A lab can't run a theory whose `requires` aren't proven,** or one already proven. `start_job` refuses both, with `theory_locked` and `already_proven`.
 
 So a theory needs three things: points from measuring, evidence from going to the right places, and a lab, which needs a station. That is the owner's "build stations to test new tech" and analysis section 8's "research station: analyzes discoveries".
@@ -114,8 +114,8 @@ Designs that are known from the start are `qualified`. The state holds `research
 Take `assisted_core`, unlocked by *Autonomous Navigation*.
 
 1. **Proof.** The theory's test finishes at a lab. `theory_proven` fires, and `assisted_core` becomes `prototype`.
-2. **Prototype.** A new derived item, `assisted_core_prototype`, has the module's mass and volume and is discrete. Its recipe, `assisted_core_prototype`, is derived by the loader from the normal recipe. It uses the same facility, twice the inputs and twice the time. Half the input mass goes into the item, and the rest to a new sink, `fab_scrap`, so it balances. The prototype is not a module, so it can't be fitted. It is a test article.
-3. **Bench test.** A lab recipe, `qualify_assisted_core`, also derived, takes the prototype plus 10 processors over 300 s, and outputs `{ "qualifies": "assisted_core" }`. The inputs go to `test_consumed`. When it finishes, `design_qualified { design }` fires and the normal recipe unlocks.
+2. **Prototype.** A new derived item, `prototype:assisted_core`, has the module's mass and volume and is discrete. Its recipe has the same ID and is derived from the normal recipe (C12's `ResearchDefs`). It uses the same facility, twice the inputs and twice the work. Half the input mass goes into the item, and the rest to a new sink, `fab_scrap`, so it balances. The prototype is not a module, so it can't be fitted. It is a test article.
+3. **Bench test.** A lab recipe, `qualify:assisted_core`, also derived, takes the prototype plus the bench test's inputs (10 processors at 300000 work by default, from `theories.json`'s `bench_test`, or the theory's own `qualify` list), and outputs `{ "qualifies": "assisted_core" }`. The inputs go to `test_consumed`. When it finishes, `design_qualified { design }` fires and the normal recipe unlocks.
 4. **Normal build.** `start_job` of recipe `assisted_core` now passes. Before qualification, it is refused with `design_unqualified`. Before the theory, it is refused with `theory_locked`.
 
 Everything is a job, so the queue, power, heat, the fail-and-fix check and the matter ledger all work as they do now. The two new outputs, `theory` and `qualifies`, are each a recipe's only output, like `unit_template`.
@@ -148,7 +148,7 @@ A module may list ideas under a new optional field, `ideas`:
 
 - **`deltas`** change numeric fields by parts per million of the **base** value, so +250000 is +25%. Allowed fields are `mass_kg`, `power_kw`, `heat_kw`, `durability`, and every numeric capability field except `ai_core.tier` and `facility.type`. The validator rejects anything else, and every idea must make at least one field better and one worse. That is the owner's rule as data: no idea is free.
 - **Connectors, collision, capabilities' keys, `visual` and `min_ai_tier` never change.** A variant fits exactly where its base fits, and looks the same. Section 4.5 explains why.
-- **`theory`** is the theory an idea needs, if any, so later science opens better ideas.
+- **`theory`** is the theory an idea needs. An idea that needs none leaves the field out, since data holds no nulls. So later science opens better ideas.
 - **`points`** is what developing the idea costs, paid by its variant's prototype run (section 4.3).
 - **`complexity`** is a small whole number, positive for an improvement and negative for a simplification (`simplifies`).
 

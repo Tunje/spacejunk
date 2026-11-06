@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "id": "composition",
+      "name": "Composition",
+      "place": "asteroid",
+      "capability": "scan",
+      "seconds": 120,
+      "points": {
+        "asteroid": 20
+      }
+    },
+    {
+      "id": "gravity_field",
+      "name": "Gravity Field",
+      "place": "orbit",
+      "capability": "ai_core",
+      "points": {
+        "moon": 40,
+        "planet": 60
+      }
+    },
+    {
+      "id": "surface",
+      "name": "Surface Sample",
+      "place": "landed",
+      "capability": "scan",
+      "seconds": 300,
+      "points": {
+        "moon": 50,
+        "planet": 50
+      }
+    },
+    {
+      "id": "survey",
+      "name": "Survey",
+      "place": "asteroid",
+      "capability": "scan",
+      "points": {
+        "asteroid": 10
+      }
+    }
+  ]
+}
