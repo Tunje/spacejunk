@@ -96,3 +96,29 @@ func test_a_waiting_move_whose_unit_drops_into_low_flight_is_cancelled() -> void
 			reasons.append(event["data"].get("reason", ""))
 	assert_has(reasons, Transfer.REASON_UNSUPPORTED, "cancelled cleanly: %s" % str(reasons))
 	assert_true(unit["transfer"].is_empty(), "it never left")
+
+
+## A41a: from a cell far from Frost's equator the take-off orbit is tilted by the cell's latitude,
+## and the way back to the cluster now includes a plane change, so it has a price, higher than
+## the equator's, instead of -1.
+func test_the_way_back_from_a_high_latitude_cell_is_priced_with_a_plane_change() -> void:
+	var bot := NewStartBot.new()
+	bot.sim = Sim.new_game("new_start", NewStartBot.SEED)
+	bot._command("plan_burn", PROBE, { "tick": 1, "prograde_um_s": -20_000_000, "normal_um_s": 0, "radial_um_s": 0 })
+	bot._until("burn_done", PROBE, 1000)
+	var sim := bot.sim
+	var radius: int = sim._state["bodies"][FROST]["radius_mm"]
+	var prices := {}
+	for latitude_deg: int in [0, 40]:
+		var lat := deg_to_rad(latitude_deg)
+		var point := [roundi(cos(lat) * radius), roundi(sin(lat) * radius), 0]
+		var cell := LandingSystem.cell_below(sim._ctx, FROST, point)
+		var checked := sim.check({ "type": "land", "unit": PROBE, "args": { "body": FROST, "cell": cell } })
+		assert_true(checked["ok"], str(checked))
+		var detail: Dictionary = checked["detail"]
+		gut.p("latitude %d: back to %d for %d kg" % [latitude_deg, detail["return_target"],
+			detail["return_propellant_g"] / 1000])
+		assert_eq(detail["return_target"], CLUSTER)
+		assert_gt(detail["return_propellant_g"], 0, "priced at %d degrees" % latitude_deg)
+		prices[latitude_deg] = detail["return_propellant_g"]
+	assert_gt(prices[40], prices[0], "the plane change costs more")
