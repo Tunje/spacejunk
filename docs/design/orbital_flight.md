@@ -975,3 +975,30 @@ The kernel caps; the client drops.
 - (a) Is 100,000× wanted now, or with the belt?
 - (b) Should the client's attention list be owned in contracts (as event types), or is it D's call?
 - (c) The systems that are C's (jobs, construction, tasks): should their closed forms be A33's, with C reviewing, or C's own small task beside A33?
+
+### 11.23 A33 results: the coast in the kernel
+
+`Sim.coast(max_ticks)` is built as 11.22 designed, with two changes found while testing:
+- **It returns just after any tick with events.** On a landing's last tick, power worked out its figures before the probe was set down in the shadow. Repeating them would have left the batteries wrong. Every change late in a tick fires an event, so after one the next tick is stepped. Returning there also gives the client each event on its own tick.
+- **Shadow bounds use the relative speed** of the unit and the caster, counted only below the first body both hang from. The planet's 30 km/s round the star moves both alike. Counting it made a lap round Frost take 5,421 coast calls; with it left out, the lap takes 21.
+
+**What coasts now:**
+- **Systems with closed forms:** rails (positions as functions of the tick), BurnSystem (bounds on spheres of influence, frame joins and low flight), LandingSystem (atomic landing and takeoff), CargoSystem (flown transfers and waits), PowerSystem (shadow bounds and battery regimes) and HeatSystem (cold and warm loops).
+- **C's systems** have an idle-only horizon, with C reviewing:
+  - JobSystem and TaskSystem can't be skipped while any job or task exists;
+  - ConstructionSystem acts only on a job's delivery;
+  - FitCopySystem, FittingSystem and UnitSystem act only on commands.
+- **C17** gives jobs, tasks, mining and cycles their closed forms. Until then a `move_to` (a task) and any job cap the world at batch speed. C's review notes for it:
+  - **ConstructionSystem** stays at NO_LIMIT only while a build lasts no longer than the tick its job delivers. A build kept pending across ticks needs a horizon.
+  - **A move left after a cancel** (op `moving` with task 0) settles through CargoSystem's arrival horizon today. If C17 gives MoveStep transfers a closed form, that state needs its own horizon.
+- **`departed { target, arrive_tick }`** (A34) fires when a trip between places leaves on its window, so a warping client can drop there.
+
+**Proof:** `tests/sim/kernel/test_coast.gd` steps one copy and coasts another, then compares their saves byte for byte and their events one for one.
+- **The cases:**
+  - a 38,000-tick lap round a Frost-sized moon, through its shadow, with half-charged batteries;
+  - a warm heat loop cooling;
+  - an atomic landing;
+  - a planned burn: the coast returns on the burn's tick, then caps at `burning`;
+  - an undock task, which caps at `tasks`;
+  - strict mode, which steps every tick.
+- **Measured:** the lap takes 21 coast calls, at 1.85 ms a call, or 39 ms for the lap. That is inside the 2 ms budget, and about 100,000× real time for that case.

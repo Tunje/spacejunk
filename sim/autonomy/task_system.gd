@@ -473,3 +473,16 @@ func _sorted(table: Dictionary) -> Array:
 	var ids: Array = table.keys()
 	ids.sort()
 	return ids
+
+
+## Coast (A33, idle only until C17): with no task on any unit, and no atomic dock or undock waiting
+## to settle, nothing here changes from tick to tick. Any task steps the world, until C17.
+func horizon(ctx: SimContext) -> int:
+	var units: Dictionary = ctx.state["units"]
+	for unit_id: int in _sorted(units):
+		var unit: Dictionary = units[unit_id]
+		var op_type: String = unit["op"]["type"]
+		if unit["task"] != 0 or op_type == DockStep.OP_DOCKING or op_type == UndockStep.OP_UNDOCKING:
+			ctx.coast_cap = "tasks"
+			return 0
+	return NO_LIMIT

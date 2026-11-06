@@ -72,6 +72,168 @@ func fill_ledger(ctx: SimContext, ledger: Dictionary) -> void:
 	ledger["energy"] = ctx.flows.get(FLOW_KEY, {}).duplicate(true)
 
 
+## Coast (A33). The last stepped tick's flows repeat exactly while every input to them holds:
+## - no generator crosses a shadow's edge (a bound by CoastBounds);
+## - no shed load's hold runs out;
+## - every battery stays in the same regime: one drawing at its full rate keeps enough stored, and
+##   one charging keeps room for what it took. A battery limited by what it holds or lacks is stepped.
+## Loads change only by ops, jobs and faults, which other systems' horizons step.
+func horizon(ctx: SimContext) -> int:
+	var flows: Dictionary = ctx.flows.get(FLOW_KEY, {})
+	var units: Dictionary = ctx.state["units"]
+	if flows.size() != units.size():
+		ctx.coast_cap = "power"
+		return 0
+	var now: int = ctx.state["tick"]
+	var skip := NO_LIMIT
+	for part_id: int in _sorted(ctx.state["parts"]):
+		var until: int = ctx.state["parts"][part_id]["shed_until_tick"]
+		if until > now:
+			skip = mini(skip, until - now - 1)
+	var casters := RailSystem.shadow_casters(ctx.state)
+	for id: int in _sorted(units):
+		if not UnitIndex.of(ctx, id)["generators"].is_empty() and not casters.is_empty():
+			skip = mini(skip, _shadow_horizon(ctx, id, casters))
+		var shed := false
+		for part_id: int in UnitIndex.of(ctx, id)["ids"]:
+			shed = shed or ctx.state["parts"][part_id]["shed"]
+		var batteries: Dictionary = flows[id]["batteries"]
+		for part_id: int in _sorted(batteries):
+			skip = mini(skip, _battery_horizon(ctx, part_id, batteries[part_id], shed))
+		if skip <= 0:
+			break
+	if skip <= 0:
+		ctx.coast_cap = "power"
+	return maxi(skip, 0)
+
+
+## Coast (A33): each battery takes in and gives out what it did last tick, every tick, which sums in
+## closed form with its remainders. The loads' draws and shed flags are already as they would be.
+func coast(ctx: SimContext, ticks: int) -> void:
+	var flows: Dictionary = ctx.flows[FLOW_KEY]
+	for id: int in _sorted(ctx.state["units"]):
+		var batteries: Dictionary = flows[id]["batteries"]
+		for part_id: int in _sorted(batteries):
+			var part: Dictionary = ctx.state["parts"][part_id]
+			var battery: Dictionary = batteries[part_id]
+			var charged: int = battery["stored_w"] * ticks + part["charge_remainder"]
+			part["stored_j"] += charged / Sim.TICKS_PER_SECOND
+			part["charge_remainder"] = charged % Sim.TICKS_PER_SECOND
+			var drawn: int = battery["discharged_w"] * ticks + part["discharge_remainder"]
+			part["stored_j"] -= drawn / Sim.TICKS_PER_SECOND
+			part["discharge_remainder"] = drawn % Sim.TICKS_PER_SECOND
+
+
+## The ticks before a unit's generators could pass into or out of any caster's shadow.
+static func _shadow_horizon(ctx: SimContext, unit_id: int, casters: Array) -> int:
+	var unit_mm := RailSystem.world_mm(ctx.state, "units", unit_id)
+	var star_mm := _star_mm(ctx.state)
+	var skip := NO_LIMIT
+	for caster: Array in casters:
+		var body_mm: Array = caster[0]
+		var direction: Array = caster[1]
+		var radius: int = caster[2]
+		var offset: Array[int] = []
+		for axis in 3:
+			offset.append(unit_mm[axis] - int(body_mm[axis]))
+		var along := OrbitMath.dot(offset, direction)
+		var across: Array[int] = []
+		for axis in 3:
+			across.append(offset[axis] - OrbitMath.smul_div(direction[axis], along, OrbitMath.ONE))
+		var side := IntMath.dist(across, [0, 0, 0])
+		var gap := 0
+		if along > 0 and side < radius:
+			gap = mini(radius - side, along)
+		elif along <= 0:
+			gap = maxi(-along, side - radius)
+		else:
+			gap = side - radius
+		# The unit closes on the shadow as fast as it closes on the caster, and the shadow also
+		# swings round the star with the caster.
+		var caster_id := _caster_id(ctx.state, body_mm)
+		var closing := CoastBounds.UNBOUNDED_UM_S
+		if caster_id != 0:
+			closing = CoastBounds.relative_speed_um_s(ctx.state, unit_id, caster_id)
+		var from_star := IntMath.dist([int(body_mm[0]) - star_mm[0], int(body_mm[1]) - star_mm[1],
+			int(body_mm[2]) - star_mm[2]], [0, 0, 0])
+		var swing := IntMath.mul_div(IntMath.dist(offset, [0, 0, 0]),
+			CoastBounds.body_speed_um_s(ctx.state, caster_id), maxi(1, from_star))
+		skip = mini(skip, CoastBounds.ticks_to_close(gap, closing + swing))
+	return skip
+
+
+static func _star_mm(state: Dictionary) -> Array:
+	for id: int in _sorted_static(state["bodies"]):
+		if state["bodies"][id]["kind"] == RailSystem.STAR_KIND:
+			return RailSystem.world_mm(state, "bodies", id)
+	return [0, 0, 0]
+
+
+## The body a caster entry stands for, found by its world position.
+static func _caster_id(state: Dictionary, body_mm: Array) -> int:
+	for id: int in _sorted_static(state["bodies"]):
+		if state["bodies"][id]["gm"] > 0 and RailSystem.world_mm(state, "bodies", id) == body_mm:
+			return id
+	return 0
+
+
+## Coast windows are searched up to this many ticks, which keeps every closed-form sum in range.
+const MAX_BATTERY_WINDOW := 1 << 40
+
+
+## The ticks a battery keeps last tick's flows: a full-rate draw keeps its cap while the store lasts,
+## and a charge keeps its room while it fills. A charging battery below its full draw raises the
+## unit's budget each tick, which could bring back a shed load, so with any load shed it is stepped.
+## Stored energy moves one way, so checking the last tick of a window is enough, and the window is
+## found by doubling and halving.
+func _battery_horizon(ctx: SimContext, part_id: int, battery: Dictionary, shed: bool) -> int:
+	var part: Dictionary = ctx.state["parts"][part_id]
+	var drawn: int = battery["discharged_w"]
+	var charged: int = battery["charged_w"]
+	var limits: Dictionary = Units.module_of(ctx.state, ctx.defs, part_id)["capabilities"]["battery"]
+	var cap_now: int = part["stored_j"] * Sim.TICKS_PER_SECOND - part["discharge_remainder"]
+	if drawn == 0 and charged == 0:
+		return NO_LIMIT
+	if drawn > 0 and cap_now < limits["max_discharge_w"]:
+		return 0  # the store, not the rate, limits the draw
+	var free_now: int = (limits["capacity_j"] - part["stored_j"]) * Sim.TICKS_PER_SECOND - part["charge_remainder"]
+	if charged > 0 and free_now < limits["max_charge_w"]:
+		return 0  # the room left, not the rate, limits the charge
+	if charged > 0 and shed and cap_now < limits["max_discharge_w"]:
+		return 0  # a rising budget could bring a shed load back
+	var low := 0
+	var high := 1
+	while high < MAX_BATTERY_WINDOW and _battery_holds(part, battery, limits, high):
+		low = high
+		high *= 2
+	while high - low > 1:
+		var mid := (low + high) / 2
+		if _battery_holds(part, battery, limits, mid):
+			low = mid
+		else:
+			high = mid
+	return low
+
+
+## Whether the battery's limits still leave last tick's flows after `ticks` more ticks of them, so
+## the tick after can repeat them too.
+static func _battery_holds(part: Dictionary, battery: Dictionary, limits: Dictionary, ticks: int) -> bool:
+	var charged: int = battery["stored_w"] * ticks + part["charge_remainder"]
+	var drawn: int = battery["discharged_w"] * ticks + part["discharge_remainder"]
+	var stored: int = part["stored_j"] + charged / Sim.TICKS_PER_SECOND - drawn / Sim.TICKS_PER_SECOND
+	var cap: int = stored * Sim.TICKS_PER_SECOND - drawn % Sim.TICKS_PER_SECOND
+	var free: int = (limits["capacity_j"] - stored) * Sim.TICKS_PER_SECOND - charged % Sim.TICKS_PER_SECOND
+	if battery["discharged_w"] > 0 and cap < limits["max_discharge_w"]:
+		return false
+	return battery["charged_w"] == 0 or free >= limits["max_charge_w"]
+
+
+static func _sorted_static(table: Dictionary) -> Array:
+	var ids: Array = table.keys()
+	ids.sort()
+	return ids
+
+
 ## Phase 3: healthy supply and what each healthy battery can give this tick.
 func _available(ctx: SimContext, unit: int, casters: Array) -> Dictionary:
 	var index := UnitIndex.of(ctx, unit)
