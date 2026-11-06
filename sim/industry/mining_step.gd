@@ -1,7 +1,8 @@
 class_name MiningStep
 extends TaskStep
-## The `start_mining` order. It runs until the hold is full or the deposit is empty, and either one
-## is a finished step, not a failure (autonomy.md section 7). Matter moves as phase 6 deltas.
+## The `start_mining` order. It runs until the hold is full or the deposit is empty, or, with the
+## optional `grams` (C19), until it has mined that many grams. Each is a finished step, not a failure
+## (autonomy.md section 7). Matter moves as phase 6 deltas.
 
 const OP_MINING := "mining"
 const CAPABILITY := "mine"
@@ -9,6 +10,8 @@ const REASON_UNKNOWN_DEPOSIT := "unknown_deposit"
 const REASON_EXHAUSTED := "deposit_exhausted"
 const REASON_CARGO_FULL := "cargo_full"
 const REASON_TOO_HARD := "too_hard"
+## The order's `grams` were mined (C19).
+const REASON_AMOUNT_MINED := "amount_mined"
 ## Grams per deposit taken by lower unit IDs this tick. Lives in ctx.flows, so it is never saved.
 const CLAIMS_FLOW := "deposit_claims"
 
@@ -18,7 +21,8 @@ func type() -> String:
 
 
 func validate(ctx: SimContext, unit_id: int, args: Dictionary) -> Dictionary:
-	if typeof(args.get("deposit")) != TYPE_INT or typeof(args.get("module")) != TYPE_INT:
+	if typeof(args.get("deposit")) != TYPE_INT or typeof(args.get("module")) != TYPE_INT \
+			or not _grams_ok(args):
 		return SimSystem.reject(TaskSystem.REASON_MALFORMED)
 	var state := ctx.state
 	var part_id: int = args["module"]
@@ -52,6 +56,8 @@ func begin(ctx: SimContext, unit_id: int, args: Dictionary) -> void:
 	op["mine_remainder"] = 0
 	op["mined_g"] = 0
 	op["end_reason"] = ""
+	# 0 is no limit: mine until the hold is full or the deposit is empty.
+	op["limit_g"] = args.get("grams", 0)
 
 
 ## Phase 5. Takes what the rate gives, clamped to the deposit and the hold. A shed laser does nothing.
@@ -69,6 +75,8 @@ func run(ctx: SimContext, unit_id: int, system: SimSystem) -> void:
 	var claims: Dictionary = ctx.flows.get_or_add(CLAIMS_FLOW, {})
 	var left: int = deposit["remaining_g"] - claims.get(deposit_id, 0)
 	var grams: int = mini(wanted, mini(left, Reservations.free_space(ctx, unit_id, deposit["item"])))
+	if op["limit_g"] > 0:
+		grams = mini(grams, op["limit_g"] - op["mined_g"])
 	if grams == wanted:
 		op["mine_remainder"] = Rate.carry(rate, remainder)
 	if grams > 0:
@@ -91,7 +99,8 @@ func apply_delta(ctx: SimContext, payload: Dictionary) -> void:
 ## Coast (C17): while every tick takes the rate's full amount, k ticks take (k * rate + remainder)
 ## / TICKS_PER_SECOND grams, the sum of k single ticks. The skip stops while the hold still has room
 ## and the deposit still has ore, so the tick that is cut short, and the one the step ends on, are
-## stepped. Several units on one deposit share it evenly for the bound.
+## stepped. Several units on one deposit share it evenly for the bound. An order's `grams` bound it
+## the same way, so the tick that reaches them is stepped too (C19).
 func coast_ticks(ctx: SimContext, unit_id: int) -> int:
 	var state := ctx.state
 	var op: Dictionary = state["units"][unit_id]["op"]
@@ -105,6 +114,8 @@ func coast_ticks(ctx: SimContext, unit_id: int) -> int:
 			miners += 1
 	var room := mini(Units.grams_that_fit(state, ctx.defs, unit_id, deposit["item"]),
 		deposit["remaining_g"] / maxi(1, miners))
+	if op["limit_g"] > 0:
+		room = mini(room, op["limit_g"] - op["mined_g"])
 	var rate := _rate(ctx, op["part"])
 	if rate <= 0:
 		return 0
@@ -133,7 +144,9 @@ func _rate(ctx: SimContext, part_id: int) -> int:
 func end_test(ctx: SimContext, unit_id: int) -> bool:
 	var op: Dictionary = ctx.state["units"][unit_id]["op"]
 	var deposit: Dictionary = ctx.state["deposits"][op["target"]]
-	if deposit["remaining_g"] == 0:
+	if op["limit_g"] > 0 and op["mined_g"] >= op["limit_g"]:
+		op["end_reason"] = REASON_AMOUNT_MINED
+	elif deposit["remaining_g"] == 0:
 		op["end_reason"] = REASON_EXHAUSTED
 	elif Units.grams_that_fit(ctx.state, ctx.defs, unit_id, deposit["item"]) == 0:
 		op["end_reason"] = REASON_CARGO_FULL
@@ -141,7 +154,8 @@ func end_test(ctx: SimContext, unit_id: int) -> bool:
 
 
 func references_exist(ctx: SimContext, unit_id: int, args: Dictionary) -> bool:
-	if typeof(args.get("deposit")) != TYPE_INT or typeof(args.get("module")) != TYPE_INT:
+	if typeof(args.get("deposit")) != TYPE_INT or typeof(args.get("module")) != TYPE_INT \
+			or not _grams_ok(args):
 		return false
 	var deposits: Dictionary = ctx.state["deposits"]
 	return _is_laser_on(ctx, unit_id, args["module"]) and deposits.has(args["deposit"]) \
@@ -158,6 +172,11 @@ func report_end(ctx: SimContext, unit_id: int, reason: String) -> void:
 		"deposit": op["target"], "grams": op["mined_g"],
 		"reason": reason if reason != "" else op["end_reason"],
 	})
+
+
+## `grams` is optional, and when given must be a whole number above 0.
+func _grams_ok(args: Dictionary) -> bool:
+	return not args.has("grams") or (typeof(args["grams"]) == TYPE_INT and args["grams"] > 0)
 
 
 func _is_laser_on(ctx: SimContext, unit_id: int, part_id: int) -> bool:

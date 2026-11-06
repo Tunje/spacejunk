@@ -5,13 +5,12 @@ class_name FittingLogic extends RefCounted
 const ROOT_MOUNT := "mount"
 
 
-## Uninstalled modules this unit can reach: its own stock and any docked host's.
+## Uninstalled modules this unit can reach: its own stock and that of every unit docked
+## with it, either way (a ship at a station, or a station built at a ship's port).
 static func stock(view: Dictionary, unit_id: int, modules: Dictionary) -> Array[Dictionary]:
 	var entries: Array[Dictionary] = []
 	var sources: Array[int] = [unit_id]
-	var dock: Dictionary = view["units"][unit_id]["dock"]
-	if not dock.is_empty():
-		sources.append(dock["target_unit"])
+	sources.append_array(FittingLogic.docked_with(view, unit_id))
 	for source: int in sources:
 		var inventory: Dictionary = view["units"][source]["inventory"]
 		var ids: Array = inventory.keys()
@@ -35,6 +34,21 @@ static func free_slots(unit: Dictionary, modules: Dictionary) -> Array[Dictionar
 			if connector["type"] != "dock" and connector["id"] != ROOT_MOUNT and not used.has(connector["id"]):
 				slots.append({ "part": part["id"], "connector": connector["id"], "type": connector["type"], "size": connector["size"] })
 	return slots
+
+
+## Units docked with this one, either way, in ID order.
+static func docked_with(view: Dictionary, unit_id: int) -> Array[int]:
+	var found: Array[int] = []
+	var own: Dictionary = view["units"][unit_id]["dock"]
+	var ids: Array = view["units"].keys()
+	ids.sort()
+	for id: int in ids:
+		if id == unit_id:
+			continue
+		var other: Dictionary = view["units"][id]["dock"]
+		if (not own.is_empty() and own["target_unit"] == id) or (not other.is_empty() and other["target_unit"] == unit_id):
+			found.append(id)
+	return found
 
 
 static func attach_command(unit_id: int, entry: Dictionary, slot: Dictionary) -> Dictionary:

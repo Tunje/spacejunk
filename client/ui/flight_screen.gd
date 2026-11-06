@@ -89,6 +89,8 @@ var _land_box: VBoxContainer
 var _land_title: Label
 var _pick_button: Button
 var _land_text: Label
+## A36's cannot-return warning, by the Land button.
+var _return_warning: Label
 var _land_button: Button
 var _takeoff_row: HBoxContainer
 var _altitude: SpinBox
@@ -201,12 +203,19 @@ func _build_landing(column: VBoxContainer) -> void:
 	var label := _add_label(_takeoff_row)
 	label.text = "To orbit at (km)"
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_altitude = _add_spin(_takeoff_row, 10.0, 5000.0, 10.0)
+	# A take-off below LowFlight.LEAVE_MM drops straight back into low flight (A39).
+	_altitude = _add_spin(_takeoff_row, LowFlight.LEAVE_MM / 1_000_000.0, 5000.0, 10.0)
 	_altitude.value = TAKEOFF_KM
 	_altitude.value_changed.connect(func(_value: float) -> void: _edited())
 	_takeoff_button = _add_button(_takeoff_row, "Take off")
 	_takeoff_button.pressed.connect(take_off)
 	_land_text = _add_label(_land_box)
+	_return_warning = _add_label(_land_box)
+	_return_warning.modulate = ClientTheme.ORANGE
+	_return_warning.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_return_warning.visible = false
+	# The warning sits just above Land, so it's read before the choice.
+	_land_box.move_child(_return_warning, _land_button.get_parent().get_index())
 
 
 func bind(new_bridge: SimBridge, view: LocalView, map: SystemMap) -> void:
@@ -790,6 +799,7 @@ func _show_landing(view: Dictionary, shown: Dictionary) -> void:
 			set_picking(false)
 		return
 	var on_ground := not landed.is_empty()
+	_return_warning.visible = false
 	_pick_button.visible = not on_ground
 	_land_button.visible = not on_ground
 	_takeoff_row.visible = on_ground
@@ -820,4 +830,7 @@ func _show_landing(view: Dictionary, shown: Dictionary) -> void:
 		land_preview = bridge.check(land_command())
 	_land_text.text = "Hex %d. %s" % [land_cell, FlightLogic.trip_cost_text(land_preview, "Descent", bridge.ticks_per_second())]
 	_land_button.disabled = not land_preview.get("ok", false)
+	_return_warning.text = FlightLogic.return_warning(land_preview, int(unit()["inventory"].get("propellant", 0)),
+		view.get("frames", {}))
+	_return_warning.visible = not _return_warning.text.is_empty()
 

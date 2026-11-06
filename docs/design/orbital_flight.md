@@ -1028,3 +1028,50 @@ The kernel caps; the client drops.
 | Closed forms | 0.8 ms |
 
 About 40% of rounds end in a horizon of 0, from 38 ships on low orbits crossing the planet's shadow. The step is most of the cost. The power horizon is the next place to cut, with its per-unit relative speeds and battery bisection.
+
+### 11.25 A37: moves inside a frame coast
+
+A route is a straight leg at a set speed. Each tick it adds `Rate.amount(speed, remainder)` to its progress, so k ticks add (k·speed + remainder) / 10 and leave (k·speed + remainder) mod 10, as every other rate does.
+- **Horizon** (CargoSystem): the most ticks that leave the route short of its length, the largest k with k·speed < 10·(length − progress) − remainder. The arrival tick, with its `arrived` event, is always stepped. A leg at no speed never arrives, and never limits.
+- **Closed form:** progress and remainder by the sum, then the position from progress, as `_advance` places it.
+- **Shadow bound** (CoastBounds): a routed unit moves at most its route's speed plus its frame's orbital speed. It is no longer unbounded.
+- **Nothing else changes for a routed unit:** BurnSystem and LandingSystem skip it, and power and heat don't depend on motion.
+
+**Proof:** `tests/sim/kernel/test_coast_routes.gd`, stepped against coasted, byte-equal:
+- the horizon's arithmetic;
+- the reference ship's move to its rock: 3 calls;
+- the new start's probe flying to two rocks in its cluster across the moon's shadow edge: 7 calls, then 56, 52 of them power-capped.
+
+Approaching the edge on the move takes more calls than parked, since the bound adds the route's speed to the frame's. Bisecting the shadow edge itself, as A16 samples it, would cut that, and belongs with A38.
+
+The soak's new start seeds fly the probe to 1 to 3 rocks, some cancelled mid-route. 40 seeds passed, and seed 3 joins the gate.
+
+In C's mining cycle (C17's test), the 372 `moving_in_frame` caps are gone: 2,004 calls became 1,632. The 1,604 `tasks` caps left are C's (C20). Nothing returns `moving_in_frame` any more, so the Lead had it taken out of the contracts §4 list (A39).
+
+### 11.26 A39: getting back up from Frost
+
+B's human Frost landing (B23) found two faults after A36.
+
+**A take-off to 20 km dropped into low flight and broke a move.**
+- A circle at exactly `LowFlight.ENTER_MM` comes out of `from_state` with e = 4 in Q30, so its periapsis rounds a millimetre under the line. Five ticks later the unit enters low flight and loses its orbit record.
+- In low flight it stays there: on a 20 km circle it never climbs past `LEAVE_MM` (30 km).
+- A `move_to` accepted in those five ticks then departed with no orbit. `Transfer.departure_orbit` read `parent` from `{}`, a script error, and the move was cancelled.
+- **Fixes:**
+  - `take_off` is refused below `LEAVE_MM` with `invalid_target` (contracts §5).
+  - A waiting move whose unit has no orbit at its departure tick is cancelled with `unsupported_orbit`.
+  - `departure_orbit` returns `{}` for a unit with no orbit.
+- From any take-off orbit the command allows, `move_to` quotes and flies as from any other orbit.
+
+**A36 under-warned.** It priced only the climb, so the probe could pass the check and still strand.
+- With no ice top-up: 745 kg left after landing, against a 584 kg climb. Getting home took 827 kg.
+- `return_propellant_g` now prices the way back to `return_target`: the frame round the landing body whose ring is nearest the unit's orbit. A land command is only accepted from an orbit, so the unit has always just left a frame. In the new start that frame is the Cluster.
+- The price is the take-off to `LEAVE_MM`, plus `Transfer.plan_between`'s leg from that orbit to the frame's, at the mass after each part, leaving as the take-off ends.
+- It prices getting back to the cluster, not the whole trip home, so B's hint keeps its ice advice.
+
+| B's case | Priced | Flown | Left after landing | `cannot_return` |
+| --- | --- | --- | --- | --- |
+| A: full tank from the start | 803 kg | 803 kg | 1,492 kg | false |
+| B: the hint case, with the ice top-up | 825 kg | 826 kg | 1,432 kg | false |
+| C: without the top-up | 758 kg | stranded | 745 kg | true |
+
+Tests: `tests/sim/networks/test_land_return.gd` has the three cases, plus the waiting move that drops into low flight. `test_landing.gd` covers the take-off minimum and the frameless price.

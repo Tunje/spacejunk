@@ -146,8 +146,55 @@ func test_mining_coasts_in_closed_form_to_a_full_hold() -> void:
 	assert_lte(caps.get("tasks", 0), 2, "mining coasts in closed form: %s" % str(caps))
 
 
+## C19: an amount stops the closed form on the tick that reaches it.
+func test_mining_an_amount_coasts_to_exactly_that_amount() -> void:
+	var stepped := _ship_at_rock()
+	var laser := _laser(stepped, SHIP)
+	stepped.submit({ "type": "start_mining", "unit": SHIP,
+		"args": { "deposit": DEPOSIT, "module": laser, "grams": 777_777 } })
+	stepped.step()
+	stepped.take_events()
+	var coasted := _copy(stepped)
+	_same_both_ways(stepped, coasted, 2_500)
+	assert_eq(stepped._state["units"][SHIP]["task"], 0, "the order ended")
+	assert_eq(stepped._state["units"][SHIP]["inventory"].get("hematite", 0), 777_777)
+	assert_lte(caps.get("tasks", 0), 2, "the amount is a horizon edge, not a step per tick: %s" % str(caps))
+
+
+func _laser(sim: Sim, unit: int) -> int:
+	for part: int in Units.sorted_part_ids(sim._state, unit):
+		if Units.module_of(sim._state, sim._ctx.defs, part)["capabilities"].has("mine"):
+			return part
+	return 0
+
+
 ## A drone fitted as tests/sim/autonomy/test_cycles.gd fits it, on a cycle to a near rock.
 func test_a_mining_cycle_coasts_exactly() -> void:
+	var stepped := _mining_cycle({})
+	var coasted := _copy(stepped)
+	_same_both_ways(stepped, coasted, 6_000)
+	assert_gt(stepped._state["units"][STATION]["inventory"].get("hematite", 0), 0, "a lap unloaded ore")
+
+
+## C19: each lap of a cycle mines the step's amount and no more.
+func test_a_cycle_mines_its_amount_each_lap_and_coasts_exactly() -> void:
+	var stepped := _mining_cycle({ "grams": 30_000 })
+	var coasted := _copy(stepped)
+	_same_both_ways(stepped, coasted, 6_000)
+	var unloaded: int = stepped._state["units"][STATION]["inventory"].get("hematite", 0)
+	assert_gt(unloaded, 30_000, "more than one lap")
+	assert_eq(unloaded % 30_000, 0, "every lap unloaded exactly the amount: %d" % unloaded)
+
+
+func test_a_cycle_with_a_bad_amount_is_refused() -> void:
+	var sim := _mining_cycle({ "grams": 0 }, false)
+	var drone: int = sim._state["units"].keys().max()
+	assert_eq(sim._state["units"][drone]["task"], 0, "no cycle set")
+
+
+## Returns the reference world with a drone docked at the station, given a mining cycle whose
+## start_mining step carries `extra` args, after one tick.
+func _mining_cycle(extra: Dictionary, accepted: bool = true) -> Sim:
 	var stepped := _reference()
 	var state := stepped._state
 	state["bodies"][ROCK]["pos_mm"] = [2_000_000, 0, 0]
@@ -168,20 +215,21 @@ func test_a_mining_cycle_coasts_exactly() -> void:
 	stepped._ctx.index.clear()
 	state["matter_start_g"] = stepped.ledger()["matter"]["total_g"]
 	var port: int = Units.ports(state, stepped._ctx.defs, drone)[0]
+	var mining := { "deposit": DEPOSIT, "module": laser }
+	mining.merge(extra)
 	stepped.submit({ "type": "set_cycle", "unit": drone, "args": { "steps": [
 		{ "type": "load_cargo", "args": { "from": STATION, "item": "propellant" } },
 		{ "type": "undock", "args": {} },
 		{ "type": "move_to", "args": { "target": ROCK } },
-		{ "type": "start_mining", "args": { "deposit": DEPOSIT, "module": laser } },
+		{ "type": "start_mining", "args": mining },
 		{ "type": "move_to", "args": { "target": STATION } },
 		{ "type": "dock", "args": { "port": port, "target_port": FREE_PORT } },
 		{ "type": "unload_cargo", "args": { "to": STATION, "item": "hematite" } },
 	] } })
 	stepped.step()
-	stepped.take_events()
-	var coasted := _copy(stepped)
-	_same_both_ways(stepped, coasted, 6_000)
-	assert_gt(state["units"][STATION]["inventory"].get("hematite", 0), 0, "a lap unloaded ore")
+	var types: Array = stepped.take_events().map(func(event: Dictionary) -> String: return event["type"])
+	assert_eq(types.has("command_rejected"), not accepted, str(types))
+	return stepped
 
 
 func _fit(sim: Sim, unit: int, def: String, parent: int, connector: String) -> int:

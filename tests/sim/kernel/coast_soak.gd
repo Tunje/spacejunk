@@ -10,7 +10,7 @@ extends RefCounted
 ## - a planned burn, or a landing and then a take-off, each at a random tick, any of which may be
 ##   refused.
 ## Every fourth seed (3, 7, 11 ...) is the new start coasted to a random tick, then compared over a
-## window.
+## window in which the probe flies to up to three rocks in its cluster (A37).
 ## Seed 1 is D's shadow edge case from A35: new start seed 1, ticks 125,000 to 135,000.
 
 const GM_STAR := 132_712_440_018_000_000
@@ -34,6 +34,7 @@ static func run_seed(seed: int, ticks: int) -> Dictionary:
 		ticks = 10_000
 	elif seed % 4 == 3:
 		stepped = _new_start(rng.randi_range(1, 1000), rng.randi_range(0, 250_000))
+		actions = _moves(stepped, rng, ticks)
 	else:
 		var built := _moon_probe(rng, ticks)
 		stepped = built[0]
@@ -43,6 +44,36 @@ static func run_seed(seed: int, ticks: int) -> Dictionary:
 	if coasted == null:
 		return _result(false, "seed %d: the copy didn't load: %s" % [seed, Sim.last_error()], 0, 0, {})
 	return _compare(seed, stepped, coasted, ticks, actions)
+
+
+## Up to three move_to orders for the new start's probe, to rocks in its frame at random ticks. One
+## given before the last has arrived is refused or replaces it; either way both copies do the same.
+static func _moves(sim: Sim, rng: RandomNumberGenerator, ticks: int) -> Array:
+	var probe := 0
+	for id: int in _sorted(sim._state["units"]):
+		if sim._state["units"][id]["name"] == "Probe":
+			probe = id
+	if probe == 0:
+		return []
+	var frame: int = sim._state["units"][probe]["frame"]
+	var rocks: Array = []
+	for id: int in _sorted(sim._state["bodies"]):
+		if sim._state["bodies"][id].get("frame", 0) == frame and frame != 0:
+			rocks.append(id)
+	var actions: Array = []
+	if rocks.is_empty():
+		return actions
+	for n in rng.randi_range(1, 3):
+		actions.append([rng.randi_range(0, ticks - 1), { "type": "move_to", "unit": probe,
+			"args": { "target": rocks[rng.randi_range(0, rocks.size() - 1)] } }])
+	actions.sort_custom(func(x: Array, y: Array) -> bool: return x[0] < y[0])
+	return actions
+
+
+static func _sorted(table: Dictionary) -> Array:
+	var ids: Array = table.keys()
+	ids.sort()
+	return ids
 
 
 static func _result(ok: bool, message: String, calls: int, ticks: int, caps: Dictionary) -> Dictionary:

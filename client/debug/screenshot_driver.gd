@@ -19,6 +19,7 @@ class_name ScreenshotDriver extends Node
 ##   --planet-wait=1                 waits for every planet's terrain before the rest
 ##   --transfer-demo=<seconds>       (reference) a planet with two frames on the real Sim, the ship
 ##                                   sent to the far one's rock, run that long past departure
+##   --propellant=<kg>               the landing demo's propellant, 1000 by default
 ##   --landing-demo=pick|landed      (reference) a small planet on the real Sim with the probe in
 ##                                   orbit: choosing a hex with Land's cost, or after landing on it
 ##   --soi-demo=<fraction>           (reference) A18's compact system on the real Sim, the ship sent
@@ -26,6 +27,7 @@ class_name ScreenshotDriver extends Node
 ##   --descent-demo=<m/s>,<seconds>  (reference) a light 250 km world on the real Sim: the probe, with
 ##                                   legs, lifts off straight up at that speed and flies that long
 ##   --snapshot=<res:// save>        (real Sim) loads that save first, such as a bot stage's
+##   --prove=<theory>                (real Sim) marks it proven and its designs prototype, as a lab test would
 ##   --run=<seconds>                 (real Sim) steps the game that long first, such as out of a shadow
 ##   --set-down=<body name>,<cell>   (real Sim) puts the commanded craft down on that hex as a landing
 ##                                   ends, for a landed shot where it can't yet fly down
@@ -87,6 +89,12 @@ func _run() -> void:
 		if loaded != null:
 			main.bridge.start(loaded)
 			main.local_view.rebuild()
+	if parsed.has("prove"):
+		var research: Dictionary = main.bridge.sim._state["research"]
+		research["theories"][parsed["prove"]] = main.bridge.current_view["tick"]
+		for design: String in main.bridge.defs()["theories"][parsed["prove"]]["unlocks"]:
+			research["designs"][design] = "prototype"
+		main.bridge.start(main.bridge.sim)
 	if parsed.has("run"):
 		(main.bridge.sim as Sim).step(roundi(float(parsed["run"]) * Sim.TICKS_PER_SECOND))
 		main.bridge.start(main.bridge.sim)
@@ -148,6 +156,10 @@ func _run() -> void:
 		screen.open_picker(recipe)
 	if parsed.has("research"):
 		main.toggle_research()
+		if parsed.has("research-designs"):
+			await get_tree().process_frame
+			await get_tree().process_frame
+			main.research_screen.scroll_to_designs()
 		if parsed.has("research-ideas"):
 			var spec: PackedStringArray = parsed["research-ideas"].split(":")
 			main.research_screen.choose_base(spec[0])
@@ -513,7 +525,8 @@ func _landing_demo(stage: String) -> void:
 				"planet": { "seed": 48213, "height_range_m": 6000 } },
 		],
 		"units": [{ "key": "ship", "template": "starter_ship", "name": "Probe", "pos_mm": [0, 0, 0],
-			"inventory": [{ "item": "propellant", "grams": 1_000_000 }], "dock": null }],
+			"inventory": [{ "item": "propellant", "grams": roundi(float(parsed.get("propellant", "1000")) * 1000.0) }],
+			"dock": null }],
 	}, {})
 	var ship := 0
 	var planet := 0

@@ -205,6 +205,23 @@ static func trip_cost_text(result: Dictionary, what: String, ticks_per_second: i
 		OrderText.tonnes(detail["propellant_g"]), OrderText.duration(float(detail["ticks"]) / ticks_per_second)]
 
 
+## A36: a warning when landing would leave too little propellant to get back, or ""
+## when it wouldn't. A39 prices the way back to `return_target`, the frame round the
+## body (0 when none, and then the take-off alone). Landing stays the player's choice.
+static func return_warning(result: Dictionary, propellant_aboard_g: int, frames: Dictionary = {}) -> String:
+	var detail: Dictionary = result.get("detail", {})
+	if not result.get("ok", false) or not detail.get("cannot_return", false):
+		return ""
+	var target := int(detail.get("return_target", 0))
+	var back := "take off again" if target == 0 else "get back to the %s" % frames.get(target, {}).get("name", "frame")
+	var need: int = detail.get("return_propellant_g", -1)
+	if need < 0:
+		return "You won't be able to %s from here." % back
+	var left := maxi(0, propellant_aboard_g - int(detail["propellant_g"]))
+	return "You won't have enough propellant to %s (need %s, will have %s)." % [
+		back, OrderText.tonnes(need), OrderText.tonnes(left)]
+
+
 ## A planned burn's row: "In 12 s: 20.0 m/s prograde".
 static func planned_text(burn: Dictionary, tick: int, ticks_per_second: int) -> String:
 	return "In %s: %s" % [OrderText.duration(float(burn["tick"] - tick) / ticks_per_second), FlightLogic.components_text(burn)]

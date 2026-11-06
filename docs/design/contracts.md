@@ -1,6 +1,6 @@
 # Simulation Contracts
 
-Contract version: 6. Signed off by the Lead (task L7) after review by Agents A, C and D. Version 2 added the job queue (C9). Version 3 adds orbits and frames ([orbital_flight.md](orbital_flight.md) section 11, task A10). Version 4 makes jobs take work points, not time (C11). Version 5 adds research: science, theories, prototypes and variants (C12). Version 6 adds fabricating in place, `install_to` on jobs (C15). Changes go through the Lead.
+Contract version: 7. Signed off by the Lead (task L7) after review by Agents A, C and D. Version 2 added the job queue (C9). Version 3 adds orbits and frames ([orbital_flight.md](orbital_flight.md) section 11, task A10). Version 4 makes jobs take work points, not time (C11). Version 5 adds research: science, theories, prototypes and variants (C12). Version 6 adds fabricating in place, `install_to` on jobs (C15). Version 7 adds an optional `grams` to `start_mining` (C19), and lets `attach_part` and `copy_fit` take parts from any unit in the docked group (C21). Changes go through the Lead.
 
 These contracts expand section 5 of `plan/workplan.md`. If the two disagree, raise it with the Lead.
 
@@ -138,7 +138,7 @@ Each tick runs these phases in order.
 - **It returns early:**
   - just after any tick with events, so the client sees each event on its own tick and can drop the warp;
   - when a system can't coast yet, after one stepped tick, with `capped_by` saying why.
-- **`capped_by` codes:** `command` (one is queued), `burning`, `low_flight`, `drifting`, `near_a_boundary` (a sphere, a frame's join distance or low flight is close), `planned_burn`, `transfer_leg`, `departure_or_arrival`, `landing_or_takeoff`, `moving_in_frame`, `docking_or_cargo`, `power`, `heat`, `tasks` and `jobs`. It is `""` when not capped.
+- **`capped_by` codes:** `command` (one is queued), `burning`, `low_flight`, `drifting`, `near_a_boundary` (a sphere, a frame's join distance or low flight is close), `planned_burn`, `transfer_leg`, `departure_or_arrival`, `landing_or_takeoff`, `docking_or_cargo`, `power`, `heat`, `tasks` and `jobs`. It is `""` when not capped.
 - **Strict mode** (tests) steps every tick, so the per-tick checks still run on every tick.
 - **Systems** take part through `SimSystem.horizon(ctx)` and `coast(ctx, ticks)`. A system without a closed form keeps the default horizon of 0, which steps.
 
@@ -172,7 +172,7 @@ Every command has this envelope. `submit` fills in `id` and `tick`.
 | `undock` | none | Leave the current port |
 | `load_cargo` | `from`, `item`, `grams` (optional) | Transfer into this unit |
 | `unload_cargo` | `to`, `item`, `grams` (optional) | Transfer out of this unit |
-| `start_mining` | `deposit`, `module` | Begin mining with a laser |
+| `start_mining` | `deposit`, `module`, `grams` (optional) | Begin mining with a laser. With `grams`, the task finishes once it has mined that many, or sooner if the hold fills or the deposit empties. `grams` must be above 0, or the order is `malformed_command` (C19) |
 | `stop` | none | Stop the current operation |
 | `start_job` | `facility`, `recipe`, `count`, `install_to` (optional) | Begin a recipe at a facility part. With `install_to`, the part is built in place (C15) |
 | `cancel_job` | `job` | Cancel and return held matter. A queued job ends at once with nothing to return |
@@ -195,7 +195,7 @@ Every command has this envelope. `submit` fills in `id` and `tick`.
 **Uninstalled parts.** An uninstalled part is an inventory stack of an item with the same ID as its module. Items with `unit_mass_kg` move only in exact multiples, or the command is rejected with `not_whole_unit`. The simulation issues the part ID on attach.
 
 **Attach and detach.**
-- `from` is this unit or a unit docked to it. Attaching is instant in phase 1 in the slice.
+- `from` is this unit or any unit in its docked group: the units joined to it through dock records, followed both ways, so a probe and a drone both docked at one station share a group (C21). `copy_fit`'s `from` is the same. A unit outside the group is `not_docked`. Attaching is instant in phase 1 in the slice.
 - `detach_part` sends the part and everything below it to the `to` inventory, and is rejected if it does not fit.
 - Detaching a port with something docked to it is rejected.
 - Detaching a root part is rejected with `root_part`.
@@ -283,8 +283,8 @@ A burn whose tick comes while the unit has another operation, a route or a task 
 
 | Command | Arguments | Effect |
 | ------- | --------- | ------ |
-| `land` | `body`, `cell` | From an orbit around `body`, an atomic autopilot descent to the cell. It needs landing gear, as a hand-flown landing does, and is refused with `no_landing_gear` without it. Its cost is the burn down half an ellipse to the surface, plus killing the remaining speed with a gravity loss that grows as thrust over weight at the surface falls ([orbital_flight.md](orbital_flight.md) 11.20, A27), by the rocket equation. It is paid at the start, and the op `landing` lasts the half ellipse. Its check's detail is `{ dv_um_s, propellant_g, ticks, return_propellant_g, cannot_return }`. `return_propellant_g` is what a `take_off` from the cell to just clear of low flight would cost at the landed mass, or -1 if it would be refused. `cannot_return` is true when that is -1 or more than the propellant left after landing. It is a warning only, and the landing is not refused for it (A36). Refused with `not_flying` when not on an orbit around that body, `invalid_target` for a cell outside the grid, `thrust_too_low`, `no_propellant`, `module_missing` or `part_busy`. |
-| `take_off` | `altitude_mm` | From a landed place, the same in reverse (op `taking_off`), onto a circular orbit at that altitude through the cell's direction, moving east around +Y. Refused with `not_landed`, `malformed_command`, `thrust_too_low`, or `invalid_target` at or past the body's sphere of influence. |
+| `land` | `body`, `cell` | From an orbit around `body`, an atomic autopilot descent to the cell. It needs landing gear, as a hand-flown landing does, and is refused with `no_landing_gear` without it. Its cost is the burn down half an ellipse to the surface, plus killing the remaining speed with a gravity loss that grows as thrust over weight at the surface falls ([orbital_flight.md](orbital_flight.md) 11.20, A27), by the rocket equation. It is paid at the start, and the op `landing` lasts the half ellipse. Its check's detail is `{ dv_um_s, propellant_g, ticks, return_target, return_propellant_g, cannot_return }`, all at the landed mass. `return_target` is the frame round `body` whose ring is nearest the unit's orbit, lowest ID on a tie, or 0 if no frame circles it. `return_propellant_g` is a `take_off` from the cell to `LowFlight.LEAVE_MM` plus the autopilot's leg from that orbit to `return_target`'s, leaving as the take-off ends; with no target it is the take-off alone, and it is -1 if either part would be refused. `cannot_return` is true when that is -1 or more than the propellant left after landing. It prices the way back to that frame, not the whole trip home, so it answers "can it get back to the cluster". It is a warning only, and the landing is not refused for it (A36, A39). Refused with `not_flying` when not on an orbit around that body, `invalid_target` for a cell outside the grid, `thrust_too_low`, `no_propellant`, `module_missing` or `part_busy`. |
+| `take_off` | `altitude_mm` | From a landed place, the same in reverse (op `taking_off`), onto a circular orbit at that altitude through the cell's direction, moving east around +Y. Refused with `not_landed`, `malformed_command`, `thrust_too_low`, or `invalid_target` below `LowFlight.LEAVE_MM` (30 km, where low flight hands back to an orbit, so a lower orbit would drop straight into low flight, A39) or at or past the body's sphere of influence. |
 
 A unit on an orbit whose position falls below its parent body's radius crashes. It comes down landed on the cell below, a running burn ends with `burn_short` reason `crashed`, a transfer ends, and `crashed` fires. Damage is not modelled yet. Landing doesn't yet check a cell's surface type or slope, which waits for planets.md's rule tables in `data/`.
 
@@ -311,7 +311,7 @@ Events are ordered by phase, then the event's `unit`, then emission order. Unit 
 | `task_cycle_done` | `task`, `cycle` |
 | `scan_finished` | `target`, `deposits` |
 | `deposit_found` | `deposit`, `item`, `grams` |
-| `mining_stopped` | `deposit`, `grams`, `reason` |
+| `mining_stopped` | `deposit`, `grams`, `reason`: `cargo_full`, `deposit_exhausted`, `amount_mined` when the order's `grams` were mined (C19), or the task's cancel reason |
 | `arrived`, `docked`, `undocked` | `target` |
 | `departed` | `target`, `arrive_tick`: a trip between places leaves on its window, paid (A34) |
 | `transfer_done` | `from`, `to`, `item`, `grams` (actual amount moved) |
