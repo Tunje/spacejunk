@@ -21,6 +21,8 @@ const RING_A_MM := 66_000_000              # a ring a tenth of the moon's radius
 const PROBE_DRY_KG := 6880.0               # B10's probe with B15's 100 kg landing legs
 const PROBE_TANK_KG := 2000.0
 const EXHAUST_M_S := 3000.0
+## A23 priced landings with a flat 3%; since A27 the loss depends on thrust over weight.
+const PROBE_THRUST_N := 10_000
 const DAY_TICKS := 864_000
 const HOUR_TICKS := 36_000
 
@@ -137,10 +139,13 @@ func _two_windows(sim: Sim, unit: int, target: int) -> Dictionary:
 
 ## LandingSystem's own cost of landing from a circular orbit at high_mm, or of taking off to it:
 ## the surface speed on the descent ellipse with the gravity loss, plus the burn at the top. The
-## same integer sums as LandingSystem._plan, which needs a unit on an orbit to call.
+## same integer sums as LandingSystem._plan, which needs a unit on an orbit to call. A23's figures
+## used the flat 3% loss that A27 replaced, so a rerun now gives dearer landings.
 func _landing(gm: int, high_mm: int) -> Dictionary:
 	var a_t := (MOON_R_MM + high_mm) / 2
-	var surface := IntMath.mul_div(OrbitMath.speed_um_s(gm, MOON_R_MM, a_t), LandingSystem.GRAVITY_LOSS_PERMILLE, 1000)
+	var n := LandingSystem.twr_ppm(gm, MOON_R_MM, PROBE_THRUST_N, roundi((PROBE_DRY_KG + PROBE_TANK_KG) * 1000.0))
+	var surface := IntMath.mul_div_ceil(OrbitMath.speed_um_s(gm, MOON_R_MM, a_t),
+		LandingSystem.loss_permille(n, LandingSystem.LAND_LOSS_A, LandingSystem.LAND_LOSS_B), 1000)
 	var top := absi(OrbitMath.speed_um_s(gm, high_mm, high_mm) - OrbitMath.speed_um_s(gm, high_mm, a_t))
 	return { "dv_um_s": surface + top, "ticks": maxi(1, OrbitMath.period_sub(gm, a_t) / (2 * OrbitMath.SUB_TICKS)) }
 

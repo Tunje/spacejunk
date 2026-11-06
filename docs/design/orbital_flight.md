@@ -730,11 +730,33 @@ Measured on the sim from new_start.json:
 | Take off and circle at the cluster's height | 302 m/s | about 242 m/s | `take_off`: 261 m/s |
 | Rejoin the cluster from that circle | 3 m/s, 62 h | | |
 
-- **A flown landing loses 33 to 38%,** not the 3% the land and take_off commands allow. The burns are long against the descent: about 2.5 minutes at full thrust to stop 211 m/s, while gravity pulls.
-- **The round trip flown is about 630 to 640 m/s,** leaving about **295 m/s spare** on today's 5.48 t probe.
-  - At 7.38 t dry it would be about 80 m/s spare.
-  - With the commands' figures it would be 525 m/s, and 408 m/s spare.
-- **The commands are cheaper than flying.** That is a choice for the Lead and B: either the commands' 3% stands as "the autopilot flies perfectly", or GRAVITY_LOSS_PERMILLE goes up to about 1300 so the commands match a pilot.
+- **A flown landing loses 33 to 38%,** not the 3% the land and take_off commands allowed. The burns are long against the descent: about 2.5 minutes at full thrust to stop 211 m/s, while gravity pulls.
+- **The round trip flown is about 630 to 640 m/s,** leaving about **295 m/s spare** on that 5.48 t probe. At B11b's 7.43 t, 2.5 t tank and 15 kN, rerun the figures with `tools/frost_run.gd`.
+
+#### Gravity loss by thrust over weight (A27)
+
+The land and take_off commands now charge what a good pilot loses, not a flat 3%. `tools/frost_run.gd -- --sweep` flies B11b's probe down from the cluster and back up at thrusts from 6 to 45 kN. That is n, thrust over weight at Frost's datum, from 1.2 to 9. For each thrust it keeps the cheapest safe flight: a landing touching down at no more than 3 m/s, half the legs' limit, and a take-off reaching the cluster's height. The factor is what that flight cost, less the impulsive burn at the top, over the command's surface speed.
+
+| n | Landing, flown | 1 + 0.66/n | Take-off, flown | 1 + 0.32/n + 0.26/n² |
+| --- | --- | --- | --- | --- |
+| 1.23 | 1.49 | 1.54 | 1.41 | 1.43 |
+| 1.64 | 1.39 | 1.40 | 1.21 | 1.29 |
+| 2.05 | 1.30 | 1.32 | 1.15 | 1.22 |
+| 2.46 | 1.24 | 1.27 | 1.12 | 1.17 |
+| 3.08 | 1.21 | 1.21 | 1.13 | 1.13 |
+
+- **The rule:** the surface speed is paid times 1 + A/n + B/n², with n worked out when the command is checked, from the unit's mass then and its best thruster.
+  - land: A = 0.66, B = 0.
+  - take_off: A = 0.32, B = 0.26.
+  - About 30% for a landing at n = 2.2.
+  - The command is never cheaper than the best safe flight from n = 1.2 to 3. The autopilot flies well, and a hand pilot may do worse.
+- **Above n = 3** the sweep's one-second burns are too coarse to trust: its landings cost 1.21 to 1.35 there. The formula keeps falling towards no loss, as physics allows with a hard enough burn.
+- **`thrust_too_low`:** at n of 1 or less, land and take_off are refused, since the craft can't hold itself up.
+- **Transfers are unchanged.** A burn in space loses only by the arc it sweeps. `tools/frost_run.gd -- --transfer` measures it through BurnSystem's own finite-burn preview, prograde from the cluster's orbit at B11b's 1.51 m/s², as the instant burn's extra energy over the finite one's:
+  - 10 to 30 m/s: nothing measurable;
+  - 100 m/s over 65 s: 0.002 m/s, 0.002%;
+  - 300 m/s over 189 s: 0.046 m/s, 0.015%.
+  This is the tightest orbit in the game. Round the planet or the star the arc is smaller still.
 
 #### The belt
 
