@@ -20,7 +20,7 @@ func _assert_no_floats(value: Variant, label: String) -> void:
 
 func test_data_loads_with_every_section() -> void:
 	assert_eq(DataLoader.error, "")
-	assert_eq(defs.keys(), ["modules", "items", "recipes", "templates", "sinks"])
+	assert_eq(defs.keys(), ["modules", "items", "recipes", "templates", "sinks", "theories", "science", "bench_test"])
 
 
 func test_nothing_the_simulation_reads_is_a_float() -> void:
