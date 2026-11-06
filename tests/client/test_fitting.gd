@@ -292,3 +292,24 @@ func test_a_station_reaches_the_stock_of_a_ship_docked_at_it() -> void:
 		return entry["from"] == ship)
 	assert_eq(from_ship.size(), 1, "the ship's part is on offer to the station")
 	assert_eq(from_ship[0]["item"], item)
+
+
+## C21 (D35): a probe and a drone docked at one station reach each other's stock.
+func test_a_craft_reaches_the_whole_docked_group() -> void:
+	var modules: Dictionary = bridge.defs()["modules"]
+	var view_now: Dictionary = bridge.current_view.duplicate(true)
+	view_now["units"][ship]["dock"] = { "target_unit": station }
+	view_now["units"][station]["dock"] = {}
+	var drone := 999
+	view_now["units"][drone] = view_now["units"][ship].duplicate(true)
+	view_now["units"][drone]["name"] = "Drone"
+	view_now["units"][drone]["inventory"] = {}
+	view_now["units"][drone]["dock"] = { "target_unit": station }
+	var expected: Array[int] = [ship, station]
+	expected.sort()
+	assert_eq(FittingLogic.docked_group(view_now, drone), expected, "the station and, through it, the probe")
+	var item: String = modules.keys()[0]
+	view_now["units"][ship]["inventory"][item] = modules[item]["mass_g"]
+	var from_ship := FittingLogic.stock(view_now, drone, modules).filter(func(entry: Dictionary) -> bool:
+		return entry["from"] == ship)
+	assert_eq(from_ship.size(), 1, "the probe's part is on offer to the drone, through the station")

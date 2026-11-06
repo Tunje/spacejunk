@@ -85,3 +85,11 @@ func test_load_moves_only_the_amount_asked() -> void:
 		if bridge.current_view["units"][ship]["op"]["type"] == "idle":
 			break
 	assert_eq(bridge.current_view["units"][ship]["inventory"].get("propellant", 0), 100_000, "100 kg, not a full tank")
+
+
+func test_mine_takes_an_amount_in_kilograms() -> void:
+	var mine := { "type": "start_mining", "unit": 1, "args": { "deposit": 5, "module": 9 } }
+	OrderList.set_amount(mine, 350, {})
+	assert_eq(mine["args"]["grams"], 350_000, "C19: 350 kg")
+	OrderList.set_amount(mine, 0, {})
+	assert_false(mine["args"].has("grams"), "0 mines until the hold is full")
