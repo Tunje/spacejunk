@@ -32,7 +32,15 @@ The core idea of the game is as follows:
 
 **Approved:** a job queue for the refinery and fabricator, and a "fit like this one" action that copies one craft's fit onto another.
 
-**Research:** "create new tech" and "run tests for new tech" are part of the core loop. Item 3 of section 4 deferred research; that deferral is now under review.
+**Research:** "create new tech" and "run tests for new tech" are part of the core loop. Item 3 of section 4, which deferred research, is withdrawn.
+
+### Owner ruling on research, 2026-11-06
+
+- **Science points** come from scanning and from science tasks: measuring things in orbit and on asteroids.
+- **Nothing is click-and-it's-yours.** Every new unlock starts as a theory. A theory has to be proven by testing before anything can be built with it.
+- **Once a theory is proven**, you can build prototypes of things that use it, and each new thing needs its prototype tested before it becomes a normal part.
+- **Every part can be improved** with ideas, chosen from a number of potential upgrades. Each improvement makes some stats better and others worse, and you can always go back to the original design.
+- **Improvements add complexity.** Each one makes the part harder to build and more expensive. Some of the potential upgrades give a chance to reduce that complexity and cost again.
 
 ## 2. Assumed decisions
 
