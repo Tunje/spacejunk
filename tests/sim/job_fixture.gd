@@ -13,5 +13,5 @@ static func record(
 		"id": 40, "unit": state["parts"][facility]["unit"], "facility": facility, "recipe": recipe,
 		"count_left": 1, "status": status, "reason": reason, "start_tick": 0,
 		"work_left": LONG_WORK, "since_tick": 0, "command": 0, "started": true,
-		"held": {}, "reserved": {}, "port": 0, "queue_pos": 0,
+		"held": {}, "reserved": {}, "port": 0, "queue_pos": 0, "points_held": 0,
 	}

@@ -18,7 +18,7 @@ const MAX_CYCLE_STEPS := 16
 const MINING_STEP := "start_mining"
 const MOVE_STEP := "move_to"
 const CYCLE_STEPS: Array[String] = [
-	MOVE_STEP, "dock", "undock", "load_cargo", "unload_cargo", MINING_STEP,
+	MOVE_STEP, "dock", "undock", "load_cargo", "unload_cargo", MINING_STEP, "measure",
 ]
 const REASON_MALFORMED := "malformed_command"
 const REASON_INVALID_TARGET := "invalid_target"
@@ -49,7 +49,7 @@ var _steps := {}
 func _init() -> void:
 	for step: TaskStep in [
 		ScanStep.new(), MiningStep.new(), MoveStep.new(), DockStep.new(), UndockStep.new(),
-		LoadCargoStep.new(), UnloadCargoStep.new(),
+		LoadCargoStep.new(), UnloadCargoStep.new(), MeasureStep.new(),
 	]:
 		_steps[step.type()] = step
 
