@@ -22,14 +22,14 @@ const WAIT_LIMIT_TICKS := 100_000
 ## hold until the station is built and takes its goods.
 const ALLOWED_PAUSES: Array[String] = ["missing_inputs", "no_power", "output_full"]
 ## Ore mined on the second trip, in grams, beyond the first trip's full hold of hematite.
-## 200 kg of that hematite is refined; the other 150 kg is hauled into the station. It all fits
+## 600 kg of that hematite is refined; the other 150 kg is hauled into the station. It all fits
 ## the probe's 2 t ore hold with room for the mining stop's overshoot.
 const SECOND_TRIP_G := {
-	"hematite": 350_000, "chalcopyrite": 900_000, "olivine": 300_000, "water_ice": 100_000,
+	"hematite": 750_000, "chalcopyrite": 800_000, "olivine": 300_000, "water_ice": 100_000,
 }
 ## Runs of each refining recipe, sized to the parts below.
 const REFINE_RUNS := {
-	"refine_hematite": 22, "refine_chalcopyrite": 9, "refine_olivine": 3, "refine_water_ice": 1,
+	"refine_hematite": 26, "refine_chalcopyrite": 8, "refine_olivine": 3, "refine_water_ice": 1,
 }
 
 static var _shared: NewStartBot
@@ -84,7 +84,7 @@ func run() -> void:
 		[refinery, "refine_water_ice", REFINE_RUNS["refine_water_ice"]],
 		# The station takes only frames and wiring, and building it empties most of the goods hold,
 		# so it goes before the processors, whose silicon the refinery can't store until then.
-		[fabricator, "structural_frame", 3], [fabricator, "wiring", 18], [fabricator, "small_station", 1],
+		[fabricator, "structural_frame", 8], [fabricator, "wiring", 15], [fabricator, "small_station", 1],
 		[fabricator, "processor", 4], [fabricator, "lidar_mk1", 1], [fabricator, "solar_panel_mk1", 1],
 	])
 	_wait_for(["refine_water_ice"])
@@ -173,10 +173,10 @@ func _fit_station() -> void:
 		_attach(station, fix[0], station_hub, fix[1])
 	_attach(station, "lidar_mk1", station_hub, "side_a_px")
 	mark("fit_fixed")
-	# The small container: a 6000 L ore_container_mk1 cannot fit the probe's 4000 L goods hold.
-	_queue([[fabricator, "small_ore_container_mk1", 1]])
+	# Built in place (C15): at 6000 L, ore_container_mk1 could never pass through the probe's
+	# 4000 L goods hold.
+	_queue([[fabricator, "ore_container_mk1", 1, _on_station("side_a_pz")]])
 	_wait_for([])
-	_attach(station, "small_ore_container_mk1", station_hub, "side_a_pz")
 
 
 func _haul() -> void:
@@ -277,13 +277,22 @@ func _order(type: String, unit: int, args: Dictionary) -> void:
 	problems.append("%s never finished" % type)
 
 
-## Queues jobs on the probe's facilities, each as [facility, recipe, count], in order. A job that
+## Where a part is built in place on the station's hub (C15).
+func _on_station(connector: String) -> Dictionary:
+	return { "unit": station, "parent_part": station_hub, "parent_connector": connector, "part_connector": "mount" }
+
+
+## Queues jobs on the probe's facilities, each as [facility, recipe, count] or with a fourth
+## element, where to build the part in place, in order. A job that
 ## waits for inputs another job is making is the plan, not a problem.
 func _queue(jobs: Array) -> void:
 	for entry: Array in jobs:
 		if not problems.is_empty():
 			return
-		var id := _command("queue_job", PROBE, { "facility": entry[0], "recipe": entry[1], "count": entry[2] })
+		var args := { "facility": entry[0], "recipe": entry[1], "count": entry[2] }
+		if entry.size() > 3:
+			args["install_to"] = entry[3]
+		var id := _command("queue_job", PROBE, args)
 		_pending_commands[id] = { "recipe": entry[1], "left": entry[2] }
 
 

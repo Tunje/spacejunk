@@ -64,6 +64,8 @@ func test_the_bare_station_refuses_a_powered_part_until_it_has_solar_and_a_radia
 	assert_has(defs, "heat_radiator_mk1")
 
 
-func test_ore_is_hauled_into_the_station() -> void:
+func test_ore_is_hauled_into_an_ore_container_built_in_place() -> void:
 	var station: Dictionary = bot.marks["hauled"]["units"][bot.station]
 	assert_gt(station["inventory"].get("hematite", 0), 0)
+	var defs: Array = InspectText.flatten(station["parts"]).map(func(part: Dictionary) -> String: return part["def"])
+	assert_has(defs, "ore_container_mk1", "6000 L, so it never passed through the probe's hold")
