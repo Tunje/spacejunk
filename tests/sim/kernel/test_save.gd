@@ -201,6 +201,15 @@ func test_a_version_3_save_with_tick_based_jobs_is_refused() -> void:
 	assert_eq(Sim.last_error(), "version_mismatch")
 
 
+func test_a_version_4_save_without_research_is_refused() -> void:
+	var state: Dictionary = _game()._state.duplicate(true)
+	state["contract_version"] = 4
+	state.erase("science")
+	state.erase("research")
+	assert_null(Sim.from_save(Canon.encode(state)))
+	assert_eq(Sim.last_error(), "version_mismatch")
+
+
 func test_tick_rate_mismatch() -> void:
 	assert_null(Sim.from_save(_altered_save(_game(), "ticks_per_second", Sim.TICKS_PER_SECOND + 1)))
 	assert_eq(Sim.last_error(), "version_mismatch")
