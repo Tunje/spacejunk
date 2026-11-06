@@ -172,12 +172,42 @@ C16 runs on from the end of Part C, which, with C15, ends at tick 71,546 with an
 - Landing straight from 300 km cost about 1,000 kg, the climb to 35 km about 690, and the trip home 159. That's about 540 to 600 m/s, depending on the 0.5 to 1.65 t of cargo carried.
 - Docking with 364 kg is about 120 to 135 m/s spare, under the 150 m/s line.
 - On the bot's first try, without a full tank from ice, the probe was stranded on Frost: it landed with 604 kg and needed 619.
-- The bot spent about 260 kg before leaving the cluster, on a trip to Red Rock and the 20 m/s departure burn. Leaving straight from the station with a full tank and an empty goods hold should keep about 190 m/s spare. That's the advice for a person, and it needs measuring in the drone task.
+- The bot spent about 260 kg before leaving the cluster, on a trip to Red Rock and the 20 m/s departure burn. Leaving straight from the station with a full tank and an empty goods hold should keep about 190 m/s spare. That's the advice for a person. Measured below, it keeps about 226 m/s.
 
 **The Lead's rulings on this, 2026-11-06:** no data change.
 - **C18, now on `main`:** the gravity-field measurement can be taken from inside the cluster frame, which orbits Frost, and lasts one period of the frame's orbit. Autonomous Navigation then needs no landing: 4 surveys, 3 compositions and one lap give 140 points, against the theory's 80. A lap at the cluster's 300 km takes about 6.8 game hours, against 1.2 at 35 km. The Lead keeps the full lap: once C17's coast warp lands it takes a couple of real minutes at 1,000×, and prospecting meanwhile is good play. The landing becomes optional: its 50-point surface sample is a bonus, and it's the evidence for Photovoltaic Arrays.
-- **A36:** the land check warns before a landing the probe can't return from.
-- **For a person who lands:** top up from White Rock's ice, leave the goods hold empty, and leave straight from the station. That keeps about 190 m/s spare. The goal hint says so. Re-measure this in the drone task.
+- **A36, now on `main`:** the land check warns before a landing the probe can't return from. It gives `return_propellant_g` and `cannot_return`, as a warning only.
+- **For a person who lands:** top up from White Rock's ice, leave the goods hold empty, and leave straight from the station. The goal hint says so. Measured below.
+
+**The human landing, measured after A36** (main at 0a361a3).
+- **The flight.** A 20 m/s retrograde burn out of the cluster, `land` on the cell below, a surface sample, then `take_off` to 35 km, then `move_to` home. Flown on the real `Sim` with no lap, since C18 takes the gravity field in the cluster.
+- **The three cases.**
+  - Case A starts the game that way: it leaves from the start, at the cluster's origin, with the full 2,500 kg tank and no station.
+  - Case B starts from the C16 save after the lab stage, at tick 179,732. The goods are unloaded to the station: copper, iron, silicon and wiring, 451 kg in all. The tank is as topped up from ice, at 2,477 kg. The probe leaves straight from the station.
+  - Case C is case B with the tank as it was before the ice top-up, at 1,701 kg.
+- **Δv conversion.** Exhaust speed is about 3,000 m/s, from the measured landing.
+
+| | A: start, full tank | B: station, as the hint advises | C: station, no ice top-up |
+| --- | --- | --- | --- |
+| Mass leaving | 9,930 kg | 10,197 kg | 9,421 kg |
+| 20 m/s burn out of the cluster | 66 kg | 68 kg | 63 kg |
+| Land check: down | 942 kg, 301 m/s | 978 kg, 304 m/s | 892 kg, 301 m/s |
+| Land check: `return_propellant_g` | 619 kg | 637 kg | 584 kg |
+| Land check: `cannot_return` | false | false | false |
+| Landed with | 1,492 kg | 1,432 kg | 745 kg |
+| Take off to 35 km | 654 kg, 229 m/s | 673 kg, 229 m/s | 618 kg, 227 m/s |
+| In low orbit with | 837 kg | 758 kg | 128 kg |
+| Home, 35 km to the cluster | 151 kg | 154 kg | refused, `no_propellant` |
+| Docked with | 686 kg, about 265 m/s spare | 604 kg, about 226 m/s spare | stranded at 35 km |
+
+- **The hint's ice top-up advice still holds, and is needed.**
+  - Following it, the probe docks with about 226 m/s spare, above the 150 m/s line. That's better than the 190 m/s estimated, because the goods unload saves about 450 kg of mass.
+  - Without the top-up, the probe lands and climbs back, then is stranded in low orbit with 128 kg, needing about 154.
+  - From the start, with a full tank and nothing built, the trip is also safe, at about 265 m/s spare.
+- **The A36 warning under-warns.**
+  - `return_propellant_g` prices the climb to `LowFlight.ENTER_MM`, 20 km. But `move_to` home from a 20 km orbit is refused for `unsupported_orbit` in case A, and in case B the route crashed the script, which is reported to A.
+  - A person who can get home needs the climb to 35 km plus the trip home: 673 + 154 = 827 kg in case B, against the 637 kg the warning checks.
+  - In case C the warning says `cannot_return: false`, since 745 kg ≥ 584 kg, but the probe strands. The warning should price the return to a frame or a station, or at least to an orbit `move_to` accepts. That's A's call through the Lead.
 
 **The long pole is the compact fabricator.** Its 64 processors take about 77,000 ticks, roughly 2.1 game hours, and they run alongside the Frost trip.
 
