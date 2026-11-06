@@ -1028,3 +1028,22 @@ The kernel caps; the client drops.
 | Closed forms | 0.8 ms |
 
 About 40% of rounds end in a horizon of 0, from 38 ships on low orbits crossing the planet's shadow. The step is most of the cost. The power horizon is the next place to cut, with its per-unit relative speeds and battery bisection.
+
+### 11.25 A37: moves inside a frame coast
+
+A route is a straight leg at a set speed. Each tick it adds `Rate.amount(speed, remainder)` to its progress, so k ticks add (k·speed + remainder) / 10 and leave (k·speed + remainder) mod 10, as every other rate does.
+- **Horizon** (CargoSystem): the most ticks that leave the route short of its length, the largest k with k·speed < 10·(length − progress) − remainder. The arrival tick, with its `arrived` event, is always stepped. A leg at no speed never arrives, and never limits.
+- **Closed form:** progress and remainder by the sum, then the position from progress, as `_advance` places it.
+- **Shadow bound** (CoastBounds): a routed unit moves at most its route's speed plus its frame's orbital speed. It is no longer unbounded.
+- **Nothing else changes for a routed unit:** BurnSystem and LandingSystem skip it, and power and heat don't depend on motion.
+
+**Proof:** `tests/sim/kernel/test_coast_routes.gd`, stepped against coasted, byte-equal:
+- the horizon's arithmetic;
+- the reference ship's move to its rock: 3 calls;
+- the new start's probe flying to two rocks in its cluster across the moon's shadow edge: 7 calls, then 56, 52 of them power-capped.
+
+Approaching the edge on the move takes more calls than parked, since the bound adds the route's speed to the frame's. Bisecting the shadow edge itself, as A16 samples it, would cut that, and belongs with A38.
+
+The soak's new start seeds fly the probe to 1 to 3 rocks, some cancelled mid-route. 40 seeds passed, and seed 3 joins the gate.
+
+In C's mining cycle (C17's test), the 372 `moving_in_frame` caps are gone: 2,004 calls became 1,632. The 1,604 `tasks` caps left are C's (C20). Nothing now returns `moving_in_frame`, but the code stays in contracts §4 unless the Lead removes it.
