@@ -3,6 +3,7 @@
   "id": "reference",
   "name": "Reference Scenario",
   "seed": 12345,
+  "research": { "theories": ["autonomous_navigation", "large_scale_refining", "photovoltaic_arrays"] },
   "bodies": [
     { "key": "star", "name": "Star", "kind": "star", "pos_mm": [99731913800000, 99731913800000, 49865956900000],
       "radius_mm": 696000000000, "visual_seed": 1, "deposits": [] },
