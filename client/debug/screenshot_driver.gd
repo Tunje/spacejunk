@@ -19,6 +19,7 @@ class_name ScreenshotDriver extends Node
 ##   --planet-wait=1                 waits for every planet's terrain before the rest
 ##   --transfer-demo=<seconds>       (reference) a planet with two frames on the real Sim, the ship
 ##                                   sent to the far one's rock, run that long past departure
+##   --propellant=<kg>               the landing demo's propellant, 1000 by default
 ##   --landing-demo=pick|landed      (reference) a small planet on the real Sim with the probe in
 ##                                   orbit: choosing a hex with Land's cost, or after landing on it
 ##   --soi-demo=<fraction>           (reference) A18's compact system on the real Sim, the ship sent
@@ -513,7 +514,8 @@ func _landing_demo(stage: String) -> void:
 				"planet": { "seed": 48213, "height_range_m": 6000 } },
 		],
 		"units": [{ "key": "ship", "template": "starter_ship", "name": "Probe", "pos_mm": [0, 0, 0],
-			"inventory": [{ "item": "propellant", "grams": 1_000_000 }], "dock": null }],
+			"inventory": [{ "item": "propellant", "grams": roundi(float(parsed.get("propellant", "1000")) * 1000.0) }],
+			"dock": null }],
 	}, {})
 	var ship := 0
 	var planet := 0

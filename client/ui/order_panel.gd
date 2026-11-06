@@ -113,7 +113,8 @@ func refresh() -> void:
 			moves = true
 			OrderList.set_amount(order["command"], int(amount.value), _items)
 	_amount_row.visible = moves
-	var other: bool = local_view.selected_kind == "unit" and local_view.selected_id != commanded 		and view["units"].has(local_view.selected_id)
+	var other: bool = local_view.selected_kind == "unit" and local_view.selected_id != commanded \
+		and view["units"].has(local_view.selected_id)
 	take_command.visible = other
 	if other:
 		take_command.text = "Take command of %s" % view["units"][local_view.selected_id]["name"]

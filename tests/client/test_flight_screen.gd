@@ -417,3 +417,18 @@ func test_an_approximate_preview_says_so() -> void:
 		{ "units": { 1: { "orbit": {}, "frame": 0, "pos_mm": [0, 0, 0], "inventory": {} } }, "bodies": {}, "frames": {} }, 1, 10)
 	assert_string_contains(lines[0], "(estimated")
 
+
+
+## A36: landing that strands the craft is warned about, not refused.
+func test_a_landing_that_cannot_return_is_warned_but_allowed() -> void:
+	var stranded := { "ok": true, "reason": "", "detail": { "dv_um_s": 1, "propellant_g": 10_594_000, "ticks": 100,
+		"return_propellant_g": 3_428_000, "cannot_return": true } }
+	assert_eq(FlightLogic.return_warning(stranded, 12_000_000),
+		"You won't have enough propellant to take off again (need %s, will have %s)." % [
+			OrderText.tonnes(3_428_000), OrderText.tonnes(1_406_000)])
+	stranded["detail"]["return_propellant_g"] = -1
+	assert_eq(FlightLogic.return_warning(stranded, 12_000_000), "You won't be able to take off again from here.")
+	stranded["detail"]["cannot_return"] = false
+	assert_eq(FlightLogic.return_warning(stranded, 12_000_000), "", "fine: no warning")
+	assert_eq(FlightLogic.return_warning({ "ok": false, "reason": "no_propellant", "detail": {} }, 0), "",
+		"a refusal says its own reason")

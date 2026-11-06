@@ -172,7 +172,8 @@ func test_parts_on_an_unfitted_part_are_refused_as_parent_not_fitted() -> void:
 	var tank := _part_with(ships[0], "stub_tank")
 	var source_tank := _part_with(ships[1], "stub_tank")
 	assert_ne(tank, 0)
-	sim._find_part(sim._state["units"][ships[0]], sim._state["units"][ships[0]]["parts"]["id"])["children"] = 		sim._state["units"][ships[0]]["parts"]["children"].filter(func(p: Dictionary) -> bool: return p["id"] != tank)
+	sim._find_part(sim._state["units"][ships[0]], sim._state["units"][ships[0]]["parts"]["id"])["children"] = \
+		sim._state["units"][ships[0]]["parts"]["children"].filter(func(p: Dictionary) -> bool: return p["id"] != tank)
 	bridge.start(sim)
 	var result: Dictionary = bridge.check(FittingLogic.copy_command(ships[0], ships[1], ships[0]))
 	assert_eq(result["detail"], { "attach": 0, "missing": 2, "refused": 2 }, "the tank and the thruster on it")
