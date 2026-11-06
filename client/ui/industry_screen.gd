@@ -33,6 +33,12 @@ var _queue_rows: Array[Dictionary] = []
 var _count: SpinBox
 var _recipe_box: VBoxContainer
 var _message: Label
+## C15's "Build into…" picker: the recipe being placed, and its slot buttons.
+var picking: Dictionary = {}
+var _picker: VBoxContainer
+var _picker_scroll: ScrollContainer
+var _recipe_scroll: ScrollContainer
+var _slot_buttons: Array[Dictionary] = []
 
 
 func _ready() -> void:
@@ -88,14 +94,23 @@ func _ready() -> void:
 	_count.max_value = MAX_COUNT
 	_count.value = 1
 	count_row.add_child(_count)
-	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(0, RECIPES_HEIGHT_PX)
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	column.add_child(scroll)
+	_recipe_scroll = ScrollContainer.new()
+	_recipe_scroll.custom_minimum_size = Vector2(0, RECIPES_HEIGHT_PX)
+	_recipe_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	column.add_child(_recipe_scroll)
 	_recipe_box = VBoxContainer.new()
 	_recipe_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_recipe_box.add_theme_constant_override("separation", 8)
-	scroll.add_child(_recipe_box)
+	_recipe_scroll.add_child(_recipe_box)
+	# The picker takes the recipes' place while open, so the screen keeps its size.
+	_picker_scroll = ScrollContainer.new()
+	_picker_scroll.custom_minimum_size = Vector2(0, RECIPES_HEIGHT_PX)
+	_picker_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_picker_scroll.visible = false
+	column.add_child(_picker_scroll)
+	_picker = VBoxContainer.new()
+	_picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_picker_scroll.add_child(_picker)
 	_message = _add_label(column)
 	_message.modulate = ClientTheme.ORANGE
 
@@ -125,6 +140,55 @@ func start(recipe: Dictionary) -> void:
 	if bridge.check(command)["reason"] in ["unknown_command", "not_in_stub"]:
 		command = IndustryLogic.start_command(unit_id, facility["part"], recipe, int(_count.value), true)
 	_send(command)
+
+
+## C15: lists every free connector on this unit and each unit docked to it, each
+## checked by the Sim, so a spot that can't take the part is greyed with its reason.
+func open_picker(recipe: Dictionary) -> void:
+	picking = recipe
+	_clear(_picker)
+	_slot_buttons.clear()
+	var view: Dictionary = bridge.current_view
+	var modules: Dictionary = _defs["modules"]
+	var heading := _add_label(_picker)
+	heading.text = "Build %s into:" % IndustryLogic.name_of(IndustryLogic.module_output(recipe, _defs), _defs)
+	heading.modulate = ClientTheme.ORANGE.lightened(0.2)
+	for target: int in IndustryLogic.install_units(view, unit_id):
+		var unit: Dictionary = view["units"][target]
+		var names: Dictionary = {}
+		for part: Dictionary in InspectText.flatten(unit["parts"]):
+			names[part["id"]] = modules[part["def"]]["name"]
+		var slots := FittingLogic.free_slots(unit, modules)
+		if slots.is_empty():
+			continue
+		_add_label(_picker).text = unit["name"]
+		for slot: Dictionary in slots:
+			var command := IndustryLogic.start_command(unit_id, facility["part"], recipe, 1, false,
+				IndustryLogic.install_to(target, slot))
+			var check := bridge.check(command)
+			var button := _add_button(_picker, "%s: %s (%s, %s)" % [names[slot["part"]], slot["connector"], slot["type"], slot["size"]])
+			button.disabled = not check["ok"]
+			button.tooltip_text = "" if check["ok"] else OrderText.reason(check["reason"], check.get("detail", {}))
+			button.pressed.connect(_send_and_close.bind(command))
+			_slot_buttons.append({ "slot": slot, "unit": target, "button": button, "command": command })
+	var close_button := _add_button(_picker, "Cancel")
+	close_button.pressed.connect(close_picker)
+	_picker.move_child(close_button, 1)
+	_picker.visible = true
+	_picker_scroll.visible = true
+	_recipe_scroll.visible = false
+
+
+func close_picker() -> void:
+	picking = {}
+	_picker.visible = false
+	_picker_scroll.visible = false
+	_recipe_scroll.visible = true
+
+
+func _send_and_close(command: Dictionary) -> void:
+	_send(command)
+	close_picker()
 
 
 func cancel() -> void:
@@ -225,6 +289,13 @@ func _sync_recipes() -> void:
 		button.focus_mode = Control.FOCUS_NONE
 		button.pressed.connect(start.bind(recipe))
 		title.add_child(button)
+		if IndustryLogic.module_output(recipe, _defs) != "":
+			var into := Button.new()
+			into.text = "Build into…"
+			into.focus_mode = Control.FOCUS_NONE
+			into.tooltip_text = "Build it straight onto a free connector here or on a docked craft"
+			into.pressed.connect(open_picker.bind(recipe))
+			title.add_child(into)
 		var inputs := _add_label(row)
 		var outputs := _add_label(row)
 		outputs.text = "Makes %s in %s" % [
@@ -244,7 +315,7 @@ func _show_job(view: Dictionary) -> void:
 	for row: Dictionary in _rows:
 		(row["start"] as Button).text = "Start" if job.is_empty() and queued == 0 else "Queue"
 	_job_bar.value = 0.0 if job.is_empty() else IndustryLogic.job_progress(job)
-	_job_label.text = "Idle" if job.is_empty() else IndustryLogic.job_line(job, _defs, bridge.ticks_per_second())
+	_job_label.text = "Idle" if job.is_empty() else IndustryLogic.job_line(job, _defs, bridge.ticks_per_second(), bridge.current_view["units"])
 	_job_label.modulate = ClientTheme.GOLD if not job.is_empty() and not job["reason"].is_empty() else Color.WHITE
 
 
