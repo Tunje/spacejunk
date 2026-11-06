@@ -174,6 +174,11 @@ C16 runs on from the end of Part C, which, with C15, ends at tick 71,546 with an
 - On the bot's first try, without a full tank from ice, the probe was stranded on Frost: it landed with 604 kg and needed 619.
 - The bot spent about 260 kg before leaving the cluster, on a trip to Red Rock and the 20 m/s departure burn. Leaving straight from the station with a full tank and an empty goods hold should keep about 190 m/s spare. That's the advice for a person, and it needs measuring in the drone task.
 
+**The Lead's rulings on this, 2026-11-06:** no data change.
+- **C18:** the gravity-field measurement can be taken from inside the cluster frame, which orbits Frost. Autonomous Navigation then needs no landing: 4 surveys, 3 compositions and one lap give 140 points, against the theory's 80. A lap at the cluster's 300 km takes about 6.8 game hours, against 1.2 at 35 km. It runs alongside mining and fabricating. The landing becomes optional: its 50-point surface sample is a bonus, and it's the evidence for Photovoltaic Arrays.
+- **A36:** the land check warns before a landing the probe can't return from.
+- **For a person who lands:** top up from White Rock's ice, leave the goods hold empty, and leave straight from the station. That keeps about 190 m/s spare. The goal hint says so. Re-measure this in the drone task.
+
 **The long pole is the compact fabricator.** Its 64 processors take about 77,000 ticks, roughly 2.1 game hours, and they run alongside the Frost trip.
 
 ### Part E: the drone and the handover (goals 10 and 11), planned
