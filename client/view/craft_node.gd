@@ -14,9 +14,9 @@ const GROW_SECONDS := 1.4
 const PLUME_LENGTH_FACTOR := 2.6
 ## Generated models are `<visual.model>.glb` here, placed on the part's data origin.
 const MODEL_DIR := "res://assets/models/"
-## Models made before the data-origin rule, and the shift that puts them on it. The
-## B9 test hull is centred on its middle, not its base; B16 replaces it.
-const MODEL_SHIFTS := { "starter_hull": Vector3(0, 3, 0) }
+## Models made before the data-origin rule, and the shift that puts them on it. None are
+## needed now: B16's starter_hull is delivered on its data origin, like every other model.
+const MODEL_SHIFTS := {}
 
 var unit_id := 0
 var signature := ""

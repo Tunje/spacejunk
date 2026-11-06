@@ -1,0 +1,18 @@
+# Small hub
+Priority 25 (Newman Probe batch B22). Image: `newmanprobe_small_hub.png`. Model: `small_hub.glb`
+
+SHAPE, read this first: an EIGHT-SIDED PRISM: eight flat rectangular faces and eight sharp straight vertical corners, like a short octagonal column. It is NOT a cylinder: no round body, no curved sides, no round lids. The only round things are the two flush port pads.
+
+The core of a small crewless space station, the first one a probe builds: an upright eight-sided prism, as wide as it is tall, not a round drum. The body is 3.0 m across between opposite flat faces, which point along +X, -X, +Z, -Z and the four diagonals. The top 0.3 m and bottom 0.3 m are mid-grey shoulders tapering inwards to a flat eight-sided mounting face 1.5 m across, with a thick rim. Crisp panel-seam grooves run down every corner. Halfway up, on the +X and -X faces, a round mid-grey port pad 1.0 m across sits flush in the face, ringed by a crisp groove. On the +Z face only, halfway up, a recessed square mid-grey core bay 0.6 m across. Parts bolt onto the centres of the +X, -X, +Z and -Z faces at 0.75 m and 2.25 m up, so those spots are plain off-white plate. Solid and clean, a smaller sibling of the big station hub. It stands alone, with nothing attached.
+
+Real size: 3.0 m tall (Y), 3.0 m across the flats (X and Z). Scale by the longest side.
+Placement (set after generation): origin at the centre of the flat bottom face, which points along -Y. The top face is at Y = +3.0 m.
+Materials: satin painted metal; anything gold is satin gold, non-mirror: a soft painted sheen, never a polished reflective metal. Colours: off-white #e8e4d8 for the body plating, mid grey #8a8d91 for the shoulders, mounting faces, port pads and core bay.
+Every collar, band, rib, rim and groove has crisp machined edges: true circles and straight lines, evenly thick all the way round, with no hand-moulded lumps, dents or wobble.
+Connectors (from data/modules.json, metres from the origin): core at (0, 1.5, 1.5) facing +Z; side_a_nx at (-1.5, 0.75, 0) facing -X; side_a_nz at (0, 0.75, -1.5) facing -Z; side_a_px at (1.5, 0.75, 0) facing +X; side_a_pz at (0, 0.75, 1.5) facing +Z; side_b_nx at (-1.5, 2.25, 0) facing -X; side_b_nz at (0, 2.25, -1.5) facing -Z; side_b_px at (1.5, 2.25, 0) facing +X; side_b_pz at (0, 2.25, 1.5) facing +Z; stack_bottom at (0, 0, 0) facing -Y; stack_nx at (-1.5, 1.5, 0) facing -X; stack_px at (1.5, 1.5, 0) facing +X; stack_top at (0, 3, 0) facing +Y. Each is a flat spot square to its facing direction, flush with the surface there. If generation bends one, flatten it afterwards; core spots sit in the recessed core bay.
+View: 3/4 view from slightly above, standing upright, looking at a corner between two flat faces, so the top, two body faces, one port pad and the core bay all show. Light it so each flat face has its own even tone.
+Triangle target: 12000. Set this before generation; it cannot be reduced afterwards. One solid closed shape with no moving parts.
+
+Off-white on white: keep the off-white areas clearly darker than the pure white background everywhere, with a soft mid-tone shade towards their edges, so the outline stays easy to separate. No outline stroke.
+
+Picture rules (for the 3D step): whole object in frame, 3/4 view, pure white background, nothing else in the picture, no floor, no floor shadow, even soft lighting. Solid readable mid-tone colours, not near-black. At least 1024 px. No thin parts: anything that would be thin must be drawn thick and solid. No lattices, grilles, rails, pipes, cables or antennas. No windows, hatches, ladders or people. No stripes, decals, logos, lettering or numbers. No rust, dirt or damage. Original design: not based on any existing game, film or real spacecraft.
