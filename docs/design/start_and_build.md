@@ -28,7 +28,7 @@ This section follows the owner's rulings on the new start of 2026-11-06. The dat
 | `core` | `basic_core` | `basic_core` |
 | `stack_top` | `docking_port_mk1` | `docking_port_mk1` |
 | `stack_bottom` | `propellant_tank_mk1`, then `chemical_thruster_mk1` | The same, at 10 kN. The tank also carries **four `landing_legs_mk1`** on its low side connectors |
-| Sides (12) | 2 solar panels, 2 battery banks, ore container, radiator, mining laser, LIDAR. 4 free | The same 8, plus `goods_container_mk1` (B11). B11b adds **`compact_refinery_mk1`, `compact_fabricator_mk1` and a second radiator**, once their work rates are set. None free then |
+| Sides (12) | 2 solar panels, 2 battery banks, ore container, radiator, mining laser, LIDAR. 4 free | The same 8, plus `goods_container_mk1` (B11), and **`compact_refinery_mk1`, `compact_fabricator_mk1` and a second radiator** (B11b). None free |
 
 | Figure | Today | The probe in B11 | With B11b's facilities |
 | ------ | ----- | ---------------- | ---------------------- |
@@ -68,12 +68,12 @@ At half speed, a 200 kW refining run draws 100 kW and takes 120 s in place of 60
 
 | ID | Mass | Power / heat | Recipe sketch | Capability |
 | -- | ---- | ------------ | ------------- | ---------- |
-| `compact_refinery_mk1` | 900 kg | 100 / 75 kW | 15 frames, 10 wiring, 10 processors, 300 s | `facility` `refinery`, speed 50% |
-| `compact_fabricator_mk1` | 800 kg | 50 / 40 kW | 12 frames, 10 wiring, 20 processors, 300 s | `facility` `fabricator`, speed 50% |
+| `compact_refinery_mk1` | 900 kg | 100 / 75 kW | 15 frames, 10 wiring, 10 processors, 300000 work | `facility` `refinery`, `work_per_tick` 50 |
+| `compact_fabricator_mk1` | 800 kg | 50 / 40 kW | 12 frames, 10 wiring, 20 processors, 300000 work | `facility` `fabricator`, `work_per_tick` 50 |
 | `goods_container_mk1` | 300 kg | 0 / 0 | 6 frames, 120 s | `storage.goods` 2000 kg |
-| `small_hub` | 1000 kg | 2 / 2 kW | In template `small_station` only | Station root, section 2 |
+| `small_hub` | 1000 kg | 0 / 0 kW | In template `small_station` only | Station root, section 2 |
 
-**Facility speed** is a new optional field on the `facility` capability, defaulting to 100%. A run takes the recipe's time divided by the speed, and draws the recipe's power multiplied by it, so energy per run is unchanged. The validator's rule that a recipe's power is at most the facility's rating then compares the scaled power. This is the one new mechanism in the start, and it belongs to C (section 6).
+**Work rate, not speed** (owner's ruling, 2026-11-06, and C11). A recipe needs `work` points, and a facility removes its `work_per_tick` each tick. The compact facilities remove 50, half a full-size facility's 100, so they take twice as long at the same recipe. They draw the recipe's power in proportion, so energy per run is unchanged. The validator compares the scaled power with the facility's rating.
 
 The compact ones are rebuildable, like everything else, so a player can put a second seed factory on a new medium craft.
 

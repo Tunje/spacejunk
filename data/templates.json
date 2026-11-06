@@ -154,6 +154,24 @@
             "parent_connector": "side_c_nx",
             "connector": "mount",
             "children": []
+          },
+          {
+            "part": "compact_refinery_mk1",
+            "parent_connector": "side_b_nz",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "compact_fabricator_mk1",
+            "parent_connector": "side_c_pz",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "heat_radiator_mk1",
+            "parent_connector": "side_c_nz",
+            "connector": "mount",
+            "children": []
           }
         ]
       }

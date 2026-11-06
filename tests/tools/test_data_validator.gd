@@ -59,28 +59,28 @@ func before_each() -> void:
 		]),
 		"modules": _envelope([
 			_module("core", 10, { "ai_core": { "tier": 1 } }, [_connector("mount", "side", "core")]),
-			_module("fabricator", 10, { "facility": { "type": "fabricator" } },
+			_module("fabricator", 10, { "facility": { "type": "fabricator", "work_per_tick": 100 } },
 				[_connector("mount", "side", "medium")]),
 			_hull(),
 			_module("laser", 20, { "mine": { "rate_kg_per_s": 1, "hardness_max": 6 } },
 				[_connector("mount", "side", "medium")]),
-			_module("refinery", 10, { "facility": { "type": "refinery" } },
+			_module("refinery", 10, { "facility": { "type": "refinery", "work_per_tick": 100 } },
 				[_connector("mount", "side", "medium")]),
 		]),
 		"recipes": _envelope([
 			_fabrication("core", 1, "core"),
 			_fabrication("fabricator", 1, "fabricator"),
-			{ "id": "frame", "facility": "fabricator", "seconds": 5, "power_kw": 1,
+			{ "id": "frame", "facility": "fabricator", "work": 5000, "power_kw": 1,
 				"inputs": [{ "item": "iron", "kg": 10 }],
 				"outputs": [{ "item": "frame", "count": 1 }], "abstract": true },
 			_fabrication("laser", 2, "laser"),
-			{ "id": "refine", "facility": "refinery", "seconds": 5, "power_kw": 1,
+			{ "id": "refine", "facility": "refinery", "work": 5000, "power_kw": 1,
 				"inputs": [{ "item": "hematite", "kg": 100 }],
 				"outputs": [{ "item": "iron", "kg": 60 },
 					{ "item": "slag", "kg": 40, "sink": "slag_vent" }],
 				"abstract": true },
 			_fabrication("refinery", 1, "refinery"),
-			{ "id": "tanker", "facility": "fabricator", "seconds": 5, "power_kw": 1,
+			{ "id": "tanker", "facility": "fabricator", "work": 5000, "power_kw": 1,
 				"inputs": [{ "item": "frame", "count": 10 }],
 				"outputs": [{ "unit_template": "tanker" }], "abstract": true },
 		]),
@@ -125,7 +125,7 @@ func before_each() -> void:
 
 func _fabrication(id: String, frames: int, output: String) -> Dictionary:
 	return {
-		"id": id, "facility": "fabricator", "seconds": 5, "power_kw": 1,
+		"id": id, "facility": "fabricator", "work": 5000, "power_kw": 1,
 		"inputs": [{ "item": "frame", "count": frames }],
 		"outputs": [{ "item": output, "count": 1 }], "abstract": true,
 	}
@@ -890,16 +890,28 @@ func test_landing_gear_is_an_object() -> void:
 	_assert_error("bad_capability")
 
 
-## Work points (C11, task B20): `work` on recipes, `work_per_tick` on facilities.
-func test_work_matching_seconds_passes() -> void:
-	_entry("recipes", "refine")["work"] = 5000
-	_entry("modules", "refinery")["capabilities"]["facility"]["work_per_tick"] = 100
+## Work points (C11, task B11b): `work` on recipes, `work_per_tick` on facilities, no `seconds`.
+func test_recipe_seconds_is_rejected() -> void:
+	_entry("recipes", "refine")["seconds"] = 5
+	_assert_error("unknown_field")
+
+
+func test_recipe_needs_work() -> void:
+	_entry("recipes", "refine").erase("work")
+	_assert_error("missing_field")
+
+
+func test_facility_needs_work_per_tick() -> void:
+	_entry("modules", "refinery")["capabilities"]["facility"].erase("work_per_tick")
+	_assert_error("missing_field")
+
+
+func test_slower_facility_draws_power_in_proportion() -> void:
+	var refinery: Dictionary = _entry("modules", "refinery")
+	_entry("recipes", "refine")["power_kw"] = 2
+	_assert_error("recipe_over_power")
+	refinery["capabilities"]["facility"]["work_per_tick"] = 50
 	assert_eq(DataValidator.validate(data), [] as Array[String])
-
-
-func test_work_must_equal_seconds_times_1000() -> void:
-	_entry("recipes", "refine")["work"] = 4000
-	_assert_error("work_mismatch")
 
 
 func test_work_must_be_above_zero() -> void:

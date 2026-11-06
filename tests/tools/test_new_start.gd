@@ -147,3 +147,17 @@ func test_every_hull_and_hub_is_built_by_a_template_recipe() -> void:
 				built[_template(output["unit_template"])["root"]["part"]] = true
 	for root: String in ["small_hull", "starter_hull", "small_hub", "command_hub"]:
 		assert_true(built.has(root), root)
+
+
+## The probe's seed factory (task B11b): compact facilities at half the full-size work rate.
+func test_probe_carries_a_compact_refinery_and_fabricator_at_half_rate() -> void:
+	var root: Dictionary = _template("probe")["root"]
+	for pair: Array in [["compact_refinery_mk1", "ore_refinery_mk1"], ["compact_fabricator_mk1", "fabricator_mk1"]]:
+		var found: Array = []
+		_find(root, pair[0], found)
+		assert_eq(found.size(), 1, pair[0])
+		var compact: Dictionary = modules[pair[0]]["capabilities"]["facility"]
+		var full: Dictionary = modules[pair[1]]["capabilities"]["facility"]
+		assert_eq(compact["type"], full["type"])
+		assert_eq(compact["work_per_tick"] * 2, full["work_per_tick"])
+	assert_lte(_mass_kg(root), 7380.0)

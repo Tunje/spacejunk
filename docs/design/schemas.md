@@ -140,7 +140,7 @@ A whole number converts by integer multiplication, so a value such as the star's
 | `port` | `transfer_kg_per_s`, `dock_seconds` (whole), `undock_seconds` (whole) | Docking ports |
 | `thruster` | `speed_m_s`, `propellant_kg_per_s`, `rated_mass_kg`, `exhaust_m_s`, `thrust_kn` | Thrusters |
 | `landing_gear` | `max_touchdown_m_s` | Landing legs |
-| `facility` | `type`: `refinery` or `fabricator`; `work_per_tick` (whole, optional) | Station facilities. `work_per_tick` is the work points removed from a running recipe each tick (C11): 100 for full-size facilities, which gives 1% steps for research ideas. Compact facilities will have their own, lower rate |
+| `facility` | `type`: `refinery` or `fabricator`; `work_per_tick` (whole, optional) | Facilities. `work_per_tick` (required) is the work points removed from a running recipe each tick (C11): 100 for full-size facilities, which gives 1% steps for research ideas, and 50 for the probe's compact refinery and fabricator (B11b). A recipe draws its `power_kw` at 100 and in proportion at other rates, so the validator compares `power_kw` × `work_per_tick` / 100 with the facility's rating |
 | `always_on` | `true` | A load that runs whenever healthy, such as a command hub |
 
 ```json
@@ -189,8 +189,7 @@ The `core` size is used only by cores and the core connector on root parts, whic
 | ----- | ---- | ------- |
 | `id` | string | Recipe ID |
 | `facility` | `refinery`, `fabricator` | Runs on a part with this `facility.type` |
-| `seconds` | whole, above 0 | Length of one run |
-| `work` | whole, above 0 | Work points one run needs (C11). While `seconds` is still present, `work` must equal `seconds` × 1000. A facility removes its `work_per_tick` each tick, so at 100 per tick and 10 ticks a second, a run lasts `seconds`. `seconds` goes in B11b. |
+| `work` | whole, above 0 | Work points one run needs (C11, contract v4). A facility removes its `work_per_tick` each tick, so a run lasts `work` / `work_per_tick` ticks: at 100 per tick and 10 ticks a second, 1000 work is one second. There is no `seconds` field (B11b) |
 | `power_kw` | number | Draw while a run is active |
 | `inputs` | array | At least one entry |
 | `outputs` | array | At least one entry |
@@ -210,11 +209,11 @@ A unit output must be the recipe's only output. An item appears at most once on 
 
 ```json
 [
-  { "id": "refine_hematite", "facility": "refinery", "seconds": 60, "power_kw": 200,
+  { "id": "refine_hematite", "facility": "refinery", "work": 60000, "power_kw": 200,
     "inputs": [{ "item": "hematite", "kg": 100 }],
     "outputs": [{ "item": "iron", "kg": 69 }, { "item": "slag", "kg": 31, "sink": "slag_vent" }],
     "abstract": true },
-  { "id": "small_craft", "facility": "fabricator", "seconds": 60, "power_kw": 100,
+  { "id": "small_craft", "facility": "fabricator", "work": 60000, "power_kw": 100,
     "inputs": [{ "item": "structural_frame", "count": 2 }, { "item": "wiring", "count": 2 }],
     "outputs": [{ "unit_template": "small_craft" }],
     "abstract": true }

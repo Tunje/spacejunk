@@ -389,6 +389,88 @@
       }
     },
     {
+      "id": "compact_fabricator_mk1",
+      "name": "Compact Fabricator",
+      "mass_kg": 800,
+      "volume_m3": 4,
+      "power_kw": 50,
+      "heat_kw": 40,
+      "priority": 2,
+      "durability": 1000,
+      "min_ai_tier": 1,
+      "realism": "established",
+      "capabilities": {
+        "facility": {
+          "type": "fabricator",
+          "work_per_tick": 50
+        }
+      },
+      "fabrication": {
+        "recipe": "compact_fabricator_mk1"
+      },
+      "connectors": [
+        {
+          "id": "mount",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [0, 0, 0],
+          "facing": "-z",
+          "up": "+y",
+          "load_limit_kg": 1000
+        }
+      ],
+      "collision": {
+        "shape": "box",
+        "center_mm": [0, 0, 700],
+        "size_mm": [1400, 1400, 1400]
+      },
+      "visual": {
+        "model": null,
+        "tint": "#e8641b"
+      }
+    },
+    {
+      "id": "compact_refinery_mk1",
+      "name": "Compact Refinery",
+      "mass_kg": 900,
+      "volume_m3": 4.5,
+      "power_kw": 100,
+      "heat_kw": 75,
+      "priority": 2,
+      "durability": 1000,
+      "min_ai_tier": 1,
+      "realism": "established",
+      "capabilities": {
+        "facility": {
+          "type": "refinery",
+          "work_per_tick": 50
+        }
+      },
+      "fabrication": {
+        "recipe": "compact_refinery_mk1"
+      },
+      "connectors": [
+        {
+          "id": "mount",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [0, 0, 0],
+          "facing": "-z",
+          "up": "+y",
+          "load_limit_kg": 1000
+        }
+      ],
+      "collision": {
+        "shape": "box",
+        "center_mm": [0, 0, 750],
+        "size_mm": [1400, 1600, 1500]
+      },
+      "visual": {
+        "model": null,
+        "tint": "#e8641b"
+      }
+    },
+    {
       "id": "docking_port_mk1",
       "name": "Docking Port",
       "mass_kg": 150,
