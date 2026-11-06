@@ -164,3 +164,39 @@ func test_time_warp_at_slice_size() -> void:
 	var warp := 1_000_000.0 / per_tick / Sim.TICKS_PER_SECOND
 	print("PERF ORBITS slice: %.0f us per tick, so up to %.0fx time warp on one core" % [per_tick, warp])
 	assert_gt(warp, 8.0)
+
+
+## The coast warp's cost at 20 times the slice (A35; budget 8 ms a jump, orbital_flight.md 11.22):
+## the same 76 ships and 4 frames with no orders, so every ship sits still in its frame or rides
+## its orbit, and each coast call is one horizon pass, one closed-form pass and one step. The ships
+## on orbits move out from 2,000 km: in the frames' band, at 700 to 1,000 km, they would always be
+## close enough to join one, which rightly stops a coast.
+func test_a_coast_jump_at_twenty_times_the_slice() -> void:
+	var dirs := OrbitMath.directions(0, 0, 0)
+	for i in SHIPS:
+		var unit: Dictionary = sim._state["units"][ships[i]["id"]]
+		if unit["orbit"].is_empty():
+			continue
+		unit["orbit"] = OrbitMath.make_orbit(GM_PLANET, 2_000_000_000 + 10_000_000 * i, ONE / 50, dirs[0], dirs[1],
+			OrbitMath.TURN / SHIPS * i, 0)
+		unit["orbit"]["parent"] = keys["Planet"]
+		unit["pos_mm"] = OrbitMath.position_at(unit["orbit"], 0)
+	sim._ctx.index.clear()
+	sim.step(SETTLE_TICKS)
+	var stepped := Time.get_ticks_usec()
+	sim.step(20)
+	var per_step := (Time.get_ticks_usec() - stepped) / 1000.0 / 20
+	var calls := 0
+	var ticks := 0
+	var caps := {}
+	var start := Time.get_ticks_usec()
+	while calls < 40:
+		var done: Dictionary = sim.coast(100_000)
+		ticks += done["ticks"]
+		calls += 1
+		caps[done["capped_by"]] = caps.get(done["capped_by"], 0) + 1
+	var per_call := (Time.get_ticks_usec() - start) / 1000.0 / calls
+	print("PERF ORBITS coast at 20x slice: %.2f ms a call, %d ticks a call on average, capped by %s; a plain step %.2f ms (budget 8 ms a jump)" % [
+		per_call, ticks / calls, str(caps), per_step])
+	assert_gt(ticks / calls, 1, "the world coasts rather than stepping")
+	assert_lt(per_call, 80.0, "ten times the budget fails; the PERF line is the measure")
