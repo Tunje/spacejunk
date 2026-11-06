@@ -4,7 +4,6 @@
     {
       "id": "assisted_core",
       "facility": "fabricator",
-      "seconds": 300,
       "work": 300000,
       "power_kw": 100,
       "inputs": [
@@ -28,7 +27,6 @@
     {
       "id": "basic_core",
       "facility": "fabricator",
-      "seconds": 120,
       "work": 120000,
       "power_kw": 50,
       "inputs": [
@@ -52,7 +50,6 @@
     {
       "id": "battery_bank_mk1",
       "facility": "fabricator",
-      "seconds": 120,
       "work": 120000,
       "power_kw": 80,
       "inputs": [
@@ -80,7 +77,6 @@
     {
       "id": "chemical_thruster_mk1",
       "facility": "fabricator",
-      "seconds": 120,
       "work": 120000,
       "power_kw": 80,
       "inputs": [
@@ -102,9 +98,62 @@
       "abstract": true
     },
     {
+      "id": "compact_fabricator_mk1",
+      "facility": "fabricator",
+      "work": 300000,
+      "power_kw": 100,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 12
+        },
+        {
+          "item": "wiring",
+          "count": 10
+        },
+        {
+          "item": "processor",
+          "count": 20
+        }
+      ],
+      "outputs": [
+        {
+          "item": "compact_fabricator_mk1",
+          "count": 1
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "compact_refinery_mk1",
+      "facility": "fabricator",
+      "work": 300000,
+      "power_kw": 100,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 15
+        },
+        {
+          "item": "wiring",
+          "count": 10
+        },
+        {
+          "item": "processor",
+          "count": 10
+        }
+      ],
+      "outputs": [
+        {
+          "item": "compact_refinery_mk1",
+          "count": 1
+        }
+      ],
+      "abstract": true
+    },
+    {
       "id": "docking_port_mk1",
       "facility": "fabricator",
-      "seconds": 90,
       "work": 90000,
       "power_kw": 60,
       "inputs": [
@@ -128,7 +177,6 @@
     {
       "id": "fabricator_mk1",
       "facility": "fabricator",
-      "seconds": 600,
       "work": 600000,
       "power_kw": 100,
       "inputs": [
@@ -156,7 +204,6 @@
     {
       "id": "goods_container_mk1",
       "facility": "fabricator",
-      "seconds": 120,
       "work": 120000,
       "power_kw": 60,
       "inputs": [
@@ -176,7 +223,6 @@
     {
       "id": "goods_storage_mk1",
       "facility": "fabricator",
-      "seconds": 300,
       "work": 300000,
       "power_kw": 60,
       "inputs": [
@@ -196,7 +242,6 @@
     {
       "id": "heat_radiator_mk1",
       "facility": "fabricator",
-      "seconds": 90,
       "work": 90000,
       "power_kw": 60,
       "inputs": [
@@ -220,7 +265,6 @@
     {
       "id": "landing_legs_mk1",
       "facility": "fabricator",
-      "seconds": 60,
       "work": 60000,
       "power_kw": 60,
       "inputs": [
@@ -240,7 +284,6 @@
     {
       "id": "large_station",
       "facility": "fabricator",
-      "seconds": 1800,
       "work": 1800000,
       "power_kw": 100,
       "inputs": [
@@ -263,7 +306,6 @@
     {
       "id": "lidar_mk1",
       "facility": "fabricator",
-      "seconds": 120,
       "work": 120000,
       "power_kw": 80,
       "inputs": [
@@ -291,7 +333,6 @@
     {
       "id": "medium_craft",
       "facility": "fabricator",
-      "seconds": 600,
       "work": 600000,
       "power_kw": 100,
       "inputs": [
@@ -314,7 +355,6 @@
     {
       "id": "mining_laser_mk1",
       "facility": "fabricator",
-      "seconds": 180,
       "work": 180000,
       "power_kw": 100,
       "inputs": [
@@ -342,7 +382,6 @@
     {
       "id": "ore_container_mk1",
       "facility": "fabricator",
-      "seconds": 120,
       "work": 120000,
       "power_kw": 60,
       "inputs": [
@@ -362,7 +401,6 @@
     {
       "id": "ore_refinery_mk1",
       "facility": "fabricator",
-      "seconds": 900,
       "work": 900000,
       "power_kw": 100,
       "inputs": [
@@ -390,7 +428,6 @@
     {
       "id": "ore_storage_mk1",
       "facility": "fabricator",
-      "seconds": 300,
       "work": 300000,
       "power_kw": 60,
       "inputs": [
@@ -410,7 +447,6 @@
     {
       "id": "processor",
       "facility": "fabricator",
-      "seconds": 60,
       "work": 60000,
       "power_kw": 80,
       "inputs": [
@@ -434,7 +470,6 @@
     {
       "id": "propellant_tank_mk1",
       "facility": "fabricator",
-      "seconds": 90,
       "work": 90000,
       "power_kw": 60,
       "inputs": [
@@ -456,9 +491,31 @@
       "abstract": true
     },
     {
+      "id": "propellant_tank_mk2",
+      "facility": "fabricator",
+      "work": 90000,
+      "power_kw": 60,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 3
+        },
+        {
+          "item": "iron",
+          "kg": 100
+        }
+      ],
+      "outputs": [
+        {
+          "item": "propellant_tank_mk2",
+          "count": 1
+        }
+      ],
+      "abstract": true
+    },
+    {
       "id": "refine_chalcopyrite",
       "facility": "refinery",
-      "seconds": 60,
       "work": 60000,
       "power_kw": 200,
       "inputs": [
@@ -483,7 +540,6 @@
     {
       "id": "refine_hematite",
       "facility": "refinery",
-      "seconds": 60,
       "work": 60000,
       "power_kw": 200,
       "inputs": [
@@ -508,7 +564,6 @@
     {
       "id": "refine_olivine",
       "facility": "refinery",
-      "seconds": 90,
       "work": 90000,
       "power_kw": 200,
       "inputs": [
@@ -533,7 +588,6 @@
     {
       "id": "refine_water_ice",
       "facility": "refinery",
-      "seconds": 60,
       "work": 60000,
       "power_kw": 200,
       "inputs": [
@@ -558,7 +612,6 @@
     {
       "id": "small_battery_bank_mk1",
       "facility": "fabricator",
-      "seconds": 60,
       "work": 60000,
       "power_kw": 60,
       "inputs": [
@@ -582,7 +635,6 @@
     {
       "id": "small_chemical_thruster_mk1",
       "facility": "fabricator",
-      "seconds": 40,
       "work": 40000,
       "power_kw": 60,
       "inputs": [
@@ -602,7 +654,6 @@
     {
       "id": "small_craft",
       "facility": "fabricator",
-      "seconds": 60,
       "work": 60000,
       "power_kw": 100,
       "inputs": [
@@ -625,7 +676,6 @@
     {
       "id": "small_docking_port_mk1",
       "facility": "fabricator",
-      "seconds": 30,
       "work": 30000,
       "power_kw": 60,
       "inputs": [
@@ -649,7 +699,6 @@
     {
       "id": "small_heat_radiator_mk1",
       "facility": "fabricator",
-      "seconds": 40,
       "work": 40000,
       "power_kw": 60,
       "inputs": [
@@ -669,7 +718,6 @@
     {
       "id": "small_landing_legs_mk1",
       "facility": "fabricator",
-      "seconds": 30,
       "work": 30000,
       "power_kw": 40,
       "inputs": [
@@ -689,7 +737,6 @@
     {
       "id": "small_mining_laser_mk1",
       "facility": "fabricator",
-      "seconds": 60,
       "work": 60000,
       "power_kw": 100,
       "inputs": [
@@ -717,7 +764,6 @@
     {
       "id": "small_ore_container_mk1",
       "facility": "fabricator",
-      "seconds": 30,
       "work": 30000,
       "power_kw": 60,
       "inputs": [
@@ -741,7 +787,6 @@
     {
       "id": "small_propellant_tank_mk1",
       "facility": "fabricator",
-      "seconds": 30,
       "work": 30000,
       "power_kw": 60,
       "inputs": [
@@ -761,7 +806,6 @@
     {
       "id": "small_solar_panel_mk1",
       "facility": "fabricator",
-      "seconds": 40,
       "work": 40000,
       "power_kw": 60,
       "inputs": [
@@ -785,7 +829,6 @@
     {
       "id": "small_station",
       "facility": "fabricator",
-      "seconds": 600,
       "work": 600000,
       "power_kw": 100,
       "inputs": [
@@ -808,7 +851,6 @@
     {
       "id": "solar_farm_mk1",
       "facility": "fabricator",
-      "seconds": 600,
       "work": 600000,
       "power_kw": 80,
       "inputs": [
@@ -836,7 +878,6 @@
     {
       "id": "solar_panel_mk1",
       "facility": "fabricator",
-      "seconds": 120,
       "work": 120000,
       "power_kw": 60,
       "inputs": [
@@ -864,7 +905,6 @@
     {
       "id": "structural_frame",
       "facility": "fabricator",
-      "seconds": 30,
       "work": 30000,
       "power_kw": 50,
       "inputs": [
@@ -884,7 +924,6 @@
     {
       "id": "wiring",
       "facility": "fabricator",
-      "seconds": 20,
       "work": 20000,
       "power_kw": 50,
       "inputs": [

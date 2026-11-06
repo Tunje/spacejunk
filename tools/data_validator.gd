@@ -34,11 +34,12 @@ const MODULE_FIELDS := [
 ]
 const CONNECTOR_FIELDS := ["id", "type", "size", "pos_mm", "facing", "up", "load_limit_kg"]
 const COLLISION_FIELDS := ["shape", "center_mm", "size_mm"]
-const RECIPE_FIELDS := ["id", "facility", "seconds", "power_kw", "inputs", "outputs", "abstract"]
-## Work points (C11). A recipe needs `work`, and a facility removes `work_per_tick` of it each tick.
-## While recipes still carry `seconds`, work must equal seconds x WORK_PER_SECOND.
-const RECIPE_OPTIONAL := ["work"]
-const WORK_PER_SECOND := 1000
+## Work points (C11, contract v4). A recipe needs `work`, and a facility removes `work_per_tick` of
+## it each tick. `seconds` is gone (B11b), so a recipe that still has it is an unknown field.
+const RECIPE_FIELDS := ["id", "facility", "work", "power_kw", "inputs", "outputs", "abstract"]
+const RECIPE_OPTIONAL: Array = []
+## A recipe draws its stated power at this rate, and in proportion at any other (PowerSystem).
+const FULL_RATE_WORK_PER_TICK := 100
 const DEPOSIT_FIELDS := ["id", "item", "mass_kg", "hardness"]
 const TEMPLATE_FIELDS := ["id", "name", "kind", "root"]
 const SINK_FIELDS := ["id", "name", "items"]
@@ -386,10 +387,9 @@ func _shape_capabilities(where: String, capabilities: Variant) -> void:
 		elif key == "max_mass_kg":
 			_check_positive(at, key, value, 1000, MAX_STACK_G)
 		elif key == "facility":
-			if value is Dictionary and _has_fields(at, value, ["type"], ["work_per_tick"]):
+			if value is Dictionary and _has_fields(at, value, ["type", "work_per_tick"]):
 				_check_enum(at, "type", value["type"], FACILITIES)
-				if value.has("work_per_tick"):
-					_check_whole(at, "work_per_tick", value["work_per_tick"], 1, MAX_RATE)
+				_check_whole(at, "work_per_tick", value["work_per_tick"], 1, MAX_RATE)
 			elif not value is Dictionary:
 				_err("bad_capability", at, "not an object")
 		elif key == "always_on":
@@ -482,11 +482,7 @@ func _shape_recipe(recipe: Dictionary) -> void:
 	if not _has_fields(where, recipe, RECIPE_FIELDS, RECIPE_OPTIONAL):
 		return
 	_check_enum(where, "facility", recipe["facility"], FACILITIES)
-	_check_whole(where, "seconds", recipe["seconds"], 1, MAX_RATE)
-	if recipe.has("work"):
-		_check_whole(where, "work", recipe["work"], 1, MAX_RATE)
-		if _is_whole(recipe["work"]) and _is_whole(recipe["seconds"]) 				and int(recipe["work"]) != int(recipe["seconds"]) * WORK_PER_SECOND:
-			_err("work_mismatch", where, "work %d, seconds %d" % [recipe["work"], recipe["seconds"]])
+	_check_whole(where, "work", recipe["work"], 1, MAX_RATE)
 	_check_number(where, "power_kw", recipe["power_kw"], 1000, MAX_RATE)
 	if not recipe["abstract"] is bool:
 		_err("bad_recipe", where, "abstract is not a boolean")
@@ -693,7 +689,9 @@ func _check_recipe_facility(where: String, recipe: Dictionary) -> void:
 		if capabilities.get("facility", {}).get("type") != recipe["facility"]:
 			continue
 		found = true
-		if float(recipe["power_kw"]) > float(_modules[id]["power_kw"]):
+		# A slower facility draws the recipe's power in proportion to its work rate.
+		var rate: float = float(capabilities["facility"]["work_per_tick"]) / FULL_RATE_WORK_PER_TICK
+		if float(recipe["power_kw"]) * rate > float(_modules[id]["power_kw"]):
 			_err("recipe_over_power", where, "above the rating of %s" % id)
 	if not found:
 		_err("unknown_facility", where, "no module has type %s" % recipe["facility"])

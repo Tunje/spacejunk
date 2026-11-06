@@ -185,13 +185,14 @@ func test_real_ore_refines_through_the_screen() -> void:
 	screen.refresh()
 	assert_string_contains(screen._job_label.text, "Running")
 	assert_gt(screen._job_bar.value, 0.0)
-	_run_ticks(chosen["ticks"] + 16)
+	var rate: int = defs["modules"]["ore_refinery_mk1"]["capabilities"]["facility"]["work_per_tick"]
+	_run_ticks(IndustryLogic.run_ticks(chosen["work"], rate) + 16)
 	screen.refresh()
 	var after: Dictionary = bridge.current_view["units"][station]["inventory"]
 	for output: Dictionary in chosen["outputs"]:
 		if output.has("item") and not output.has("sink"):
 			assert_gt(after.get(output["item"], 0), 0, output["item"])
-	print("REAL_JOB %s ticks=%d" % [chosen["id"], chosen["ticks"]])
+	print("REAL_JOB %s work=%d" % [chosen["id"], chosen["work"]])
 
 
 func test_screen_swaps_with_fitting_and_restores_orders() -> void:
