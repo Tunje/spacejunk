@@ -14,6 +14,7 @@ const REASONS: Dictionary = {
 	"stat_out_of_range": "Those ideas push a figure to zero or below",
 	"missing_points": "Not enough science points",
 	"install_blocked": "Built, but it can't be fitted there yet",
+	"amount_mined": "the amount asked for is aboard",
 	"missing_evidence": "The theory's evidence isn't gathered yet",
 	"orbit_changed": "The orbit changed, so the measurement stopped",
 	"corrupt": "The save file is damaged",

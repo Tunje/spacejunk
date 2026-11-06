@@ -5,6 +5,9 @@ class_name ResearchLogic extends RefCounted
 
 const PPM := 1_000_000
 const MAX_IDEAS := 4
+## For a theory still short of a surface sample: landing is the propellant crunch
+## (new_start_chain.md, Part D, optional: landing on Frost).
+const LANDING_ADVICE := "A surface sample means landing. Top the tank up with White Rock's ice first, empty the goods hold, and leave straight from the station: the landing and the climb back take most of a tank. If Land warns you can't get back, don't."
 
 
 ## "locked", "prototype" or "qualified". A design missing from research.designs is
@@ -47,6 +50,14 @@ static func evidence_text(theory: Dictionary, view: Dictionary) -> String:
 	for entry: Dictionary in ResearchLogic.evidence(theory, view):
 		lines.append("%s %d of %d" % [OrderText.science_kind(entry["kind"]), mini(entry["have"], entry["need"]), entry["need"]])
 	return ", ".join(lines) if not lines.is_empty() else "No evidence needed"
+
+
+## LANDING_ADVICE when a theory still needs a surface sample, otherwise "".
+static func landing_advice(theory: Dictionary, view: Dictionary) -> String:
+	for entry: Dictionary in ResearchLogic.evidence(theory, view):
+		if entry["kind"] == "surface" and not entry["met"]:
+			return LANDING_ADVICE
+	return ""
 
 
 ## One of: "Proven", "Needs <theory> first", "Gathering evidence", "Ready to prove".
