@@ -189,3 +189,13 @@ func test_durations_read_cleanly() -> void:
 	assert_eq(OrderText.duration(12.2), "13 s")
 	assert_eq(OrderText.duration(125.0), "2 min 5 s")
 	assert_eq(OrderText.duration(7320.0), "2 h 2 min")
+
+
+## A41a: a trip between planes says how much of it is the plane change.
+func test_trip_text_names_a_plane_change() -> void:
+	var quote := { "kind": "transfer", "ticks": 1200, "depart_tick": 600, "dv_um_s": 90_000_000,
+		"plane_change_dv_um_s": 35_000_000 }
+	assert_eq(SystemMap.trip_text(quote, 0, 10), "Departs in 1 min 0 s, 2 min 0 s trip, including a %s plane change"
+		% FlightLogic.speed(35_000_000))
+	quote["plane_change_dv_um_s"] = 0
+	assert_eq(SystemMap.trip_text(quote, 0, 10), "Departs in 1 min 0 s, 2 min 0 s trip", "one plane: unchanged")

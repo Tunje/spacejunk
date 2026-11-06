@@ -248,9 +248,12 @@ static func trip_text(quote: Dictionary, tick: int, ticks_per_second: int) -> St
 	if quote.get("kind", "") != "transfer":
 		return trip
 	var wait: int = quote["depart_tick"] - tick
+	# A41a: a trip between planes burns into the target's plane first, part of its delta-v.
+	var plane := int(quote.get("plane_change_dv_um_s", 0))
+	var plane_text := "" if plane <= 0 else ", including a %s plane change" % FlightLogic.speed(plane)
 	if wait <= 0:
-		return "%s trip" % trip
-	return "Departs in %s, %s trip" % [OrderText.duration(float(wait) / ticks_per_second), trip]
+		return "%s trip%s" % [trip, plane_text]
+	return "Departs in %s, %s trip%s" % [OrderText.duration(float(wait) / ticks_per_second), trip, plane_text]
 
 
 func _unhandled_input(event: InputEvent) -> void:
