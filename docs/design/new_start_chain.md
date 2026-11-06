@@ -1,6 +1,6 @@
 # New Start Chain
 
-Status: **draft**, task B23. Sections 1 and 2 are measured on the real `Sim`, from [data/scenarios/new_start.json](../../data/scenarios/new_start.json) on `main` at d85aac6. Section 3, Parts A to D, is measured by C's new-start bot (C14 at adf431a for Parts A to C, and C16 at dce5c55 through research, seed 12345). Parts E and F, the drone and expansion, come with C's next bot task. This page is to the new start what [reference_scenario.md](reference_scenario.md) is to today's station game. When `reference.json` becomes the new start, the two pages swap names. Until then `reference_scenario.md` stays as the station fixture's worked chain, which many tests cite.
+Status: **draft**, task B23. Sections 1 and 2 are measured on the real `Sim`, from [data/scenarios/new_start.json](../../data/scenarios/new_start.json) on `main` at d85aac6. Section 3, Parts A to D, is measured by C's new-start bot (C14 at adf431a for Parts A to C, and C18b at a6de5ca through research, seed 12345; the optional Frost landing is from C16 at dce5c55 and B23's runs). Parts E and F, the drone and expansion, come with C's next bot task. This page is to the new start what [reference_scenario.md](reference_scenario.md) is to today's station game. When `reference.json` becomes the new start, the two pages swap names. Until then `reference_scenario.md` stays as the station fixture's worked chain, which many tests cite.
 
 The chain follows [start_and_build.md](start_and_build.md) section 4 and the research route of [research.md](research.md) section 5.
 
@@ -132,52 +132,59 @@ No step was stopped by shadow or a power shortfall.
 
 ### Part D: research (goal 9), measured
 
-C16 runs on from the end of Part C, which, with C15, ends at tick 71,546 with an `ore_container_mk1` built in place on the station. All ticks are absolute.
+C18b runs on from the end of Part C, which, with C15, ends at tick 71,546 with an `ore_container_mk1` built in place on the station. It is measured on `gameplay/C18b` at a6de5ca, seed 12345, and all ticks are absolute. The route has five stages: chain, prep, lab, the gravity lap from the cluster, and research. Frost's landing and take-off are off it, and priced in the optional part below.
 
 **Prep, to tick 159,741.**
 - Take composition at Red, Brass and Green Rock (1,201 ticks each), and mine full holds of hematite, chalcopyrite and olivine.
 - The compact facilities refine and fabricate the frames, wiring and 24 processors.
 - Build into the station (fabricate in place, C15): a Basic Core, a goods container and a solar panel, 2,400 ticks each.
 
-**The lab, to tick 179,537.**
-- Top up the tank from White Rock in two holds. Ice fills the 750 L ore hold at about 690 kg, by volume.
+**The lab, to tick 165,742.**
 - `research_lab_mk1` is built in place on the station (6,000 ticks), and the station's core is assigned.
-- The tank is topped up to 2,477 kg at tick 173,536.
+- There's no ice top-up: that was only fuel for the Frost trip.
 
-**Frost, to tick 384,763.**
+**The gravity lap, to tick 411,435.**
+- The probe stays docked at the station and measures Frost's gravity field from inside the cluster (C18). The measurement lasts one lap of the cluster's orbit round Frost: 245,692 ticks, about 6.8 game hours, played warped (C17).
+- The fabricator's processors and cores run on meanwhile.
+- The probe never burns: it ends the lap with 1,701 kg.
+
+**Proving it, to tick 429,491, which is 11.9 game hours.**
+- Research starts with 140 points: surveys 40, compositions 60, the lap 40.
+- Prove Autonomous Navigation at the lab: 3,000 ticks at 100 a tick. It costs 80 of the 140 points.
+- `prototype:assisted_core` on the probe: 12,000 ticks at 50 a tick.
+- `qualify:assisted_core` at the lab: 3,000 ticks. The Assisted Core is qualified at tick 429,491, which is goal 9.
+
+| Stage | Ends at tick | Propellant | Points |
+| ----- | ------------ | ---------- | ------ |
+| 1. Chain (Parts A to C) | 71,546 | | |
+| 2. Prep | 159,741 | 1,701 kg | 100 |
+| 3. Lab | 165,742 | 1,701 | 100 |
+| 4. Gravity lap | 411,435 | 1,701 | 140 |
+| 5. Research, qualified | 429,491 | 1,701 | 60 left, 80 spent |
+
+**Science:** 4 surveys at 10, 3 compositions at 20 and Frost's gravity field at 40, for 140 earned. The theory takes 80. Before C18b the route landed on Frost for a 50-point surface sample and qualified at tick 402,819 (11.2 h), about 0.7 game hours sooner, at a cost of about 2,100 kg of propellant and the ice runs to replace it.
+
+**The long pole is now the lap.** About 6.8 game hours of the 11.9 is the lap. The compact fabricator's 64 processors take about 77,000 ticks, roughly 2.1 game hours, and run inside it.
+
+### Part D, optional: landing on Frost
+
+Landing and take-off are off the research route until a theory that needs a surface sample brings them back (research.md, design note on Photovoltaic Arrays). These figures are for a person who lands anyway, and for that later trip.
+
+**C16's bot route, before C18b.** The tank was topped up from White Rock in two holds to 2,477 kg (ice fills the 750 L ore hold at about 690 kg, by volume). Then:
 - The probe undocks, flies to Red Rock and burns 20 m/s retrograde. It leaves the cluster at tick 181,571 with 2,217 kg.
 - It lands straight from the cluster's orbit, at tick 240,491, with 1,215 kg, and takes a surface sample (3,001 ticks, 50 points).
 - It takes off to a 35 km orbit (523 kg left), flies one gravity-field lap of 43,790 ticks (40 points), and flies home in 81,150 ticks, docking with 364 kg.
 
-**Proving it, to tick 402,819, which is 11.2 game hours.**
-- Prove Autonomous Navigation at the lab: 3,000 ticks at 100 a tick. It costs 80 of the 190 points.
-- `prototype:assisted_core` on the probe: 12,000 ticks at 50 a tick.
-- `qualify:assisted_core` at the lab: 3,000 ticks. The Assisted Core is qualified at tick 402,819, which is goal 9.
-
-| Milestone | Tick | Propellant | Points |
-| --------- | ---- | ---------- | ------ |
-| Prep refined | 99,542 | 1,927 kg | 60 |
-| Prep done | 159,741 | 1,701 | 100 |
-| Tank topped up | 173,536 | 2,477 | 100 |
-| Left the cluster | 181,571 | 2,217 | 100 |
-| Landed on Frost | 240,491 | 1,215 | 150 |
-| Low orbit | 259,622 | 523 | 150 |
-| Lap done | 303,412 | | 190 |
-| Docked at home | 384,763 | 364 | 190 |
-| Qualified | 402,819 | | 110 left, 80 spent |
-
-**Science:** 4 surveys at 10, 3 compositions at 20, a surface sample at 50 and Frost's gravity field at 40, for 190 earned. The theory takes 80.
-
-**The Frost trip is the propellant crunch.**
+**The landing is the propellant crunch.**
 - Landing straight from 300 km cost about 1,000 kg, the climb to 35 km about 690, and the trip home 159. That's about 540 to 600 m/s, depending on the 0.5 to 1.65 t of cargo carried.
 - Docking with 364 kg is about 120 to 135 m/s spare, under the 150 m/s line.
 - On the bot's first try, without a full tank from ice, the probe was stranded on Frost: it landed with 604 kg and needed 619.
 - The bot spent about 260 kg before leaving the cluster, on a trip to Red Rock and the 20 m/s departure burn. Leaving straight from the station with a full tank and an empty goods hold should keep about 190 m/s spare. That's the advice for a person. Measured below, it keeps about 226 m/s.
 
 **The Lead's rulings on this, 2026-11-06:** no data change.
-- **C18, now on `main`:** the gravity-field measurement can be taken from inside the cluster frame, which orbits Frost, and lasts one period of the frame's orbit. Autonomous Navigation then needs no landing: 4 surveys, 3 compositions and one lap give 140 points, against the theory's 80. A lap at the cluster's 300 km takes about 6.8 game hours, against 1.2 at 35 km. The Lead keeps the full lap: once C17's coast warp lands it takes a couple of real minutes at 1,000×, and prospecting meanwhile is good play. The landing becomes optional: its 50-point surface sample is a bonus, and it's the evidence for Photovoltaic Arrays.
-- **A36, now on `main`:** the land check warns before a landing the probe can't return from. It gives `return_propellant_g` and `cannot_return`, as a warning only.
-- **For a person who lands:** top up from White Rock's ice, leave the goods hold empty, and leave straight from the station. The goal hint says so. Measured below.
+- **C18:** the gravity-field measurement can be taken from inside the cluster frame, so Autonomous Navigation needs no landing. The Lead keeps the full lap.
+- **A36 and A39:** the land check warns before a landing the probe can't get back from, pricing the take-off to 30 km plus the leg back to the frame round Frost nearest the probe's orbit, the cluster.
+- **For a person who lands:** top up from White Rock's ice, leave the goods hold empty, and leave straight from the station. The goal hint says so, and the hint keeps it.
 
 **The human landing, measured after A36** (main at 0a361a3).
 - **The flight.** A 20 m/s retrograde burn out of the cluster, `land` on the cell below, a surface sample, then `take_off` to 35 km, then `move_to` home. Flown on the real `Sim` with no lap, since C18 takes the gravity field in the cluster.
@@ -204,12 +211,11 @@ C16 runs on from the end of Part C, which, with C15, ends at tick 71,546 with an
   - Following it, the probe docks with about 226 m/s spare, above the 150 m/s line. That's better than the 190 m/s estimated, because the goods unload saves about 450 kg of mass.
   - Without the top-up, the probe lands and climbs back, then is stranded in low orbit with 128 kg, needing about 154.
   - From the start, with a full tank and nothing built, the trip is also safe, at about 265 m/s spare.
-- **The A36 warning under-warns.**
-  - `return_propellant_g` prices the climb to `LowFlight.ENTER_MM`, 20 km. But `move_to` home from a 20 km orbit is refused for `unsupported_orbit` in case A, and in case B the route crashed the script, which is reported to A.
-  - A person who can get home needs the climb to 35 km plus the trip home: 673 + 154 = 827 kg in case B, against the 637 kg the warning checks.
-  - In case C the warning says `cannot_return: false`, since 745 kg ≥ 584 kg, but the probe strands. The warning should price the return to a frame or a station, or at least to an orbit `move_to` accepts. That's A's call through the Lead.
-
-**The long pole is the compact fabricator.** Its 64 processors take about 77,000 ticks, roughly 2.1 game hours, and they run alongside the Frost trip.
+- **The A36 warning under-warned, and A39 fixes it.**
+  - Under A36, `return_propellant_g` priced the climb to `LowFlight.ENTER_MM`, 20 km. But `move_to` home from a 20 km orbit was refused for `unsupported_orbit` in case A, and in case B the route crashed the script. Getting home took the climb to 35 km plus the trip: 673 + 154 = 827 kg in case B, against the 637 kg checked. In case C it said `cannot_return: false`, since 745 kg ≥ 584 kg, but the probe stranded.
+  - A39 (on `kernel/A39`, approved by the Lead) refuses `take_off` below `LowFlight.LEAVE_MM`, 30 km, cancels a waiting move that loses its orbit instead of crashing, and prices the return as the take-off to 30 km plus the leg up to the cluster.
+  - A's run of these three cases on A39, with a 30 km take-off: A priced 803 kg and flew home on 803; B priced 825 kg and docked on 826; C priced 758 kg against 745 left, so `cannot_return` is true, and it stranded. The warning now agrees with each.
+  - **To do:** rerun the three cases here once A39 is on `main`, and replace the table above with the 30 km figures.
 
 ### Part E: the drone and the handover (goals 10 and 11), planned
 
@@ -235,4 +241,6 @@ Measured to the haul:
 - **Margin:** the probe ended Part C with 2,110 kg, and its tank has room for 390 kg more.
 - **Making it back:** ice is cheap to make. 100 kg of ice is 51 ticks of mining and 1,200 of refining for 90 kg of propellant. So a person who wastes propellant in the cluster can always make it back once the compact refinery runs.
 
-**Still to measure:** the Frost round trip, about 640 m/s flown, from a tank that should be topped up first, and the drone's laps. Those come from Parts D to F.
+**Through research (Part D):** the probe never burns after Part C, and reaches goal 9 with 1,701 kg. Landing on Frost is optional, and the optional part of Part D prices it: following the hint, about 226 m/s spare; without the ice top-up, stranded.
+
+**Still to measure:** the drone's laps, from Parts E and F.
