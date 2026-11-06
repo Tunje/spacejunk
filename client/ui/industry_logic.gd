@@ -13,13 +13,16 @@ const STATUS_TEXT: Dictionary = {
 }
 
 
-## Facility parts on a unit, as { part, name, type }.
+## Facility parts on a unit, as { part, name, type, rate }, where rate is the
+## facility's work_per_tick.
 static func facilities(unit: Dictionary, modules: Dictionary) -> Array[Dictionary]:
 	var found: Array[Dictionary] = []
 	for part: Dictionary in InspectText.flatten(unit["parts"]):
 		var module: Dictionary = modules[part["def"]]
 		if module["capabilities"].has("facility"):
-			found.append({ "part": part["id"], "name": module["name"], "type": module["capabilities"]["facility"]["type"] })
+			var capability: Dictionary = module["capabilities"]["facility"]
+			found.append({ "part": part["id"], "name": module["name"], "type": capability["type"],
+				"rate": int(capability.get("work_per_tick", 0)) })
 	return found
 
 
@@ -129,16 +132,49 @@ static func can_move(job: Dictionary) -> bool:
 	return job.get("queue_pos", 0) > 0 or job["status"] == "waiting"
 
 
-static func job_line(job: Dictionary, defs: Dictionary) -> String:
+static func job_line(job: Dictionary, defs: Dictionary, ticks_per_second: float) -> String:
 	var line := "%s: %s" % [IndustryLogic.name_of(job["recipe"], defs), STATUS_TEXT.get(job["status"], job["status"].capitalize())]
 	if not job["reason"].is_empty():
 		line += ", %s" % OrderText.reason(job["reason"])
 	if job["count_left"] > 1:
 		line += " (%d left)" % job["count_left"]
+	var left := IndustryLogic.seconds_left(job, ticks_per_second)
+	if left > 0.0:
+		line += ", about %s" % OrderText.duration(left)
 	return line
 
 
-static func job_progress(job: Dictionary, tick: int) -> float:
-	if job["status"] != "running" or job["end_tick"] <= job["start_tick"]:
+## A queued job's row: being in the queue says it is queued, so the line is the
+## recipe, its runs and their time.
+static func queue_line(job: Dictionary, defs: Dictionary, ticks_per_second: float) -> String:
+	var line := IndustryLogic.name_of(job["recipe"], defs)
+	if job["count_left"] > 1:
+		line += " (%d left)" % job["count_left"]
+	var left := IndustryLogic.seconds_left(job, ticks_per_second)
+	if left > 0.0:
+		line += ", about %s" % OrderText.duration(left)
+	return line
+
+
+## How far the current run is, from its work points. A paused run keeps its place.
+static func job_progress(job: Dictionary) -> float:
+	if job["work"] <= 0 or job["work_left"] <= 0:
 		return 0.0
-	return InspectText.ratio(tick - job["start_tick"], job["end_tick"] - job["start_tick"])
+	return 1.0 - float(job["work_left"]) / float(job["work"])
+
+
+## Ticks for `work` points at `rate` a tick: the facility does its rate each tick,
+## and the last tick's spare work is lost.
+static func run_ticks(work: int, rate: int) -> int:
+	return ceili(float(work) / float(rate)) if rate > 0 else 0
+
+
+## Seconds until the active run delivers, or, for a queued job, all its runs. 0 when
+## nothing is under way or the time isn't known.
+static func seconds_left(job: Dictionary, ticks_per_second: float) -> float:
+	var rate: int = job["work_per_tick"]
+	if job.get("queue_pos", 0) > 0:
+		return job["count_left"] * IndustryLogic.run_ticks(job["work"], rate) / ticks_per_second
+	if job["status"] != "running":
+		return 0.0
+	return IndustryLogic.run_ticks(job["work_left"], rate) / ticks_per_second
