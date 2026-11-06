@@ -225,6 +225,7 @@ Running shortfalls are still handled by shedding and faults.
   - `composition` is taken at an asteroid, undocked, with the part that has `scan`.
   - `surface` is taken landed on the target body, with that part.
   - `gravity_field` is taken on an elliptic orbit round the target, with an assigned core and no other part. It lasts one period of that orbit, rounded up to whole ticks. Its op keeps the orbit it started on, and any change to the unit's orbit ends it unpaid with `orbit_changed`.
+  - It may also be taken by a unit in a frame, or docked within one, whose own orbit is an ellipse round the target (C18). It then lasts one period of the frame's orbit, and leaving the frame ends it unpaid with `orbit_changed`. So a unit in an asteroid cluster round a moon can map the moon's gravity field without leaving the cluster.
   - The time is the kind's `ticks`, or the scan part's own when it has none. The op type is `measuring`, with the op's `kind`.
   - A kind with no points for the target's class (`asteroid`, `moon` for a body round a planet, or `planet`) is refused with `invalid_target`. Placement gives `out_of_range`, `docked`, `no_core` or `tier_too_low`.
   - Like a scan, a part shed on the last tick does no work, and an interrupted measurement pays nothing. `measure` may be a cycle step when its kind is taken at an asteroid.
