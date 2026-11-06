@@ -141,6 +141,8 @@ func _depart_transfer(ctx: SimContext, id: int, quoted: Dictionary) -> void:
 	unit["op"] = { "type": MoveStep.OP_MOVING, "target": target, "part": 0, "start_tick": ctx.tick,
 		"end_tick": quoted["arrive_tick"] }
 	_clear_followers(ctx, id)
+	# The window opened and the trip is paid and under way (A34), so a warping client can drop.
+	ctx.emit_event("departed", id, { "target": target, "arrive_tick": quoted["arrive_tick"] })
 
 
 ## The end of a transfer: the unit takes the target's place, parked beside it.

@@ -312,6 +312,7 @@ Events are ordered by phase, then the event's `unit`, then emission order. Unit 
 | `deposit_found` | `deposit`, `item`, `grams` |
 | `mining_stopped` | `deposit`, `grams`, `reason` |
 | `arrived`, `docked`, `undocked` | `target` |
+| `departed` | `target`, `arrive_tick`: a trip between places leaves on its window, paid (A34) |
 | `transfer_done` | `from`, `to`, `item`, `grams` (actual amount moved) |
 | `job_started` | `job`, `command` |
 | `job_finished`, `job_cancelled` | `job`, `recipe`, `facility`, and on `job_cancelled` an optional `reason`, set only when the sim removes a lab job already done (C12) |
