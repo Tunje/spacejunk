@@ -1,7 +1,6 @@
 extends GutTest
-## The new start, stage 3 (C16): the probe tops its tank up from White Rock's ice, a hold at a time,
-## and builds the research lab in place on the station, whose core it assigns. Starts from the game
-## saved after test_new_start_prep.gd's stage.
+## The new start, stage 3 (C16): the probe builds the research lab in place on the station, whose
+## core it assigns. Starts from the game saved after test_new_start_prep.gd's stage.
 
 var bot: NewStartBot
 
@@ -11,7 +10,7 @@ func before_all() -> void:
 	var start := bot.total_ticks()
 	bot.play_through(NewStartBot.STAGE_LAB)
 	gut.p("the lab: ticks %d to %d" % [start, bot.total_ticks()])
-	for line in bot.report(start, ["tank_topped_up", "research_ready"]):
+	for line in bot.report(start, ["research_ready"]):
 		gut.p(line)
 
 
@@ -21,11 +20,6 @@ func test_the_stage_runs_with_every_ledger_balanced() -> void:
 	assert_eq(bot.range_problems, PackedStringArray())
 	assert_true(bot.marks.has("research_ready"))
 	assert_eq(bot.snapshot_mismatch(NewStartBot.STAGE_LAB), "", "the next file starts from here")
-
-
-func test_the_tank_is_topped_up_from_ice() -> void:
-	var cargo: Dictionary = bot.marks["tank_topped_up"]["units"][NewStartBot.PROBE]["cargo"]["propellant"]
-	assert_lt(cargo["cap_g"] - cargo["used_g"], 90_000, "within one run of full")
 
 
 func test_the_station_is_ready_for_research() -> void:
