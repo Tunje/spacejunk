@@ -81,7 +81,7 @@ Arriving is included in the Δv. The trip home costs the same again.
 **What it takes:**
 1. **Electric propulsion** (era III theory *Ion Propulsion*). An `ion_thruster_mk1` with `exhaust_m_s` about 30,000 and very low `thrust_kn`, so its burns last hours or days. Its propellant is **ammonia or water**, from the belt or the cluster, which keeps it inside today's catalogue. Helium, which the owner mentioned for electric thrusters, comes with gas giants later. A mass ratio of 1.44 there and back is a large tank, but buildable.
 2. **Power far from the star.** Solar gives 14% at 2.7 AU, and an ion thruster needs tens of kW. So the belt also needs the era II/III fission theory, *Fission Power*, from the analysis's progression. The alternative is very large solar farms. Uranium is a planet ore, so this ties the planet into the route.
-3. **A coast time warp.** 460 days is 57 days of play at today's 8×. The player cannot watch that. A23 already found the same for planets: a coast warp of about 10,000× when nothing needs attention, set by the client and the kernel. That is open question 2. Without it the belt is unplayable whatever the propulsion.
+3. **A coast time warp.** 460 days is 57 days of play at today's 8×. The player cannot watch that. A23 already found the same for planets: a coast warp of about 10,000× when nothing needs attention, set by the client and the kernel. The Lead has ruled it is needed, and A sets the multiplier. Without it the belt is unplayable whatever the propulsion.
 4. **An Adaptive Core** (era III) to fly the trip and run a belt operation on its own. A crewless probe that is 15 months away can't be micromanaged. That is the analysis's point about AI tiers setting what a machine can do alone.
 
 So the belt is the natural goal of era III: four theories (Ion Propulsion, Fission Power, Hazard Prediction for the Adaptive Core, and a materials theory for graphene). A player can see the belt from the start but can only get there by advancing.
@@ -111,5 +111,5 @@ All of this waits for the research data (B19) and C11's work points, so the belt
 ## 6. Open questions for the owner
 
 1. **Graphene and ozone.** The catalogue rules both are made, not mined: graphene from the belt's carbon, and ozone from oxygen. Is that right? And is ozone needed at all? Proposed: graphene is made from belt carbon, and ozone is left out until something needs it.
-2. **A coast time warp of about 10,000×** for long transfers when nothing needs attention. Without it, the belt and the planets round the star can't be played. Proposed: yes, as A23 also found.
+2. **A coast time warp:** settled by the Lead on 2026-11-06. A long-coast warp is needed whatever the propellant, and A sets the multiplier later.
 3. **The belt's distance.** About 2.7 AU is realistic: about 11 km/s and 15 months each way. A closer belt at about 1.4 AU is 4.6 km/s and 8 months, but its windows come every 2.5 years. Proposed: 2.7 AU. Its windows come every 15 months, against 2.5 years, and the trip time is a coast-warp question either way.
