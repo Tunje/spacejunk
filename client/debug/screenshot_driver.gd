@@ -138,7 +138,7 @@ func _run() -> void:
 		_show_demo_drone()
 	if parsed.has("goals-done"):
 		for index in range(int(parsed["goals-done"])):
-			main.goal_panel.tracker.complete(GoalTracker.GOALS[index]["id"])
+			main.goal_panel.tracker.complete(main.goal_panel.tracker.goals[index]["id"])
 		main.goal_panel.refresh()
 	if parsed.has("autosave"):
 		SaveStore.path = SHOT_SAVE_PATH

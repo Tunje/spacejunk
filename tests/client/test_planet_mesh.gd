@@ -113,6 +113,20 @@ func test_a_request_builds_in_the_background_then_caches() -> void:
 	assert_false(PlanetMesh.request(settings, receiver).is_empty(), "now cached")
 
 
+## D26: a game or test that ends mid-build joins the thread, rather than leaving it
+## running at exit, where Godot hung or crashed.
+func test_finish_all_ends_a_running_build_and_keeps_its_result() -> void:
+	var settings := PlanetMesh.settings_of({ "radius_mm": RADIUS_MM, "seed": 993, "height_range_m": 1000 })
+	var receiver := PlanetReceiver.new()
+	PlanetMesh.request(settings, receiver)
+	assert_true(PlanetMesh.busy())
+	PlanetMesh.finish_all()
+	assert_false(PlanetMesh.busy(), "no thread left running")
+	assert_false(PlanetMesh.cached(settings).is_empty(), "the built planet is kept")
+	await wait_process_frames(2)
+	assert_eq(receiver.received, 0, "its late delivery finds nothing to do")
+
+
 func test_two_requests_share_one_build() -> void:
 	var settings := PlanetMesh.settings_of({ "radius_mm": RADIUS_MM, "seed": 992 })
 	var first := PlanetReceiver.new()

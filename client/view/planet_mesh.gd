@@ -304,3 +304,13 @@ static func _deliver(key: String, built: Dictionary) -> void:
 ## Whether any build is still running, for tests and screenshots.
 static func busy() -> bool:
 	return not _pending.is_empty()
+
+
+## Waits for every build still running and lets its thread go. A build's thread is
+## otherwise joined only when its result is delivered, so a game or test that ends
+## mid-build would leave it running at exit, where Godot hangs or crashes. Built
+## planets stay cached; the deferred deliveries then find nothing to do.
+static func finish_all() -> void:
+	for key: String in _pending.keys():
+		(_pending[key]["thread"] as Thread).wait_to_finish()
+	_pending.clear()

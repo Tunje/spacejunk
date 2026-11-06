@@ -55,7 +55,7 @@ func _ready() -> void:
 	fitting_screen.bind(bridge, local_view, fitting_markers)
 	industry_screen.bind(bridge, local_view)
 	automation_screen.bind(bridge, local_view, order_panel)
-	goal_panel.bind(bridge, event_log, fitting_screen)
+	goal_panel.bind(bridge, event_log, fitting_screen, scenario)
 	system_map.bind(bridge, local_view)
 	flight_screen.bind(bridge, local_view, system_map)
 	time_controls.map_pressed.connect(toggle_map)
@@ -91,6 +91,11 @@ func _new_backend(id: String) -> RefCounted:
 	if [StubSim.SCENARIO_ID, StubSim.SCENARIO_LOAD, StubSim.SCENARIO_ORBIT].has(id):
 		return StubSim.new_game(id, SEED_VALUE)
 	return Sim.new_game(id, SEED_VALUE)
+
+
+## Planet builds run on their own threads; none may outlive the game.
+func _exit_tree() -> void:
+	PlanetMesh.finish_all()
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
