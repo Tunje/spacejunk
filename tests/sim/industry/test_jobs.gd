@@ -323,6 +323,7 @@ func test_a_cancel_with_no_room_waits_on_the_job() -> void:
 	var shown: Dictionary = sim.view()["jobs"][job]
 	assert_eq(shown["status"], "cancelling")
 	assert_eq(shown["reason"], "cargo_full")
+	assert_eq(shown["work_left"], 0, "the cancelled run's progress is gone")
 	assert_eq(sim.ledger()["matter"]["jobs_g"], COPPER_RUN_G)
 	assert_eq(sim.view()["units"][STATION]["cargo"]["goods"]["reserved_g"], 0, "the reservation is gone")
 	assert_eq(state["units"][STATION]["demand_w"], 7000, "a cancelling job draws nothing")

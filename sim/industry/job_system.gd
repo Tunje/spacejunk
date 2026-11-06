@@ -384,6 +384,7 @@ func _cancel(ctx: SimContext, job: Dictionary) -> void:
 		return
 	_release_outputs(ctx, job)
 	_release_port(ctx, job)
+	job["work_left"] = 0
 	_try_return(ctx, job)
 	if ctx.state["jobs"].has(job["id"]):
 		_set_reason(ctx, job, STATUS_CANCELLING, REASON_CARGO_FULL)
