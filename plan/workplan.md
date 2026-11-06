@@ -42,6 +42,12 @@ The core idea of the game is as follows:
 - **Every part can be improved** with ideas, chosen from a number of potential upgrades. Each improvement makes some stats better and others worse, and you can always go back to the original design.
 - **Improvements add complexity.** Each one makes the part harder to build and more expensive. Some of the potential upgrades give a chance to reduce that complexity and cost again.
 
+### Owner rulings on the new start, 2026-11-06
+
+- **Propellant is made from ice.** Helium or other sources come at a later stage, possibly as propellant for electric thrusters. There is no second starting tank.
+- **Work, not time.** A recipe or job has no set duration and no "half speed" variant. Each recipe needs a number of work points to complete. Each factory removes a number of work points per tick, so a smaller factory is simply slower at the same recipe. This also applies to research tests.
+- **Both asteroid groups exist, with different resources.** There is a cluster near the starting moon (the icy, half-density 60 km moon at 300 km), and a belt round the star. Use the idea doc's split: the cluster holds the industrial ores, and the belt holds gold, silver, copper, platinum, sphalerite, smithsonite, garnierite, graphene, ammonia and ozone.
+
 ## 2. Assumed decisions
 
 All are confirmed by the owner. Flight in the slice is order-based, not hands-on. "Newman Probe" and "spacejunk" are both placeholder names.
