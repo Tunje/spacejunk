@@ -99,6 +99,11 @@ func test_a_job_built_in_place_is_refused_where_attach_part_would_be() -> void:
 		"connector_occupied")
 	assert_eq(sim.check(_job("mining_laser_mk1", _target(SHIP, HULL, "side_b_nz")))["reason"], "over_heat_budget",
 		"the ship's second laser, as in the reference chain")
+	sim.submit(_job("mining_laser_mk1", _target(SHIP, HULL, "side_b_nz")))
+	sim.step()
+	var events := sim.take_events()
+	assert_eq(_types(events), ["command_rejected"], "refused as this command, not as an attach")
+	assert_eq(events[0]["data"]["reason"], "over_heat_budget")
 
 
 func test_two_jobs_never_aim_at_one_spot() -> void:

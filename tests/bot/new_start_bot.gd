@@ -27,10 +27,20 @@ const ALLOWED_PAUSES: Array[String] = ["missing_inputs", "no_power", "output_ful
 const SECOND_TRIP_G := {
 	"hematite": 750_000, "chalcopyrite": 800_000, "olivine": 300_000, "water_ice": 100_000,
 }
+## Olivine refined in stage 2, for the research route's processors and solar panel.
+const OLIVINE_RUNS := 16
 ## Runs of each refining recipe, sized to the parts below.
 const REFINE_RUNS := {
 	"refine_hematite": 26, "refine_chalcopyrite": 8, "refine_olivine": 3, "refine_water_ice": 1,
 }
+
+## The stages after the chain to the station (C16), each a slow test file of its own, run in order
+## on one shared game: research prep, the Frost trip, research.
+const STAGE_CHAIN := 1
+const STAGE_PREP := 2
+const STAGE_LAB := 3
+## Waiting on jobs steps this many ticks between looks, as a player at speed would.
+const WAIT_BATCH_TICKS := 10
 
 static var _shared: NewStartBot
 
@@ -51,8 +61,13 @@ var fabricator := 0
 var laser := 0
 var station := 0
 var station_hub := 0
+var station_core := 0
+## The last stage run.
+var stage := 0
 ## Queued jobs by command ID until job_queued names them, then by job ID until their last run.
 var _pending_commands := {}
+## The last hundred-tick block whose state ranges were checked.
+var _range_checked := 0
 var _jobs := {}
 
 
@@ -61,6 +76,19 @@ static func shared() -> NewStartBot:
 		_shared = NewStartBot.new()
 		_shared.run()
 	return _shared
+
+
+## The shared game, played on through `last` if it has not got there yet.
+static func shared_through(last: int) -> NewStartBot:
+	var bot := shared()
+	while bot.stage < last and bot.problems.is_empty():
+		bot.stage += 1
+		match bot.stage:
+			STAGE_PREP:
+				bot._prepare_research()
+			STAGE_LAB:
+				bot._build_lab()
+	return bot
 
 
 func run() -> void:
@@ -94,6 +122,7 @@ func run() -> void:
 	_fit_station()
 	_haul()
 	mark("end")
+	stage = STAGE_CHAIN
 
 
 ## Finds the probe's facilities and laser and each rock's deposit, by definition and name.
@@ -177,6 +206,50 @@ func _fit_station() -> void:
 	# 4000 L goods hold.
 	_queue([[fabricator, "ore_container_mk1", 1, _on_station("side_a_pz")]])
 	_wait_for([])
+
+
+## Stage 2: two more trips for the research route's goods, with composition measured at each rock,
+## all of it refined, and the station given a core, a goods container and a second solar panel, each
+## built in place. The fabricator runs on into stage 3.
+func _prepare_research() -> void:
+	_order("move_to", PROBE, { "target": RED_ROCK })
+	_order("measure", PROBE, { "target": RED_ROCK, "kind": "composition" })
+	_mine("hematite", 0)
+	_queue([[refinery, "refine_hematite", 20], [fabricator, "structural_frame", 27], [fabricator, "wiring", 30]])
+	_wait_for(["refine_hematite"])
+	mark("prep_refined")
+	for rock_and_item: Array in [[BRASS_ROCK, "chalcopyrite", 1_100_000], [GREEN_ROCK, "olivine", 0]]:
+		_order("move_to", PROBE, { "target": rock_and_item[0] })
+		_order("measure", PROBE, { "target": rock_and_item[0], "kind": "composition" })
+		_mine(rock_and_item[1], rock_and_item[2])
+	var olivine_runs: int = sim._state["units"][PROBE]["inventory"].get("olivine", 0) / 100_000
+	_queue([
+		[refinery, "refine_chalcopyrite", 11], [refinery, "refine_olivine", olivine_runs],
+		[fabricator, "processor", 24], [fabricator, "basic_core", 1, _on_station("core")],
+		[fabricator, "goods_container_mk1", 1, _on_station("side_b_nx")],
+		[fabricator, "solar_panel_mk1", 1, _on_station("side_b_pz")],
+	])
+	_wait_for(["refine_olivine"])
+	_mine("olivine", (OLIVINE_RUNS - olivine_runs) * 100_000)
+	_queue([[refinery, "refine_olivine", OLIVINE_RUNS - olivine_runs]])
+	_wait_for(["refine_olivine"])
+	mark("prep_done")
+
+
+## Stage 3: once the second solar panel is on, the lab, too big for any hold, is built in place, and
+## the station's core assigned. Then the processors and cores for the test, the prototype and the
+## bench test are queued, to run on through the Frost trip.
+func _build_lab() -> void:
+	_wait_for(["solar_panel_mk1"])
+	_queue([[fabricator, "research_lab_mk1", 1, _on_station("side_b_px")]])
+	_wait_for(["research_lab_mk1"])
+	if not problems.is_empty():
+		return
+	station_core = Units.child_at(sim._state, station_hub, "core")
+	_command("assign_core", station, { "core": station_core })
+	_step()
+	_queue([[fabricator, "processor", 40], [fabricator, "basic_core", 2]])
+	mark("research_ready")
 
 
 func _haul() -> void:
@@ -298,10 +371,10 @@ func _queue(jobs: Array) -> void:
 
 ## Steps until every queued job of these recipes has finished, or every queued job if [].
 func _wait_for(recipes: Array) -> void:
-	for i in WAIT_LIMIT_TICKS:
+	for i in WAIT_LIMIT_TICKS / WAIT_BATCH_TICKS:
 		if not problems.is_empty() or not _is_waiting_for(recipes):
 			return
-		_step()
+		_step(WAIT_BATCH_TICKS)
 	problems.append("jobs never finished: %s" % str(_open_recipes()))
 
 
@@ -391,14 +464,15 @@ func _command(type: String, unit: int, args: Dictionary) -> int:
 	return sim.submit({ "type": type, "unit": unit, "args": args })
 
 
-func _step() -> Array[Dictionary]:
-	sim.step()
+func _step(ticks: int = 1) -> Array[Dictionary]:
+	sim.step(ticks)
 	var new_events := sim.take_events()
 	events.append_array(new_events)
 	for event in new_events:
 		_on_job_event(event)
 	_check_ledgers(sim.ledger())
-	if sim.current_tick() % RANGE_CHECK_TICKS == 0:
+	if sim.current_tick() / RANGE_CHECK_TICKS != _range_checked:
+		_range_checked = sim.current_tick() / RANGE_CHECK_TICKS
 		range_problems.append_array(Invariants.violations(sim._state))
 	return new_events
 
