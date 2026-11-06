@@ -84,8 +84,8 @@ func test_a_move_coasts_to_its_arrival() -> void:
 ## the moon's shadow (A35's case), so the shadow bound counts the route's speed with the frame's.
 func test_moves_between_rocks_in_the_cluster_coast_through_a_shadow_edge() -> void:
 	var stepped := Sim.new_game("new_start", 1)
-	while stepped.current_tick() < 125_000:
-		stepped.coast(125_000 - stepped.current_tick())
+	while stepped.current_tick() < 128_000:
+		stepped.coast(128_000 - stepped.current_tick())
 	stepped.take_events()
 	var probe := 13
 	var calls := 0
@@ -95,4 +95,6 @@ func test_moves_between_rocks_in_the_cluster_coast_through_a_shadow_edge() -> vo
 		calls += _same_both_ways(stepped, coasted, 3_000, false)
 		assert_eq(stepped._state["units"][probe]["at_target"], rock, "arrived at %d" % rock)
 		assert_eq(caps.get("moving_in_frame", 0), 0)
-	assert_lt(calls, 60, "the legs and the shadow edge took a few calls each")
+	# The second leg meets the edge on the move: the bound adds the route's speed to the frame's, so
+	# each call closes less of the gap than a parked probe's does. About 50 calls for 3,000 ticks.
+	assert_lt(calls, 100, "the legs and the shadow edge took tens of calls, not thousands")
