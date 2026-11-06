@@ -59,7 +59,7 @@
             "children": []
           },
           {
-            "part": "propellant_tank_mk1",
+            "part": "propellant_tank_mk2",
             "parent_connector": "stack_bottom",
             "connector": "mount",
             "children": [

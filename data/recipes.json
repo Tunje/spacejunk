@@ -491,6 +491,29 @@
       "abstract": true
     },
     {
+      "id": "propellant_tank_mk2",
+      "facility": "fabricator",
+      "work": 90000,
+      "power_kw": 60,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 3
+        },
+        {
+          "item": "iron",
+          "kg": 100
+        }
+      ],
+      "outputs": [
+        {
+          "item": "propellant_tank_mk2",
+          "count": 1
+        }
+      ],
+      "abstract": true
+    },
+    {
       "id": "refine_chalcopyrite",
       "facility": "refinery",
       "work": 60000,

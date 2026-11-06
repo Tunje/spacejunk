@@ -27,16 +27,16 @@ This section follows the owner's rulings on the new start of 2026-11-06. The dat
 | --------- | -------------------- | --------- |
 | `core` | `basic_core` | `basic_core` |
 | `stack_top` | `docking_port_mk1` | `docking_port_mk1` |
-| `stack_bottom` | `propellant_tank_mk1`, then `chemical_thruster_mk1` | The same, at 10 kN. The tank also carries **four `landing_legs_mk1`** on its low side connectors |
+| `stack_bottom` | `propellant_tank_mk1`, then `chemical_thruster_mk1` | **`propellant_tank_mk2`** (2.5 t, 3.6 m), then the thruster at 15 kN. The tank also carries **four `landing_legs_mk1`** on its low side connectors |
 | Sides (12) | 2 solar panels, 2 battery banks, ore container, radiator, mining laser, LIDAR. 4 free | The same 8, plus `goods_container_mk1` (B11), and **`compact_refinery_mk1`, `compact_fabricator_mk1` and a second radiator** (B11b). None free |
 
 | Figure | Today | The probe in B11 | With B11b's facilities |
 | ------ | ----- | ---------------- | ---------------------- |
-| Dry mass | 4580 kg | 5480 kg | 7380 kg (within `max_mass_kg` 12000) |
+| Dry mass | 4580 kg | 5480 kg | 7430 kg (within `max_mass_kg` 12000) |
 | Rated power | 172 of 420 kW | 172 of 420 kW | 322 of 420 kW |
-| Propellant | 1000 kg | 2000 kg, a full tank, then made from ice | The same |
+| Propellant | 1000 kg | 2000 kg, a full tank, then made from ice | 2500 kg, a full `propellant_tank_mk2` |
 | Holds | 2000 kg ore | 2000 kg ore, 2000 kg goods | The same |
-| Thrust when full | 3 kN | 10 kN: 1.34 m/s², 2.7 times Frost's 0.49 m/s² | 1.07 m/s², 2.2 times |
+| Thrust when full | 3 kN | 10 kN: 1.34 m/s², 2.7 times Frost's 0.49 m/s² | 15 kN: 1.51 m/s², 3.1 times |
 
 With all 12 sides used, the probe cannot grow by fitting more parts. To get more capability, the player has to build another craft or a station, which is the point.
 
@@ -50,7 +50,7 @@ With all 12 sides used, the probe cannot grow by fitting more parts. To get more
 | A 60 km moon at Kerbin's density | About 523 m/s |
 | The 600 km planet | About 5.2 km/s. Can't return without refuelling on the surface |
 
-**From the cluster.** A23 put the trip from the cluster at 300 km down to Frost, back up and rejoining at about 536 m/s. With B11b's facilities the probe has 719 m/s on a full tank at 3000 m/s exhaust, which leaves about 183 m/s spare. In B11's lighter fit it has 933 m/s. A23's power findings are met in data: a station needs a second battery bank to run its refinery through Frost's eclipses, and the drone carries `small_battery_bank_mk1` so its core stays alive in shadow. Both are fitted parts in the chain, not template parts.
+**From the cluster.** A26 flew the trip from the cluster down to Frost, back up and rejoining by hand, for about 640 m/s (orbital_flight.md section 11.20). The `land` and `take_off` commands quote about 525 m/s. With B11b's facilities, a 2 t tank and 10 kN, the probe had 719 m/s, which was only about 80 m/s spare when hand-flown. So B11b gives it `propellant_tank_mk2` (2.5 t) and 15 kN. That's 870 m/s on a full tank, about 230 m/s spare when hand-flown, and the burns are shorter, so less is lost to gravity. A will confirm by flying it. Between trips, White Rock's ice refills the tank. A23's power findings are met in data: a station needs a second battery bank to run its refinery through Frost's eclipses, and the drone carries `small_battery_bank_mk1` so its core stays alive in shadow. Both are fitted parts in the chain, not template parts.
 
 ### 1.2 Refining and fabricating with no station
 
