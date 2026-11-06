@@ -1,6 +1,6 @@
 # Simulation Contracts
 
-Contract version: 7. Signed off by the Lead (task L7) after review by Agents A, C and D. Version 2 added the job queue (C9). Version 3 adds orbits and frames ([orbital_flight.md](orbital_flight.md) section 11, task A10). Version 4 makes jobs take work points, not time (C11). Version 5 adds research: science, theories, prototypes and variants (C12). Version 6 adds fabricating in place, `install_to` on jobs (C15). Version 7 adds an optional `grams` to `start_mining` (C19). Changes go through the Lead.
+Contract version: 7. Signed off by the Lead (task L7) after review by Agents A, C and D. Version 2 added the job queue (C9). Version 3 adds orbits and frames ([orbital_flight.md](orbital_flight.md) section 11, task A10). Version 4 makes jobs take work points, not time (C11). Version 5 adds research: science, theories, prototypes and variants (C12). Version 6 adds fabricating in place, `install_to` on jobs (C15). Version 7 adds an optional `grams` to `start_mining` (C19), and lets `attach_part` and `copy_fit` take parts from any unit in the docked group (C21). Changes go through the Lead.
 
 These contracts expand section 5 of `plan/workplan.md`. If the two disagree, raise it with the Lead.
 
@@ -195,7 +195,7 @@ Every command has this envelope. `submit` fills in `id` and `tick`.
 **Uninstalled parts.** An uninstalled part is an inventory stack of an item with the same ID as its module. Items with `unit_mass_kg` move only in exact multiples, or the command is rejected with `not_whole_unit`. The simulation issues the part ID on attach.
 
 **Attach and detach.**
-- `from` is this unit or a unit docked to it. Attaching is instant in phase 1 in the slice.
+- `from` is this unit or any unit in its docked group: the units joined to it through dock records, followed both ways, so a probe and a drone both docked at one station share a group (C21). `copy_fit`'s `from` is the same. A unit outside the group is `not_docked`. Attaching is instant in phase 1 in the slice.
 - `detach_part` sends the part and everything below it to the `to` inventory, and is rejected if it does not fit.
 - Detaching a port with something docked to it is rejected.
 - Detaching a root part is rejected with `root_part`.

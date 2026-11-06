@@ -231,6 +231,27 @@ static func are_docked(state: Dictionary, a: int, b: int) -> bool:
 	return units[a]["dock"].get("target_unit", 0) == b or units[b]["dock"].get("target_unit", 0) == a
 
 
+## Every unit joined to `unit` through dock records, followed both ways, `unit` included, sorted
+## (C21). A probe and a drone both docked at a station are one group.
+static func docked_group(state: Dictionary, unit: int) -> Array[int]:
+	var units: Dictionary = state["units"]
+	var ids: Array = units.keys()
+	ids.sort()
+	var group: Array[int] = [unit]
+	var next := 0
+	while next < group.size():
+		var current: int = group[next]
+		next += 1
+		var target: int = units[current]["dock"].get("target_unit", 0)
+		if target != 0 and units.has(target) and not group.has(target):
+			group.append(target)
+		for id: int in ids:
+			if units[id]["dock"].get("target_unit", 0) == current and not group.has(id):
+				group.append(id)
+	group.sort()
+	return group
+
+
 ## True if a unit is at a body or unit. This is the one test of placement (networks.md section 6).
 static func at(state: Dictionary, unit_id: int, target: int) -> bool:
 	return target != 0 and state["units"][unit_id]["at_target"] == target

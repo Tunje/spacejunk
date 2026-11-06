@@ -44,7 +44,7 @@ func _validate_attach(ctx: SimContext, command: Dictionary) -> Dictionary:
 		return SimSystem.reject(REASON_MALFORMED)
 	var state := ctx.state
 	var unit: int = command["unit"]
-	var problem := _check_partner(state, unit, args["from"])
+	var problem := _check_group_partner(state, unit, args["from"])
 	if problem != "":
 		return SimSystem.reject(problem)
 	var item: String = args["item"]
@@ -205,6 +205,16 @@ func _check_partner(state: Dictionary, unit: int, other: int) -> String:
 	if not state["units"].has(other):
 		return REASON_UNKNOWN_UNIT
 	return "" if Units.are_docked(state, unit, other) else REASON_NOT_DOCKED
+
+
+## "" if `other` is this unit or in its docked group, otherwise the reason it is not usable. Only an
+## attach's `from` takes the group (C21); everything else is _check_partner's direct dock.
+func _check_group_partner(state: Dictionary, unit: int, other: int) -> String:
+	if other == unit:
+		return ""
+	if not state["units"].has(other):
+		return REASON_UNKNOWN_UNIT
+	return "" if Units.docked_group(state, unit).has(other) else REASON_NOT_DOCKED
 
 
 func _has_types(args: Dictionary, types: Dictionary) -> bool:
