@@ -86,22 +86,42 @@ func horizon(ctx: SimContext) -> int:
 		return 0
 	var now: int = ctx.state["tick"]
 	var skip := NO_LIMIT
-	for part_id: int in _sorted(ctx.state["parts"]):
-		var until: int = ctx.state["parts"][part_id]["shed_until_tick"]
-		if until > now:
-			skip = mini(skip, until - now - 1)
+	var parts: Dictionary = ctx.state["parts"]
 	var casters := _coast_casters(ctx.state)
+	# Speeds between bodies are worked out once per pass, not once per unit (A38).
+	var chains := {}
+	# Units sitting still in a frame wait, by frame, until the rest are bounded (A38).
+	var waiting := {}
 	for id: int in _sorted(units):
-		if not UnitIndex.of(ctx, id)["generators"].is_empty() and not casters.is_empty():
-			skip = mini(skip, _shadow_horizon(ctx, id, casters))
+		var index := UnitIndex.of(ctx, id)
 		var shed := false
-		for part_id: int in UnitIndex.of(ctx, id)["ids"]:
-			shed = shed or ctx.state["parts"][part_id]["shed"]
+		for part_id: int in index["ids"]:
+			var part: Dictionary = parts[part_id]
+			shed = shed or part["shed"]
+			var until: int = part["shed_until_tick"]
+			if until > now:
+				skip = mini(skip, until - now - 1)
+		if not index["generators"].is_empty() and not casters.is_empty():
+			var place := _still_place(units, id)
+			if place != 0:
+				waiting.get_or_add(place, []).append(id)
+			else:
+				skip = mini(skip, _shadow_horizon(ctx, id, casters, chains))
 		var batteries: Dictionary = flows[id]["batteries"]
 		for part_id: int in _sorted(batteries):
 			skip = mini(skip, _battery_horizon(ctx, part_id, batteries[part_id], shed))
 		if skip <= 0:
 			break
+	# One bound from each frame's centre, less its farthest still unit's distance from it, is below
+	# every one of theirs. When it is no lower than the horizon already found, theirs can't lower
+	# it, so they are skipped; otherwise each is bounded on its own. The horizon is the same either way.
+	for frame_id: int in _sorted(waiting):
+		if skip <= 0:
+			break
+		if _frame_shadow_bound(ctx, frame_id, waiting[frame_id], casters, chains) >= skip:
+			continue
+		for id: int in waiting[frame_id]:
+			skip = mini(skip, _shadow_horizon(ctx, id, casters, chains))
 	if skip <= 0:
 		ctx.coast_cap = "power"
 	return maxi(skip, 0)
@@ -150,8 +170,17 @@ static func _coast_casters(state: Dictionary) -> Array:
 
 
 ## The ticks before a unit's generators could pass into or out of any caster's shadow.
-static func _shadow_horizon(ctx: SimContext, unit_id: int, casters: Array) -> int:
-	var unit_mm := RailSystem.world_mm(ctx.state, "units", unit_id)
+static func _shadow_horizon(ctx: SimContext, unit_id: int, casters: Array, chains: Dictionary = {}) -> int:
+	return _shadow_horizon_at(ctx.state, RailSystem.world_mm(ctx.state, "units", unit_id),
+		CoastBounds.unit_base(ctx.state, unit_id), 0, casters, chains)
+
+
+## The ticks before anything within `slack_mm` of a point, moving at most as `base` allows, could
+## pass into or out of any caster's shadow. The gap to a shadow's edge changes by no more than the
+## distance moved, so a frame's still units can share one bound from its centre, with the farthest
+## of them as the slack (A38).
+static func _shadow_horizon_at(state: Dictionary, point_mm: Array, base: Array, slack_mm: int, casters: Array,
+		chains: Dictionary) -> int:
 	var skip := NO_LIMIT
 	for caster: Array in casters:
 		var body_mm: Array = caster[0]
@@ -159,7 +188,7 @@ static func _shadow_horizon(ctx: SimContext, unit_id: int, casters: Array) -> in
 		var radius: int = caster[2]
 		var offset: Array[int] = []
 		for axis in 3:
-			offset.append(unit_mm[axis] - int(body_mm[axis]))
+			offset.append(int(point_mm[axis]) - int(body_mm[axis]))
 		var along := OrbitMath.dot(offset, direction)
 		var across: Array[int] = []
 		for axis in 3:
@@ -174,10 +203,50 @@ static func _shadow_horizon(ctx: SimContext, unit_id: int, casters: Array) -> in
 			gap = side - radius
 		# The unit closes on the shadow as fast as it closes on the caster, and the shadow also
 		# swings round the star with the caster.
-		var closing := CoastBounds.relative_speed_um_s(ctx.state, unit_id, caster[3])
-		var swing := IntMath.mul_div(IntMath.dist(offset, [0, 0, 0]), caster[5], caster[4])
-		skip = mini(skip, CoastBounds.ticks_to_close(gap, closing + swing))
+		var closing := CoastBounds.UNBOUNDED_UM_S
+		if base[1] < CoastBounds.UNBOUNDED_UM_S:
+			var key := Vector2i(base[0], caster[3])
+			if not chains.has(key):
+				chains[key] = CoastBounds.chain_um_s(state, base[0], caster[3])
+			closing = mini(int(base[1]) + int(chains[key]), CoastBounds.UNBOUNDED_UM_S)
+		var swing := IntMath.mul_div(IntMath.dist(offset, [0, 0, 0]) + slack_mm, caster[5], caster[4])
+		skip = mini(skip, CoastBounds.ticks_to_close(gap - slack_mm, closing + swing))
 	return skip
+
+
+## A shadow bound below that of every unit in `ids`, all sitting still in the frame: the frame
+## centre's, with the farthest of them from it as the slack, plus a metre for the millimetres each
+## worked-out gap can be out by.
+static func _frame_shadow_bound(ctx: SimContext, frame_id: int, ids: Array, casters: Array,
+		chains: Dictionary) -> int:
+	var units: Dictionary = ctx.state["units"]
+	var far := CoastBounds.GAP_SLACK_MM
+	var spread := 0
+	for id: int in ids:
+		spread = maxi(spread, IntMath.dist(units[_still_host(units, id)]["pos_mm"], [0, 0, 0]))
+	far += spread
+	var frame: Dictionary = ctx.state["frames"][frame_id]
+	var parent: int = frame["orbit"]["parent"]
+	var base := [parent, CoastBounds.orbit_max_um_s(ctx.state["bodies"][parent]["gm"], frame["orbit"])]
+	return _shadow_horizon_at(ctx.state, RailSystem.world_mm(ctx.state, "frames", frame_id), base, far,
+		casters, chains)
+
+
+## The frame a unit sits still in, through its dock, or 0.
+static func _still_place(units: Dictionary, id: int) -> int:
+	var unit: Dictionary = units[_still_host(units, id)]
+	if unit["frame"] == 0 or not unit["orbit"].is_empty() or not unit["route"].is_empty() \
+			or unit.get("low_flight", 0) != 0 or not unit.get("landed", {}).is_empty() \
+			or unit["vel_um_s"] != [0, 0, 0]:
+		return 0
+	return unit["frame"]
+
+
+static func _still_host(units: Dictionary, id: int) -> int:
+	var host := id
+	while not units[host]["dock"].is_empty():
+		host = units[host]["dock"]["target_unit"]
+	return host
 
 
 static func _star_mm(state: Dictionary) -> Array:
@@ -216,11 +285,36 @@ func _battery_horizon(ctx: SimContext, part_id: int, battery: Dictionary, shed: 
 		return 0  # the room left, not the rate, limits the charge
 	if charged > 0 and shed and cap_now < limits["max_discharge_w"]:
 		return 0  # a rising budget could bring a shed load back
+	return _battery_window(part, battery, limits)
+
+
+## The largest k below MAX_BATTERY_WINDOW for which _battery_holds, which only stops holding once.
+static func _battery_window(part: Dictionary, battery: Dictionary, limits: Dictionary) -> int:
+	# A straight-line estimate lands within a few ticks of the answer, so the search gallops out from there
+	# rather than doubling up from 1 (A38): the same answer in a handful of checks, not about 80.
+	var guess := _battery_guess(part, battery, limits)
 	var low := 0
-	var high := 1
-	while high < MAX_BATTERY_WINDOW and _battery_holds(part, battery, limits, high):
-		low = high
-		high *= 2
+	var high := MAX_BATTERY_WINDOW
+	if guess > 0 and _battery_holds(part, battery, limits, guess):
+		low = guess
+		var step := 1
+		while low + step < MAX_BATTERY_WINDOW and _battery_holds(part, battery, limits, low + step):
+			low += step
+			step *= 2
+		high = mini(low + step, MAX_BATTERY_WINDOW)
+	elif guess > 0:
+		high = guess
+		var step := 1
+		while high - step > 0 and not _battery_holds(part, battery, limits, high - step):
+			high -= step
+			step *= 2
+		low = maxi(0, high - step)
+	else:
+		high = 1
+		while high < MAX_BATTERY_WINDOW and _battery_holds(part, battery, limits, high):
+			low = high
+			high *= 2
+		high = mini(high, MAX_BATTERY_WINDOW)
 	while high - low > 1:
 		var mid := (low + high) / 2
 		if _battery_holds(part, battery, limits, mid):
@@ -228,6 +322,20 @@ func _battery_horizon(ctx: SimContext, part_id: int, battery: Dictionary, shed: 
 		else:
 			high = mid
 	return low
+
+
+## Roughly how many ticks a battery's regime lasts, from its store moving in a straight line, for
+## _battery_horizon to search out from. Only a starting point: the search finds the exact window.
+static func _battery_guess(part: Dictionary, battery: Dictionary, limits: Dictionary) -> int:
+	var net: int = int(battery["stored_w"]) - int(battery["discharged_w"])
+	var stored: int = part["stored_j"]
+	var guess := MAX_BATTERY_WINDOW - 1
+	if battery["discharged_w"] > 0 and net < 0:
+		guess = mini(guess, (stored * Sim.TICKS_PER_SECOND - int(limits["max_discharge_w"])) / -net)
+	if battery["charged_w"] > 0 and net > 0:
+		guess = mini(guess, ((int(limits["capacity_j"]) - stored) * Sim.TICKS_PER_SECOND
+			- int(limits["max_charge_w"])) / net)
+	return clampi(guess, 0, MAX_BATTERY_WINDOW - 1)
 
 
 ## Whether one tick of last tick's flows leaves the battery's store and both remainders unchanged.

@@ -127,3 +127,113 @@ func test_a_gravity_field_lap_coasts_with_few_calls() -> void:
 	var calls := _same_both_ways(stepped, coasted, 800)
 	assert_eq(stepped._state["science"]["paid"].size(), 1, "the lap paid")
 	assert_lt(calls, 30, "was 283 calls before A35")
+
+
+## The battery window search as A33 wrote it, doubling up from 1, as the reference for A38's.
+func _doubling_window(part: Dictionary, battery: Dictionary, limits: Dictionary) -> int:
+	var low := 0
+	var high := 1
+	while high < PowerSystem.MAX_BATTERY_WINDOW and PowerSystem._battery_holds(part, battery, limits, high):
+		low = high
+		high *= 2
+	while high - low > 1:
+		var mid := (low + high) / 2
+		if PowerSystem._battery_holds(part, battery, limits, mid):
+			low = mid
+		else:
+			high = mid
+	return low
+
+
+## A38: the battery window found from a straight-line guess is the one doubling finds, for random
+## stores, remainders, rates and limits, draining, charging and both.
+func test_the_guessed_battery_window_is_the_doubling_one() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 3801
+	var checked := 0
+	for n in 4000:
+		var capacity := rng.randi_range(1, 50_000_000)
+		var limits := { "capacity_j": capacity, "max_discharge_w": rng.randi_range(1, 20_000),
+			"max_charge_w": rng.randi_range(1, 20_000) }
+		var part := { "stored_j": rng.randi_range(0, capacity), "charge_remainder": rng.randi_range(0, 9),
+			"discharge_remainder": rng.randi_range(0, 9) }
+		var drawn := rng.randi_range(0, 20_000) if rng.randi_range(0, 2) > 0 else 0
+		var charged := rng.randi_range(0, 20_000) if rng.randi_range(0, 2) > 0 else 0
+		var battery := { "discharged_w": drawn, "charged_w": charged,
+			"stored_w": charged * rng.randi_range(500, 1000) / 1000 }
+		if drawn == 0 and charged == 0:
+			continue
+		# Only regimes that hold now are searched, as _battery_horizon screens the rest.
+		if not PowerSystem._battery_holds(part, battery, limits, 0):
+			continue
+		checked += 1
+		var expected := _doubling_window(part, battery, limits)
+		var got := PowerSystem._battery_window(part, battery, limits)
+		if got != expected:
+			assert_eq(got, expected, "case %d: %s %s %s" % [n, str(part), str(battery), str(limits)])
+			return
+	gut.p("%d battery regimes compared" % checked)
+	assert_gt(checked, 1000)
+
+
+## PowerSystem's horizon worked out unit by unit, as A33 did, for A38's grouped one to match.
+func _horizon_unit_by_unit(sim: Sim) -> int:
+	var ctx := sim._ctx
+	var power: PowerSystem
+	for system in sim._systems:
+		if system is PowerSystem:
+			power = system
+	var flows: Dictionary = ctx.flows[PowerSystem.FLOW_KEY]
+	var casters := PowerSystem._coast_casters(ctx.state)
+	var skip := SimSystem.NO_LIMIT
+	var ids: Array = ctx.state["units"].keys()
+	ids.sort()
+	for id: int in ids:
+		var index := UnitIndex.of(ctx, id)
+		var shed := false
+		for part_id: int in index["ids"]:
+			shed = shed or ctx.state["parts"][part_id]["shed"]
+			var until: int = ctx.state["parts"][part_id]["shed_until_tick"]
+			if until > sim.current_tick():
+				skip = mini(skip, until - sim.current_tick() - 1)
+		if not index["generators"].is_empty() and not casters.is_empty():
+			skip = mini(skip, PowerSystem._shadow_horizon(ctx, id, casters))
+		var batteries: Dictionary = flows[id]["batteries"]
+		var battery_ids: Array = batteries.keys()
+		battery_ids.sort()
+		for part_id: int in battery_ids:
+			skip = mini(skip, power._battery_horizon(ctx, part_id, batteries[part_id], shed))
+	return maxi(skip, 0)
+
+
+## A38: the horizon with one shadow bound per frame for the units sitting still in it is the one
+## worked out unit by unit, in the 20-times-slice world of test_perf_orbits.gd, its ships on orbits
+## moved out from 2,000 km, through shadow edges and out again.
+func test_the_grouped_power_horizon_is_the_unit_by_unit_one() -> void:
+	var perf: GutTest = load("res://tests/sim/kernel/test_perf_orbits.gd").new()
+	perf.before_each()
+	var sim: Sim = perf.sim
+	var dirs := OrbitMath.directions(0, 0, 0)
+	for i in perf.ships.size():
+		var unit: Dictionary = sim._state["units"][perf.ships[i]["id"]]
+		if unit["orbit"].is_empty():
+			continue
+		unit["orbit"] = OrbitMath.make_orbit(perf.GM_PLANET, 2_000_000_000 + 10_000_000 * i, OrbitMath.ONE / 50,
+			dirs[0], dirs[1], OrbitMath.TURN / perf.ships.size() * i, 0)
+		unit["orbit"]["parent"] = perf.keys["Planet"]
+		unit["pos_mm"] = OrbitMath.position_at(unit["orbit"], 0)
+	sim._ctx.index.clear()
+	sim.step(40)
+	var power: PowerSystem
+	for system in sim._systems:
+		if system is PowerSystem:
+			power = system
+	var zero := 0
+	for n in 40:
+		var grouped := power.horizon(sim._ctx)
+		assert_eq(grouped, _horizon_unit_by_unit(sim), "at tick %d" % sim.current_tick())
+		zero += int(grouped == 0)
+		sim.step(37)
+	perf.free()
+	gut.p("40 horizons compared, %d of them 0" % zero)
+	assert_lt(zero, 30, "most of them bound something")

@@ -52,12 +52,18 @@ static func body_speed_um_s(state: Dictionary, body_id: int) -> int:
 ## The most a unit and a body can close on each other per second: only the motion below the first
 ## body both hang from counts, since what that body does moves both alike.
 static func relative_speed_um_s(state: Dictionary, unit_id: int, body_id: int) -> int:
-	var base := _unit_base(state, unit_id)
+	var base := unit_base(state, unit_id)
 	if base[1] >= UNBOUNDED_UM_S:
 		return UNBOUNDED_UM_S
+	return mini(int(base[1]) + chain_um_s(state, base[0], body_id), UNBOUNDED_UM_S)
+
+
+## The most two bodies can close per second through their orbits below the first body both hang
+## from. It is the same for every unit based on `from_body`, so a horizon pass caches it (A38).
+static func chain_um_s(state: Dictionary, from_body: int, body_id: int) -> int:
 	var theirs := _ancestors(state, body_id)
-	var total: int = base[1]
-	var id: int = base[0]
+	var total := 0
+	var id := from_body
 	while id != 0 and not theirs.has(id):
 		total += _own_speed(state, id)
 		id = _parent(state, id)
@@ -70,10 +76,10 @@ static func relative_speed_um_s(state: Dictionary, unit_id: int, body_id: int) -
 
 
 ## [the body a unit moves round or sits on, its most speed relative to that body].
-static func _unit_base(state: Dictionary, unit_id: int) -> Array:
+static func unit_base(state: Dictionary, unit_id: int) -> Array:
 	var unit: Dictionary = state["units"][unit_id]
 	if not unit["dock"].is_empty():
-		return _unit_base(state, unit["dock"]["target_unit"])
+		return unit_base(state, unit["dock"]["target_unit"])
 	if unit.get("low_flight", 0) != 0:
 		return [0, UNBOUNDED_UM_S]
 	if not unit["route"].is_empty():
