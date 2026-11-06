@@ -4,6 +4,7 @@ extends "res://tests/sim/networks/landing_fixture.gd"
 
 
 func test_take_off_reaches_a_circular_orbit() -> void:
+	_strong_thruster()
 	LandingSystem._set_down(sim._ctx, keys["Ship"], keys["Planet"], 777)
 	var command := { "type": "take_off", "unit": keys["Ship"], "args": { "altitude_mm": 100_000_000 } }
 	var checked := sim.check(command)

@@ -28,9 +28,16 @@ const REASON_NO_THRUSTER := "module_missing"
 const REASON_NOT_LANDED := "not_landed"
 ## The autopilot lands only on gear, as a hand-flown landing does (A19).
 const REASON_NO_GEAR := "no_landing_gear"
-## Landing and takeoff lose 3% more than the ideal burns to gravity: on an airless body the craft
-## kills its speed close to the ground, so the loss is small.
-const GRAVITY_LOSS_PERMILLE := 1030
+## Landing and takeoff need thrust over weight above 1 at the body's surface.
+const REASON_THRUST_TOO_LOW := "thrust_too_low"
+## Gravity loss (A27). The surface speed is paid times loss_permille(n) / 1000, where n is the
+## thrust over weight at the body's datum, at the unit's mass when the command is checked:
+## 1000 / sqrt(1 - 1/n^2), the cost of braking level speed while holding the craft up, plus
+## EXTRA_PERMILLE / n for the descent or climb itself. EXTRA_PERMILLE is fitted to the cheapest safe
+## flights of tools/frost_run.gd --sweep (orbital_flight.md 11.20): the autopilot flies as well as a
+## good pilot, never better than physics allows.
+const LAND_EXTRA_PERMILLE := 650
+const TAKE_OFF_EXTRA_PERMILLE := 650
 ## Octave weights for a planet's height when its `planet` settings give none, as A14's tests use.
 const HEIGHT_WEIGHTS := [4, 2, 1]
 
@@ -142,16 +149,37 @@ static func _plan(ctx: SimContext, unit_id: int, type: String, args: Dictionary)
 		if soi > 0 and high_mm >= soi:
 			return { "reason": REASON_INVALID }
 	var gm: int = ctx.state["bodies"][body_id]["gm"]
+	var mass_g := Units.unit_mass(ctx.state, ctx.defs, unit_id)
+	var n_ppm := twr_ppm(gm, low_mm, found["thrust_n"], mass_g)
+	if n_ppm <= 1_000_000:
+		return { "reason": REASON_THRUST_TOO_LOW }
+	var extra := LAND_EXTRA_PERMILLE if type == LAND else TAKE_OFF_EXTRA_PERMILLE
 	var a_t := (low_mm + high_mm) / 2
-	var surface := IntMath.mul_div(OrbitMath.speed_um_s(gm, low_mm, a_t), GRAVITY_LOSS_PERMILLE, 1000)
+	var surface := IntMath.mul_div_ceil(OrbitMath.speed_um_s(gm, low_mm, a_t), loss_permille(n_ppm, extra), 1000)
 	var orbit_end := absi(OrbitMath.speed_um_s(gm, high_mm, high_mm) - OrbitMath.speed_um_s(gm, high_mm, a_t))
 	var dv := surface + orbit_end
-	var mass_g := Units.unit_mass(ctx.state, ctx.defs, unit_id)
 	var ticks := maxi(1, OrbitMath.period_sub(gm, a_t) / (2 * OrbitMath.SUB_TICKS))
 	return {
 		"body": body_id, "cell": cell, "altitude_mm": altitude, "dv_um_s": dv, "ticks": ticks,
 		"cost_g": OrbitMath.burn_g(mass_g, dv, found["exhaust_mm_s"]),
 	}
+
+
+## Thrust over weight at a body's datum, in parts per million: thrust / mass over GM / r^2.
+static func twr_ppm(gm: int, radius_mm: int, thrust_n: int, mass_g: int) -> int:
+	var accel := IntMath.mul_div(thrust_n, 1_000_000_000, maxi(1, mass_g))  # um/s^2
+	var gravity := IntMath.mul_div(gm, LowFlight.UM_PER_S2_FACTOR / radius_mm, radius_mm)  # um/s^2
+	return IntMath.mul_div(accel, 1_000_000, maxi(1, gravity))
+
+
+## The surface speed's multiplier in permille at thrust over weight n (ppm, over 1): 1000 over
+## sqrt(1 - 1/n^2), rounded up, plus extra / n.
+static func loss_permille(n_ppm: int, extra: int) -> int:
+	var one := OrbitMath.ONE
+	var inv := IntMath.mul_div(one, 1_000_000, n_ppm)
+	var inv2 := IntMath.mul_div(inv, 1_000_000, n_ppm)
+	var root := maxi(1, OrbitMath.root((one - inv2) * one))
+	return IntMath.mul_div_ceil(1000, one, root) + IntMath.mul_div_ceil(extra, 1_000_000, n_ppm)
 
 
 ## The grid size of a body, from its radius: about 7 km a hex (A14).

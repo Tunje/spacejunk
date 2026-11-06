@@ -5,6 +5,7 @@ extends "res://tests/sim/networks/landing_fixture.gd"
 
 
 func test_landing_sets_the_ship_down_on_its_cell() -> void:
+	_strong_thruster()
 	var checked := sim.check(_land(4242))
 	assert_true(checked["ok"], str(checked))
 	var detail: Dictionary = checked["detail"]
@@ -44,6 +45,8 @@ func test_landing_and_takeoff_refusals() -> void:
 	}
 	for reason: String in cases:
 		assert_eq(sim.check(cases[reason])["reason"], reason, reason)
+	assert_eq(sim.check(_land(5))["reason"], "thrust_too_low", "15 kN can't hold up 16 t at Kerbin's gravity")
+	_strong_thruster()
 	_ship()["inventory"]["propellant"] = 1000
 	assert_eq(sim.check(_land(5))["reason"], "no_propellant")
 	_ship()["inventory"]["propellant"] = PROPELLANT_G
@@ -98,6 +101,7 @@ func test_a_landed_ship_cannot_move_to_or_burn() -> void:
 ## Mid-landing and landed. The landing itself is checked elsewhere, so this saves part-way through
 ## it, and again once set down, rather than flying the whole descent twice (A20).
 func test_save_and_load_while_landing_and_landed_is_byte_exact() -> void:
+	_strong_thruster()
 	sim.submit(_land(4242))
 	sim.step(200)
 	var saved := sim.to_save()
@@ -284,3 +288,40 @@ func test_predict_skimming_the_ground_is_quick_and_matches_the_flight() -> void:
 	assert_eq(sim.current_tick(), contact["tick"], "the predicted tick")
 	assert_eq(event["data"]["cell"], contact["cell"], "the predicted cell")
 	assert_eq(event["data"]["speed_um_s"], contact["speed_um_s"], "the predicted speed")
+
+
+# ------------------------------------------------------------------------------ A27: gravity loss
+
+
+func test_gravity_loss_grows_as_thrust_over_weight_falls() -> void:
+	assert_eq(LandingSystem.loss_permille(2_000_000, 0), 1155, "1 / sqrt(1 - 1/4), rounded up")
+	assert_eq(LandingSystem.loss_permille(2_000_000, 600), 1455, "plus 600 / 2")
+	assert_lte(LandingSystem.loss_permille(1_000_000_000, 0), 1001, "no loss to speak of at a huge thrust")
+	var costs: Array[int] = []
+	for thrust_n: int in [300_000, 600_000, 1_200_000]:
+		_strong_thruster()
+		var part: int = BurnSystem.thruster(sim._ctx, keys["Ship"])["part"]
+		Units.module_of(sim._state, sim._ctx.defs, part)["capabilities"]["thruster"]["thrust_n"] = thrust_n
+		costs.append(sim.check(_land(4242))["detail"]["dv_um_s"])
+	assert_gt(costs[0], costs[1], "less thrust, more loss")
+	assert_gt(costs[1], costs[2])
+
+
+func test_land_and_take_off_need_thrust_over_weight_above_one() -> void:
+	# 16.6 t at 9.8 m/s^2 weighs 163 kN: just under it is refused, just over it is quoted.
+	var weight_n := IntMath.mul_div(Units.unit_mass(sim._state, sim._ctx.defs, keys["Ship"]),
+		GM_PLANET * 1_000_000 / RADIUS_MM, RADIUS_MM)
+	_strong_thruster()
+	var part: int = BurnSystem.thruster(sim._ctx, keys["Ship"])["part"]
+	var thruster: Dictionary = Units.module_of(sim._state, sim._ctx.defs, part)["capabilities"]["thruster"]
+	thruster["thrust_n"] = weight_n - 100
+	assert_eq(sim.check(_land(4242))["reason"], "thrust_too_low")
+	thruster["thrust_n"] = weight_n + 2000
+	# Barely over its weight the loss is huge, so the tank may not cover it, but it is not refused
+	# for thrust.
+	assert_ne(sim.check(_land(4242)).get("reason", ""), "thrust_too_low")
+	LandingSystem._set_down(sim._ctx, keys["Ship"], keys["Planet"], 4242)
+	var take_off := { "type": "take_off", "unit": keys["Ship"], "args": { "altitude_mm": 100_000_000 } }
+	assert_ne(sim.check(take_off).get("reason", ""), "thrust_too_low")
+	thruster["thrust_n"] = weight_n - 100
+	assert_eq(sim.check(take_off)["reason"], "thrust_too_low")
