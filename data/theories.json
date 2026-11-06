@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "id": "autonomous_navigation",
+      "name": "Autonomous Navigation",
+      "era": 2,
+      "requires": [],
+      "evidence": [
+        {
+          "kind": "gravity_field",
+          "count": 1
+        },
+        {
+          "kind": "survey",
+          "count": 3
+        }
+      ],
+      "test": "prove_autonomous_navigation",
+      "unlocks": [
+        "assisted_core"
+      ]
+    },
+    {
+      "id": "large_scale_refining",
+      "name": "Large-Scale Refining",
+      "era": 2,
+      "requires": [],
+      "evidence": [
+        {
+          "kind": "composition",
+          "count": 3
+        }
+      ],
+      "test": "prove_large_scale_refining",
+      "unlocks": [
+        "ore_refinery_mk1"
+      ]
+    },
+    {
+      "id": "photovoltaic_arrays",
+      "name": "Photovoltaic Arrays",
+      "era": 2,
+      "requires": [],
+      "evidence": [
+        {
+          "kind": "surface",
+          "count": 1
+        }
+      ],
+      "test": "prove_photovoltaic_arrays",
+      "unlocks": [
+        "solar_farm_mk1"
+      ]
+    }
+  ]
+}

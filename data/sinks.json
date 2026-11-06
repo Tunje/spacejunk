@@ -14,6 +14,16 @@
       "items": [
         "slag"
       ]
+    },
+    {
+      "id": "test_consumed",
+      "name": "Test Consumed",
+      "items": [
+        "processor",
+        "silicon",
+        "structural_frame",
+        "wiring"
+      ]
     }
   ]
 }

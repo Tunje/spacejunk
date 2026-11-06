@@ -122,7 +122,40 @@
       "visual": {
         "model": "battery_bank_mk1",
         "tint": "#8a8d91"
-      }
+      },
+      "ideas": [
+        {
+          "id": "dense_cells",
+          "name": "Dense Cells",
+          "points": 30,
+          "complexity": 2,
+          "deltas": {
+            "capabilities.battery.capacity_kj": 300000,
+            "mass_kg": 150000
+          }
+        },
+        {
+          "id": "fast_discharge",
+          "name": "Fast Discharge",
+          "points": 25,
+          "complexity": 2,
+          "deltas": {
+            "capabilities.battery.max_discharge_kw": 500000,
+            "capabilities.battery.charge_efficiency_ppm": -50000
+          }
+        },
+        {
+          "id": "simple_casing",
+          "name": "Simpler Casing",
+          "points": 10,
+          "complexity": -1,
+          "deltas": {
+            "mass_kg": 100000,
+            "durability": 100000
+          },
+          "simplifies": true
+        }
+      ]
     },
     {
       "id": "chemical_thruster_mk1",
@@ -725,7 +758,54 @@
       "visual": {
         "model": "mining_laser_mk1",
         "tint": "#e8641b"
-      }
+      },
+      "ideas": [
+        {
+          "id": "focused_beam",
+          "name": "Focused Beam",
+          "points": 30,
+          "complexity": 2,
+          "deltas": {
+            "capabilities.mine.rate_kg_per_s": 250000,
+            "power_kw": 200000,
+            "heat_kw": 250000
+          }
+        },
+        {
+          "id": "light_frame",
+          "name": "Light Frame",
+          "points": 20,
+          "complexity": 1,
+          "deltas": {
+            "mass_kg": -200000,
+            "durability": -300000
+          }
+        },
+        {
+          "id": "simple_optics",
+          "name": "Simpler Optics",
+          "points": 10,
+          "complexity": -2,
+          "deltas": {
+            "capabilities.mine.rate_kg_per_s": -100000,
+            "heat_kw": -50000
+          },
+          "simplifies": true
+        },
+        {
+          "id": "cast_housing",
+          "name": "Cast Housing",
+          "points": 0,
+          "complexity": -1,
+          "deltas": {
+            "mass_kg": 100000,
+            "durability": 200000
+          },
+          "simplifies": true,
+          "hidden": true,
+          "discover_ppm": 200000
+        }
+      ]
     },
     {
       "id": "ore_container_mk1",
@@ -939,6 +1019,47 @@
       },
       "visual": {
         "model": "propellant_tank_mk1",
+        "tint": "#e8e4d8"
+      }
+    },
+    {
+      "id": "research_lab_mk1",
+      "name": "Research Lab",
+      "mass_kg": 1200,
+      "volume_m3": 6,
+      "power_kw": 100,
+      "heat_kw": 60,
+      "priority": 2,
+      "durability": 1000,
+      "min_ai_tier": 1,
+      "realism": "established",
+      "capabilities": {
+        "facility": {
+          "type": "lab",
+          "work_per_tick": 100
+        }
+      },
+      "fabrication": {
+        "recipe": "research_lab_mk1"
+      },
+      "connectors": [
+        {
+          "id": "mount",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [0, 0, 0],
+          "facing": "-z",
+          "up": "+y",
+          "load_limit_kg": 3000
+        }
+      ],
+      "collision": {
+        "shape": "box",
+        "center_mm": [0, 0, 1000],
+        "size_mm": [2000, 2000, 2000]
+      },
+      "visual": {
+        "model": null,
         "tint": "#e8e4d8"
       }
     },
@@ -1681,7 +1802,41 @@
       "visual": {
         "model": "solar_panel_mk1",
         "tint": "#c9a227"
-      }
+      },
+      "ideas": [
+        {
+          "id": "high_efficiency_cells",
+          "name": "High-Efficiency Cells",
+          "theory": "photovoltaic_arrays",
+          "points": 40,
+          "complexity": 2,
+          "deltas": {
+            "capabilities.generate.power_kw": 200000,
+            "mass_kg": 250000
+          }
+        },
+        {
+          "id": "light_substrate",
+          "name": "Light Substrate",
+          "points": 20,
+          "complexity": 1,
+          "deltas": {
+            "mass_kg": -300000,
+            "durability": -300000
+          }
+        },
+        {
+          "id": "bulk_cells",
+          "name": "Bulk Cells",
+          "points": 10,
+          "complexity": -2,
+          "deltas": {
+            "capabilities.generate.power_kw": -100000,
+            "mass_kg": -50000
+          },
+          "simplifies": true
+        }
+      ]
     },
     {
       "id": "starter_hull",

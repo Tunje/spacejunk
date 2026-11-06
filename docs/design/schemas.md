@@ -388,3 +388,26 @@ The other settings in [planets.md](planets.md) section 1 (`kind`, `temperature`,
 **Validity.** A docked unit's `pos_mm` equals its host's, and starting inventory fits the unit's capacity, by mass and volume per cargo class. The validator checks both.
 
 **Start state.** Batteries start full and heat loops start at 0. Every deposit starts unfound. A template with a core has it assigned (section 10). A docked unit starts with `at_target` set to its host, as after arrival.
+
+## 15. Research (draft, task B19)
+
+Draft data for [research.md](research.md). It stays off `main` until the research contract round. Both files are optional to the validator, so a dataset without research still passes.
+
+**`theories.json`:** `id`, `name`, `era` (whole, 2 to 6), `requires` (theory IDs, no cycles, none of a later era), `evidence` (`{ kind, count }`, where `kind` is a `science.json` ID), `test` (a lab recipe whose output is `{ "theory": id }`), and `unlocks` (module IDs, each unlocked by one theory at most).
+
+**`science.json`:** `id`, `name`, `place` (`asteroid`, `orbit` or `landed`), `capability` (the part capability that takes it, or `ai_core`), optional `seconds` (absent means the part's own time, or one orbit), and `points`, which maps body classes (`asteroid`, `moon`, `planet`) to base points.
+
+**Recipes:**
+- the facility type `lab`;
+- an optional `points` input, which is whole and above 0;
+- the output `{ "theory": id }`, which weighs nothing and may sit only beside sink routes.
+
+Every lab recipe proves a theory. The sink `test_consumed` takes a test's goods.
+
+**Modules:** optional `ideas`. An idea has `id`, `name`, `points`, `complexity` (whole, -10 to 10, negative exactly when `simplifies` is true) and `deltas`. It may also have `theory`, `simplifies`, `hidden` (a simplification only, which needs `discover_ppm`) and `discover_ppm` (1 to 1000000).
+- `deltas` maps a field path, such as `capabilities.mine.rate_kg_per_s`, to ppm of the base value.
+- Each delta is whole, not 0, and above -1000000.
+- The validator's direction table lists the allowed fields. Each idea makes at least one field better and one worse.
+
+**The sink rule, generalised:** an output of an item that a sink accepts must route to that sink, unless some recipe takes the item as an input, or it is propellant. Slag still always vents.
+

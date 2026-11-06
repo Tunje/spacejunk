@@ -71,7 +71,7 @@ A theory is proven by **running its test recipe at a research lab**. A test is a
 - **Points are a recipe input.** A new optional recipe field, `points`, gives the science points a run takes. They are deducted when the run starts, as inputs are, and refunded on cancel. A run that can't pay waits with reason `missing_points`.
 - **Evidence is checked when a run starts.** A test whose theory's evidence isn't met waits with reason `missing_evidence`. The view shows which entries are still missing.
 - **Inputs are real goods.** A test uses some materials and components, which go to a new sink, `test_consumed`. That is the cost of building the apparatus and running the experiment.
-- **The output is the proof.** A new output form, `{ "theory": id }`, marks it proven when the run finishes. That fires a new event, `theory_proven { theory }`. A recipe with this output may not have any other output.
+- **The output is the proof.** A new output form, `{ "theory": id }`, marks it proven when the run finishes. That fires a new event, `theory_proven { theory }`. The theory weighs nothing, so its only companions are sink routes, which carry the test's inputs to `test_consumed`.
 - **A lab can't run a theory whose `requires` aren't proven,** or one already proven. `start_job` refuses both, with `theory_locked` and `already_proven`.
 
 So a theory needs three things: points from measuring, evidence from going to the right places, and a lab, which needs a station. That is the owner's "build stations to test new tech" and analysis section 8's "research station: analyzes discoveries".
@@ -148,7 +148,7 @@ A module may list ideas under a new optional field, `ideas`:
 
 - **`deltas`** change numeric fields by parts per million of the **base** value, so +250000 is +25%. Allowed fields are `mass_kg`, `power_kw`, `heat_kw`, `durability`, and every numeric capability field except `ai_core.tier` and `facility.type`. The validator rejects anything else, and every idea must make at least one field better and one worse. That is the owner's rule as data: no idea is free.
 - **Connectors, collision, capabilities' keys, `visual` and `min_ai_tier` never change.** A variant fits exactly where its base fits, and looks the same. Section 4.5 explains why.
-- **`theory`** is the theory an idea needs, if any, so later science opens better ideas.
+- **`theory`** is the theory an idea needs. An idea that needs none leaves the field out, since data holds no nulls. So later science opens better ideas.
 - **`points`** is what developing the idea costs, paid by its variant's prototype run (section 4.3).
 - **`complexity`** is a small whole number, positive for an improvement and negative for a simplification (`simplifies`).
 

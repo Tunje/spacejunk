@@ -962,3 +962,152 @@ func test_propellant_output_may_stay_in_the_hold() -> void:
 func test_slag_must_still_be_vented() -> void:
 	_entry("recipes", "refine")["outputs"][1].erase("sink")
 	_assert_error("sink_route_missing")
+
+
+## Research data (task B19): theories, science kinds, the lab and ideas.
+func _research() -> void:
+	data["modules"]["entries"].append(_module("lab", 10, { "facility": { "type": "lab" } },
+		[_connector("mount", "side", "medium")]))
+	data["recipes"]["entries"].append(_fabrication("lab", 1, "lab"))
+	data["recipes"]["entries"].append({ "id": "prove_x", "facility": "lab", "seconds": 5,
+		"power_kw": 1, "points": 5, "inputs": [{ "item": "frame", "count": 1 }],
+		"outputs": [{ "item": "frame", "count": 1, "sink": "test_consumed" }, { "theory": "x" }],
+		"abstract": true })
+	for file: String in ["modules", "recipes"]:
+		data[file]["entries"].sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["id"] < b["id"])
+	data["sinks"]["entries"].append({ "id": "test_consumed", "name": "Test", "items": ["frame"] })
+	data["theories"] = _envelope([{ "id": "x", "name": "X", "era": 2, "requires": [],
+		"evidence": [{ "kind": "survey", "count": 1 }], "test": "prove_x", "unlocks": ["laser"] }])
+	data["science"] = _envelope([{ "id": "survey", "name": "Survey", "place": "asteroid",
+		"capability": "scan", "points": { "asteroid": 10 } }])
+	_entry("modules", "laser")["ideas"] = [
+		{ "id": "fast", "name": "Fast", "theory": "x", "points": 5, "complexity": 2,
+			"deltas": { "capabilities.mine.rate_kg_per_s": 250000, "power_kw": 200000 } },
+		{ "id": "simple", "name": "Simple", "points": 0, "complexity": -1,
+			"simplifies": true, "deltas": { "capabilities.mine.rate_kg_per_s": -100000, "mass_kg": -50000 } },
+	]
+
+
+func _theory() -> Dictionary:
+	return data["theories"]["entries"][0]
+
+
+func _idea(index: int) -> Dictionary:
+	return _entry("modules", "laser")["ideas"][index]
+
+
+func test_research_data_passes() -> void:
+	_research()
+	assert_eq(DataValidator.validate(data), [] as Array[String])
+
+
+func test_theory_needs_known_evidence() -> void:
+	_research()
+	_theory()["evidence"][0]["kind"] = "smell"
+	_assert_error("unknown_science")
+
+
+func test_theory_test_must_be_its_lab_recipe() -> void:
+	_research()
+	_theory()["test"] = "laser"
+	_assert_error("theory_test_mismatch")
+
+
+func test_theory_era_is_two_or_later() -> void:
+	_research()
+	_theory()["era"] = 1
+	_assert_error("out_of_range")
+
+
+func test_theory_cannot_require_itself() -> void:
+	_research()
+	_theory()["requires"] = ["x"]
+	_assert_error("theory_cycle")
+
+
+func test_lab_recipe_must_prove_a_theory() -> void:
+	_research()
+	_entry("recipes", "prove_x")["outputs"] = [{ "item": "frame", "count": 1, "sink": "test_consumed" }]
+	_assert_error("lab_without_theory")
+
+
+func test_theory_proven_only_at_a_lab() -> void:
+	_research()
+	_entry("recipes", "prove_x")["facility"] = "fabricator"
+	_assert_error("theory_not_at_lab")
+
+
+func test_theory_output_stands_alone() -> void:
+	_research()
+	_entry("recipes", "prove_x")["outputs"][0].erase("sink")
+	_assert_error("theory_output_not_alone")
+
+
+func test_a_module_is_unlocked_once() -> void:
+	_research()
+	data["theories"]["entries"].append({ "id": "y", "name": "Y", "era": 2, "requires": [],
+		"evidence": [], "test": "prove_x", "unlocks": ["laser"] })
+	_assert_error("unlocked_twice")
+
+
+func test_idea_needs_a_trade_off() -> void:
+	_research()
+	_idea(0)["deltas"] = { "capabilities.mine.rate_kg_per_s": 250000 }
+	_assert_error("idea_without_trade_off")
+
+
+func test_idea_field_must_be_allowed() -> void:
+	_research()
+	_idea(0)["deltas"]["connectors"] = 100
+	_assert_error("bad_idea_field")
+
+
+func test_idea_field_must_be_on_the_module() -> void:
+	_research()
+	_idea(0)["deltas"] = { "capabilities.battery.capacity_kj": 100000, "mass_kg": 100000 }
+	_assert_error("bad_idea_field")
+
+
+func test_idea_delta_cannot_reach_zero() -> void:
+	_research()
+	_idea(0)["deltas"]["power_kw"] = -1000000
+	_assert_error("bad_idea_delta")
+
+
+func test_negative_complexity_means_simplifies() -> void:
+	_research()
+	_idea(1).erase("simplifies")
+	_assert_error("bad_idea")
+
+
+func test_hidden_idea_needs_a_discovery_chance() -> void:
+	_research()
+	_idea(1)["hidden"] = true
+	_assert_error("missing_field")
+	_idea(1)["discover_ppm"] = 200000
+	assert_eq(DataValidator.validate(data), [] as Array[String])
+
+
+func test_idea_theory_must_exist() -> void:
+	_research()
+	_idea(0)["theory"] = "z"
+	_assert_error("unknown_theory")
+
+
+func test_science_place_is_known() -> void:
+	_research()
+	data["science"]["entries"][0]["place"] = "anywhere"
+	_assert_error("bad_enum")
+
+
+func test_science_points_name_body_classes() -> void:
+	_research()
+	data["science"]["entries"][0]["points"] = { "comet": 10 }
+	_assert_error("bad_enum")
+
+
+func test_goods_a_recipe_uses_may_go_to_a_sink_or_stay() -> void:
+	_research()
+	var errors := DataValidator.validate(data)
+	assert_false(errors.any(func(error: String) -> bool: return error.begins_with("sink_route_missing ")),
+		str(errors))
