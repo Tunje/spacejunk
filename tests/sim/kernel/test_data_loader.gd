@@ -69,7 +69,7 @@ func test_items_convert_and_modules_become_items() -> void:
 
 func test_recipes_give_every_amount_in_grams() -> void:
 	var refine: Dictionary = defs["recipes"]["refine_hematite"]
-	assert_eq(refine["ticks"], 60 * Sim.TICKS_PER_SECOND)
+	assert_eq(refine["work"], 60_000)
 	assert_eq(refine["power_w"], 200_000)
 	assert_eq(refine["inputs"][0]["grams"], 100_000)
 	assert_eq(refine["outputs"][1]["sink"], "slag_vent")
