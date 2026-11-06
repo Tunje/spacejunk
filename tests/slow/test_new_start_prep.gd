@@ -1,26 +1,18 @@
 extends GutTest
 ## The new start, stage 2 (C16): research prep. Two more trips with composition measured at each
 ## rock, everything refined, and the station given a core, a goods container and a second solar
-## panel, built in place. Runs on from the chain's shared game, so it follows
-## test_new_start_chain.gd.
+## panel, built in place. Starts from the game saved after test_new_start_chain.gd's stage.
 
 var bot: NewStartBot
 
 
 func before_all() -> void:
-	var start := NewStartBot.shared().total_ticks()
-	bot = NewStartBot.shared_through(NewStartBot.STAGE_PREP)
+	bot = NewStartBot.from_snapshot(NewStartBot.STAGE_CHAIN)
+	var start := bot.total_ticks()
+	bot.play_through(NewStartBot.STAGE_PREP)
 	gut.p("research prep: ticks %d to %d" % [start, bot.total_ticks()])
-	for step: Dictionary in bot.steps:
-		if step["start_tick"] >= start:
-			gut.p("  %s: %d ticks from %d" % [step["label"], step["ticks"], step["start_tick"]])
-	for label: String in ["prep_refined", "prep_done"]:
-		if bot.marks.has(label):
-			var view: Dictionary = bot.marks[label]
-			var cargo: Dictionary = view["units"][NewStartBot.PROBE]["cargo"]
-			gut.p("  %s: tick %d, propellant %d kg, ore %d kg, goods %d kg, points %d" % [label, view["tick"],
-				cargo["propellant"]["used_g"] / 1000, cargo["ore"]["used_g"] / 1000, cargo["goods"]["used_g"] / 1000,
-				view["science"]["points"]])
+	for line in bot.report(start, ["prep_refined", "prep_done"]):
+		gut.p(line)
 
 
 func test_the_prep_runs_with_every_ledger_balanced() -> void:
@@ -28,6 +20,7 @@ func test_the_prep_runs_with_every_ledger_balanced() -> void:
 	assert_eq(bot.ledger_problems, PackedStringArray())
 	assert_eq(bot.range_problems, PackedStringArray())
 	assert_true(bot.marks.has("prep_done"))
+	assert_eq(bot.snapshot_mismatch(NewStartBot.STAGE_PREP), "", "the next file starts from here")
 
 
 func test_composition_is_measured_at_three_rocks() -> void:

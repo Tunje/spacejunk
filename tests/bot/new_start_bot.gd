@@ -27,6 +27,10 @@ const ALLOWED_PAUSES: Array[String] = ["missing_inputs", "no_power", "output_ful
 const SECOND_TRIP_G := {
 	"hematite": 750_000, "chalcopyrite": 800_000, "olivine": 300_000, "water_ice": 100_000,
 }
+## Propellant from one run of refine_water_ice.
+const ICE_RUN_PROPELLANT_G := 90_000
+## Holds of ice mined at most to top up the tank before Frost.
+const ICE_HOLDS := 2
 ## Olivine refined in stage 2, for the research route's processors and solar panel.
 const OLIVINE_RUNS := 16
 ## Runs of each refining recipe, sized to the parts below.
@@ -39,10 +43,24 @@ const REFINE_RUNS := {
 const STAGE_CHAIN := 1
 const STAGE_PREP := 2
 const STAGE_LAB := 3
+const STAGE_FROST_DOWN := 4
+const STAGE_FROST_LAP := 5
+const STAGE_RETURN := 6
+const STAGE_RESEARCH := 7
+const FROST := 3
+## The low orbit the gravity field is mapped from, just above the low-flight band.
+const LAP_ALTITUDE_MM := 35_000_000
+## Leaving the cluster: a small retrograde burn drops the probe onto an orbit round Frost.
+const LEAVE_BURN_UM_S := -20_000_000
+const FLIGHT_LIMIT_TICKS := 200_000
 ## Waiting on jobs steps this many ticks between looks, as a player at speed would.
 const WAIT_BATCH_TICKS := 10
 
-static var _shared: NewStartBot
+## Each slow file starts from the game saved at the end of the stage before it, so no file replays
+## earlier stages. tests/bot/new_start_snapshots.gd writes them; a file whose stage no longer ends
+## in its committed snapshot fails, and says to regenerate.
+const SNAPSHOT_DIR := "res://tests/slow/new_start/"
+const REGENERATE := "regenerate with: godot --headless --path . -s tests/bot/new_start_snapshots.gd"
 
 var sim: Sim
 var events: Array[Dictionary] = []
@@ -62,6 +80,7 @@ var laser := 0
 var station := 0
 var station_hub := 0
 var station_core := 0
+var lab := 0
 ## The last stage run.
 var stage := 0
 ## Queued jobs by command ID until job_queued names them, then by job ID until their last run.
@@ -71,27 +90,65 @@ var _range_checked := 0
 var _jobs := {}
 
 
-static func shared() -> NewStartBot:
-	if _shared == null:
-		_shared = NewStartBot.new()
-		_shared.run()
-	return _shared
+static func snapshot_path(after_stage: int) -> String:
+	return SNAPSHOT_DIR + "stage_%d.save" % after_stage
 
 
-## The shared game, played on through `last` if it has not got there yet.
-static func shared_through(last: int) -> NewStartBot:
-	var bot := shared()
-	while bot.stage < last and bot.problems.is_empty():
-		bot.stage += 1
-		match bot.stage:
-			STAGE_PREP:
-				bot._prepare_research()
-			STAGE_LAB:
-				bot._build_lab()
+## A bot on the game saved after `after_stage`, its IDs and open jobs found again from the state. A
+## missing or stale snapshot leaves a problem saying so.
+static func from_snapshot(after_stage: int) -> NewStartBot:
+	var bot := NewStartBot.new()
+	var text := FileAccess.get_file_as_string(snapshot_path(after_stage))
+	bot.sim = Sim.from_save(text) if text != "" else null
+	if bot.sim == null:
+		bot.problems.append("snapshot after stage %d does not load (%s); %s" % [after_stage,
+			Sim.last_error() if text != "" else "missing", REGENERATE])
+		return bot
+	bot.stage = after_stage
+	bot._range_checked = bot.sim.current_tick() / RANGE_CHECK_TICKS
+	bot._find_start()
+	bot._find_station()
+	for id: int in bot.sim._state["jobs"].keys():
+		var job: Dictionary = bot.sim._state["jobs"][id]
+		bot._jobs[id] = { "recipe": job["recipe"], "left": job["count_left"] }
 	return bot
 
 
+## Plays stages after the bot's last one, through `last`.
+func play_through(last: int) -> void:
+	while stage < last and problems.is_empty():
+		stage += 1
+		match stage:
+			STAGE_CHAIN:
+				run()
+			STAGE_PREP:
+				_prepare_research()
+			STAGE_LAB:
+				_build_lab()
+			STAGE_FROST_DOWN:
+				_frost_down()
+			STAGE_FROST_LAP:
+				_frost_lap()
+			STAGE_RETURN:
+				_return_home()
+			STAGE_RESEARCH:
+				_research()
+
+
+## "" if the game is where the committed snapshot after `after_stage` says, otherwise why not.
+func snapshot_mismatch(after_stage: int) -> String:
+	var text := FileAccess.get_file_as_string(snapshot_path(after_stage))
+	var saved := Sim.from_save(text) if text != "" else null
+	if saved == null:
+		return "snapshot after stage %d does not load; %s" % [after_stage, REGENERATE]
+	if saved.state_hash() != sim.state_hash():
+		return "the game after stage %d is not its snapshot; %s" % [after_stage, REGENERATE]
+	return ""
+
+
+## Stage 1, the chain to the station, from a new game.
 func run() -> void:
+	stage = STAGE_CHAIN
 	sim = Sim.new_game(SCENARIO, SEED)
 	if sim == null:
 		problems.append("new_start did not load: %s" % Sim.last_error())
@@ -122,7 +179,6 @@ func run() -> void:
 	_fit_station()
 	_haul()
 	mark("end")
-	stage = STAGE_CHAIN
 
 
 ## Finds the probe's facilities and laser and each rock's deposit, by definition and name.
@@ -173,13 +229,23 @@ func _second_trip() -> void:
 func _find_station() -> void:
 	if not problems.is_empty():
 		return
-	var created := last_event("unit_created")
-	if created.is_empty() or created["data"]["def"] != "small_station":
-		problems.append("no station was built")
+	for id: int in _sorted_ids(sim._state["units"]):
+		if sim._state["units"][id]["kind"] == "station":
+			station = id
+	if station == 0:
+		if stage == STAGE_CHAIN:
+			problems.append("no station was built")
 		return
-	station = created["data"]["unit"]
-	station_hub = sim.view()["units"][station]["parts"]["id"]
-	mark("station_built")
+	station_hub = sim._state["units"][station]["root"]
+	station_core = sim._state["units"][station]["core"]
+	if stage == STAGE_CHAIN:
+		mark("station_built")
+
+
+static func _sorted_ids(table: Dictionary) -> Array:
+	var ids: Array = table.keys()
+	ids.sort()
+	return ids
 
 
 ## Fits the station from the probe's hold, as a player learns its limits: the bare station refuses
@@ -240,6 +306,20 @@ func _prepare_research() -> void:
 ## the station's core assigned. Then the processors and cores for the test, the prototype and the
 ## bench test are queued, to run on through the Frost trip.
 func _build_lab() -> void:
+	# A full tank for Frost: landing from the cluster's orbit costs about 900 kg and the climb back
+	# to a low orbit about 620, so the probe tops up from White Rock's ice first. Ice is bulky: about
+	# 690 kg fills the ore hold's 750 L, so it takes holds until the tank is nearly full.
+	_order("move_to", PROBE, { "target": WHITE_ROCK })
+	for i in ICE_HOLDS:
+		var free_g: int = _cargo("propellant")["cap_g"] - _cargo("propellant")["used_g"]
+		if free_g < ICE_RUN_PROPELLANT_G:
+			break
+		_mine("water_ice", 0)
+		var held_g: int = sim._state["units"][PROBE]["inventory"].get("water_ice", 0)
+		var runs := mini(free_g / ICE_RUN_PROPELLANT_G, held_g / 100_000)
+		_queue([[refinery, "refine_water_ice", runs]])
+		_wait_for(["refine_water_ice"])
+	mark("tank_topped_up")
 	_wait_for(["solar_panel_mk1"])
 	_queue([[fabricator, "research_lab_mk1", 1, _on_station("side_b_px")]])
 	_wait_for(["research_lab_mk1"])
@@ -252,6 +332,113 @@ func _build_lab() -> void:
 	mark("research_ready")
 
 
+## Stage 4: the station undocks to stay in the cluster, and the probe burns out of it onto an orbit
+## round Frost, lands and takes a surface sample. Its fabricator runs on throughout.
+func _frost_down() -> void:
+	_order("undock", station, {})
+	mark("station_undocked")
+	_order("move_to", PROBE, { "target": RED_ROCK })
+	if not problems.is_empty():
+		return
+	_command("plan_burn", PROBE, { "tick": sim.current_tick() + 1, "prograde_um_s": LEAVE_BURN_UM_S,
+		"normal_um_s": 0, "radial_um_s": 0 })
+	_until("burn_done", PROBE, 1000)
+	if sim._state["units"][PROBE]["orbit"].get("parent", 0) != FROST:
+		problems.append("the burn did not leave the probe on an orbit round Frost")
+		return
+	mark("left_cluster")
+	var cell := LandingSystem.cell_below(sim._ctx, FROST, sim._state["units"][PROBE]["pos_mm"])
+	var land := { "type": "land", "unit": PROBE, "args": { "body": FROST, "cell": cell } }
+	var checked := sim.check(land)
+	if not checked["ok"]:
+		problems.append("land refused: %s" % checked["reason"])
+		return
+	_command("land", PROBE, land["args"])
+	_until("landed", PROBE, checked["detail"]["ticks"] + 1000, WAIT_BATCH_TICKS)
+	mark("landed")
+	_order("measure", PROBE, { "target": FROST, "kind": "surface" })
+	mark("sampled")
+
+
+## Stage 5: up to a low orbit, and one lap of it to map Frost's gravity field.
+func _frost_lap() -> void:
+	var take_off := { "type": "take_off", "unit": PROBE, "args": { "altitude_mm": LAP_ALTITUDE_MM } }
+	var checked := sim.check(take_off)
+	if not checked["ok"]:
+		problems.append("take_off refused: %s %s" % [checked["reason"], str(checked["detail"])])
+		return
+	marks["take_off_quote"] = checked["detail"]
+	_command("take_off", PROBE, take_off["args"])
+	_until("took_off", PROBE, FLIGHT_LIMIT_TICKS, WAIT_BATCH_TICKS)
+	mark("low_orbit")
+	_order("measure", PROBE, { "target": FROST, "kind": "gravity_field" }, FLIGHT_LIMIT_TICKS, WAIT_BATCH_TICKS)
+	mark("gravity_mapped")
+
+
+## Stage 6: back to the station in the cluster, and docked at the port it left from.
+func _return_home() -> void:
+	_order("move_to", PROBE, { "target": station }, FLIGHT_LIMIT_TICKS, WAIT_BATCH_TICKS)
+	_order("dock", PROBE, { "port": _probe_port(), "target_port": _free_station_port() })
+	mark("home")
+
+
+## Stage 7: the theory proven at the station's lab, then the Assisted Core prototyped on the probe
+## and bench-tested at the lab, as research.md section 5 lays out.
+func _research() -> void:
+	for part: int in Units.sorted_part_ids(sim._state, station):
+		if sim._state["parts"][part]["def"] == "research_lab_mk1":
+			lab = part
+	_wait_for([])
+	_unload_to_station({ "processor": 10, "wiring": 10 })
+	_queue_on(station, [[lab, "prove_autonomous_navigation", 1]])
+	_wait_for([])
+	mark("proven")
+	_queue([[fabricator, "prototype:assisted_core", 1]])
+	_wait_for([])
+	mark("prototyped")
+	_unload_to_station({ "prototype:assisted_core": 1, "processor": 10 })
+	_queue_on(station, [[lab, "qualify:assisted_core", 1]])
+	_wait_for([])
+	mark("qualified")
+
+
+## Moves whole items from the probe's hold into the station's, by count.
+func _unload_to_station(counts: Dictionary) -> void:
+	var items: Array = counts.keys()
+	items.sort()
+	for item: String in items:
+		var grams: int = counts[item] * sim.defs()["items"][item]["unit_mass_g"]
+		_order("unload_cargo", PROBE, { "to": station, "item": item, "grams": grams })
+
+
+func _free_station_port() -> int:
+	for port: int in Units.ports(sim._state, sim.defs(), station):
+		if not Units.port_in_use(sim._state, port):
+			return port
+	return 0
+
+
+func _probe_port() -> int:
+	return Units.ports(sim._state, sim.defs(), PROBE)[0]
+
+
+## Steps until `type` happens to `unit`, or the limit. A crash is a problem.
+func _until(type: String, unit: int, limit: int, batch: int = 1) -> Dictionary:
+	for i in limit / batch:
+		if not problems.is_empty():
+			return {}
+		for event in _step(batch):
+			if event["unit"] != unit:
+				continue
+			if event["type"] == type:
+				return event
+			if event["type"] in ["crashed", "burn_short"]:
+				problems.append("%s while waiting for %s" % [event["type"], type])
+				return {}
+	problems.append("no %s within %d ticks" % [type, limit])
+	return {}
+
+
 func _haul() -> void:
 	_order("unload_cargo", PROBE, { "to": station, "item": "hematite" })
 	mark("hauled")
@@ -259,6 +446,22 @@ func _haul() -> void:
 
 func mark(label: String) -> void:
 	marks[label] = sim.view()
+
+
+## Lines for B's chain figures: each step since `from_tick`, then the probe at each named mark.
+func report(from_tick: int, labels: Array) -> PackedStringArray:
+	var lines := PackedStringArray()
+	for step: Dictionary in steps:
+		if step["start_tick"] >= from_tick:
+			lines.append("  %s: %d ticks from %d" % [step["label"], step["ticks"], step["start_tick"]])
+	for label: String in labels:
+		if marks.has(label):
+			var view: Dictionary = marks[label]
+			var cargo: Dictionary = view["units"][PROBE]["cargo"]
+			lines.append("  %s: tick %d, propellant %d kg, ore %d kg, goods %d kg, points %d, spent %d" % [label,
+				view["tick"], cargo["propellant"]["used_g"] / 1000, cargo["ore"]["used_g"] / 1000,
+				cargo["goods"]["used_g"] / 1000, view["science"]["points"], view["science"]["spent"]])
+	return lines
 
 
 func last_event(type: String) -> Dictionary:
@@ -321,15 +524,15 @@ func _mine(item: String, target_g: int) -> void:
 	problems.append("mining %s never finished" % item)
 
 
-## Gives an order and steps until its task ends.
-func _order(type: String, unit: int, args: Dictionary) -> void:
+## Gives an order and steps until its task ends, `batch` ticks at a time for a long one.
+func _order(type: String, unit: int, args: Dictionary, limit: int = ORDER_LIMIT_TICKS, batch: int = 1) -> void:
 	if not problems.is_empty():
 		return
 	var id := _command(type, unit, args)
 	var start := sim.current_tick() + 1
 	var task := 0
-	for i in ORDER_LIMIT_TICKS:
-		for event in _step():
+	for i in limit / batch:
+		for event in _step(batch):
 			var data: Dictionary = event["data"]
 			match event["type"]:
 				"command_rejected":
@@ -359,13 +562,18 @@ func _on_station(connector: String) -> Dictionary:
 ## element, where to build the part in place, in order. A job that
 ## waits for inputs another job is making is the plan, not a problem.
 func _queue(jobs: Array) -> void:
+	_queue_on(PROBE, jobs)
+
+
+## As _queue, for the facilities of another unit, such as the station's lab.
+func _queue_on(unit: int, jobs: Array) -> void:
 	for entry: Array in jobs:
 		if not problems.is_empty():
 			return
 		var args := { "facility": entry[0], "recipe": entry[1], "count": entry[2] }
 		if entry.size() > 3:
 			args["install_to"] = entry[3]
-		var id := _command("queue_job", PROBE, args)
+		var id := _command("queue_job", unit, args)
 		_pending_commands[id] = { "recipe": entry[1], "left": entry[2] }
 
 
@@ -375,7 +583,10 @@ func _wait_for(recipes: Array) -> void:
 		if not problems.is_empty() or not _is_waiting_for(recipes):
 			return
 		_step(WAIT_BATCH_TICKS)
-	problems.append("jobs never finished: %s" % str(_open_recipes()))
+	var open := PackedStringArray()
+	for job: Dictionary in sim._state["jobs"].values():
+		open.append("%s %s %s" % [job["recipe"], job["status"], job["reason"]])
+	problems.append("jobs never finished: %s; open: %s" % [str(_open_recipes()), ", ".join(open)])
 
 
 func _is_waiting_for(recipes: Array) -> bool:

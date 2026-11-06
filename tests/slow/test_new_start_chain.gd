@@ -11,7 +11,8 @@ var bot: NewStartBot
 
 
 func before_all() -> void:
-	bot = NewStartBot.shared()
+	bot = NewStartBot.new()
+	bot.play_through(NewStartBot.STAGE_CHAIN)
 	gut.p("new start chain: %d ticks (%.1f game hours)" % [bot.total_ticks(), bot.total_ticks() / 36000.0])
 	for step: Dictionary in bot.steps:
 		gut.p("  %s: %d ticks from %d" % [step["label"], step["ticks"], step["start_tick"]])
@@ -30,6 +31,7 @@ func before_all() -> void:
 
 func test_the_chain_runs_to_the_end_with_every_ledger_balanced() -> void:
 	assert_eq(bot.problems, PackedStringArray(), "the bot finished every step")
+	assert_eq(bot.snapshot_mismatch(NewStartBot.STAGE_CHAIN), "", "the next file starts from here")
 	assert_eq(bot.ledger_problems, PackedStringArray())
 	assert_eq(bot.range_problems, PackedStringArray())
 	assert_true(bot.marks.has("end"))
