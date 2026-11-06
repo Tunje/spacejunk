@@ -1188,7 +1188,7 @@
         "size_mm": [2000, 3600, 2000]
       },
       "visual": {
-        "model": null,
+        "model": "propellant_tank_mk2",
         "tint": "#e8e4d8"
       }
     },
