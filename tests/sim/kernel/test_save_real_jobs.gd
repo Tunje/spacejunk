@@ -2,9 +2,13 @@ extends GutTest
 ## Saving and loading midway through real jobs (accounting.md section 6, task A29): the reference
 ## station's refinery and fabricator run their real recipes at full length, by work points (C11),
 ## with slag already in its sink, and one job paused by a fault. A save then load must give the same
-## bytes and the same play from there. A lab job holding science points joins once C12 is on main.
+## bytes and the same play from there. A lab job proving a theory holds its science points across
+## the save (C12).
 
 const STATION := 8
+const HUB := 9
+const THEORY := "autonomous_navigation"
+const PROVE := "prove_autonomous_navigation"
 const REFINERY := 13
 const FABRICATOR := 14
 const HEMATITE_G := 300_000
@@ -85,3 +89,41 @@ func test_a_save_midway_through_real_jobs_with_slag_in_its_sink_loads_and_plays_
 		var ledger := game.ledger()
 		assert_eq(ledger["matter"]["total_g"], ledger["matter"]["start_g"])
 		assert_eq(ledger["violations"], PackedStringArray())
+
+
+func test_a_save_midway_through_a_lab_test_keeps_its_points_held() -> void:
+	sim._state["research"] = Research.empty_research()
+	var lab := Units.add_part(sim._ctx, STATION, "research_lab_mk1", HUB, "side_d_px", "mount")
+	sim._state["parts"][HUB]["children"].append(lab)
+	sim._ctx.index.clear()
+	for input: Dictionary in sim._ctx.defs["recipes"][PROVE]["inputs"]:
+		Units.add_stock(sim._state["units"][STATION]["inventory"], input["item"], input["grams"])
+	sim._state["matter_start_g"] = sim.ledger()["matter"]["total_g"]
+	# Science as if measured: the theory's evidence, and its points with 7 to spare.
+	var points: int = sim._ctx.defs["recipes"][PROVE]["points"]
+	var science: Dictionary = sim._state["science"]
+	science["points"] = points + 7
+	science["earned"] = points + 7
+	for key: String in ["survey:2", "survey:4", "survey:6", "gravity_field:20"]:
+		science["paid"][key] = 1
+	_start(lab, PROVE, 1)
+	sim.step(_run_ticks(PROVE, lab) / 2)
+	var job := _job_on(sim, lab)
+	assert_eq(job.get("status", ""), "running", str(job.get("reason", "")))
+	assert_eq(job["points_held"], points)
+	assert_eq(sim.ledger()["science"], { "points": 7, "earned": points + 7, "spent": 0, "held": points })
+
+	var saved := sim.to_save()
+	var loaded := Sim.from_save(saved)
+	assert_not_null(loaded, Sim.last_error())
+	loaded._strict = true
+	assert_eq(loaded.to_save(), saved, "byte-exact")
+	assert_eq(loaded.ledger()["science"], sim.ledger()["science"], "the points are still held")
+
+	sim.step(_run_ticks(PROVE, lab))
+	loaded.step(_run_ticks(PROVE, lab))
+	assert_eq(loaded.state_hash(), sim.state_hash(), "the same play after the load")
+	for game: Sim in [sim, loaded]:
+		assert_has(game._state["research"]["theories"], THEORY, "proven after the load too")
+		assert_eq(game.ledger()["science"], { "points": 7, "earned": points + 7, "spent": points, "held": 0 })
+		assert_eq(game.ledger()["violations"], PackedStringArray())
