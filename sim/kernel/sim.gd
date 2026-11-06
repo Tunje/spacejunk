@@ -30,6 +30,8 @@ var _strict := false
 var _unitless := {}
 ## Whether the last tick run emitted no events, so coast may repeat its figures (A33).
 var _quiet_tick := false
+## For tests only: rounds of coast so far, each a stepped tick and a horizon pass. Never saved.
+var coast_rounds := 0
 var _violations := PackedStringArray()
 
 
@@ -108,6 +110,7 @@ func step(tick_count: int = 1) -> void:
 func coast(max_ticks: int) -> Dictionary:
 	var done := 0
 	while done < max_ticks:
+		coast_rounds += 1
 		_run_tick()
 		done += 1
 		# A tick with events returns, so the client sees each event on its own tick and can drop the

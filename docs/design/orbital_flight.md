@@ -1075,3 +1075,26 @@ B's human Frost landing (B23) found two faults after A36.
 | C: without the top-up | 758 kg | stranded | 745 kg | true |
 
 Tests: `tests/sim/networks/test_land_return.gd` has the three cases, plus the waiting move that drops into low flight. `test_landing.gd` covers the take-off minimum and the frameless price.
+
+### 11.27 A38: coast cost at 20 times the slice
+
+Measured by `test_perf_orbits.gd`'s coast line: 76 ships with no orders, the 38 on orbits moved out from 2,000 km, 4 frames.
+
+A **jump** is one round of `coast`: a stepped tick, a horizon pass, and the closed forms when the horizon allows. It now costs **9.1 ms**, against about 11 ms after A35 and a budget of 8 ms.
+
+| Part | After A35 | After A38 |
+| --- | --- | --- |
+| The stepped tick | 6.1 ms | 6.1 ms |
+| PowerSystem horizon | 2.9 ms | 1.95 ms |
+| BurnSystem horizon | 1.05 ms | 0.63 ms |
+| Other horizons | about 0.2 ms | about 0.2 ms |
+| Closed forms | 0.8 ms | 0.8 ms |
+
+**What A38 changed.** The horizon each system returns is unchanged everywhere, so coasts take the same calls as before. Each change is checked against the code it replaced.
+- **Speed chains** between bodies, for shadow bounds, are worked out once per horizon pass.
+- **Battery windows** are searched out from a straight-line guess instead of doubled up from 1: a handful of checks instead of about 80. They are compared with the doubling search on 3,590 random regimes.
+- **Still units in a frame** first get one shared shadow bound from the frame's centre. The slack is the farthest of them from it, plus a metre for rounding, since a gap changes by no more than the distance moved. When that bound is no lower than the horizon already found, theirs can't lower it and are skipped. Otherwise each is bounded on its own. The result is compared with the unit-by-unit horizon at 40 ticks.
+- **The shed-until scan** folds into the per-unit loop.
+- **BurnSystem** works out each parent's neighbours once per pass: bodies by their spheres, frames by their join reach, with their periapses, apoapses and top speeds.
+
+**The rest.** The stepped tick is three quarters of the budget by itself, and every jump must step one, since events fire only on stepped ticks. The Lead accepted 9.1 ms at 20 times the slice for now: the new start is far below that scale. Profiling the step at 20 times idle load is logged as A40. A horizon cache carried between calls was ruled out, since it would make the call pattern depend on history.

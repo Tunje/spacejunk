@@ -147,6 +147,8 @@ func horizon(ctx: SimContext) -> int:
 	var skip := NO_LIMIT
 	var now: int = ctx.state["tick"]
 	var units: Dictionary = ctx.state["units"]
+	# What each parent's orbiters could run into, worked out once per pass (A38).
+	var neighbours := {}
 	for id: int in _sorted(units):
 		var unit: Dictionary = units[id]
 		if not unit["burn"].is_empty():
@@ -166,7 +168,7 @@ func horizon(ctx: SimContext) -> int:
 				ctx.coast_cap = "drifting"
 				return 0
 			continue
-		skip = mini(skip, _orbit_horizon(ctx, unit))
+		skip = mini(skip, _orbit_horizon(ctx, unit, neighbours))
 		if skip <= 0:
 			ctx.coast_cap = "near_a_boundary"
 			return 0
@@ -176,7 +178,7 @@ func horizon(ctx: SimContext) -> int:
 
 
 ## The ticks a unit on an orbit can coast before it could need _cross_soi, _try_join or low flight.
-func _orbit_horizon(ctx: SimContext, unit: Dictionary) -> int:
+func _orbit_horizon(ctx: SimContext, unit: Dictionary, neighbours: Dictionary = {}) -> int:
 	var orbit: Dictionary = unit["orbit"]
 	if orbit.get("hyperbolic", false):
 		return 0
@@ -193,32 +195,48 @@ func _orbit_horizon(ctx: SimContext, unit: Dictionary) -> int:
 	var soi: int = parent.get("soi_mm", 0)
 	if soi > 0 and not parent["orbit"].is_empty() and apoapsis >= soi:
 		skip = mini(skip, CoastBounds.ticks_to_close(soi - IntMath.dist(here, [0, 0, 0]), speed))
+	if not neighbours.has(parent_id):
+		neighbours[parent_id] = _neighbours_of(ctx, parent_id)
+	for near: Array in neighbours[parent_id]:
+		skip = mini(skip, _approach_horizon(here, periapsis, apoapsis, speed, near))
+	return skip
+
+
+## What an orbiter round a parent could come within reach of, as [position, reach, its periapsis,
+## its apoapsis, its fastest speed]: the parent's children with gravity, by their spheres, then
+## the frames round it, by their join distance. Bodies first, each in ascending ID.
+func _neighbours_of(ctx: SimContext, parent_id: int) -> Array:
+	var result := []
+	var gm: int = ctx.state["bodies"][parent_id]["gm"]
+	var bodies: Dictionary = ctx.state["bodies"]
 	for child_id: int in _sorted(bodies):
 		var child: Dictionary = bodies[child_id]
 		if child["orbit"].is_empty() or child["orbit"]["parent"] != parent_id or child["gm"] <= 0:
 			continue
-		var reach: int = child.get("soi_mm", 0)
-		skip = mini(skip, _approach_horizon(here, periapsis, apoapsis, speed, child["pos_mm"], child["orbit"],
-			parent["gm"], reach))
+		result.append(_neighbour(child["pos_mm"], child["orbit"], gm, child.get("soi_mm", 0)))
 	var frames: Dictionary = ctx.state["frames"]
 	for frame_id: int in _sorted(frames):
 		var frame: Dictionary = frames[frame_id]
 		if frame["orbit"]["parent"] != parent_id:
 			continue
 		var reach: int = frame["radius_mm"] + join_margin_mm(ctx, frame) + JOIN_SLACK_MM
-		skip = mini(skip, _approach_horizon(here, periapsis, apoapsis, speed, frame["pos_mm"], frame["orbit"],
-			parent["gm"], reach))
-	return skip
+		result.append(_neighbour(frame["pos_mm"], frame["orbit"], gm, reach))
+	return result
+
+
+static func _neighbour(there: Array, orbit: Dictionary, gm: int, reach: int) -> Array:
+	return [there, reach, CoastBounds.periapsis_mm(orbit), apoapsis_mm(orbit), CoastBounds.orbit_max_um_s(gm, orbit)]
 
 
 ## The ticks before a unit could come within reach of something on another orbit round the same
 ## parent: never if their distance bands from the parent can't meet, else the gap over both speeds.
-static func _approach_horizon(here: Array, periapsis: int, apoapsis: int, speed: int, there: Array,
-		other: Dictionary, gm: int, reach: int) -> int:
-	if CoastBounds.periapsis_mm(other) - reach > apoapsis or apoapsis_mm(other) + reach < periapsis:
+static func _approach_horizon(here: Array, periapsis: int, apoapsis: int, speed: int, near: Array) -> int:
+	var reach: int = near[1]
+	if int(near[2]) - reach > apoapsis or int(near[3]) + reach < periapsis:
 		return NO_LIMIT
+	var there: Array = near[0]
 	var gap := IntMath.dist([here[0] - there[0], here[1] - there[1], here[2] - there[2]], [0, 0, 0]) - reach
-	return CoastBounds.ticks_to_close(gap, speed + CoastBounds.orbit_max_um_s(gm, other))
+	return CoastBounds.ticks_to_close(gap, speed + int(near[4]))
 
 
 func apply_delta(ctx: SimContext, payload: Dictionary) -> void:
