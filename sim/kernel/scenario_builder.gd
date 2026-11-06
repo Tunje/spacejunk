@@ -94,7 +94,8 @@ static func _frame_fits(ctx: SimContext, frame: Dictionary) -> String:
 	var soi: int = parent.get("soi_mm", 0)
 	if soi <= 0:
 		return ""
-	var reach := BurnSystem.apoapsis_mm(frame["orbit"]) + int(frame["radius_mm"]) 		+ 2 * BurnSystem.MIN_LEAVE_MARGIN_MM
+	var reach := BurnSystem.apoapsis_mm(frame["orbit"]) + int(frame["radius_mm"]) \
+		+ 2 * BurnSystem.MIN_LEAVE_MARGIN_MM
 	if reach > soi:
 		return "reaches past the sphere of influence of %s" % parent["name"]
 	return ""

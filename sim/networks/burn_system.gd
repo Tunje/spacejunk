@@ -556,7 +556,8 @@ func _drift(ctx: SimContext, unit_id: int) -> void:
 	if frame_id == 0:
 		return
 	var frame: Dictionary = ctx.state["frames"][frame_id]
-	if IntMath.dist(vel, [0, 0, 0]) > LEAVE_SPEED_UM_S 			or IntMath.dist(unit["pos_mm"], [0, 0, 0]) > frame["radius_mm"] + leave_margin_mm(ctx, frame):
+	if IntMath.dist(vel, [0, 0, 0]) > LEAVE_SPEED_UM_S \
+			or IntMath.dist(unit["pos_mm"], [0, 0, 0]) > frame["radius_mm"] + leave_margin_mm(ctx, frame):
 		_leave(ctx, unit_id, frame_id)
 
 

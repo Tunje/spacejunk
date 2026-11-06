@@ -123,7 +123,8 @@ func _depart_transfer(ctx: SimContext, id: int, quoted: Dictionary) -> void:
 		unit["op"]["reason"] = MoveStep.REASON_NO_PROPELLANT
 		return
 	var legs: Array = quoted.get("legs", []).duplicate(true)
-	var orbit: Dictionary = legs.pop_front()["orbit"] if not legs.is_empty() 		else Transfer.departure_orbit(ctx, id, quoted, ctx.tick)
+	var orbit: Dictionary = legs.pop_front()["orbit"] if not legs.is_empty() \
+		else Transfer.departure_orbit(ctx, id, quoted, ctx.tick)
 	if orbit.is_empty():
 		unit["op"]["reason"] = Travel.REASON_OTHER_PLACE
 		return
