@@ -752,7 +752,11 @@ The land and take_off commands now charge what a good pilot loses, not a flat 3%
   - The command is never cheaper than the best safe flight from n = 1.2 to 3. The autopilot flies well, and a hand pilot may do worse.
 - **Above n = 3** the sweep's one-second burns are too coarse to trust: its landings cost 1.21 to 1.35 there. The formula keeps falling towards no loss, as physics allows with a hard enough burn.
 - **`thrust_too_low`:** at n of 1 or less, land and take_off are refused, since the craft can't hold itself up.
-- **Transfers are unchanged.** A burn in space loses only by the arc it sweeps. A11 measured a 45.7 m/s finite burn reaching 759.3 km against 760 km impulsively, under 0.1%. At B11b's 1.5 m/s², a 300 m/s burn lasts about 200 s. Round Frost's cluster orbit (6.8 h) that sweeps under 3°, a loss under 0.02%, and less round the planet or the star.
+- **Transfers are unchanged.** A burn in space loses only by the arc it sweeps. `tools/frost_run.gd -- --transfer` measures it through BurnSystem's own finite-burn preview, prograde from the cluster's orbit at B11b's 1.51 m/s², as the instant burn's extra energy over the finite one's:
+  - 10 to 30 m/s: nothing measurable;
+  - 100 m/s over 65 s: 0.002 m/s, 0.002%;
+  - 300 m/s over 189 s: 0.046 m/s, 0.015%.
+  This is the tightest orbit in the game. Round the planet or the star the arc is smaller still.
 
 #### The belt
 

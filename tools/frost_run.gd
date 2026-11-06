@@ -28,6 +28,10 @@ func _init() -> void:
 		_sweep()
 		quit()
 		return
+	if "--transfer" in OS.get_cmdline_user_args():
+		_transfer_loss()
+		quit()
+		return
 	_new()
 	var probe := _probe()
 	var wet_g := Units.unit_mass(sim._state, sim._ctx.defs, keys["Probe"])
@@ -342,6 +346,31 @@ func _onto_descent(periapsis_m: float, apoapsis_m: float) -> void:
 	probe["pos_mm"] = OrbitMath.position_at(orbit, sim.current_tick())
 	probe["vel_um_s"] = [0, 0, 0]
 	sim._ctx.index.clear()
+
+
+## A27: what a finite prograde burn from the cluster's orbit loses against an instant one, by the
+## sim's own preview (BurnSystem flies it tick by tick). The loss is the extra delta-v the instant
+## burn would need to match the finite one's orbital energy, taken the other way round.
+func _transfer_loss() -> void:
+	_new()
+	_onto_cluster_orbit()
+	print("Prograde burns from the cluster's orbit round Frost at %.2f m/s^2:" % _accel())
+	for dv_m_s: int in [10, 20, 30, 100, 300]:
+		var checked := sim.check(_burn_args(dv_m_s * 1_000_000, 0))
+		var finite: Dictionary = checked["detail"].get("orbit", {})
+		var now := OrbitMath.state_at(_probe()["orbit"], int(gm_frost / 1000.0), sim.current_tick() + 1)
+		var r := _vec(now["r"], 1e-3).length()
+		var v := _vec(now["v"], 1e-6).length() + dv_m_s
+		var instant_energy := v * v / 2.0 - gm_frost / r
+		if finite.is_empty():
+			print("  %d m/s: %s" % [dv_m_s, str(checked)])
+			continue
+		# An escape's record keeps a positive semi-major axis; its energy is +GM / 2a.
+		var sign := 1.0 if finite.get("hyperbolic", false) else -1.0
+		var finite_energy: float = sign * gm_frost / (2.0 * finite["a_mm"] / 1000.0)
+		var lost := (instant_energy - finite_energy) / v
+		print("  %d m/s over %d ticks: %.3f m/s lost, %.3f%%" % [dv_m_s, checked["detail"].get("burn_ticks", 0),
+			lost, 100.0 * lost / dv_m_s])
 
 
 func _set_thrust(thrust_n: int) -> void:

@@ -42,7 +42,7 @@ func _fly(orbit_r: Array, orbit_v: Array, terrain: Dictionary = { "seed": SEED, 
 		],
 		"units": [
 			{ "key": "orbiter", "template": "starter_ship", "name": "Orbiter", "pos_mm": [0, 0, 0],
-				"inventory": [{ "item": "propellant", "grams": 1_000_000 }], "dock": null },
+				"inventory": [{ "item": "propellant", "grams": 2_000_000 }], "dock": null },
 		],
 	}, {}), "")
 	for table: String in ["bodies", "units"]:
