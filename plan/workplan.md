@@ -226,6 +226,7 @@ Data files use readable units such as kg and kW. The loader converts them to sim
 - Agents edit only folders they own. Changes elsewhere go to the owner by message.
 - Contracts (`docs/design/contracts.md`, covering commands, events, entity and state views, tick order, numeric units and the schema) change only through the Lead.
 - A task is done when `tools/test.ps1` passes on its branch, its acceptance check holds, and new behaviour has tests.
+- The full gate skips `tests/playthrough` (D31, a real-client playthrough of the new start, about 4 min). Run `tools/test.ps1 -Playthrough` before merging anything that touches the new start's UI, its snapshots (`tests/slow/new_start/`), or the order and jobs panels. The Lead runs it on those merges.
 - Client work also needs a screenshot read back by the agent. Agents cannot judge feel, so the owner is the playtester.
 - If a task is blocked for more than a short attempt, report to the Lead rather than work around it.
 - **GPU holds stop all Godot use.** The image-to-3d pipeline needs the GPU alone, and any Godot process, even headless, can corrupt its output. Before each hold the Lead creates `newmanprobe-wt/GPU_HOLD` (which makes `tools/test.ps1` refuse to run), tells all agents to stop, confirms that no Godot process is running, and tells the image-to-3d agent it can begin. The Lead removes the file and gives the all-clear afterwards. Agents keep doing non-Godot work during a hold.
