@@ -642,7 +642,7 @@
         "size_mm": [800, 3100, 1600]
       },
       "visual": {
-        "model": null,
+        "model": "landing_legs_mk1",
         "tint": "#8a8d91"
       }
     },
