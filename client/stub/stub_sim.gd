@@ -116,11 +116,17 @@ func view() -> Dictionary:
 		"deposits": _state["deposits"].duplicate(true),
 		"jobs": _jobs_view(),
 		"tasks": _state["tasks"].duplicate(true),
+		# C12: the stub has no research, so both start and stay empty.
+		"science": { "points": 0, "earned": 0, "spent": 0, "paid": {}, "evidence": {} },
+		"research": { "theories": {}, "designs": {}, "variants": {}, "discovered": {} },
 	}
 
 
 func defs() -> Dictionary:
-	return _defs.duplicate(true)
+	var copy := _defs.duplicate(true)
+	copy["theories"] = {}
+	copy["science"] = {}
+	return copy
 
 
 func take_events() -> Array[Dictionary]:
@@ -973,6 +979,7 @@ func _jobs_view() -> Dictionary:
 			job[field] = _state["jobs"][id][field]
 		job["work"] = _defs["recipes"][job["recipe"]]["work"]
 		job["work_per_tick"] = _work_per_tick(job["facility"])
+		job["points_held"] = 0
 		shown[id] = job
 	return shown
 

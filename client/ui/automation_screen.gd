@@ -69,6 +69,7 @@ func bind(new_bridge: SimBridge, view: LocalView, orders: OrderPanel) -> void:
 	bridge = new_bridge
 	local_view = view
 	_defs = bridge.defs()
+	bridge.defs_changed.connect(func() -> void: _defs = bridge.defs())
 	orders.order_issued.connect(note_order)
 	bridge.view_updated.connect(refresh)
 	local_view.selection_changed.connect(refresh)

@@ -104,6 +104,7 @@ func bind(new_bridge: SimBridge, view: LocalView) -> void:
 	bridge = new_bridge
 	local_view = view
 	_defs = bridge.defs()
+	bridge.defs_changed.connect(_reread_defs)
 	bridge.view_updated.connect(refresh)
 	local_view.selection_changed.connect(refresh)
 
@@ -199,6 +200,12 @@ func _sync_tabs(found: Array[Dictionary]) -> void:
 		(_tabs.get_child(index) as Button).set_pressed_no_signal(found[index] == facility)
 
 
+## A designed variant brings its recipes, so the recipe list is built again.
+func _reread_defs() -> void:
+	_defs = bridge.defs()
+	_recipe_key = ""
+
+
 func _sync_recipes() -> void:
 	var key: String = "%d:%s" % [facility["part"], facility["type"]]
 	if key == _recipe_key:
@@ -290,7 +297,7 @@ func _build_queue_rows(queued: Array[Dictionary]) -> void:
 func _show_stock(stock: Dictionary) -> void:
 	for row: Dictionary in _rows:
 		var label: Label = row["inputs"]
-		label.text = IndustryLogic.inputs_line(row["recipe"], stock, _defs)
+		label.text = IndustryLogic.inputs_line(row["recipe"], stock, _defs, int(bridge.current_view.get("science", {}).get("points", -1)))
 		label.modulate = Color.WHITE if IndustryLogic.has_inputs(row["recipe"], stock) else ClientTheme.GOLD
 
 

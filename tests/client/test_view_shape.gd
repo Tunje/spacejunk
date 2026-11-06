@@ -32,8 +32,11 @@ const BODY_FIELDS: Array[String] = [
 const FRAME_FIELDS: Array[String] = ["name", "radius_mm", "orbit", "pos_mm", "world_mm"]
 const DEPOSIT_FIELDS: Array[String] = ["body", "item", "remaining_g", "hardness"]
 const JOB_FIELDS: Array[String] = [
-	"unit", "facility", "recipe", "count_left", "status", "reason", "start_tick", "queue_pos", "work_left", "work", "work_per_tick",
+	"unit", "facility", "recipe", "count_left", "status", "reason", "start_tick", "queue_pos", "work_left", "work", "work_per_tick", "points_held",
 ]
+## C12's research views.
+const SCIENCE_FIELDS: Array[String] = ["points", "earned", "spent", "paid", "evidence"]
+const RESEARCH_FIELDS: Array[String] = ["theories", "designs", "variants", "discovered"]
 
 
 ## A new game from each backend present. `reference` runs the entity checks
@@ -94,8 +97,10 @@ func _assert_unit(unit: Dictionary) -> void:
 
 
 func _assert_view(view: Dictionary) -> void:
-	for field: String in ["tick", "seed", "units", "bodies", "frames", "deposits", "jobs", "tasks"]:
+	for field: String in ["tick", "seed", "units", "bodies", "frames", "deposits", "jobs", "tasks", "science", "research"]:
 		assert_true(view.has(field), "view has %s" % field)
+	_assert_fields(view["science"], SCIENCE_FIELDS, "science")
+	_assert_fields(view["research"], RESEARCH_FIELDS, "research")
 	for id: int in view["frames"]:
 		_assert_fields(view["frames"][id], FRAME_FIELDS, "frame")
 	_assert_no_floats(view, "view")

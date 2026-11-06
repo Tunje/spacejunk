@@ -1,6 +1,8 @@
 class_name IndustryLogic extends RefCounted
 ## Works out facilities, recipes and job text from the view and defs. Starting
 ## and cancelling stay Sim commands; nothing here decides what is allowed.
+## Sinks that take a lab or prototype run's spent inputs, which aren't products.
+const TEST_SINKS: Array[String] = ["test_consumed", "fab_scrap"]
 
 ## C9: jobs on one facility, counting the active one.
 const QUEUE_LIMIT := 16
@@ -95,15 +97,22 @@ static func cancel_command(unit_id: int, job_id: int) -> Dictionary:
 
 ## A recipe or item's display name, whichever definition holds it.
 static func name_of(id: String, defs: Dictionary) -> String:
+	if id.begins_with("qualify:"):
+		return "Bench Test: %s" % IndustryLogic.name_of(id.trim_prefix("qualify:"), defs)
+	if id.contains("+"):
+		return OrderText.variant_name(id, defs["items"])
 	for section: String in ["items", "modules", "templates"]:
 		if defs[section].has(id):
 			return defs[section][id]["name"]
 	return id.capitalize()
 
 
-## "Iron 2.0 t of 5.0 t" for each input, against this unit's stock.
-static func inputs_line(recipe: Dictionary, stock: Dictionary, defs: Dictionary) -> String:
+## "Iron 2.0 t of 5.0 t" for each input, against this unit's stock, and a lab
+## recipe's science points against the points banked (when known).
+static func inputs_line(recipe: Dictionary, stock: Dictionary, defs: Dictionary, points := -1) -> String:
 	var lines: PackedStringArray = []
+	if recipe.has("points"):
+		lines.append("Science %d of %d points" % [points, recipe["points"]] if points >= 0 else "Science %d points" % recipe["points"])
 	for input: Dictionary in recipe["inputs"]:
 		var have: int = stock.get(input["item"], 0)
 		lines.append("%s %s of %s" % [IndustryLogic.name_of(input["item"], defs), OrderText.tonnes(have), OrderText.tonnes(input["grams"])])
@@ -120,8 +129,14 @@ static func has_inputs(recipe: Dictionary, stock: Dictionary) -> bool:
 static func outputs_line(recipe: Dictionary, defs: Dictionary) -> String:
 	var lines: PackedStringArray = []
 	for output: Dictionary in recipe["outputs"]:
+		if TEST_SINKS.has(output.get("sink", "")):
+			continue
 		if output.has("grams"):
 			lines.append("%s %s" % [OrderText.tonnes(output["grams"]), IndustryLogic.name_of(output.get("item", output.get("unit", "")), defs)])
+		elif output.has("theory"):
+			lines.append("proof of %s" % defs.get("theories", {}).get(output["theory"], {}).get("name", String(output["theory"]).capitalize()))
+		elif output.has("qualifies"):
+			lines.append("a qualified %s design" % IndustryLogic.name_of(output["qualifies"], defs))
 		else:
 			lines.append(IndustryLogic.name_of(output.get("item", output.get("unit", "")), defs))
 	return ", ".join(lines)

@@ -10,6 +10,7 @@ var bridge: SimBridge
 var local_view: LocalView
 var _modules: Dictionary = {}
 var _items: Dictionary = {}
+var _science: Dictionary = {}
 var _orders: Array[Dictionary] = []
 var _buttons: Dictionary = {}
 ## An atomic order just pressed, shown as started until the next tick runs it.
@@ -44,12 +45,18 @@ func _ready() -> void:
 	_why_label.modulate = ClientTheme.GOLD
 
 
-func bind(new_bridge: SimBridge, view: LocalView) -> void:
-	bridge = new_bridge
-	local_view = view
+func _reread_defs() -> void:
 	var defs: Dictionary = bridge.defs()
 	_modules = defs["modules"]
 	_items = defs["items"]
+	_science = defs.get("science", {})
+
+
+func bind(new_bridge: SimBridge, view: LocalView) -> void:
+	bridge = new_bridge
+	local_view = view
+	_reread_defs()
+	bridge.defs_changed.connect(_reread_defs)
 	bridge.view_updated.connect(refresh)
 	local_view.selection_changed.connect(refresh)
 	refresh()
@@ -66,7 +73,7 @@ func refresh() -> void:
 	_selection_label.text = _selection_title(view)
 	_detail_label.text = _selection_detail(view)
 	_detail_label.visible = not _detail_label.text.is_empty()
-	_orders = OrderList.build(view, _modules, _items, commanded, local_view.selected_kind, local_view.selected_id)
+	_orders = OrderList.build(view, _modules, _items, commanded, local_view.selected_kind, local_view.selected_id, _science)
 	_sync_buttons()
 
 

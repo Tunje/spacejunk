@@ -95,6 +95,7 @@ func bind(new_bridge: SimBridge, view: LocalView, new_markers: FittingMarkers) -
 	markers = new_markers
 	markers.screen = self
 	_modules = bridge.defs()["modules"]
+	bridge.defs_changed.connect(func() -> void: _modules = bridge.defs()["modules"])
 	bridge.view_updated.connect(refresh)
 	local_view.selection_changed.connect(refresh)
 	local_view.click_filter = allows_click
