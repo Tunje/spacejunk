@@ -112,3 +112,4 @@ func test_a_frame_reaching_past_its_parents_soi_is_refused() -> void:
 		built._setup(Sim._new_state("reference", 7, defs), defs)
 		var problem := ScenarioBuilder.populate(built._ctx, _scenario(case[0], case[1]), {})
 		assert_string_contains(problem, "frame cluster reaches past the sphere of influence of Frost")
+

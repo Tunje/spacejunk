@@ -107,11 +107,12 @@ func _leaving_the_cluster() -> void:
 	for axis in 3:
 		honest_v.append(int(frame_state["v"][axis]) - OrbitMath.smul_div(dir[axis], done, OrbitMath.ONE))
 	var honest := OrbitMath.from_state(frame_state["r"], honest_v, int(gm_frost / 1000.0), start + 1)
-	var left := 0
+	var left := sim.current_tick() if _probe()["frame"] == 0 else 0  # over 2 m/s, it leaves mid-burn
 	for i in 200_000:
+		if left != 0:
+			break
 		if _steps(1).any(func(e: Dictionary) -> bool: return e["type"] == "frame_left"):
 			left = sim.current_tick()
-			break
 	if left == 0:
 		print("\nLeaving the cluster: the probe never left the frame")
 		return

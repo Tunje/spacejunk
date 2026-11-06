@@ -403,7 +403,7 @@ Sizes compare with earlier kernel tasks: **S** is about A7's size, **M** about A
 - **Each tick's delta-v** is thrust over the unit's mass at the start of the tick, with a carried remainder.
 - **Propellant** flows at thrust / exhaust speed, also with a remainder. It is claimed against reservations and leaves in phase 6 through `propellant_exhaust`, so the matter ledger holds.
 - **Drift:** in a frame, a burn changes `vel_um_s`, and the unit drifts in a straight line, with a carry in tenths of a micrometre so the drift is exact. A `move_to` in a frame stops the drift.
-- **Frame margins,** a change from 11.2: a drifting unit leaves at the frame's radius + **2000 km**, and joins at radius + 1000 km under 1 m/s. The gap stops a slow unit at the edge flapping in and out. A26 shrinks both inside a small sphere of influence (11.20).
+- **Frame margins,** a change from 11.2: a drifting unit leaves at the frame's radius + **2000 km**, and joins at radius + 1000 km under 1 m/s. The gap stops a slow unit at the edge flapping in and out. A26 shrinks both inside a small sphere of influence, and a unit drifting over 2 m/s leaves at once (11.20).
 - **Measured:**
   - The first Hohmann burn from 700 km (45.7 m/s), flown as a finite burn of 844 ticks, gives an apoapsis of 759.3 km, against 760 km for an instant impulse.
   - The delta-v delivered matches the request within the rounding of its direction.
@@ -701,11 +701,17 @@ The rule now:
 - **Refused at load:** a frame whose apoapsis, radius and twice the 2 km floor reach past its parent's sphere. ScenarioBuilder refuses it, so the floor never puts the leave point outside the sphere.
 - **new_start's cluster:** 300 km from Frost's centre and 60 km in radius. It leaves 106 km past its edge and joins 53 km past it. The floor is not used.
 
-**The drift itself is still wrong near Frost.** A 31 m/s retrograde burn in the cluster, as for a landing, drifts **90 minutes** before the probe leaves. That is 22% of a cluster orbit, with no gravity. It then leaves on an orbit with its periapsis **25 km from Frost's centre, under the surface**. The same burn made on an orbit gives 65 km. The margin cap can't fix this, because the cluster itself is 120 km across, 40% of its orbit's radius. Ways out, for the Lead:
-- a burn in a frame of more than the join speed takes the unit out of the frame at once, onto the orbit the frame and its velocity give;
-- or a much smaller cluster round Frost, a few km across.
+**Leaving at speed.** Capping the margin was not enough near Frost.
+- In D's D25 run, a 20 m/s retrograde burn from the cluster would still drift about 2.3 hours to the capped leave point, in a straight line with no gravity.
+- A 31 m/s burn, as for a landing, drifted 90 minutes (22% of a cluster orbit). It then left on an orbit with its periapsis 25 km from Frost's centre, under the surface. The same burn made on an orbit gives 65 km.
+- The cluster is 120 km across, 40% of its orbit's radius, so no margin fixes that.
 
-The first is a small BurnSystem change, and it makes a burn in any frame exact.
+The rule now:
+- A unit drifting in a frame faster than **2 m/s** (`LEAVE_SPEED_UM_S`, twice the join speed) leaves it on that tick, even mid-burn, onto the orbit the frame's motion plus its own velocity give.
+- The rest of the burn is flown on that orbit, in the direction the burn started with.
+- Only a nudge under 2 m/s still drifts in a straight line, and leaves by the margin.
+- The hysteresis is unchanged: a unit joins under 1 m/s and leaves over 2 m/s.
+- `tests/slow/test_new_start_landing.gd` flies D's case on new_start. It moves to a rock, burns 20 m/s retrograde, leaves on the burn's first ticks onto an orbit round Frost, and lands with the land command.
 
 #### The probe on new_start
 
@@ -714,7 +720,7 @@ Measured on the sim from new_start.json:
 - **Thruster:** 10 kN at 3000 m/s exhaust, so 1.34 to 1.8 m/s² as the tank empties. Frost's surface gravity is 0.49 m/s².
 - **Legs:** four, with a 6 m/s touchdown limit.
 
-`tools/frost_run.gd` flies the landing as a player would. Every second it places a short burn: level thrust against the level speed, plus enough vertical thrust to follow a descent rate it can still stop. It starts on the cluster's orbit, not in the frame, so the drift error above is not in these figures.
+`tools/frost_run.gd` flies the landing as a player would. Every second it places a short burn: level thrust against the level speed, plus enough vertical thrust to follow a descent rate it can still stop. It starts on the cluster's orbit, half a turn from the cluster, which is what leaving at speed now gives.
 
 | | Flown | Impulsive | Quoted by the command |
 | --- | --- | --- | --- |

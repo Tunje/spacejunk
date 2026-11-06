@@ -14,6 +14,9 @@ extends SimSystem
 ##   The join margin is half the leave margin, so a slow unit at the edge cannot flap in and out.
 ##   Both shrink to fit a frame inside its parent's sphere of influence (A26), as a frame has no
 ##   gravity and a drifter must not coast past the SOI before it becomes an orbit again.
+## - A unit drifting faster than LEAVE_SPEED_UM_S leaves its frame at once, onto the orbit the frame
+##   and its velocity give, even mid-burn (A26). Only a slow nudge drifts in a straight line, which
+##   near a small moon would otherwise carry it far off the path gravity gives.
 ## - A unit on an orbit changes parent on the tick it crosses a sphere of influence (A12): up to the
 ##   parent's parent when it passes its parent's `soi_mm`, or down to a child body inside the child's.
 ##
@@ -50,6 +53,8 @@ const LEAVE_MARGIN_MM := 2_000_000_000
 ## SOI, so the floor never puts the leave point outside it.
 const MIN_LEAVE_MARGIN_MM := 2_000_000
 const JOIN_SPEED_UM_S := 1_000_000
+## Twice the join speed, so a unit can't flap between joining and leaving.
+const LEAVE_SPEED_UM_S := 2_000_000
 ## Room for the stored positions to differ from freshly computed ones by rounding.
 const JOIN_SLACK_MM := 1_000_000
 ## Drift is carried in tenths of a micrometre: velocity in um/s over a tenth of a second.
@@ -470,7 +475,7 @@ func _drift(ctx: SimContext, unit_id: int) -> void:
 	if frame_id == 0:
 		return
 	var frame: Dictionary = ctx.state["frames"][frame_id]
-	if IntMath.dist(unit["pos_mm"], [0, 0, 0]) > frame["radius_mm"] + leave_margin_mm(ctx, frame):
+	if IntMath.dist(vel, [0, 0, 0]) > LEAVE_SPEED_UM_S 			or IntMath.dist(unit["pos_mm"], [0, 0, 0]) > frame["radius_mm"] + leave_margin_mm(ctx, frame):
 		_leave(ctx, unit_id, frame_id)
 
 
