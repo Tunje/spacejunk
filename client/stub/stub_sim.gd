@@ -129,6 +129,19 @@ func defs() -> Dictionary:
 	return copy
 
 
+## A33's coast, as the stub can do it: tick by tick to the first tick that fires
+## events, or max_ticks. The real Sim jumps in closed form to the same place.
+func coast(max_ticks: int) -> Dictionary:
+	var before := _events.size()
+	var ticks := 0
+	while ticks < max_ticks:
+		step(1)
+		ticks += 1
+		if _events.size() > before:
+			break
+	return { "ticks": ticks, "capped_by": "" }
+
+
 func take_events() -> Array[Dictionary]:
 	var taken := _events
 	_events = []

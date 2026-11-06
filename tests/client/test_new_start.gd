@@ -7,13 +7,19 @@ var bridge: SimBridge
 var view: LocalView
 
 
-func before_each() -> void:
+## One game for the file (each new start waits on Frost's planet build at teardown);
+## the tests that move it on come last.
+func before_all() -> void:
 	main = load("res://client/main.tscn").instantiate()
 	main.scenario = Main.NEW_START
-	add_child_autofree(main)
+	add_child(main)
 	bridge = main.get_node("Bridge")
 	bridge.set_paused(true)
 	view = main.get_node("LocalView")
+
+
+func after_all() -> void:
+	main.free()
 
 
 func _id_of(table: String, name: String) -> int:

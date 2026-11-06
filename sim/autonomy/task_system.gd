@@ -475,14 +475,40 @@ func _sorted(table: Dictionary) -> Array:
 	return ids
 
 
-## Coast (A33, idle only until C17): with no task on any unit, and no atomic dock or undock waiting
-## to settle, nothing here changes from tick to tick. Any task steps the world, until C17.
+## Coast (A33, C17). A task whose operation is under way and steady coasts as its step allows:
+## scans and measurements until their last tick, mining in closed form, and moves and waits as
+## CargoSystem's own horizon bounds them. Anything else steps the world: a task about to start,
+## end or change step, a blocked cycle, docking, undocking and cargo transfers.
 func horizon(ctx: SimContext) -> int:
+	var skip := NO_LIMIT
 	var units: Dictionary = ctx.state["units"]
 	for unit_id: int in _sorted(units):
 		var unit: Dictionary = units[unit_id]
 		var op_type: String = unit["op"]["type"]
-		if unit["task"] != 0 or op_type == DockStep.OP_DOCKING or op_type == UndockStep.OP_UNDOCKING:
-			ctx.coast_cap = "tasks"
-			return 0
-	return NO_LIMIT
+		if unit["task"] == 0:
+			if op_type == DockStep.OP_DOCKING or op_type == UndockStep.OP_UNDOCKING:
+				return _no_coast(ctx)
+			continue
+		var task: Dictionary = ctx.state["tasks"][unit["task"]]
+		if task["state"] != STATE_RUNNING or task["op_ended"] or task["enter"] or not _has_op(unit) \
+				or _interruption(ctx, unit) != "":
+			return _no_coast(ctx)
+		if op_type == MoveStep.OP_MOVING or op_type == MoveStep.OP_WAITING:
+			continue
+		skip = mini(skip, _current_step(ctx, unit).coast_ticks(ctx, unit_id))
+		if skip <= 0:
+			return _no_coast(ctx)
+	return skip
+
+
+## Coast (C17): each coasting operation advances in closed form.
+func coast(ctx: SimContext, ticks: int) -> void:
+	var units: Dictionary = ctx.state["units"]
+	for unit_id: int in _sorted(units):
+		if units[unit_id]["task"] != 0 and _has_op(units[unit_id]):
+			_current_step(ctx, units[unit_id]).coast(ctx, unit_id, ticks)
+
+
+func _no_coast(ctx: SimContext) -> int:
+	ctx.coast_cap = "tasks"
+	return 0

@@ -373,6 +373,16 @@ func test_built_units_survive_a_save() -> void:
 	assert_eq(again.observe_event(_event("part_attached", 31, { "part": 2 }), view, defs), ["install"] as Array[String])
 
 
+func test_view_shows_science_station_and_research_for_a_loaded_game() -> void:
+	var goals := _new_start()
+	var view := _view({ 31: _unit("station") })
+	view["science"] = { "earned": 40 }
+	view["research"] = { "designs": { "assisted_core": "qualified" } }
+	var finished := goals.observe_view(view, items, modules)
+	for id in ["science", "station", "research"]:
+		assert_has(finished, id)
+
+
 func test_the_new_start_panel_shows_thirteen_goals() -> void:
 	var main: Node = load("res://client/main.tscn").instantiate()
 	main.scenario = Main.NEW_START

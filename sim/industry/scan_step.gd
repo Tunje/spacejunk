@@ -40,6 +40,11 @@ func begin(ctx: SimContext, unit_id: int, args: Dictionary) -> void:
 	TaskStep.set_op(ctx, unit_id, OP_SCANNING, args["target"], part, ticks)
 
 
+## Coast (C17): nothing changes until the scan's last tick.
+func coast_ticks(ctx: SimContext, unit_id: int) -> int:
+	return TaskStep.ticks_before_end(ctx, unit_id)
+
+
 ## A part shed on the last tick did no work, so the scan does not finish, and phase 2 cancels it.
 func end_test(ctx: SimContext, unit_id: int) -> bool:
 	var op: Dictionary = ctx.state["units"][unit_id]["op"]

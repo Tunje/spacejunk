@@ -48,7 +48,7 @@ func _init(new_main: Node) -> void:
 	automation = main.automation_screen
 	goals = main.goal_panel.tracker
 	bridge.set_paused(true)
-	bridge.set_speed(SimBridge.SPEEDS[-1])
+	bridge.set_speed(WarpLogic.STEP_MAX)
 	bridge.events_received.connect(_on_events)
 	var state := bridge.current_view
 	for id: int in state["units"]:
