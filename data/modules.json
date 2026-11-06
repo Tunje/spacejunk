@@ -452,7 +452,8 @@
       "realism": "extrapolation",
       "capabilities": {
         "facility": {
-          "type": "fabricator"
+          "type": "fabricator",
+          "work_per_tick": 100
         }
       },
       "fabrication": {
@@ -739,7 +740,8 @@
       "realism": "extrapolation",
       "capabilities": {
         "facility": {
-          "type": "refinery"
+          "type": "refinery",
+          "work_per_tick": 100
         }
       },
       "fabrication": {

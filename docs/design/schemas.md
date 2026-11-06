@@ -140,7 +140,7 @@ A whole number converts by integer multiplication, so a value such as the star's
 | `port` | `transfer_kg_per_s`, `dock_seconds` (whole), `undock_seconds` (whole) | Docking ports |
 | `thruster` | `speed_m_s`, `propellant_kg_per_s`, `rated_mass_kg`, `exhaust_m_s`, `thrust_kn` | Thrusters |
 | `landing_gear` | `max_touchdown_m_s` | Landing legs |
-| `facility` | `type`: `refinery` or `fabricator` | Station facilities |
+| `facility` | `type`: `refinery` or `fabricator`; `work_per_tick` (whole, optional) | Station facilities. `work_per_tick` is the work points removed from a running recipe each tick (C11): 100 for full-size facilities, which gives 1% steps for research ideas. Compact facilities will have their own, lower rate |
 | `always_on` | `true` | A load that runs whenever healthy, such as a command hub |
 
 ```json
@@ -190,6 +190,7 @@ The `core` size is used only by cores and the core connector on root parts, whic
 | `id` | string | Recipe ID |
 | `facility` | `refinery`, `fabricator` | Runs on a part with this `facility.type` |
 | `seconds` | whole, above 0 | Length of one run |
+| `work` | whole, above 0 | Work points one run needs (C11). While `seconds` is still present, `work` must equal `seconds` × 1000. A facility removes its `work_per_tick` each tick, so at 100 per tick and 10 ticks a second, a run lasts `seconds`. `seconds` goes in B11b. |
 | `power_kw` | number | Draw while a run is active |
 | `inputs` | array | At least one entry |
 | `outputs` | array | At least one entry |

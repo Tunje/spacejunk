@@ -885,3 +885,38 @@ func test_landing_gear_needs_its_limit() -> void:
 func test_landing_gear_is_an_object() -> void:
 	_entry("modules", "laser")["capabilities"]["landing_gear"] = 6
 	_assert_error("bad_capability")
+
+
+## Work points (C11, task B20): `work` on recipes, `work_per_tick` on facilities.
+func test_work_matching_seconds_passes() -> void:
+	_entry("recipes", "refine")["work"] = 5000
+	_entry("modules", "refinery")["capabilities"]["facility"]["work_per_tick"] = 100
+	assert_eq(DataValidator.validate(data), [] as Array[String])
+
+
+func test_work_must_equal_seconds_times_1000() -> void:
+	_entry("recipes", "refine")["work"] = 4000
+	_assert_error("work_mismatch")
+
+
+func test_work_must_be_above_zero() -> void:
+	_entry("recipes", "refine")["work"] = 0
+	_assert_error("out_of_range")
+
+
+func test_work_must_be_whole() -> void:
+	_entry("recipes", "refine")["work"] = 5000.5
+	_assert_error("not_whole")
+
+
+func test_work_per_tick_must_be_whole_and_positive() -> void:
+	var facility: Dictionary = _entry("modules", "refinery")["capabilities"]["facility"]
+	facility["work_per_tick"] = 0
+	_assert_error("out_of_range")
+	facility["work_per_tick"] = 50.5
+	_assert_error("not_whole")
+
+
+func test_facility_rejects_other_fields() -> void:
+	_entry("modules", "refinery")["capabilities"]["facility"]["speed"] = 2
+	_assert_error("unknown_field")
