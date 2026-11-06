@@ -14,7 +14,7 @@ extends SceneTree
 
 const BELT_A_MM := 403_914_250_890_000  # 2.7 AU (docs/design/belt.md)
 ## The deorbit burn aims the periapsis this far above Frost's datum, over its highest ground.
-const PERIAPSIS_ALT_M := 5000.0
+const PERIAPSIS_ALT_M := 2500.0
 const TOUCHDOWN_M_S := 1.5
 const GUIDE_TICKS := 10
 
@@ -230,7 +230,7 @@ func _flown_landing() -> void:
 	while true:
 		var s: Array = _now()
 		var r: float = s[0].length()
-		if r - _ground_m(s[0]) < PERIAPSIS_ALT_M + 1500.0 or s[0].dot(s[1]) > 0.0:
+		if r - _ground_m(s[0]) < PERIAPSIS_ALT_M + 1000.0 or s[0].dot(s[1]) > 0.0:
 			break
 		_steps(GUIDE_TICKS)
 	var braking := sim.current_tick()
@@ -251,7 +251,7 @@ func _flown_landing() -> void:
 		# Come down no faster than a fifth of the thrust could stop, and while braking, no sooner
 		# than the level speed is gone: reach 300 m as it is.
 		var stoppable := -sqrt(2.0 * _profile[0] * cap * maxf(alt - 20.0, 0.0)) - TOUCHDOWN_M_S
-		var want_vz := maxf(stoppable, -40.0)
+		var want_vz := stoppable
 		if h > 1.0:
 			want_vz = maxf(want_vz, -maxf(alt - _profile[1], 0.0) / maxf(h / (0.9 * cap), 1.0))
 		var a_up := gm_frost / (r * r) - h * h / r + (want_vz - vz) / 2.0
@@ -287,7 +287,7 @@ var _result := {}
 ## Frost's surface. Run: godot --headless --path . -s tools/frost_run.gd -- --sweep
 func _sweep() -> void:
 	_quiet = true
-	var landing_profiles := [[0.2, 300.0], [0.3, 250.0], [0.4, 200.0], [0.5, 150.0]]
+	var landing_profiles := [[0.2, 300.0], [0.3, 250.0], [0.4, 200.0], [0.5, 150.0], [0.6, 100.0], [0.7, 80.0]]
 	var climbs := [[10.0, 1000.0, 3.0], [20.0, 2000.0, 5.0], [40.0, 3000.0, 10.0]]
 	print("thrust kN, n landing, best landing factor (profile, flown m/s, touchdown m/s), n take-off, best take-off factor (climb, flown m/s)")
 	for thrust_n: int in [6_000, 8_000, 10_000, 12_000, 15_000, 20_000, 30_000, 45_000]:

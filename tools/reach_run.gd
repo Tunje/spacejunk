@@ -145,7 +145,7 @@ func _landing(gm: int, high_mm: int) -> Dictionary:
 	var a_t := (MOON_R_MM + high_mm) / 2
 	var n := LandingSystem.twr_ppm(gm, MOON_R_MM, PROBE_THRUST_N, roundi((PROBE_DRY_KG + PROBE_TANK_KG) * 1000.0))
 	var surface := IntMath.mul_div_ceil(OrbitMath.speed_um_s(gm, MOON_R_MM, a_t),
-		LandingSystem.loss_permille(n, LandingSystem.LAND_EXTRA_PERMILLE), 1000)
+		LandingSystem.loss_permille(n, LandingSystem.LAND_LOSS_A, LandingSystem.LAND_LOSS_B), 1000)
 	var top := absi(OrbitMath.speed_um_s(gm, high_mm, high_mm) - OrbitMath.speed_um_s(gm, high_mm, a_t))
 	return { "dv_um_s": surface + top, "ticks": maxi(1, OrbitMath.period_sub(gm, a_t) / (2 * OrbitMath.SUB_TICKS)) }
 

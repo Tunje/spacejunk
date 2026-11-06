@@ -11,7 +11,7 @@ func test_landing_sets_the_ship_down_on_its_cell() -> void:
 	var detail: Dictionary = checked["detail"]
 	print("LAND from 700 km: %d m/s, %d kg, %d ticks" % [
 		detail["dv_um_s"] / 1_000_000, detail["propellant_g"] / 1000, detail["ticks"]])
-	assert_between(detail["dv_um_s"], 2_300_000_000, 2_700_000_000, "about 2.3 to 2.6 km/s, as planned")
+	assert_between(detail["dv_um_s"], 2_900_000_000, 3_200_000_000, "about 3.06 km/s, with 18% lost at 3.7 g (A27)")
 	sim.submit(_land(4242))
 	sim.step()
 	assert_eq(_ship()["op"]["type"], LandingSystem.OP_LANDING)
@@ -294,9 +294,11 @@ func test_predict_skimming_the_ground_is_quick_and_matches_the_flight() -> void:
 
 
 func test_gravity_loss_grows_as_thrust_over_weight_falls() -> void:
-	assert_eq(LandingSystem.loss_permille(2_000_000, 0), 1155, "1 / sqrt(1 - 1/4), rounded up")
-	assert_eq(LandingSystem.loss_permille(2_000_000, 600), 1455, "plus 600 / 2")
-	assert_lte(LandingSystem.loss_permille(1_000_000_000, 0), 1001, "no loss to speak of at a huge thrust")
+	assert_eq(LandingSystem.loss_permille(2_000_000, 660, 0), 1330, "1 + 0.66 / 2")
+	assert_eq(LandingSystem.loss_permille(2_000_000, 320, 260), 1225, "1 + 0.32 / 2 + 0.26 / 4")
+	assert_eq(LandingSystem.loss_permille(2_200_000, LandingSystem.LAND_LOSS_A, LandingSystem.LAND_LOSS_B), 1300,
+		"a landing at 2.2 g loses 30%, as flown")
+	assert_lte(LandingSystem.loss_permille(1_000_000_000, 660, 260), 1002, "almost nothing at a huge thrust")
 	var costs: Array[int] = []
 	for thrust_n: int in [300_000, 600_000, 1_200_000]:
 		_strong_thruster()
