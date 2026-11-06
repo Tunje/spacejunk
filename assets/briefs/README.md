@@ -113,6 +113,17 @@ Results: style, off-white edges, colour blocks, triangles and LOD passed. Each m
 | 17 | [mining_laser_mk1](mining_laser_mk1.md) | 6000 |
 | 18 | [landing_legs_mk1](landing_legs_mk1.md) | 6000 |
 
+**Batch B22** adds the last placeholder parts, all faceted, on the data origin, with connector lists from data:
+
+| # | Model | Target |
+| - | ----- | ------ |
+| 20 | [compact_refinery_mk1](compact_refinery_mk1.md) | 6000 |
+| 21 | [compact_fabricator_mk1](compact_fabricator_mk1.md) | 6000 |
+| 22 | [goods_container_mk1](goods_container_mk1.md) | 6000 |
+| 23 | [small_battery_bank_mk1](small_battery_bank_mk1.md) | 6000 |
+| 24 | [research_lab_mk1](research_lab_mk1.md) | 6000 |
+| 25 | [small_hub](small_hub.md) | 12000 |
+
 Not in this batch:
 - The two cores, which sit hidden in a hull's core slot.
 - The `small_` versions of modules. Each is a later batch, or the client scales its full-size model.
