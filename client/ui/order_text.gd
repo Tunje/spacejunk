@@ -13,6 +13,7 @@ const REASONS: Dictionary = {
 	"variant_exists": "That variant is already designed",
 	"stat_out_of_range": "Those ideas push a figure to zero or below",
 	"missing_points": "Not enough science points",
+	"install_blocked": "Built, but it can't be fitted there yet",
 	"missing_evidence": "The theory's evidence isn't gathered yet",
 	"orbit_changed": "The orbit changed, so the measurement stopped",
 	"corrupt": "The save file is damaged",
@@ -178,7 +179,8 @@ static func event(entry: Dictionary, unit_name: String, items: Dictionary, bodie
 		"idea_discovered":
 			return "Idea discovered for %s: %s" % [items.get(data["base"], {}).get("name", data["base"]), String(data["idea"]).capitalize()]
 		"job_paused":
-			return "%s: job held. %s" % [unit_name, reason(data["reason"])]
+			var held := "%s: job held. %s" % [unit_name, reason(data["reason"])]
+			return held if not data.has("detail") or not data["detail"] is String else "%s: %s" % [held, reason(data["detail"])]
 		"fit_copied":
 			return OrderText.fit_copied(data, unit_name, items)
 		"burn_started":
