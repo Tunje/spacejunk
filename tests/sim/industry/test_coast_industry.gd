@@ -138,11 +138,10 @@ func test_mining_coasts_in_closed_form_to_a_full_hold() -> void:
 	stepped.step()
 	stepped.take_events()
 	var coasted := _copy(stepped)
-	_same_both_ways(stepped, coasted, 2_500)
+	assert_lt(_same_both_ways(stepped, coasted, 2_500), 20, "with A35's power horizon")
 	assert_eq(stepped._state["units"][SHIP]["task"], 0, "the hold filled and the order ended")
 	assert_gt(stepped._state["units"][SHIP]["inventory"].get("hematite", 0), 0)
-	# Mining itself never caps: only its start and end. PowerSystem may still step the ship's full
-	# battery tick by tick (reported to A), so the call count is A's to bring down.
+	# Mining itself never caps: only its start and end.
 	assert_lte(caps.get("tasks", 0), 2, "mining coasts in closed form: %s" % str(caps))
 
 
@@ -172,7 +171,8 @@ func _laser(sim: Sim, unit: int) -> int:
 func test_a_mining_cycle_coasts_exactly() -> void:
 	var stepped := _mining_cycle({})
 	var coasted := _copy(stepped)
-	_same_both_ways(stepped, coasted, 6_000)
+	# Was 2,004 calls: docking, undocking and transfers now coast too (C20), and moves (A37).
+	assert_lt(_same_both_ways(stepped, coasted, 6_000), 60, "laps are skipped, not stepped")
 	assert_gt(stepped._state["units"][STATION]["inventory"].get("hematite", 0), 0, "a lap unloaded ore")
 
 
@@ -180,7 +180,7 @@ func test_a_mining_cycle_coasts_exactly() -> void:
 func test_a_cycle_mines_its_amount_each_lap_and_coasts_exactly() -> void:
 	var stepped := _mining_cycle({ "grams": 30_000 })
 	var coasted := _copy(stepped)
-	_same_both_ways(stepped, coasted, 6_000)
+	assert_lt(_same_both_ways(stepped, coasted, 6_000), 150, "short laps, each a few calls")
 	var unloaded: int = stepped._state["units"][STATION]["inventory"].get("hematite", 0)
 	assert_gt(unloaded, 30_000, "more than one lap")
 	assert_eq(unloaded % 30_000, 0, "every lap unloaded exactly the amount: %d" % unloaded)
@@ -278,6 +278,89 @@ func test_a_gravity_field_lap_coasts_exactly() -> void:
 	stepped.step()
 	stepped.take_events()
 	var coasted := _copy(stepped)
-	_same_both_ways(stepped, coasted, 800)
+	assert_lt(_same_both_ways(stepped, coasted, 800), 30, "with A35's power horizon")
 	assert_eq(stepped._state["science"]["paid"].size(), 1, "the lap paid")
 	assert_lte(caps.get("tasks", 0), 2, "a running measurement never caps: %s" % str(caps))
+
+
+## C20: the reference ship, docked at the station, for docks and transfers. The ship has an ore
+## hold but no goods hold, so ore goes both ways and goods only out to the station.
+func _docked() -> Sim:
+	var sim := _reference()
+	_give(sim, STATION, "hematite", 900_000)
+	_give(sim, SHIP, "chalcopyrite", 400_000)
+	return sim
+
+
+func _then_same(stepped: Sim, ticks: int) -> int:
+	stepped.step()
+	stepped.take_events()
+	return _same_both_ways(stepped, _copy(stepped), ticks)
+
+
+func _held(sim: Sim, unit: int, item: String) -> int:
+	return sim._state["units"][unit]["inventory"].get(item, 0)
+
+
+func test_an_undock_and_a_dock_coast_to_their_end_ticks() -> void:
+	var stepped := _docked()
+	var dock: Dictionary = stepped._state["units"][SHIP]["dock"].duplicate()
+	stepped.submit({ "type": "undock", "unit": SHIP, "args": {} })
+	assert_lte(_then_same(stepped, 200), 6, "the undock coasts")
+	assert_true(stepped._state["units"][SHIP]["dock"].is_empty())
+	stepped.submit({ "type": "dock", "unit": SHIP,
+		"args": { "port": dock["port"], "target_port": dock["target_port"] } })
+	assert_lte(_then_same(stepped, 400), 6, "the dock coasts once its ports are granted")
+	assert_false(stepped._state["units"][SHIP]["dock"].is_empty())
+
+
+func test_a_load_and_an_unload_coast_exactly() -> void:
+	var stepped := _docked()
+	stepped.submit({ "type": "load_cargo", "unit": SHIP, "args": { "from": STATION, "item": "hematite" } })
+	assert_lte(_then_same(stepped, 600), 6, "the load is summed, not stepped")
+	assert_eq(caps.get("docking_or_cargo", 0), 0)
+	assert_eq(_held(stepped, SHIP, "hematite"), 900_000, "all of it came")
+	stepped.submit({ "type": "unload_cargo", "unit": SHIP, "args": { "to": STATION, "item": "chalcopyrite" } })
+	assert_lte(_then_same(stepped, 600), 6, "the unload is summed, not stepped")
+	assert_eq(_held(stepped, STATION, "chalcopyrite"), 400_000, "all of it went")
+
+
+func test_a_transfer_amount_stops_exactly_under_coast() -> void:
+	var stepped := _docked()
+	stepped.submit({ "type": "unload_cargo", "unit": SHIP,
+		"args": { "to": STATION, "item": "chalcopyrite", "grams": 123_456 } })
+	_then_same(stepped, 400)
+	assert_eq(_held(stepped, SHIP, "chalcopyrite"), 400_000 - 123_456)
+
+
+func test_a_load_into_a_hold_that_fills_coasts_exactly() -> void:
+	var stepped := _docked()
+	var room := Units.grams_that_fit(stepped._state, stepped._ctx.defs, SHIP, "hematite")
+	_give(stepped, STATION, "hematite", room)
+	stepped.submit({ "type": "load_cargo", "unit": SHIP, "args": { "from": STATION, "item": "hematite" } })
+	_then_same(stepped, 2_000)
+	assert_eq(_held(stepped, SHIP, "hematite"), room, "the hold filled")
+	assert_eq(Units.grams_that_fit(stepped._state, stepped._ctx.defs, SHIP, "hematite"), 0)
+
+
+func test_whole_units_still_step_and_match() -> void:
+	var stepped := _docked()
+	var unit_g: int = stepped._ctx.defs["items"]["processor"]["unit_mass_g"]
+	_give(stepped, SHIP, "processor", 40 * unit_g)
+	stepped.submit({ "type": "unload_cargo", "unit": SHIP, "args": { "to": STATION, "item": "processor" } })
+	_then_same(stepped, 300)
+	assert_eq(_held(stepped, STATION, "processor"), 40 * unit_g, "all forty went")
+	assert_gt(caps.get("tasks", 0), 30, "a whole-unit transfer steps, from the task side first")
+
+
+## A job held for inputs at the station starts on the tick the unloaded ore lets it, coasted or not.
+func test_a_job_waiting_on_an_unload_starts_on_the_same_tick() -> void:
+	var stepped := _reference()
+	_give(stepped, SHIP, "hematite", 400_000)
+	stepped.submit(_job(REFINERY, "refine_hematite", 2))
+	stepped.step()
+	assert_eq(stepped._state["jobs"].values()[0]["reason"], "missing_inputs")
+	stepped.submit({ "type": "unload_cargo", "unit": SHIP, "args": { "to": STATION, "item": "hematite" } })
+	_then_same(stepped, 3_000)
+	assert_true(stepped._state["jobs"].is_empty(), "both runs went")
+	assert_gt(caps.get("jobs", 0), 0, "the held job stepped while its inputs came")

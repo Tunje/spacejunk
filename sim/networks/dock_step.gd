@@ -78,6 +78,12 @@ func end_test(ctx: SimContext, unit_id: int) -> bool:
 	return not ctx.state["units"][unit_id]["dock"].is_empty()
 
 
+## Coast (C20): once its ports are granted, nothing changes until CargoSystem finishes the dock on
+## its end tick, which is stepped.
+func coast_ticks(ctx: SimContext, unit_id: int) -> int:
+	return CargoSystem.dock_horizon(ctx, unit_id)
+
+
 func _is_port(ctx: SimContext, part: int) -> bool:
 	return ctx.state["parts"].has(part) \
 		and Units.module_of(ctx.state, ctx.defs, part)["capabilities"].has(CAPABILITY)

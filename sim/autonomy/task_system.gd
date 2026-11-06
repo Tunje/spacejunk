@@ -475,10 +475,11 @@ func _sorted(table: Dictionary) -> Array:
 	return ids
 
 
-## Coast (A33, C17). A task whose operation is under way and steady coasts as its step allows:
-## scans and measurements until their last tick, mining in closed form, and moves and waits as
-## CargoSystem's own horizon bounds them. Anything else steps the world: a task about to start,
-## end or change step, a blocked cycle, docking, undocking and cargo transfers.
+## Coast (A33, C17, C20). A task whose operation is under way and steady coasts as its step allows:
+## scans and measurements until their last tick, mining and bulk transfers in closed form, docking
+## and undocking until their end tick, and moves and waits as CargoSystem's own horizon bounds them.
+## Anything else steps the world: a task about to start, end or change step, a blocked cycle, and a
+## transfer of whole units.
 func horizon(ctx: SimContext) -> int:
 	var skip := NO_LIMIT
 	var units: Dictionary = ctx.state["units"]
