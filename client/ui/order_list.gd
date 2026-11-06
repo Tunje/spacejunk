@@ -9,7 +9,7 @@ const ATOMIC_OPS: Dictionary = { "dock": "docking", "undock": "undocking" }
 
 
 static func build(view: Dictionary, modules: Dictionary, items: Dictionary, commanded: int,
-		selected_kind: String, selected_id: int) -> Array[Dictionary]:
+		selected_kind: String, selected_id: int, science: Dictionary = {}) -> Array[Dictionary]:
 	var orders: Array[Dictionary] = []
 	if not view["units"].has(commanded):
 		return orders
@@ -17,6 +17,7 @@ static func build(view: Dictionary, modules: Dictionary, items: Dictionary, comm
 	if selected_kind == "body" and view["bodies"].has(selected_id):
 		if view["bodies"][selected_id]["kind"] == SHOWN_KIND_ASTEROID:
 			_add_asteroid_orders(orders, view, modules, items, commanded, selected_id)
+		_add_measure_orders(orders, view["bodies"][selected_id]["kind"], science, commanded, selected_id)
 	elif selected_kind == "unit" and selected_id != commanded and view["units"].has(selected_id):
 		_add(orders, "Move to", commanded, "move_to", { "target": selected_id })
 		var used := OrderList.ports_in_use(view)
@@ -81,6 +82,25 @@ static func _add_asteroid_orders(orders: Array[Dictionary], view: Dictionary, mo
 			var label := "Mine %s (%s)" % [items[deposit["item"]]["name"], OrderText.tonnes(deposit["remaining_g"])]
 			var key := "Mine %d" % id
 			_add(orders, label, commanded, "start_mining", { "deposit": id, "module": laser }, key)
+
+
+## C12: a Measure order for each science kind whose place suits this kind of body:
+## composition at a rock, gravity field and surface sample at a planet or moon.
+## Survey is Scan's own. Sim.check says whether the unit is in that place now.
+static func _add_measure_orders(orders: Array[Dictionary], body_kind: String, science: Dictionary,
+		commanded: int, body: int) -> void:
+	if body_kind != SHOWN_KIND_ASTEROID and not ["planet", "moon"].has(body_kind):
+		return
+	var kinds: Array = science.keys()
+	kinds.sort()
+	for kind: String in kinds:
+		if kind == "survey":
+			continue
+		var place: String = science[kind].get("place", "")
+		var at_rock := body_kind == SHOWN_KIND_ASTEROID
+		if (place == "asteroid") == at_rock:
+			var label := "Measure %s" % OrderText.science_kind(kind).to_lower()
+			_add(orders, label, commanded, "measure", { "target": body, "kind": kind }, "Measure %s" % kind)
 
 
 static func _add(orders: Array[Dictionary], label: String, unit: int, type: String, args: Dictionary, key: String = "") -> void:

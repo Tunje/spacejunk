@@ -17,6 +17,8 @@ var index := {}
 ## radius of cells it has met. Only a starting point for the search, which ends at the same cell
 ## without it, so it is derived and never saved (A24).
 var ground_memo := {}
+## Why the last coast horizon was 0, set by the system that capped it (A33).
+var coast_cap := ""
 
 var _events: Array[Dictionary] = []
 var _deltas: Array[Dictionary] = []

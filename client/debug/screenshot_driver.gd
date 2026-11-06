@@ -29,6 +29,9 @@ class_name ScreenshotDriver extends Node
 ##   --set-down=<body name>,<cell>   (real Sim) puts the commanded craft down on that hex as a landing
 ##                                   ends, for a landed shot where it can't yet fly down
 ##   --look-at=<body name>           turns the camera so that body is behind the craft (after --pitch)
+##   --build-into=<recipe id>        opens Jobs on the facility that makes it, then its "Build into…" picker
+##   --research=1                    opens the research screen
+##   --research-ideas=<base>:<idea>[,<idea>...]  then picks that base and those ideas in its designer
 ##   --copy=1                        (stub_load) strips two parts off the first ship and
 ##                                   opens fitting there, to show "Fit like this one"
 ##   --fit=<item>  --fit-slot=<connector>  opens fitting after the orders and picks both
@@ -128,6 +131,28 @@ func _run() -> void:
 		await _open_fitting()
 	if parsed.has("jobs"):
 		await _open_jobs()
+	if parsed.has("build-into"):
+		main.toggle_industry()
+		var screen: IndustryScreen = main.industry_screen
+		var recipe: Dictionary = main.bridge.defs()["recipes"][parsed["build-into"]]
+		for entry: Dictionary in IndustryLogic.facilities(main.bridge.current_view["units"][screen.unit_id], screen._defs["modules"]):
+			if entry["type"] == recipe["facility"]:
+				screen.choose_facility(entry)
+		screen.refresh()
+		screen.open_picker(recipe)
+	if parsed.has("research"):
+		main.toggle_research()
+		if parsed.has("research-ideas"):
+			var spec: PackedStringArray = parsed["research-ideas"].split(":")
+			main.research_screen.choose_base(spec[0])
+			for idea: String in spec[1].split(","):
+				main.research_screen.toggle_idea(idea, true)
+			main.research_screen._key = ""
+			main.research_screen.refresh()
+			# Down to the designer, once the list has its size.
+			await get_tree().process_frame
+			await get_tree().process_frame
+			main.research_screen.scroll_to_designs()
 	if parsed.has("cycle"):
 		await _start_demo_cycle()
 	if parsed.has("copy"):
@@ -235,7 +260,7 @@ static func _fit_part(bridge: SimBridge, drone: int, item: String, connector: St
 static func _step(bridge: SimBridge) -> void:
 	var was_paused := bridge.paused
 	bridge.set_paused(false)
-	bridge.set_speed(SimBridge.SPEEDS[-1])
+	bridge.set_speed(WarpLogic.STEP_MAX)
 	bridge.advance(RUN_STEP_S)
 	bridge.set_paused(was_paused)
 
@@ -297,7 +322,7 @@ func _open_jobs() -> void:
 					screen.choose_facility(entry)
 					screen.start(recipe)
 	ScreenshotDriver._step(main.bridge)
-	for i in roundi(float(parsed.get("jobs-run", "0")) / (RUN_STEP_S * SimBridge.SPEEDS[-1])):
+	for i in roundi(float(parsed.get("jobs-run", "0")) / (RUN_STEP_S * WarpLogic.STEP_MAX)):
 		ScreenshotDriver._step(main.bridge)
 	main.bridge.set_paused(true)
 	screen.refresh()

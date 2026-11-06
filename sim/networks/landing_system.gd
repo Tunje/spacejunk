@@ -96,6 +96,21 @@ func run(ctx: SimContext) -> void:
 			_check_crash(ctx, id)
 
 
+## Coast (A33): an atomic landing or takeoff ends on its end tick. A unit on an orbit low enough to
+## meet the ground is BurnSystem's to cap, since it enters low flight first.
+func horizon(ctx: SimContext) -> int:
+	var skip := NO_LIMIT
+	var now: int = ctx.state["tick"]
+	var units: Dictionary = ctx.state["units"]
+	for id: int in _sorted(units):
+		var op: Dictionary = units[id]["op"]
+		if op["type"] == OP_LANDING or op["type"] == OP_TAKING_OFF:
+			skip = mini(skip, int(op["end_tick"]) - now - 1)
+	if skip <= 0:
+		ctx.coast_cap = "landing_or_takeoff"
+	return maxi(skip, 0)
+
+
 func apply_delta(ctx: SimContext, payload: Dictionary) -> void:
 	Units.remove_stock(ctx.state["units"][payload["unit"]]["inventory"], Travel.PROPELLANT, payload["grams"])
 	var sink: Dictionary = ctx.state["sinks"].get_or_add(Travel.SINK, {})

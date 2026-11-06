@@ -46,3 +46,9 @@ static func _place_holder(state: Dictionary, unit_id: int) -> int:
 	while not state["units"][current]["dock"].is_empty():
 		current = state["units"][current]["dock"]["target_unit"]
 	return current
+
+
+## Coast (A33): this system only builds what a job delivered on the same tick, so it waits on
+## JobSystem's horizon and has none of its own.
+func horizon(_ctx: SimContext) -> int:
+	return NO_LIMIT

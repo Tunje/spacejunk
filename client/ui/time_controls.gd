@@ -7,15 +7,22 @@ signal fly_pressed
 signal policy_pressed
 signal fit_pressed
 signal jobs_pressed
+signal research_pressed
 signal auto_pressed
 signal save_pressed
 signal load_pressed
+
+## Left edge of the warp readout, past the inspection panel under the bar.
+const WARP_LABEL_LEFT_PX := 350.0
 
 var bridge: SimBridge
 
 var _pause_button: Button
 var _speed_buttons: Dictionary = {}
 var _clock: Label
+## Above 8×: the speed reached and why it's held back. Below the toolbar row.
+var warp_label: Label
+var _through_jobs: CheckBox
 
 
 func _ready() -> void:
@@ -30,7 +37,7 @@ func _ready() -> void:
 	row.add_child(_pause_button)
 	for value: int in SimBridge.SPEEDS:
 		var button := Button.new()
-		button.text = "%dx" % value
+		button.text = WarpLogic.speed_label(value)
 		button.toggle_mode = true
 		button.focus_mode = Control.FOCUS_NONE
 		button.pressed.connect(func() -> void: bridge.set_speed(value))
@@ -56,6 +63,11 @@ func _ready() -> void:
 	jobs_button.focus_mode = Control.FOCUS_NONE
 	jobs_button.pressed.connect(func() -> void: jobs_pressed.emit())
 	row.add_child(jobs_button)
+	var research_button := Button.new()
+	research_button.text = "Research"
+	research_button.focus_mode = Control.FOCUS_NONE
+	research_button.pressed.connect(func() -> void: research_pressed.emit())
+	row.add_child(research_button)
 	var auto_button := Button.new()
 	auto_button.text = "Auto"
 	auto_button.focus_mode = Control.FOCUS_NONE
@@ -80,6 +92,28 @@ func _ready() -> void:
 	_clock.custom_minimum_size = Vector2(190, 0)
 	_clock.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	row.add_child(_clock)
+	warp_label = Label.new()
+	warp_label.modulate = ClientTheme.MID_GREY.lightened(0.35)
+	warp_label.visible = false
+	warp_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	warp_label.add_theme_constant_override("outline_size", 6)
+	# Floats in the overlay just under the bar, clear of the panel at the left.
+	_place_warp_label.call_deferred()
+	_through_jobs = CheckBox.new()
+	_through_jobs.text = "Warp past jobs"
+	_through_jobs.tooltip_text = "Above 8×, keep warping when a job finishes instead of dropping to 1×"
+	_through_jobs.focus_mode = Control.FOCUS_NONE
+	_through_jobs.toggled.connect(func(on: bool) -> void: bridge.warp_through_jobs = on)
+	row.add_child(_through_jobs)
+
+
+## The bar has a fixed height, so the readout is a sibling under it, starting
+## right of the inspection panel, over open sky.
+func _place_warp_label() -> void:
+	if get_parent() == null:
+		return
+	get_parent().add_child(warp_label)
+	warp_label.position = position + Vector2(WARP_LABEL_LEFT_PX, size.y + 6)
 
 
 func bind(new_bridge: SimBridge) -> void:
@@ -107,6 +141,10 @@ func _refresh() -> void:
 	_pause_button.text = "Resume" if bridge.paused else "Pause"
 	for value: int in _speed_buttons:
 		_speed_buttons[value].set_pressed_no_signal(value == bridge.speed)
-	var seconds := floori(bridge.game_seconds())
-	_clock.text = "T+%02d:%02d:%02d" % [seconds / 3600, seconds / 60 % 60, seconds % 60]
+	_clock.text = WarpLogic.clock_text(floori(bridge.game_seconds()))
+	warp_label.visible = bridge.speed > WarpLogic.STEP_MAX and not bridge.paused
+	if warp_label.visible:
+		var cap := bridge.shown_cap()
+		warp_label.text = "Warp %s%s" % [WarpLogic.achieved_text(bridge.achieved_speed),
+			"" if cap.is_empty() else ", held back: %s" % WarpLogic.cap_text(cap)]
 	_clock.modulate = ClientTheme.ORANGE if bridge.paused else Color.WHITE

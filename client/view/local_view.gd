@@ -70,6 +70,7 @@ func rebuild() -> void:
 func bind(new_bridge: SimBridge) -> void:
 	bridge = new_bridge
 	_modules = bridge.defs()["modules"]
+	bridge.defs_changed.connect(func() -> void: _modules = bridge.defs()["modules"])
 	_sync_entities()
 	field = AsteroidField.new()
 	add_child(field)

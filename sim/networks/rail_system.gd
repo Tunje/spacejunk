@@ -33,6 +33,35 @@ func update_tasks(ctx: SimContext) -> void:
 			units[id]["pos_mm"] = OrbitMath.position_at(units[id]["orbit"], ctx.tick)
 
 
+## Coast (A33): positions are functions of the tick, so only a transfer's next leg must be stepped.
+func horizon(ctx: SimContext) -> int:
+	var skip := NO_LIMIT
+	var now: int = ctx.state["tick"]
+	for id: int in _sorted(ctx.state["units"]):
+		var legs: Array = ctx.state["units"][id]["transfer"].get("legs", [])
+		if not legs.is_empty():
+			skip = mini(skip, int(legs[0]["from_tick"]) - now - 1)
+	if skip <= 0:
+		ctx.coast_cap = "transfer_leg"
+	return maxi(skip, 0)
+
+
+## Coast (A33): everything on rails where it is after the skipped ticks.
+func coast(ctx: SimContext, ticks: int) -> void:
+	var tick: int = ctx.state["tick"] + ticks
+	var bodies: Dictionary = ctx.state["bodies"]
+	for id: int in _sorted(bodies):
+		if not bodies[id]["orbit"].is_empty():
+			bodies[id]["pos_mm"] = OrbitMath.position_at(bodies[id]["orbit"], tick)
+	var frames: Dictionary = ctx.state["frames"]
+	for id: int in _sorted(frames):
+		frames[id]["pos_mm"] = OrbitMath.position_at(frames[id]["orbit"], tick)
+	var units: Dictionary = ctx.state["units"]
+	for id: int in _sorted(units):
+		if not units[id]["orbit"].is_empty() and units[id]["dock"].is_empty():
+			units[id]["pos_mm"] = OrbitMath.position_at(units[id]["orbit"], tick)
+
+
 func fill_view(ctx: SimContext, view: Dictionary) -> void:
 	var frames: Dictionary = ctx.state["frames"]
 	for id: int in _sorted(frames):

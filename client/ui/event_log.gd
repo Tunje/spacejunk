@@ -21,6 +21,7 @@ func _ready() -> void:
 func bind(new_bridge: SimBridge) -> void:
 	bridge = new_bridge
 	_items = bridge.defs()["items"]
+	bridge.defs_changed.connect(func() -> void: _items = bridge.defs()["items"])
 	bridge.events_received.connect(_on_events)
 
 

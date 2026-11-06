@@ -139,3 +139,8 @@ func _refused(ctx: SimContext, pending: Array[int], reasons: Dictionary) -> Arra
 			"reason": reasons[source_part],
 		})
 	return refused
+
+
+## Coast (A33): this system only acts on commands, which the kernel's own horizon steps for.
+func horizon(_ctx: SimContext) -> int:
+	return NO_LIMIT
