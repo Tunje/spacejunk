@@ -71,11 +71,12 @@ func set_speed(value: int) -> void:
 		time_changed.emit()
 
 
-## The cap to show: a lasting one at once, a momentary one only if it holds.
+## The cap to show: a lasting one at once, a momentary one only if it holds or
+## has pulled the speed below half what was asked, so a slow warp always says why.
 func shown_cap() -> String:
 	if capped_by.is_empty():
 		return ""
-	if WarpLogic.MOMENTARY.has(capped_by) and _cap_seconds < CAP_SHOWN_AFTER_S:
+	if WarpLogic.MOMENTARY.has(capped_by) and _cap_seconds < CAP_SHOWN_AFTER_S and achieved_speed >= speed * 0.5:
 		return ""
 	return capped_by
 

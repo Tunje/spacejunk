@@ -126,8 +126,12 @@ func test_a_momentary_cap_shows_only_if_it_lasts() -> void:
 	sim.cap = "power"
 	bridge.start(sim)
 	bridge.set_speed(1000)
+	bridge.achieved_speed = 900.0
 	bridge.advance(0.01)
+	bridge.achieved_speed = 900.0
 	assert_eq(bridge.shown_cap(), "", "a passing power edge isn't worth showing")
+	bridge.achieved_speed = 300.0
+	assert_eq(bridge.shown_cap(), "power", "unless it has pulled the speed well down")
 	for i in 40:
 		bridge.advance(0.016)
 	assert_eq(bridge.shown_cap(), "power")
