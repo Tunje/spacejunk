@@ -28,6 +28,8 @@ var _events: Array[Dictionary] = []
 var _strict := false
 ## Command types that may be sent with unit 0, meaning the player rather than a unit (C12).
 var _unitless := {}
+## Whether the last tick run emitted no events, so coast may repeat its figures (A33).
+var _quiet_tick := false
 var _violations := PackedStringArray()
 
 
@@ -95,6 +97,52 @@ func check(command: Dictionary) -> Dictionary:
 func step(tick_count: int = 1) -> void:
 	for i in tick_count:
 		_run_tick()
+
+
+## Coast time warp (contracts section 3, orbital_flight.md 11.22): advances up to max_ticks ticks,
+## running in closed form those in which nothing discrete can happen, and stepping the rest. The
+## state, its save and the events are exactly as step(ticks) leaves them. Returns { ticks,
+## capped_by }: when a system can't coast yet it returns after one stepped tick, with capped_by
+## naming why, so the client can run at batch speed instead. It also returns just after any tick
+## with events, so each is seen on its own tick. In strict mode it steps every tick.
+func coast(max_ticks: int) -> Dictionary:
+	var done := 0
+	while done < max_ticks:
+		_run_tick()
+		done += 1
+		# A tick with events returns, so the client sees each event on its own tick and can drop the
+		# warp. It also changed something after its figures were worked out (a landing, an arrival,
+		# a fault), so the next call steps a tick before anything repeats them.
+		if not _quiet_tick:
+			return { "ticks": done, "capped_by": "" }
+		if done >= max_ticks or _strict:
+			continue
+		var skip := _horizon(max_ticks - done)
+		if skip <= 0:
+			return { "ticks": done, "capped_by": _ctx.coast_cap }
+		for system in _systems:
+			system.coast(_ctx, skip)
+		_state["tick"] += skip
+		done += skip
+	return { "ticks": done, "capped_by": "" }
+
+
+## The ticks after this one that every system, and any queued command, lets coast skip, up to most.
+func _horizon(most: int) -> int:
+	_ctx.coast_cap = ""
+	var skip := most
+	for command: Dictionary in _state["commands"]:
+		skip = mini(skip, command["tick"] - current_tick() - 1)
+	if skip <= 0:
+		_ctx.coast_cap = "command"
+		return 0
+	for system in _systems:
+		skip = mini(skip, system.horizon(_ctx))
+		if skip <= 0:
+			if _ctx.coast_cap == "":
+				_ctx.coast_cap = system.get_script().get_global_name()
+			return 0
+	return skip
 
 
 func current_tick() -> int:
@@ -397,7 +445,9 @@ func _value_problem(value: Variant) -> String:
 
 
 func _commit(tick: int) -> void:
-	_events.append_array(_ctx.take_events())
+	var tick_events := _ctx.take_events()
+	_quiet_tick = tick_events.is_empty()
+	_events.append_array(tick_events)
 	if _events.size() > MAX_QUEUED_EVENTS:
 		var dropped := _events.size() - MAX_QUEUED_EVENTS
 		push_warning("Dropped %d undrained events" % dropped)

@@ -124,3 +124,8 @@ func _sorted(table: Dictionary) -> Array:
 	var ids: Array = table.keys()
 	ids.sort()
 	return ids
+
+
+## Coast (A33): this system only acts on commands, which the kernel's own horizon steps for.
+func horizon(_ctx: SimContext) -> int:
+	return NO_LIMIT

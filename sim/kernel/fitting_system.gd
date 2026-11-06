@@ -212,3 +212,8 @@ func _has_types(args: Dictionary, types: Dictionary) -> bool:
 		if typeof(args.get(key)) != types[key]:
 			return false
 	return true
+
+
+## Coast (A33): this system only acts on commands, which the kernel's own horizon steps for.
+func horizon(_ctx: SimContext) -> int:
+	return NO_LIMIT

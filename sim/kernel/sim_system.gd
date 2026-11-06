@@ -5,6 +5,10 @@ extends RefCounted
 ## within each phase. Every phase method defaults to doing nothing.
 
 
+## A horizon with nothing to wait for (orbital_flight.md 11.22).
+const NO_LIMIT := 1 << 60
+
+
 ## Command types this system handles.
 func commands() -> PackedStringArray:
 	return PackedStringArray()
@@ -14,6 +18,20 @@ func commands() -> PackedStringArray:
 ## such as designing a variant (C12). The kernel skips its unit check for these alone.
 func unitless_commands() -> PackedStringArray:
 	return PackedStringArray()
+
+
+## Coast (orbital_flight.md 11.22, A33). Asked between ticks, just after one was stepped, with
+## ctx.flows still holding that tick's figures: how many of the coming ticks this system can skip in
+## closed form, nothing discrete happening in any of them. 0 means the next must be stepped; then set
+## ctx.coast_cap to say why. The default is 0, so a system without a closed form blocks coasting.
+func horizon(_ctx: SimContext) -> int:
+	return 0
+
+
+## Advances this system's state over the `ticks` ticks after state["tick"], exactly as stepping
+## them would, where horizon allowed it. state["tick"] is moved on by the kernel afterwards.
+func coast(_ctx: SimContext, _ticks: int) -> void:
+	pass
 
 
 ## Phase 1 validation, and the body of Sim.check. Must not change anything.
