@@ -110,13 +110,14 @@ func _rebuild(view: Dictionary) -> void:
 		_add_detail("Evidence: %s" % ResearchLogic.evidence_text(theory, view))
 		if status != "Proven":
 			_add_detail("%s." % ResearchLogic.test_cost(theory, _defs))
-			_add_lab_button("Start at a lab", theory.get("test", ""), view)
+			_add_facility_button("Start at a lab", theory.get("test", ""), view, "lab")
 	_designs_heading = _heading("Designs")
 	for design: String in ResearchLogic.designs(view, _defs):
 		_add_label(_body, IndustryLogic.name_of(design, _defs))
 		_add_detail(ResearchLogic.next_step(design, view, _defs))
 		if ResearchLogic.design_state(design, view, _defs) == "prototype":
-			_add_lab_button("Bench-test at a lab", "qualify:%s" % design, view)
+			_add_facility_button("Make the prototype at a fabricator", "prototype:%s" % design, view, "fabricator")
+			_add_facility_button("Bench-test at a lab", "qualify:%s" % design, view, "lab")
 	_build_designer(view)
 
 
@@ -161,31 +162,37 @@ func _build_designer(view: Dictionary) -> void:
 	_show_preview()
 
 
-## Queues one run of a lab recipe at the first lab the Sim would take it at, or says
-## why none can: no lab yet, or each lab's refusal.
-func _add_lab_button(text: String, recipe: String, view: Dictionary) -> void:
+## Queues one run of a recipe at the first facility of that type the Sim would take
+## it at, or says why none can: none built yet, or each one's refusal. When it can
+## start but its inputs are elsewhere, it says what is missing and where.
+func _add_facility_button(text: String, recipe: String, view: Dictionary, facility_type: String) -> void:
 	if recipe == "" or not _defs["recipes"].has(recipe):
 		return
 	var button := Button.new()
 	button.text = text
 	button.focus_mode = Control.FOCUS_NONE
-	var labs := ResearchLogic.labs(view, _defs)
 	var command := {}
-	var why := "No lab yet: build a Research Lab on a station"
-	for lab: Dictionary in labs:
-		var check := bridge.check(ResearchLogic.lab_command(lab, recipe))
+	var why := "No lab yet: build a Research Lab on a station" if facility_type == "lab" \
+		else "No %s yet" % facility_type
+	for facility: Dictionary in ResearchLogic.facilities_of(view, _defs, facility_type):
+		var check := bridge.check(ResearchLogic.lab_command(facility, recipe))
 		if check["ok"]:
-			command = ResearchLogic.lab_command(lab, recipe)
+			command = ResearchLogic.lab_command(facility, recipe)
 			break
-		why = "%s: %s" % [view["units"][lab["unit"]]["name"], OrderText.reason(check["reason"], check.get("detail", {}))]
+		why = "%s: %s" % [view["units"][facility["unit"]]["name"], OrderText.reason(check["reason"], check.get("detail", {}))]
 	button.disabled = command.is_empty()
-	button.tooltip_text = why if command.is_empty() else "Queues it at %s's lab" % view["units"][command["unit"]]["name"]
+	button.tooltip_text = why if command.is_empty() else "Queues it at %s" % view["units"][command["unit"]]["name"]
 	button.pressed.connect(func() -> void:
 		bridge.submit(command)
 		lab_started.emit(recipe))
 	_body.add_child(button)
 	if command.is_empty():
 		_add_detail(why)
+		return
+	var missing := ResearchLogic.missing_inputs(view, _defs, recipe, command["unit"])
+	if missing != "":
+		var line := _add_detail("Needs on %s first: %s." % [view["units"][command["unit"]]["name"], missing])
+		line.modulate = ClientTheme.GOLD
 
 
 func choose_base(new_base: String) -> void:

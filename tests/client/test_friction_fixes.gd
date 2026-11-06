@@ -89,3 +89,21 @@ func test_measure_everything_runs_each_unpaid_kind_in_turn() -> void:
 	var commands := OrderList.measure_everything(bridge.current_view, bridge.defs()["science"], probe, rock)
 	assert_eq(commands.map(func(command: Dictionary) -> String: return command["type"]), ["scan", "measure"])
 	assert_not_null(panel.button_for("Measure everything here"))
+
+
+## D34: a bench test names what the lab's unit lacks and where it is instead.
+func test_a_bench_test_says_what_is_missing_and_where() -> void:
+	var defs := bridge.defs()
+	var view := {
+		"units": {
+			40: { "name": "Station", "inventory": {} },
+			13: { "name": "Probe", "inventory": { "processor": 10 * defs["items"]["processor"]["unit_mass_g"] } },
+		},
+	}
+	var line := ResearchLogic.missing_inputs(view, defs, "qualify:assisted_core", 40)
+	assert_string_contains(line, "10 Processor is on Probe")
+	assert_string_contains(line, "Assisted Core Prototype still to make")
+	view["units"][40]["inventory"] = view["units"][13]["inventory"].duplicate()
+	view["units"][40]["inventory"]["prototype:assisted_core"] = defs["items"]["prototype:assisted_core"]["unit_mass_g"]
+	assert_eq(ResearchLogic.missing_inputs(view, defs, "qualify:assisted_core", 40), "", "all at the lab")
+	assert_gt(ResearchLogic.facilities_of(bridge.current_view, defs, "fabricator").size(), 0, "the probe's fabricator")
