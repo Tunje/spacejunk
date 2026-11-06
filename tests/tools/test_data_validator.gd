@@ -978,10 +978,10 @@ func test_slag_must_still_be_vented() -> void:
 
 ## Research data (task B19): theories, science kinds, the lab and ideas.
 func _research() -> void:
-	data["modules"]["entries"].append(_module("lab", 10, { "facility": { "type": "lab" } },
+	data["modules"]["entries"].append(_module("lab", 10, { "facility": { "type": "lab", "work_per_tick": 100 } },
 		[_connector("mount", "side", "medium")]))
 	data["recipes"]["entries"].append(_fabrication("lab", 1, "lab"))
-	data["recipes"]["entries"].append({ "id": "prove_x", "facility": "lab", "seconds": 5,
+	data["recipes"]["entries"].append({ "id": "prove_x", "facility": "lab", "work": 5000,
 		"power_kw": 1, "points": 5, "inputs": [{ "item": "frame", "count": 1 }],
 		"outputs": [{ "item": "frame", "count": 1, "sink": "test_consumed" }, { "theory": "x" }],
 		"abstract": true })
