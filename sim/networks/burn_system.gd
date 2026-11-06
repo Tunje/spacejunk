@@ -9,9 +9,11 @@ extends SimSystem
 ## tick it delivers thrust / mass each tick until its delta-v is done or the propellant runs out.
 ## - On an orbit, each tick's delta-v makes a new orbit through OrbitMath.from_state.
 ## - In a frame, it changes the unit's local velocity, and the unit drifts in a straight line. A
-##   drifting unit leaves the frame for an orbit past LEAVE_MARGIN_MM beyond the frame's radius.
-## - A unit on an orbit joins a frame within JOIN_MARGIN_MM of its radius at under JOIN_SPEED_UM_S.
-##   The two margins differ so a slow unit at the edge cannot flap in and out.
+##   drifting unit leaves the frame for an orbit past leave_margin_mm beyond the frame's radius.
+## - A unit on an orbit joins a frame within join_margin_mm of its radius at under JOIN_SPEED_UM_S.
+##   The join margin is half the leave margin, so a slow unit at the edge cannot flap in and out.
+##   Both shrink to fit a frame inside its parent's sphere of influence (A26), as a frame has no
+##   gravity and a drifter must not coast past the SOI before it becomes an orbit again.
 ## - A unit on an orbit changes parent on the tick it crosses a sphere of influence (A12): up to the
 ##   parent's parent when it passes its parent's `soi_mm`, or down to a child body inside the child's.
 ##
@@ -41,8 +43,12 @@ const MAX_HELD_UM_S := 50_000_000
 ## check flies a planned burn tick by tick, as the real one will be, for up to this many ticks.
 ## A longer burn is previewed as one impulse, marked `approximate`.
 const MAX_PREVIEW_TICKS := 20_000
-const JOIN_MARGIN_MM := 1_000_000_000
+## The leave margin where the parent's sphere of influence leaves room, as round the star; the join
+## margin is always half the leave margin.
 const LEAVE_MARGIN_MM := 2_000_000_000
+## The least leave margin. ScenarioBuilder refuses a frame with less room than this in its parent's
+## SOI, so the floor never puts the leave point outside it.
+const MIN_LEAVE_MARGIN_MM := 2_000_000
 const JOIN_SPEED_UM_S := 1_000_000
 ## Room for the stored positions to differ from freshly computed ones by rounding.
 const JOIN_SLACK_MM := 1_000_000
@@ -464,8 +470,29 @@ func _drift(ctx: SimContext, unit_id: int) -> void:
 	if frame_id == 0:
 		return
 	var frame: Dictionary = ctx.state["frames"][frame_id]
-	if IntMath.dist(unit["pos_mm"], [0, 0, 0]) > frame["radius_mm"] + LEAVE_MARGIN_MM:
+	if IntMath.dist(unit["pos_mm"], [0, 0, 0]) > frame["radius_mm"] + leave_margin_mm(ctx, frame):
 		_leave(ctx, unit_id, frame_id)
+
+
+## How far past its radius a drifting unit leaves a frame: LEAVE_MARGIN_MM, or less, so the leave
+## point stays inside the parent's sphere of influence with as much room again to spare. The room is
+## the SOI less the frame's apoapsis and radius, halved, and never under MIN_LEAVE_MARGIN_MM.
+static func leave_margin_mm(ctx: SimContext, frame: Dictionary) -> int:
+	var soi: int = ctx.state["bodies"][frame["orbit"]["parent"]].get("soi_mm", 0)
+	if soi <= 0:
+		return LEAVE_MARGIN_MM
+	var room := (soi - apoapsis_mm(frame["orbit"]) - int(frame["radius_mm"])) / 2
+	return clampi(room, MIN_LEAVE_MARGIN_MM, LEAVE_MARGIN_MM)
+
+
+## How far past its radius a unit on an orbit joins a frame: half the leave margin.
+static func join_margin_mm(ctx: SimContext, frame: Dictionary) -> int:
+	return leave_margin_mm(ctx, frame) / 2
+
+
+## The farthest an elliptic orbit gets from its parent.
+static func apoapsis_mm(orbit: Dictionary) -> int:
+	return OrbitMath.smul_div(orbit["a_mm"], OrbitMath.ONE + int(orbit["e_q30"]), OrbitMath.ONE)
 
 
 func _leave(ctx: SimContext, unit_id: int, frame_id: int) -> void:
@@ -506,7 +533,8 @@ func _try_join(ctx: SimContext, unit_id: int) -> void:
 		var unit_mm: Array = unit["pos_mm"]
 		var frame_mm: Array = frame["pos_mm"]
 		var near := [unit_mm[0] - frame_mm[0], unit_mm[1] - frame_mm[1], unit_mm[2] - frame_mm[2]]
-		if IntMath.dist(near, [0, 0, 0]) > frame["radius_mm"] + JOIN_MARGIN_MM + JOIN_SLACK_MM:
+		var join_mm: int = frame["radius_mm"] + join_margin_mm(ctx, frame)
+		if IntMath.dist(near, [0, 0, 0]) > join_mm + JOIN_SLACK_MM:
 			continue
 		var gm: int = ctx.state["bodies"][orbit["parent"]]["gm"]
 		var mine := OrbitMath.state_at(orbit, gm, ctx.tick)
@@ -516,7 +544,7 @@ func _try_join(ctx: SimContext, unit_id: int) -> void:
 		for axis in 3:
 			local.append(int(mine["r"][axis]) - int(theirs["r"][axis]))
 			rel_v.append(int(mine["v"][axis]) - int(theirs["v"][axis]))
-		if IntMath.dist(local, [0, 0, 0]) > frame["radius_mm"] + JOIN_MARGIN_MM:
+		if IntMath.dist(local, [0, 0, 0]) > join_mm:
 			continue
 		if IntMath.dist(rel_v, [0, 0, 0]) >= JOIN_SPEED_UM_S:
 			continue
