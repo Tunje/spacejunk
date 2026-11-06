@@ -35,7 +35,9 @@ static var _defs_cache := {}
 static var _deposits_cache := {}
 
 
-## All definitions in sim units as { modules, items, recipes, templates, sinks }, or {} with error.
+## All definitions in sim units as { modules, items, recipes, templates, sinks, theories, science,
+## bench_test }, or {} with error. These are the authored definitions only: what research derives
+## from them is added per game by Research.overlay (C12).
 static func load_defs() -> Dictionary:
 	error = ""
 	if not _defs_cache.is_empty():
@@ -45,19 +47,30 @@ static func load_defs() -> Dictionary:
 	var recipes := _load_table("recipes")
 	var templates := _load_table("templates")
 	var sinks := _load_table("sinks")
+	var theories := _load_table("theories")
+	var science := _load_table("science")
+	var bench_test := _load_section("theories", "bench_test")
 	if error != "":
 		return {}
 	var problem := work_problem(recipes, modules)
+	if problem == "":
+		problem = delta_problem(modules)
 	if problem != "":
 		_fail(problem)
 		return {}
 	_derive_module_items(modules, items)
 	_add_recipe_grams(recipes, items)
+	_add_amount_grams(bench_test.get("inputs", []), items, "bench_test")
+	var theory_ids := theories.keys()
+	theory_ids.sort()
+	for id: String in theory_ids:
+		_add_amount_grams(theories[id].get("qualify", []), items, id)
 	if error != "":
 		return {}
 	_defs_cache = {
 		"modules": modules, "items": items, "recipes": recipes,
-		"templates": templates, "sinks": sinks,
+		"templates": templates, "sinks": sinks, "theories": theories, "science": science,
+		"bench_test": bench_test,
 	}
 	return _defs_cache
 
@@ -93,6 +106,8 @@ static func read_after_load(defs: Dictionary) -> Dictionary:
 	for section: String in result:
 		var entries: Dictionary = result[section]
 		for id: String in entries:
+			if typeof(entries[id]) != TYPE_DICTIONARY:
+				continue  # a single section such as bench_test, not a table of entries
 			var entry: Dictionary = entries[id]
 			for field: String in UNREAD_FIELDS:
 				entry.erase(field)
@@ -114,6 +129,16 @@ static func _load_table(table: String) -> Dictionary:
 		var converted: Dictionary = _convert(entry, "", 1, table)
 		result[converted["id"]] = converted
 	return result
+
+
+## A top-level section of a data file other than its entries, converted, or {} if it has none.
+static func _load_section(table: String, section: String) -> Dictionary:
+	var parsed: Variant = _read_json("%s%s.json" % [DATA_DIR, table])
+	if error != "":
+		return {}
+	if typeof(parsed.get(section)) != TYPE_DICTIONARY:
+		return {}
+	return _convert_map(parsed[section], "%s.%s" % [table, section])
 
 
 static func _read_json(path: String) -> Variant:
@@ -149,9 +174,43 @@ static func _convert_map(map: Dictionary, path: String) -> Dictionary:
 		if key == "visual":
 			result[key] = map[key].duplicate(true)
 			continue
+		if key == "deltas":
+			result[key] = _convert_deltas(map[key], "%s.%s" % [path, key])
+			continue
 		var rule := _rule(key)
 		result[rule[0]] = _convert(map[key], key, rule[1], "%s.%s" % [path, key])
 	return result
+
+
+## An idea's deltas (research.md section 4): each path is renamed to its sim field by the last
+## part's suffix rule, as "capabilities.battery.capacity_kj" becomes "capabilities.battery.capacity_j".
+## The values are parts per million of the field, so they are never scaled, only checked whole.
+static func _convert_deltas(deltas: Dictionary, path: String) -> Dictionary:
+	var result := {}
+	for data_path: String in deltas:
+		var parts := data_path.split(".")
+		parts[parts.size() - 1] = _rule(parts[parts.size() - 1])[0]
+		result[".".join(parts)] = _exact(deltas[data_path], 1, "%s.%s" % [path, data_path])
+	return result
+
+
+## "" if every idea's delta path names a whole number in its module, in sim units. Otherwise what
+## is wrong, for the first in ID order, so a delta can never scale a missing or fractional field.
+static func delta_problem(modules: Dictionary) -> String:
+	var ids := modules.keys()
+	ids.sort()
+	for id: String in ids:
+		for idea: Dictionary in modules[id].get("ideas", []):
+			var paths: Array = idea.get("deltas", {}).keys()
+			paths.sort()
+			for path: String in paths:
+				var value: Variant = modules[id]
+				for part in path.split("."):
+					value = value.get(part) if typeof(value) == TYPE_DICTIONARY else null
+				if typeof(value) != TYPE_INT:
+					return "module %s idea %s changes %s, which is not a whole number in the module" % [
+						id, idea.get("id", "?"), path]
+	return ""
 
 
 ## The sim field name and factor for a data field, as [name, factor].
