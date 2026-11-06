@@ -387,3 +387,49 @@ The other settings in [planets.md](planets.md) section 1 (`kind`, `temperature`,
 **Validity.** A docked unit's `pos_mm` equals its host's, and starting inventory fits the unit's capacity, by mass and volume per cargo class. The validator checks both.
 
 **Start state.** Batteries start full and heat loops start at 0. Every deposit starts unfound. A template with a core has it assigned (section 10). A docked unit starts with `at_target` set to its host, as after arrival.
+
+## 15. Research (task B19, contract version 5)
+
+Data for [research.md](research.md) under contract version 5 (C12). Both files are optional to the validator, so a dataset without research still passes.
+
+**`theories.json`:** the usual `schema_version` and `entries`, plus a top-level `bench_test`.
+- **`bench_test`** is the default bench test that qualifies a prototype: `{ inputs, work, power_kw }`, which loads as `power_w`. It is required once any theory exists. The data sets 10 processors, work 300000 and 100 kW.
+- **An entry has:**
+  - `id` and `name`;
+  - `era`, whole, 2 to 6;
+  - `requires`, theory IDs, with no cycles and none of a later era;
+  - `evidence`, a list of `{ kind, count }`: `count` distinct keys of that `science.json` kind paid at least once;
+  - `test`, a lab recipe whose output is `{ "theory": id }`;
+  - `unlocks`, module IDs, each unlocked by one theory at most;
+  - optionally `qualify`, inputs that replace the bench test's for the designs it unlocks.
+
+**`science.json`:** each entry has:
+- `id` and `name`;
+- `place`: `asteroid`, `orbit` or `landed`;
+- `capability`: the part capability that takes it, or `ai_core`;
+- optionally `seconds`; without it, the time is the part's own, or one orbit;
+- `points`, which maps body classes (`asteroid`, `moon`, `planet`) to base points.
+
+The nth payment of a key such as `composition:12` is base >> n.
+
+**Recipes:**
+- the facility type `lab`;
+- an optional `points` input, whole and above 0;
+- the output `{ "theory": id }`, which weighs nothing and may sit only beside sink routes. Every lab recipe proves a theory.
+
+**Derived, not authored:** `prototype:<design>`, which is both an item and its recipe, and `qualify:<design>`. ':' and '+' never appear in an authored ID; the ID pattern `^[a-z][a-z0-9_]*$` already excludes them.
+
+**Sinks:**
+- An `items` list of exactly `["*"]` accepts any item, derived prototypes included. `test_consumed` takes a test's goods, and `fab_scrap` takes a prototype's or variant's input mass beyond the part.
+- A route is required only for waste: an item that no recipe takes as input, such as slag. Propellant may also stay in a hold.
+
+**Modules:** optional `ideas`. An idea has:
+- `id` and `name`;
+- `points`;
+- `complexity`, whole, from -10 to 10, and negative exactly when `simplifies` is true;
+- `deltas`;
+- optionally `theory` (no nulls: an idea needing none leaves it out), `simplifies`, `hidden` (a simplification only, which needs `discover_ppm`) and `discover_ppm` (1 to 1000000).
+
+`deltas` maps a field path, such as `capabilities.mine.rate_kg_per_s`, to ppm of the base value. Each delta is whole, not 0, and above -1000000. The validator's direction table lists the allowed fields, and each idea makes at least one field better and one worse.
+
+**Scenarios:** an optional `research: { theories: [...] }`. Those theories are proven at load, and their unlocks are qualified. `reference.json` proves all three of today's theories, because its station already carries the refinery and the solar farm. `new_start.json` proves none.

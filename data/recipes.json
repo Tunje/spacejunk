@@ -514,6 +514,105 @@
       "abstract": true
     },
     {
+      "id": "prove_autonomous_navigation",
+      "facility": "lab",
+      "work": 300000,
+      "power_kw": 100,
+      "points": 80,
+      "inputs": [
+        {
+          "item": "processor",
+          "count": 10
+        },
+        {
+          "item": "wiring",
+          "count": 10
+        }
+      ],
+      "outputs": [
+        {
+          "item": "processor",
+          "count": 10,
+          "sink": "test_consumed"
+        },
+        {
+          "item": "wiring",
+          "count": 10,
+          "sink": "test_consumed"
+        },
+        {
+          "theory": "autonomous_navigation"
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "prove_large_scale_refining",
+      "facility": "lab",
+      "work": 600000,
+      "power_kw": 100,
+      "points": 100,
+      "inputs": [
+        {
+          "item": "processor",
+          "count": 10
+        },
+        {
+          "item": "structural_frame",
+          "count": 20
+        }
+      ],
+      "outputs": [
+        {
+          "item": "processor",
+          "count": 10,
+          "sink": "test_consumed"
+        },
+        {
+          "item": "structural_frame",
+          "count": 20,
+          "sink": "test_consumed"
+        },
+        {
+          "theory": "large_scale_refining"
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "prove_photovoltaic_arrays",
+      "facility": "lab",
+      "work": 600000,
+      "power_kw": 100,
+      "points": 120,
+      "inputs": [
+        {
+          "item": "processor",
+          "count": 10
+        },
+        {
+          "item": "silicon",
+          "kg": 30
+        }
+      ],
+      "outputs": [
+        {
+          "item": "processor",
+          "count": 10,
+          "sink": "test_consumed"
+        },
+        {
+          "item": "silicon",
+          "kg": 30,
+          "sink": "test_consumed"
+        },
+        {
+          "theory": "photovoltaic_arrays"
+        }
+      ],
+      "abstract": true
+    },
+    {
       "id": "refine_chalcopyrite",
       "facility": "refinery",
       "work": 60000,
@@ -605,6 +704,33 @@
           "item": "slag",
           "kg": 10,
           "sink": "slag_vent"
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "research_lab_mk1",
+      "facility": "fabricator",
+      "work": 300000,
+      "power_kw": 100,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 19
+        },
+        {
+          "item": "wiring",
+          "count": 15
+        },
+        {
+          "item": "processor",
+          "count": 20
+        }
+      ],
+      "outputs": [
+        {
+          "item": "research_lab_mk1",
+          "count": 1
         }
       ],
       "abstract": true
