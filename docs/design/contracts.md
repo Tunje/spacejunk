@@ -108,7 +108,7 @@ Rules:
   - A docked unit predicts as its host.
 - `quote(unit, target, from_tick) -> Dictionary` gives the trip a `move_to` would take, leaving at the first chance at or after `from_tick`. It is read-only, like `view()`. The result is `{ kind, target, depart_tick, arrive_tick, ticks, cost_g }`, or `{ reason }`:
   - `kind` is `"route"` for today's straight-line trip inside one frame or the old world. It leaves at `from_tick` and also carries the route's `from_mm`, `to_mm`, `length_mm` and `speed_mm_s`.
-  - `kind` is `"transfer"` for an autopilot trip between places (orbital_flight.md section 11.12). It leaves at its next window and also carries `dv_um_s`.
+  - `kind` is `"transfer"` for an autopilot trip between places (orbital_flight.md section 11.12). It leaves at its next window and also carries `dv_um_s` and `plane_change_dv_um_s`. Between near-circular orbits round one parent whose planes are more than a degree apart, it leaves on the next crossing of the target's plane and burns into that plane there first (A41a, orbital_flight.md 11.28). `plane_change_dv_um_s` is that burn, part of `dv_um_s`, and 0 for a trip in one plane.
   - `arrive_tick` is the tick `arrived` fires, `depart_tick + ticks - 1`.
 - `next_window(unit, target, from_tick, cap_g) -> Dictionary` gives the same as `quote` if it costs at most `cap_g`, otherwise `{ reason: "no_window" }`.
 - Sim code prices a leg the unit hasn't reached yet, such as a cycle's lap gate, with `Travel.quote_leg(ctx, unit, from_place, target, mass_g, from_tick)`. That gives the same dictionary, from the place of a body or unit at a given mass.
@@ -340,7 +340,7 @@ Each failure emits exactly one event. Fitting failures emit `attach_failed`, and
 Known reason codes: `over_mass_limit`, `over_power_budget`, `over_heat_budget`, `over_heat_limit`, `over_load_limit`, `connector_type_mismatch`, `connector_size_mismatch`, `connector_occupied`, `not_whole_unit`, `no_free_port`, `no_propellant`, `cargo_full`, `deposit_exhausted`, `root_part`, `part_busy`, `float_in_command`, `unknown_unit`, `unknown_part`, `invalid_target`, `unknown_command`, `malformed_command`, `queue_full`, `job_busy`, `fit_mismatch`, `parent_not_fitted`, and for research `theory_locked`, `already_proven`, `already_qualified`, `design_unqualified`, `idea_locked`, `variant_exists`, `stat_out_of_range`, `missing_points`, `missing_evidence` and `orbit_changed` (C12), and `install_blocked` (C15). Autonomy adds its own codes, job statuses and view fields in `docs/design/autonomy.md` sections 3, 8, 9 and 10. `connector_size_mismatch` means a `core` connector met a non-core one.
 
 Orbit reason codes:
-- `unsupported_orbit`: a `move_to` target that is on an orbit or in another frame, a burn whose result is exactly parabolic (which neither orbit form can hold, and which rounding makes vanishingly rare), and later the planner's limits.
+- `unsupported_orbit`: a `move_to` target that is on an orbit or in another frame, a burn whose result is exactly parabolic (which neither orbit form can hold, and which rounding makes vanishingly rare), and the planner's limits: a hyperbolic or eccentric orbit at either end, or a trip across spheres of influence out of the planet's plane. Orbits in different planes round one parent are a plane change, not a refusal (A41a).
 - `burn_in_past`, `not_flying`, and `cancelled` (a burn's end only).
 - `no_window`: from `next_window`, when the trip costs more than the cap.
 - `not_landed`: a `take_off` from anywhere but the ground.

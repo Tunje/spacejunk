@@ -204,10 +204,11 @@ func _scenario_bodies_with_home_rock() -> Array:
 func test_unsupported_trips_are_refused() -> void:
 	assert_eq(sim.quote(keys["Ship"], keys["Planet"], 0), { "reason": "unsupported_orbit" }, "a body to orbit or land on")
 	var far: Dictionary = sim._state["frames"][keys["Far"]]
-	var dirs := OrbitMath.directions(OrbitMath.TURN / 36, 0, 0)  # 10 degrees inclined
-	far["orbit"] = OrbitMath.make_orbit(GM_PLANET, 900_000_000, 0, dirs[0], dirs[1], 0, 0)
+	# Another plane is a plane change since A41a (test_plane_change.gd); an eccentric orbit is not.
+	var dirs := OrbitMath.directions(0, 0, 0)
+	far["orbit"] = OrbitMath.make_orbit(GM_PLANET, 900_000_000, OrbitMath.ONE / 20, dirs[0], dirs[1], 0, 0)
 	far["orbit"]["parent"] = keys["Planet"]
-	assert_eq(sim.quote(keys["Ship"], keys["Rock"], 0), { "reason": "unsupported_orbit" }, "another plane")
+	assert_eq(sim.quote(keys["Ship"], keys["Rock"], 0), { "reason": "unsupported_orbit" }, "an eccentric orbit")
 
 
 func test_quote_leg_prices_a_leg_from_elsewhere_at_any_mass() -> void:

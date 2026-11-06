@@ -48,17 +48,31 @@ static func plan_between(ctx: SimContext, unit_id: int, mine: Dictionary, theirs
 	if found.is_empty():
 		return { "reason": REASON_NO_THRUSTER }
 	if mine["parent"] != theirs["parent"]:
-		return SoiTransfer.plan(ctx, unit_id, mine, theirs, target, mass_g, from_tick, found)
-	if not _compatible(mine, theirs):
+		var crossing := SoiTransfer.plan(ctx, unit_id, mine, theirs, target, mass_g, from_tick, found)
+		if not crossing.has("reason"):
+			crossing["plane_change_dv_um_s"] = 0
+		return crossing
+	if not _near_circular(mine, theirs):
 		return { "reason": REASON_UNSUPPORTED }
 	var gm: int = ctx.state["bodies"][mine["parent"]]["gm"]
+	if not _coplanar(mine, theirs):
+		return _plane_change_plan(mine, theirs, target, gm, mass_g, from_tick, found)
+	var plan := _coplanar_plan(mine, theirs, target, gm, mass_g, from_tick, found)
+	plan["plane_change_dv_um_s"] = 0
+	return plan
+
+
+## A trip between near-circular orbits in one plane round one parent: a Hohmann transfer, or a
+## phasing orbit on one ring.
+static func _coplanar_plan(mine: Dictionary, theirs: Dictionary, target: int, gm: int, mass_g: int,
+		from_tick: int, found: Dictionary) -> Dictionary:
 	var r1: int = mine["a_mm"]
 	var r2: int = theirs["a_mm"]
 	var leg: Dictionary
 	if absi(r2 - r1) * SAME_RING_DIVISOR <= r1:
-		leg = _phasing(ctx, mine, theirs, gm, from_tick)
+		leg = _phasing(null, mine, theirs, gm, from_tick)
 	else:
-		leg = _hohmann(ctx, mine, theirs, gm, from_tick)
+		leg = _hohmann(null, mine, theirs, gm, from_tick)
 	var first_g := OrbitMath.burn_g(mass_g, leg["dv1_um_s"], found["exhaust_mm_s"])
 	var second_g := OrbitMath.burn_g(mass_g - first_g, leg["dv2_um_s"], found["exhaust_mm_s"])
 	return {
@@ -97,15 +111,87 @@ static func target_orbit(ctx: SimContext, target: int) -> Dictionary:
 
 
 static func _compatible(mine: Dictionary, theirs: Dictionary) -> bool:
+	return mine["parent"] == theirs["parent"] and _near_circular(mine, theirs) and _coplanar(mine, theirs)
+
+
+static func _near_circular(mine: Dictionary, theirs: Dictionary) -> bool:
 	if mine.get("hyperbolic", false) or theirs.get("hyperbolic", false):
 		return false
-	if mine["parent"] != theirs["parent"]:
-		return false
-	if mine["e_q30"] > MAX_E_Q30 or theirs["e_q30"] > MAX_E_Q30:
-		return false
+	return mine["e_q30"] <= MAX_E_Q30 and theirs["e_q30"] <= MAX_E_Q30
+
+
+static func _coplanar(mine: Dictionary, theirs: Dictionary) -> bool:
 	var normal_mine := OrbitMath.cross(mine["p_q30"], mine["q_q30"])
 	var normal_theirs := OrbitMath.cross(theirs["p_q30"], theirs["q_q30"])
 	return OrbitMath.dot(normal_mine, normal_theirs) >= MIN_COPLANAR_Q30
+
+
+## A trip between near-circular orbits round one parent in planes more than a degree apart (A41):
+## ride the unit's orbit to where it next crosses the target's plane, burn onto the circle in that
+## plane through the point, then the coplanar trip from there, all as legs. The point is the
+## unit's position on the node tick moved into the plane, at most one tick's motion off it, so the
+## leg starts up to a few metres from where the unit was. Every burn is in the price.
+static func _plane_change_plan(mine: Dictionary, theirs: Dictionary, target: int, gm: int, mass_g: int,
+		from_tick: int, found: Dictionary) -> Dictionary:
+	var normal := OrbitMath.unit(OrbitMath.cross(theirs["p_q30"], theirs["q_q30"]))
+	var node := node_tick(mine, normal, from_tick)
+	if node < 0:
+		return { "reason": REASON_UNSUPPORTED }
+	var now := OrbitMath.state_at(mine, gm, node)
+	var r: Array = now["r"]
+	var off := OrbitMath.dot(r, normal)
+	var flat: Array[int] = []
+	for axis in 3:
+		flat.append(int(r[axis]) - OrbitMath.smul_div(normal[axis], off, OrbitMath.ONE))
+	var radius := IntMath.dist(flat, [0, 0, 0])
+	var p := OrbitMath.unit(flat)
+	var q := OrbitMath.unit(OrbitMath.cross(normal, p))
+	var circle := OrbitMath.make_orbit(gm, radius, 0, p, q, 0, node)
+	circle["parent"] = mine["parent"]
+	var speed := OrbitMath.speed_um_s(gm, radius, radius)
+	var after: Array[int] = []
+	for axis in 3:
+		after.append(OrbitMath.smul_div(q[axis], speed, OrbitMath.ONE))
+	var change := IntMath.dist(now["v"], after)
+	var change_g := OrbitMath.burn_g(mass_g, change, found["exhaust_mm_s"])
+	var rest := _coplanar_plan(circle, theirs, target, gm, mass_g - change_g, node + 1, found)
+	var ellipse := launch_orbit(circle, gm, rest["orbit_a_mm"], rest["depart_tick"])
+	if ellipse.is_empty():
+		return { "reason": REASON_UNSUPPORTED }
+	return {
+		"kind": KIND, "target": target, "depart_tick": node, "arrive_tick": rest["arrive_tick"],
+		"ticks": rest["arrive_tick"] - node + 1, "cost_g": change_g + rest["cost_g"],
+		"dv_um_s": change + rest["dv_um_s"], "orbit_a_mm": rest["orbit_a_mm"],
+		"plane_change_dv_um_s": change,
+		"legs": [{ "orbit": circle, "from_tick": node }, { "orbit": ellipse, "from_tick": rest["depart_tick"] }],
+	}
+
+
+## The first tick at or after from_tick on which an orbit has crossed the plane with this normal
+## since the tick before, or -1 if it never does within two turns. A coarse walk, a 64th of a turn
+## at a time so it can't step over a crossing, then bisection.
+static func node_tick(orbit: Dictionary, normal: Array, from_tick: int) -> int:
+	var before := _above(orbit, normal, from_tick - 1)
+	var step := maxi(1, int(orbit["period_subticks"]) / OrbitMath.SUB_TICKS / 64)
+	var low := from_tick - 1
+	var high := from_tick
+	var limit := from_tick + 128 * step
+	while _above(orbit, normal, high) == before:
+		if high > limit:
+			return -1
+		low = high
+		high += step
+	while high - low > 1:
+		var mid := (low + high) / 2
+		if _above(orbit, normal, mid) == before:
+			low = mid
+		else:
+			high = mid
+	return high
+
+
+static func _above(orbit: Dictionary, normal: Array, tick: int) -> bool:
+	return OrbitMath.dot(OrbitMath.position_at(orbit, tick), normal) >= 0
 
 
 ## Where an orbit is at a tick, as a binary angle in the plane of `frame_orbit`.
@@ -179,12 +265,16 @@ static func departure_orbit(ctx: SimContext, unit_id: int, quoted: Dictionary, t
 	var mine := unit_orbit(ctx, unit_id)
 	if mine.is_empty():
 		return {}
-	var gm: int = ctx.state["bodies"][mine["parent"]]["gm"]
+	return launch_orbit(mine, ctx.state["bodies"][mine["parent"]]["gm"], quoted["orbit_a_mm"], tick)
+
+
+## The orbit from a point on `mine` at a tick, with the speed there scaled for semi-major axis a_mm.
+static func launch_orbit(mine: Dictionary, gm: int, a_mm: int, tick: int) -> Dictionary:
 	var now := OrbitMath.state_at(mine, gm, tick)
 	var r: Array = now["r"]
 	var v: Array = now["v"]
 	var speed := IntMath.dist(v, [0, 0, 0])
-	var wanted := OrbitMath.speed_um_s(gm, IntMath.dist(r, [0, 0, 0]), quoted["orbit_a_mm"])
+	var wanted := OrbitMath.speed_um_s(gm, IntMath.dist(r, [0, 0, 0]), a_mm)
 	var scaled: Array[int] = []
 	for axis in 3:
 		scaled.append(OrbitMath.smul_div(v[axis], wanted, speed))
