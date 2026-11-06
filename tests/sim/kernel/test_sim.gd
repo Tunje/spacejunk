@@ -286,7 +286,7 @@ func test_view_and_defs_are_copies() -> void:
 
 
 func test_defs_has_the_contract_sections() -> void:
-	assert_eq(sim.defs().keys(), ["modules", "items", "recipes", "templates", "sinks"])
+	assert_eq(sim.defs().keys(), ["modules", "items", "recipes", "templates", "sinks", "theories", "science", "bench_test"])
 
 
 func test_ledger_rebuilds_matter_and_sums_all_places() -> void:
