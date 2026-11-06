@@ -87,6 +87,13 @@ func begin(ctx: SimContext, unit_id: int, args: Dictionary) -> void:
 	unit["op"]["kind"] = args["kind"]
 
 
+## Coast (C17): nothing changes until the measurement's last tick. A gravity field's orbit changes
+## only on a stepped tick (a burn, or a sphere-of-influence change at BurnSystem's horizon), and
+## leaving a frame likewise.
+func coast_ticks(ctx: SimContext, unit_id: int) -> int:
+	return TaskStep.ticks_before_end(ctx, unit_id)
+
+
 ## Phase 5. A gravity field ends as soon as the orbit it is measuring changes, or the unit leaves
 ## the frame it is measuring from.
 func run(ctx: SimContext, unit_id: int, _system: SimSystem) -> void:

@@ -50,7 +50,7 @@ const NEW_START_GOALS: Array[Dictionary] = [
 	{ "id": "haul", "title": "Haul ore to the station",
 		"hint": "With the probe docked at your station, Unload ore into it. Fit an Ore Storage first if the station has no ore hold." },
 	{ "id": "research", "title": "Prove a new tech",
-		"hint": "Fit a Research Lab and a Basic Core on the station. Survey three rocks and map Frost's gravity field (Measure, from orbit round Frost). Prove Autonomous Navigation at the lab in Jobs (J), then fabricate the Assisted Core prototype and bench-test it at the lab." },
+		"hint": "Fit a Research Lab and a Basic Core on the station. Survey three rocks and map Frost's gravity field: select Frost and Measure. You can do that without landing: stay in the cluster for one lap. Prove Autonomous Navigation at the lab in Jobs (J), then fabricate the Assisted Core prototype and bench-test it at the lab. To land on Frost too, fill the tank from White Rock's ice first, empty the goods hold, and leave straight from the station. The landing and the climb back take most of a tank." },
 	{ "id": "drone", "title": "Build a mining drone",
 		"hint": "Fabricate a Small Craft: it appears bare at a free port. Fabricate a Small Solar Panel, Small Heat Radiator, Small Propellant Tank, Small Thruster, Small Ore Container and Small Mining Laser, and fit them in that order with Fit (G). The thruster goes under the tank." },
 	{ "id": "handover", "title": "Hand the job to an AI core",
@@ -116,6 +116,11 @@ func observe_view(view: Dictionary, items: Dictionary, modules: Dictionary) -> A
 	var finished: Array[String] = []
 	if not view["deposits"].is_empty():
 		_finish(finished, "scan")
+	# C12 and C13's goals that the view alone shows, so a loaded game is right too.
+	if int(view.get("science", {}).get("earned", 0)) > 0:
+		_finish(finished, "science")
+	if view.get("research", {}).get("designs", {}).get("assisted_core", "") == "qualified":
+		_finish(finished, "research")
 	for id: int in view["units"]:
 		var unit: Dictionary = view["units"][id]
 		if unit["kind"] == "drone" and GoalTracker._is_working_drone(unit, modules):
@@ -124,6 +129,8 @@ func observe_view(view: Dictionary, items: Dictionary, modules: Dictionary) -> A
 			_finish(finished, "mine")
 		if unit["kind"] == "station" and GoalTracker._holds_ore(unit, items):
 			_finish(finished, "haul")
+		if unit["kind"] == "station":
+			_finish(finished, "station")
 	return finished
 
 

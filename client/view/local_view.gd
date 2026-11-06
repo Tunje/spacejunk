@@ -201,6 +201,16 @@ func select(kind: String, id: int, part: int) -> void:
 	selection_changed.emit()
 
 
+## Makes any unit the one given orders, stations included. Selecting a ship does
+## this by itself; a station is selected as a target (to dock at, say) until the
+## player takes command of it.
+func command(id: int) -> void:
+	if not bridge.current_view["units"].has(id):
+		return
+	commanded_unit = id
+	selection_changed.emit()
+
+
 func clear_selection() -> void:
 	select("", 0, 0)
 

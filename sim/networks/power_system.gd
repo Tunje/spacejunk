@@ -90,7 +90,7 @@ func horizon(ctx: SimContext) -> int:
 		var until: int = ctx.state["parts"][part_id]["shed_until_tick"]
 		if until > now:
 			skip = mini(skip, until - now - 1)
-	var casters := RailSystem.shadow_casters(ctx.state)
+	var casters := _coast_casters(ctx.state)
 	for id: int in _sorted(units):
 		if not UnitIndex.of(ctx, id)["generators"].is_empty() and not casters.is_empty():
 			skip = mini(skip, _shadow_horizon(ctx, id, casters))
@@ -124,10 +124,34 @@ func coast(ctx: SimContext, ticks: int) -> void:
 			part["discharge_remainder"] = drawn % Sim.TICKS_PER_SECOND
 
 
+## Each shadow caster as RailSystem.shadow_casters gives it, with what a coast horizon needs worked
+## out once per call rather than once per unit: [world_mm, direction, radius_mm, body ID, distance
+## from the star, the body's speed bound].
+static func _coast_casters(state: Dictionary) -> Array:
+	var result := []
+	var casters := RailSystem.shadow_casters(state)
+	if casters.is_empty():
+		return result
+	var star_mm := _star_mm(state)
+	var ids: Array = []
+	for id: int in _sorted_static(state["bodies"]):
+		var body: Dictionary = state["bodies"][id]
+		if body["kind"] != RailSystem.STAR_KIND and body["gm"] > 0 and not body["orbit"].is_empty():
+			ids.append(id)
+	# shadow_casters lists the same bodies in the same ascending order.
+	for n in casters.size():
+		var caster: Array = casters[n]
+		var body_mm: Array = caster[0]
+		var from_star := IntMath.dist([int(body_mm[0]) - star_mm[0], int(body_mm[1]) - star_mm[1],
+			int(body_mm[2]) - star_mm[2]], [0, 0, 0])
+		result.append([body_mm, caster[1], caster[2], ids[n], maxi(1, from_star),
+			CoastBounds.body_speed_um_s(state, ids[n])])
+	return result
+
+
 ## The ticks before a unit's generators could pass into or out of any caster's shadow.
 static func _shadow_horizon(ctx: SimContext, unit_id: int, casters: Array) -> int:
 	var unit_mm := RailSystem.world_mm(ctx.state, "units", unit_id)
-	var star_mm := _star_mm(ctx.state)
 	var skip := NO_LIMIT
 	for caster: Array in casters:
 		var body_mm: Array = caster[0]
@@ -150,14 +174,8 @@ static func _shadow_horizon(ctx: SimContext, unit_id: int, casters: Array) -> in
 			gap = side - radius
 		# The unit closes on the shadow as fast as it closes on the caster, and the shadow also
 		# swings round the star with the caster.
-		var caster_id := _caster_id(ctx.state, body_mm)
-		var closing := CoastBounds.UNBOUNDED_UM_S
-		if caster_id != 0:
-			closing = CoastBounds.relative_speed_um_s(ctx.state, unit_id, caster_id)
-		var from_star := IntMath.dist([int(body_mm[0]) - star_mm[0], int(body_mm[1]) - star_mm[1],
-			int(body_mm[2]) - star_mm[2]], [0, 0, 0])
-		var swing := IntMath.mul_div(IntMath.dist(offset, [0, 0, 0]),
-			CoastBounds.body_speed_um_s(ctx.state, caster_id), maxi(1, from_star))
+		var closing := CoastBounds.relative_speed_um_s(ctx.state, unit_id, caster[3])
+		var swing := IntMath.mul_div(IntMath.dist(offset, [0, 0, 0]), caster[5], caster[4])
 		skip = mini(skip, CoastBounds.ticks_to_close(gap, closing + swing))
 	return skip
 
@@ -167,14 +185,6 @@ static func _star_mm(state: Dictionary) -> Array:
 		if state["bodies"][id]["kind"] == RailSystem.STAR_KIND:
 			return RailSystem.world_mm(state, "bodies", id)
 	return [0, 0, 0]
-
-
-## The body a caster entry stands for, found by its world position.
-static func _caster_id(state: Dictionary, body_mm: Array) -> int:
-	for id: int in _sorted_static(state["bodies"]):
-		if state["bodies"][id]["gm"] > 0 and RailSystem.world_mm(state, "bodies", id) == body_mm:
-			return id
-	return 0
 
 
 ## Coast windows are searched up to this many ticks, which keeps every closed-form sum in range.
@@ -193,6 +203,11 @@ func _battery_horizon(ctx: SimContext, part_id: int, battery: Dictionary, shed: 
 	var limits: Dictionary = Units.module_of(ctx.state, ctx.defs, part_id)["capabilities"]["battery"]
 	var cap_now: int = part["stored_j"] * Sim.TICKS_PER_SECOND - part["discharge_remainder"]
 	if drawn == 0 and charged == 0:
+		return NO_LIMIT
+	# A battery that one more tick of these flows leaves exactly as it is will be offered the same
+	# flows again, for ever: full and taking a trickle its losses round to nothing, or empty and
+	# giving one that rounds to nothing. That is most of the game in sunlight (C, C17).
+	if _battery_holds_still(part, battery):
 		return NO_LIMIT
 	if drawn > 0 and cap_now < limits["max_discharge_w"]:
 		return 0  # the store, not the rate, limits the draw
@@ -213,6 +228,17 @@ func _battery_horizon(ctx: SimContext, part_id: int, battery: Dictionary, shed: 
 		else:
 			high = mid
 	return low
+
+
+## Whether one tick of last tick's flows leaves the battery's store and both remainders unchanged.
+static func _battery_holds_still(part: Dictionary, battery: Dictionary) -> bool:
+	var charged: int = battery["stored_w"] + part["charge_remainder"]
+	var drawn: int = battery["discharged_w"] + part["discharge_remainder"]
+	if charged / Sim.TICKS_PER_SECOND != drawn / Sim.TICKS_PER_SECOND:
+		return false
+	if charged % Sim.TICKS_PER_SECOND != part["charge_remainder"]:
+		return false
+	return drawn % Sim.TICKS_PER_SECOND == part["discharge_remainder"]
 
 
 ## Whether the battery's limits still leave last tick's flows after `ticks` more ticks of them, so

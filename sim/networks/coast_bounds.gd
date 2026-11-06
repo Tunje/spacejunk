@@ -9,8 +9,10 @@ const UNBOUNDED_UM_S := 1 << 50
 
 
 ## Room for integer positions and rounded speeds: a bound gives away this much of each gap and
-## takes speeds as 1% faster than worked out.
-const GAP_SLACK_MM := 10_000
+## takes speeds as 1% faster than worked out. Positions are whole millimetres and Q30 directions
+## err by well under a millimetre at these distances, so a metre is ample. It was 10 km in A33,
+## which held coast at 0 for thousands of ticks either side of every shadow edge (D, A35).
+const GAP_SLACK_MM := 1_000
 const SPEED_SLACK_PERMILLE := 1010
 
 

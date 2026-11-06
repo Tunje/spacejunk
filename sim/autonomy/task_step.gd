@@ -71,6 +71,22 @@ func leaves(_ctx: SimContext, _args: Dictionary, place: Dictionary) -> Dictionar
 	return place
 
 
+## Coast (C17): how many of the ticks after this one the running operation lets the world skip in
+## closed form, with nothing discrete happening in them, or 0 to step the next.
+func coast_ticks(_ctx: SimContext, _unit_id: int) -> int:
+	return 0
+
+
+## Advances the operation over `ticks` skipped ticks, exactly as stepping them would.
+func coast(_ctx: SimContext, _unit_id: int, _ticks: int) -> void:
+	pass
+
+
+## Ticks to skip before an operation that ends at its op's end_tick: that tick is stepped.
+static func ticks_before_end(ctx: SimContext, unit_id: int) -> int:
+	return maxi(0, int(ctx.state["units"][unit_id]["op"]["end_tick"]) - int(ctx.state["tick"]) - 1)
+
+
 ## Sets a unit's operation to run for `ticks`, from this tick (networks.md section 6). An operation
 ## with no fixed length passes 0 and ends through end_test.
 static func set_op(ctx: SimContext, unit_id: int, op_type: String, target: int, part: int, ticks: int) -> void:

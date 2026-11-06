@@ -71,13 +71,17 @@ func test_the_clock_turns_to_days() -> void:
 
 
 func test_attention_events_and_the_jobs_option() -> void:
-	var finished: Array = [{ "type": "job_finished" }]
+	var finished: Array = [{ "type": "job_finished", "data": { "job": 7 } }]
 	assert_true(WarpLogic.needs_attention([{ "type": "landed" }]))
 	assert_false(WarpLogic.needs_attention([{ "type": "deposit_found" }]))
-	assert_true(WarpLogic.needs_attention(finished))
+	assert_true(WarpLogic.needs_attention(finished), "its last run: the job is gone")
+	assert_false(WarpLogic.needs_attention(finished, false, { 7: {} }), "a run of a job with runs left")
 	assert_false(WarpLogic.needs_attention(finished, true), "warp past jobs")
 	assert_eq(WarpLogic.cap_text("moving_in_frame"), "ships moving in the cluster")
 	assert_true(WarpLogic.needs_attention([{ "type": "departed" }]), "A34: a window opening")
+	assert_false(WarpLogic.needs_attention([{ "type": "job_paused", "data": { "reason": "missing_inputs" } }]),
+		"waiting on another job's output is the plan")
+	assert_true(WarpLogic.needs_attention([{ "type": "job_paused", "data": { "reason": "output_full" } }]))
 	assert_false(WarpLogic.needs_attention([{ "type": "transfer_done" }]), "cargo moved isn't a stop")
 	var line := OrderText.event({ "type": "departed", "unit": 1, "tick": 100, "data": { "target": 4, "arrive_tick": 1300 } },
 		"Probe", {}, { 4: { "name": "White Rock" } })

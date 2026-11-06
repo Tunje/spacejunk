@@ -88,6 +88,47 @@ func apply_delta(ctx: SimContext, payload: Dictionary) -> void:
 	unit["op"]["mined_g"] += grams
 
 
+## Coast (C17): while every tick takes the rate's full amount, k ticks take (k * rate + remainder)
+## / TICKS_PER_SECOND grams, the sum of k single ticks. The skip stops while the hold still has room
+## and the deposit still has ore, so the tick that is cut short, and the one the step ends on, are
+## stepped. Several units on one deposit share it evenly for the bound.
+func coast_ticks(ctx: SimContext, unit_id: int) -> int:
+	var state := ctx.state
+	var op: Dictionary = state["units"][unit_id]["op"]
+	var deposit: Dictionary = state["deposits"][op["target"]]
+	var miners := 0
+	var ids: Array = state["units"].keys()
+	ids.sort()
+	for id: int in ids:
+		var other: Dictionary = state["units"][id]["op"]
+		if other["type"] == OP_MINING and other["target"] == op["target"]:
+			miners += 1
+	var room := mini(Units.grams_that_fit(state, ctx.defs, unit_id, deposit["item"]),
+		deposit["remaining_g"] / maxi(1, miners))
+	var rate := _rate(ctx, op["part"])
+	if rate <= 0:
+		return 0
+	# The most ticks k with k * rate + remainder <= TICKS_PER_SECOND * room - 1, so their sum stays
+	# below room.
+	return maxi(0, (Sim.TICKS_PER_SECOND * room - 1 - int(op["mine_remainder"])) / rate)
+
+
+func coast(ctx: SimContext, unit_id: int, ticks: int) -> void:
+	var unit: Dictionary = ctx.state["units"][unit_id]
+	var op: Dictionary = unit["op"]
+	var deposit: Dictionary = ctx.state["deposits"][op["target"]]
+	var total: int = ticks * _rate(ctx, op["part"]) + int(op["mine_remainder"])
+	var grams := total / Sim.TICKS_PER_SECOND
+	op["mine_remainder"] = total % Sim.TICKS_PER_SECOND
+	deposit["remaining_g"] -= grams
+	Units.add_stock(unit["inventory"], deposit["item"], grams)
+	op["mined_g"] += grams
+
+
+func _rate(ctx: SimContext, part_id: int) -> int:
+	return Units.module_of(ctx.state, ctx.defs, part_id)["capabilities"][CAPABILITY]["rate_g_per_s"]
+
+
 ## Phase 6, after deltas, so a store that fills exactly ends on that tick.
 func end_test(ctx: SimContext, unit_id: int) -> bool:
 	var op: Dictionary = ctx.state["units"][unit_id]["op"]
