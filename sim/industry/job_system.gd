@@ -302,7 +302,8 @@ func _validate_install(ctx: SimContext, command: Dictionary, recipe: Dictionary)
 	var fake_job := { "command": command.get("id", 0), "unit": unit, "install_to": target }
 	var result := _fitter.validate(trial, _install_command(fake_job, item))
 	if not result["ok"]:
-		return result
+		# A plain refusal of this command: attach_part's own attach_failed event is not this one's.
+		return SimSystem.reject(result["reason"], result["detail"])
 	return SimSystem.ok()
 
 

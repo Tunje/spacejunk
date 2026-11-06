@@ -11,7 +11,8 @@ var bot: NewStartBot
 
 
 func before_all() -> void:
-	bot = NewStartBot.shared()
+	bot = NewStartBot.new()
+	bot.play_through(NewStartBot.STAGE_CHAIN)
 	gut.p("new start chain: %d ticks (%.1f game hours)" % [bot.total_ticks(), bot.total_ticks() / 36000.0])
 	for step: Dictionary in bot.steps:
 		gut.p("  %s: %d ticks from %d" % [step["label"], step["ticks"], step["start_tick"]])
@@ -30,6 +31,7 @@ func before_all() -> void:
 
 func test_the_chain_runs_to_the_end_with_every_ledger_balanced() -> void:
 	assert_eq(bot.problems, PackedStringArray(), "the bot finished every step")
+	assert_eq(bot.snapshot_mismatch(NewStartBot.STAGE_CHAIN), "", "the next file starts from here")
 	assert_eq(bot.ledger_problems, PackedStringArray())
 	assert_eq(bot.range_problems, PackedStringArray())
 	assert_true(bot.marks.has("end"))
@@ -64,6 +66,8 @@ func test_the_bare_station_refuses_a_powered_part_until_it_has_solar_and_a_radia
 	assert_has(defs, "heat_radiator_mk1")
 
 
-func test_ore_is_hauled_into_the_station() -> void:
+func test_ore_is_hauled_into_an_ore_container_built_in_place() -> void:
 	var station: Dictionary = bot.marks["hauled"]["units"][bot.station]
 	assert_gt(station["inventory"].get("hematite", 0), 0)
+	var defs: Array = InspectText.flatten(station["parts"]).map(func(part: Dictionary) -> String: return part["def"])
+	assert_has(defs, "ore_container_mk1", "6000 L, so it never passed through the probe's hold")
