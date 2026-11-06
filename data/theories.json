@@ -1,5 +1,15 @@
 {
   "schema_version": 1,
+  "bench_test": {
+    "inputs": [
+      {
+        "item": "processor",
+        "count": 10
+      }
+    ],
+    "work": 300000,
+    "power_kw": 100
+  },
   "entries": [
     {
       "id": "autonomous_navigation",

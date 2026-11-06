@@ -277,8 +277,8 @@ func test_higher_id_sheds_first_within_a_class() -> void:
 	_set_stored(0)
 	state["units"][SHIP]["op"] = { "type": "mining", "target": 3, "part": LASER, "start_tick": 0, "end_tick": 0 }
 	state["jobs"][40] = JobFixture.record(state, LIDAR, "wiring", "running")
-	modules["lidar_mk1"]["capabilities"]["facility"] = { "type": "fabricator" }
-	sim._ctx.defs["recipes"]["wiring"] = { "power_w": 100_000 }
+	modules["lidar_mk1"]["capabilities"]["facility"] = { "type": "fabricator", "work_per_tick": 100 }
+	sim._ctx.defs["recipes"]["wiring"] = { "power_w": 100_000, "work": 100 }
 	sim.step()
 	assert_eq(_part_state(LASER), "on")
 	assert_eq(_part_state(LIDAR), "shed")
@@ -289,7 +289,8 @@ func test_a_small_load_is_readmitted_after_a_big_one_is_shed() -> void:
 	_run_op(LASER)
 	state["jobs"][40] = JobFixture.record(state, LIDAR, "wiring", "running")
 	sim._ctx.defs = sim._ctx.defs.duplicate(true)
-	sim._ctx.defs["recipes"]["wiring"] = { "power_w": 10_000 }
+	sim._ctx.defs["modules"]["lidar_mk1"]["capabilities"]["facility"] = { "type": "fabricator", "work_per_tick": 100 }
+	sim._ctx.defs["recipes"]["wiring"] = { "power_w": 10_000, "work": 100 }
 	sim.step()
 	assert_eq(_part_state(LASER), "shed")
 	assert_eq(_part_state(LIDAR), "on", "the small load fits once the laser is off")

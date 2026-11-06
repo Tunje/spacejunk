@@ -1,6 +1,6 @@
 # Research: Science, Theories, Prototypes and Ideas
 
-Status: **proposal**, task B17. Nothing in `data/`, `sim/`, the client or the contracts changes until the Lead and the owner approve it. It follows the owner's ruling on research of 2026-11-06 at the top of [workplan.md](../../plan/workplan.md), and replaces section 5 of [start_and_build.md](start_and_build.md).
+Status: **proposal**, task B17. Contract version 5 (C12) fixes the names and rules; where this page and the contract differ, the contract wins. Derived IDs are `prototype:<design>` and `qualify:<design>`, and a variant is `base+idea+idea`, so authored IDs never hold ':' or '+'. Nothing in `data/`, `sim/`, the client or the contracts changes until the Lead and the owner approve it. It follows the owner's ruling on research of 2026-11-06 at the top of [workplan.md](../../plan/workplan.md), and replaces section 5 of [start_and_build.md](start_and_build.md).
 
 ## The short answer
 
@@ -114,8 +114,8 @@ Designs that are known from the start are `qualified`. The state holds `research
 Take `assisted_core`, unlocked by *Autonomous Navigation*.
 
 1. **Proof.** The theory's test finishes at a lab. `theory_proven` fires, and `assisted_core` becomes `prototype`.
-2. **Prototype.** A new derived item, `assisted_core_prototype`, has the module's mass and volume and is discrete. Its recipe, `assisted_core_prototype`, is derived by the loader from the normal recipe. It uses the same facility, twice the inputs and twice the time. Half the input mass goes into the item, and the rest to a new sink, `fab_scrap`, so it balances. The prototype is not a module, so it can't be fitted. It is a test article.
-3. **Bench test.** A lab recipe, `qualify_assisted_core`, also derived, takes the prototype plus 10 processors over 300 s, and outputs `{ "qualifies": "assisted_core" }`. The inputs go to `test_consumed`. When it finishes, `design_qualified { design }` fires and the normal recipe unlocks.
+2. **Prototype.** A new derived item, `prototype:assisted_core`, has the module's mass and volume and is discrete. Its recipe has the same ID and is derived from the normal recipe (C12's `ResearchDefs`). It uses the same facility, twice the inputs and twice the work. Half the input mass goes into the item, and the rest to a new sink, `fab_scrap`, so it balances. The prototype is not a module, so it can't be fitted. It is a test article.
+3. **Bench test.** A lab recipe, `qualify:assisted_core`, also derived, takes the prototype plus the bench test's inputs (10 processors at 300000 work by default, from `theories.json`'s `bench_test`, or the theory's own `qualify` list), and outputs `{ "qualifies": "assisted_core" }`. The inputs go to `test_consumed`. When it finishes, `design_qualified { design }` fires and the normal recipe unlocks.
 4. **Normal build.** `start_job` of recipe `assisted_core` now passes. Before qualification, it is refused with `design_unqualified`. Before the theory, it is refused with `theory_locked`.
 
 Everything is a job, so the queue, power, heat, the fail-and-fix check and the matter ledger all work as they do now. The two new outputs, `theory` and `qualifies`, are each a recipe's only output, like `unit_template`.

@@ -185,13 +185,14 @@ func test_real_ore_refines_through_the_screen() -> void:
 	screen.refresh()
 	assert_string_contains(screen._job_label.text, "Running")
 	assert_gt(screen._job_bar.value, 0.0)
-	_run_ticks(chosen["ticks"] + 16)
+	var rate: int = defs["modules"]["ore_refinery_mk1"]["capabilities"]["facility"]["work_per_tick"]
+	_run_ticks(IndustryLogic.run_ticks(chosen["work"], rate) + 16)
 	screen.refresh()
 	var after: Dictionary = bridge.current_view["units"][station]["inventory"]
 	for output: Dictionary in chosen["outputs"]:
 		if output.has("item") and not output.has("sink"):
 			assert_gt(after.get(output["item"], 0), 0, output["item"])
-	print("REAL_JOB %s ticks=%d" % [chosen["id"], chosen["ticks"]])
+	print("REAL_JOB %s work=%d" % [chosen["id"], chosen["work"]])
 
 
 func test_screen_swaps_with_fitting_and_restores_orders() -> void:
@@ -218,13 +219,41 @@ func test_the_key_and_escape_work() -> void:
 
 
 func test_text_helpers() -> void:
-	var job := { "recipe": "iron", "status": "paused", "reason": "no_power", "count_left": 3, "start_tick": 0, "end_tick": 0 }
-	assert_string_contains(IndustryLogic.job_line(job, defs), "Paused, Not enough power (3 left)")
-	assert_eq(IndustryLogic.job_progress(job, 5), 0.0)
-	job["status"] = "running"
-	job["end_tick"] = 10
-	assert_almost_eq(IndustryLogic.job_progress(job, 5), 0.5, 0.001)
+	var job := { "recipe": "iron", "status": "paused", "reason": "no_power", "count_left": 3, "start_tick": 0,
+		"queue_pos": 0, "work_left": 0, "work": 3000, "work_per_tick": 100 }
+	assert_eq(IndustryLogic.job_line(job, defs, 10.0), "Iron: Paused, Not enough power (3 left)")
+	assert_eq(IndustryLogic.job_progress(job), 0.0, "no run under way")
 	assert_eq(IndustryLogic.name_of("no_such_thing", defs), "No Such Thing")
+
+
+## D23: progress and time come from work points, not ticks.
+func test_progress_and_time_left_come_from_work() -> void:
+	var job := { "recipe": "iron", "status": "running", "reason": "", "count_left": 1, "start_tick": 0,
+		"queue_pos": 0, "work_left": 750, "work": 3000, "work_per_tick": 100 }
+	assert_almost_eq(IndustryLogic.job_progress(job), 0.75, 0.001)
+	assert_eq(IndustryLogic.seconds_left(job, 10.0), 0.8, "ceil(750 / 100) = 8 ticks")
+	assert_eq(IndustryLogic.job_line(job, defs, 10.0), "Iron: Running, about 1 s")
+	job["work_left"] = 2000
+	assert_eq(IndustryLogic.job_line(job, defs, 10.0), "Iron: Running, about 2 s")
+	# A paused run keeps its place and gives no time, since it isn't moving.
+	job["status"] = "paused"
+	job["reason"] = "no_power"
+	assert_almost_eq(IndustryLogic.job_progress(job), 1.0 / 3.0, 0.001)
+	assert_eq(IndustryLogic.seconds_left(job, 10.0), 0.0)
+	# A half-rate facility takes twice as long; spare work on the last tick is lost.
+	job["status"] = "running"
+	job["work_per_tick"] = 50
+	assert_eq(IndustryLogic.seconds_left(job, 10.0), 4.0)
+	assert_eq(IndustryLogic.run_ticks(3000, 70), 43)
+	assert_eq(IndustryLogic.run_ticks(3000, 0), 0)
+
+
+func test_a_queued_job_shows_all_its_runs() -> void:
+	var job := { "recipe": "iron", "status": "queued", "reason": "", "count_left": 4, "start_tick": 0,
+		"queue_pos": 2, "work_left": 0, "work": 3000, "work_per_tick": 100 }
+	assert_eq(IndustryLogic.seconds_left(job, 10.0), 12.0, "4 runs of 30 ticks")
+	assert_eq(IndustryLogic.job_line(job, defs, 10.0), "Iron: Queued (4 left), about 12 s")
+	assert_eq(IndustryLogic.queue_line(job, defs, 10.0), "Iron (4 left), about 12 s", "the queue says queued")
 
 
 func test_no_facilities_gives_no_working_unit() -> void:

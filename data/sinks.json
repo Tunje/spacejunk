@@ -2,6 +2,13 @@
   "schema_version": 1,
   "entries": [
     {
+      "id": "fab_scrap",
+      "name": "Fabrication Scrap",
+      "items": [
+        "*"
+      ]
+    },
+    {
       "id": "propellant_exhaust",
       "name": "Exhaust",
       "items": [
@@ -19,10 +26,7 @@
       "id": "test_consumed",
       "name": "Test Consumed",
       "items": [
-        "processor",
-        "silicon",
-        "structural_frame",
-        "wiring"
+        "*"
       ]
     }
   ]

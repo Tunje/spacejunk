@@ -8,9 +8,11 @@ const ITEMS := [
 ]
 const MODULES := [
 	"assisted_core", "basic_core", "battery_bank_mk1", "chemical_thruster_mk1", "command_hub",
+	"compact_fabricator_mk1", "compact_refinery_mk1",
 	"docking_port_mk1", "fabricator_mk1", "goods_container_mk1", "goods_storage_mk1",
 	"heat_radiator_mk1", "landing_legs_mk1", "lidar_mk1", "mining_laser_mk1", "ore_container_mk1",
-	"ore_refinery_mk1", "ore_storage_mk1", "propellant_tank_mk1", "research_lab_mk1", "small_battery_bank_mk1",
+	"ore_refinery_mk1", "ore_storage_mk1", "propellant_tank_mk1", "propellant_tank_mk2", "research_lab_mk1",
+	"small_battery_bank_mk1",
 	"small_chemical_thruster_mk1", "small_docking_port_mk1", "small_heat_radiator_mk1", "small_hub",
 	"small_hull", "small_landing_legs_mk1", "small_mining_laser_mk1", "small_ore_container_mk1",
 	"small_propellant_tank_mk1", "small_solar_panel_mk1", "solar_farm_mk1", "solar_panel_mk1",
@@ -134,16 +136,16 @@ func test_a_drone_keeps_its_mass_and_build_cost_across_its_parts() -> void:
 	var parts := _drone_parts()
 	assert_eq(_sum(parts, func(p: Dictionary) -> float: return p["mass_kg"]), 520)
 	var used := {}
-	var seconds := 0
+	var work := 0
 	var recipes := ["small_craft"]
 	recipes.append_array(DRONE_MODULES)
 	for id: String in recipes:
 		var recipe: Dictionary = _entry_of("recipes", id)
-		seconds += int(recipe["seconds"])
+		work += int(recipe["work"])
 		for input: Dictionary in recipe["inputs"]:
 			used[input["item"]] = used.get(input["item"], 0) + int(input["count"])
 	assert_eq(used, { "structural_frame": 8, "wiring": 10, "processor": 4 })
-	assert_eq(seconds, 300)
+	assert_eq(work, 300_000)
 
 
 func test_small_parts_never_beat_medium_on_capacity_per_kg() -> void:

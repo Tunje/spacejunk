@@ -174,7 +174,7 @@
           "propellant_kg_per_s": 1,
           "rated_mass_kg": 10000,
           "exhaust_m_s": 3000,
-          "thrust_kn": 10
+          "thrust_kn": 15
         }
       },
       "fabrication": {
@@ -419,6 +419,88 @@
       "visual": {
         "model": "command_hub",
         "tint": "#e8e4d8"
+      }
+    },
+    {
+      "id": "compact_fabricator_mk1",
+      "name": "Compact Fabricator",
+      "mass_kg": 800,
+      "volume_m3": 4,
+      "power_kw": 50,
+      "heat_kw": 40,
+      "priority": 2,
+      "durability": 1000,
+      "min_ai_tier": 1,
+      "realism": "established",
+      "capabilities": {
+        "facility": {
+          "type": "fabricator",
+          "work_per_tick": 50
+        }
+      },
+      "fabrication": {
+        "recipe": "compact_fabricator_mk1"
+      },
+      "connectors": [
+        {
+          "id": "mount",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [0, 0, 0],
+          "facing": "-z",
+          "up": "+y",
+          "load_limit_kg": 1000
+        }
+      ],
+      "collision": {
+        "shape": "box",
+        "center_mm": [0, 0, 700],
+        "size_mm": [1400, 1400, 1400]
+      },
+      "visual": {
+        "model": null,
+        "tint": "#e8641b"
+      }
+    },
+    {
+      "id": "compact_refinery_mk1",
+      "name": "Compact Refinery",
+      "mass_kg": 900,
+      "volume_m3": 4.5,
+      "power_kw": 100,
+      "heat_kw": 75,
+      "priority": 2,
+      "durability": 1000,
+      "min_ai_tier": 1,
+      "realism": "established",
+      "capabilities": {
+        "facility": {
+          "type": "refinery",
+          "work_per_tick": 50
+        }
+      },
+      "fabrication": {
+        "recipe": "compact_refinery_mk1"
+      },
+      "connectors": [
+        {
+          "id": "mount",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [0, 0, 0],
+          "facing": "-z",
+          "up": "+y",
+          "load_limit_kg": 1000
+        }
+      ],
+      "collision": {
+        "shape": "box",
+        "center_mm": [0, 0, 750],
+        "size_mm": [1400, 1600, 1500]
+      },
+      "visual": {
+        "model": null,
+        "tint": "#e8641b"
       }
     },
     {
@@ -1019,6 +1101,94 @@
       },
       "visual": {
         "model": "propellant_tank_mk1",
+        "tint": "#e8e4d8"
+      }
+    },
+    {
+      "id": "propellant_tank_mk2",
+      "name": "Large Propellant Tank",
+      "mass_kg": 250,
+      "volume_m3": 2.5,
+      "power_kw": 0,
+      "heat_kw": 0,
+      "priority": 0,
+      "durability": 1000,
+      "min_ai_tier": 1,
+      "realism": "established",
+      "capabilities": {
+        "storage": {
+          "propellant": {
+            "mass_kg": 2500,
+            "volume_m3": 2.5
+          }
+        }
+      },
+      "fabrication": {
+        "recipe": "propellant_tank_mk2"
+      },
+      "connectors": [
+        {
+          "id": "mount",
+          "type": "stack",
+          "size": "medium",
+          "pos_mm": [0, 0, 0],
+          "facing": "+y",
+          "up": "+z",
+          "load_limit_kg": 1000
+        },
+        {
+          "id": "stack_bottom",
+          "type": "stack",
+          "size": "medium",
+          "pos_mm": [0, -3600, 0],
+          "facing": "-y",
+          "up": "+z",
+          "load_limit_kg": 1000
+        },
+        {
+          "id": "side_px",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [1000, -3200, 0],
+          "facing": "+x",
+          "up": "+y",
+          "load_limit_kg": 500
+        },
+        {
+          "id": "side_nx",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [-1000, -3200, 0],
+          "facing": "-x",
+          "up": "+y",
+          "load_limit_kg": 500
+        },
+        {
+          "id": "side_pz",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [0, -3200, 1000],
+          "facing": "+z",
+          "up": "+y",
+          "load_limit_kg": 500
+        },
+        {
+          "id": "side_nz",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [0, -3200, -1000],
+          "facing": "-z",
+          "up": "+y",
+          "load_limit_kg": 500
+        }
+      ],
+      "collision": {
+        "shape": "cylinder",
+        "center_mm": [0, -1800, 0],
+        "size_mm": [2000, 3600, 2000]
+      },
+      "visual": {
+        "model": null,
         "tint": "#e8e4d8"
       }
     },

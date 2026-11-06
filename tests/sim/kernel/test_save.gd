@@ -10,7 +10,7 @@ func _game(seed_value: int = 12345) -> Sim:
 	sim._register_system(FixtureSystem.new())
 	FixtureSystem.add_unit(sim, 7, 1000)
 	FixtureSystem.add_unit(sim, 3, 1000)
-	sim._state["jobs"][5] = { "held": { "slag": 500 }, "end_tick": 30, "facility": 0, "status": "fixture", "reason": "" }
+	sim._state["jobs"][5] = { "held": { "slag": 500 }, "work_left": 30, "facility": 0, "status": "fixture", "reason": "" }
 	sim._state["matter_start_g"] = 2500
 	return sim
 
@@ -189,6 +189,15 @@ func test_missing_or_mistyped_fields_are_corrupt() -> void:
 
 func test_contract_version_mismatch() -> void:
 	assert_null(Sim.from_save(_altered_save(_game(), "contract_version", Sim.CONTRACT_VERSION + 1)))
+	assert_eq(Sim.last_error(), "version_mismatch")
+
+
+func test_a_version_3_save_with_tick_based_jobs_is_refused() -> void:
+	var state: Dictionary = _game()._state.duplicate(true)
+	state["contract_version"] = 3
+	state["jobs"][5].erase("work_left")
+	state["jobs"][5]["end_tick"] = 30
+	assert_null(Sim.from_save(Canon.encode(state)))
 	assert_eq(Sim.last_error(), "version_mismatch")
 
 

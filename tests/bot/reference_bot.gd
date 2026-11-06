@@ -266,13 +266,25 @@ func _order(type: String, unit: int, args: Dictionary) -> void:
 	problems.append("%s never finished" % type)
 
 
+## The def of a part in a view part tree, or "".
+func _def_of(tree: Dictionary, part: int) -> String:
+	if tree["id"] == part:
+		return tree["def"]
+	for child: Dictionary in tree["children"]:
+		var found := _def_of(child, part)
+		if found != "":
+			return found
+	return ""
+
+
 ## Starts a job and steps until its last run ends.
 func _job(facility: int, recipe: String, count: int) -> void:
 	if not problems.is_empty():
 		return
 	var id := _command("start_job", STATION, { "facility": facility, "recipe": recipe, "count": count })
 	var start := sim.current_tick() + 1
-	var limit: int = sim.defs()["recipes"][recipe]["ticks"] * count + ORDER_LIMIT_TICKS
+	var rate: int = sim.defs()["modules"][_def_of(sim.view()["units"][STATION]["parts"], facility)]["capabilities"] 		["facility"]["work_per_tick"]
+	var limit: int = ceili(float(sim.defs()["recipes"][recipe]["work"]) / rate) * count + ORDER_LIMIT_TICKS
 	var job := 0
 	var left := count
 	for i in limit:

@@ -40,13 +40,16 @@ const MODULE_FIELDS := [
 ]
 const CONNECTOR_FIELDS := ["id", "type", "size", "pos_mm", "facing", "up", "load_limit_kg"]
 const COLLISION_FIELDS := ["shape", "center_mm", "size_mm"]
-const RECIPE_FIELDS := ["id", "facility", "seconds", "power_kw", "inputs", "outputs", "abstract"]
-## Work points (C11). A recipe needs `work`, and a facility removes `work_per_tick` of it each tick.
-## While recipes still carry `seconds`, work must equal seconds x WORK_PER_SECOND.
-const RECIPE_OPTIONAL := ["work", "points"]
-const WORK_PER_SECOND := 1000
+## Work points (C11, contract v4). A recipe needs `work`, and a facility removes `work_per_tick` of
+## it each tick. `seconds` is gone (B11b), so a recipe that still has it is an unknown field.
+const RECIPE_FIELDS := ["id", "facility", "work", "power_kw", "inputs", "outputs", "abstract"]
+const RECIPE_OPTIONAL := ["points"]
+## A recipe draws its stated power at this rate, and in proportion at any other (PowerSystem).
+const FULL_RATE_WORK_PER_TICK := 100
 const MODULE_OPTIONAL := ["ideas"]
 const THEORY_FIELDS := ["id", "name", "era", "requires", "evidence", "test", "unlocks"]
+## A theory may replace the bench test's inputs for the designs it unlocks.
+const THEORY_OPTIONAL := ["qualify"]
 const SCIENCE_FIELDS := ["id", "name", "place", "capability", "points"]
 const SCIENCE_OPTIONAL := ["seconds"]
 ## Where a measurement is taken: at an asteroid, on an orbit round a body, or landed on one.
@@ -79,7 +82,12 @@ const TEMPLATE_FIELDS := ["id", "name", "kind", "root"]
 const SINK_FIELDS := ["id", "name", "items"]
 const SCENARIO_DIR := "scenarios/"
 const SCENARIO_FIELDS := ["schema_version", "id", "name", "seed", "bodies", "units"]
-const SCENARIO_OPTIONAL := ["frames"]
+const SCENARIO_OPTIONAL := ["frames", "research"]
+## A sink whose items list is exactly this accepts any item, derived prototypes included (C12).
+const ANY_ITEM := "*"
+## theories.json may carry the default bench test beside its entries (C12, section 5).
+const FILE_EXTRAS := { "theories": ["bench_test"] }
+const BENCH_TEST_FIELDS := ["inputs", "work", "power_kw"]
 const BODY_FIELDS := ["key", "name", "kind", "radius_mm", "visual_seed", "deposits"]
 const BODY_OPTIONAL := ["pos_mm", "gm_km3_s2", "orbit", "frame", "planet"]
 const PLANET_FIELDS := ["seed", "height_range_m"]
@@ -150,6 +158,7 @@ var _templates: Dictionary = {}
 var _sinks: Dictionary = {}
 var _theories: Dictionary = {}
 var _science: Dictionary = {}
+var _bench_test: Variant = null
 var _scenarios: Array = []
 var _id_regex := RegEx.create_from_string(ID_PATTERN)
 var _tint_regex := RegEx.create_from_string(TINT_PATTERN)
@@ -195,6 +204,8 @@ func _run(data: Dictionary) -> Array[String]:
 	_sinks = _index(data, "sinks")
 	_theories = _index(data, "theories") if data.has("theories") else {}
 	_science = _index(data, "science") if data.has("science") else {}
+	if data.get("theories") is Dictionary:
+		_bench_test = data["theories"].get("bench_test")
 	if not _errors.is_empty():
 		return _errors
 
@@ -214,6 +225,7 @@ func _run(data: Dictionary) -> Array[String]:
 		_shape_theory(_theories[id])
 	for id: String in _sorted(_science):
 		_shape_science(_science[id])
+	_shape_bench_test()
 	_scenarios = data.get("scenarios", [])
 	if _scenarios.is_empty():
 		_err("scenario_missing", "data/scenarios", "at least one scenario is needed")
@@ -260,7 +272,7 @@ func _index(data: Dictionary, key: String) -> Dictionary:
 	if not parsed is Dictionary:
 		_err("bad_file", file, "missing, unparsable or not an object")
 		return table
-	if not _has_fields(file, parsed, ["schema_version", "entries"]):
+	if not _has_fields(file, parsed, ["schema_version", "entries"], FILE_EXTRAS.get(key, [])):
 		return table
 	if parsed["schema_version"] != SCHEMA_VERSION:
 		_err("bad_schema_version", file, str(parsed["schema_version"]))
@@ -436,10 +448,9 @@ func _shape_capabilities(where: String, capabilities: Variant) -> void:
 		elif key == "max_mass_kg":
 			_check_positive(at, key, value, 1000, MAX_STACK_G)
 		elif key == "facility":
-			if value is Dictionary and _has_fields(at, value, ["type"], ["work_per_tick"]):
+			if value is Dictionary and _has_fields(at, value, ["type", "work_per_tick"]):
 				_check_enum(at, "type", value["type"], FACILITIES)
-				if value.has("work_per_tick"):
-					_check_whole(at, "work_per_tick", value["work_per_tick"], 1, MAX_RATE)
+				_check_whole(at, "work_per_tick", value["work_per_tick"], 1, MAX_RATE)
 			elif not value is Dictionary:
 				_err("bad_capability", at, "not an object")
 		elif key == "always_on":
@@ -532,13 +543,9 @@ func _shape_recipe(recipe: Dictionary) -> void:
 	if not _has_fields(where, recipe, RECIPE_FIELDS, RECIPE_OPTIONAL):
 		return
 	_check_enum(where, "facility", recipe["facility"], FACILITIES)
-	_check_whole(where, "seconds", recipe["seconds"], 1, MAX_RATE)
+	_check_whole(where, "work", recipe["work"], 1, MAX_RATE)
 	if recipe.has("points"):
 		_check_whole(where, "points", recipe["points"], 1, MAX_RATE)
-	if recipe.has("work"):
-		_check_whole(where, "work", recipe["work"], 1, MAX_RATE)
-		if _is_whole(recipe["work"]) and _is_whole(recipe["seconds"]) 				and int(recipe["work"]) != int(recipe["seconds"]) * WORK_PER_SECOND:
-			_err("work_mismatch", where, "work %d, seconds %d" % [recipe["work"], recipe["seconds"]])
 	_check_number(where, "power_kw", recipe["power_kw"], 1000, MAX_RATE)
 	if not recipe["abstract"] is bool:
 		_err("bad_recipe", where, "abstract is not a boolean")
@@ -623,6 +630,8 @@ func _shape_sink(sink: Dictionary) -> void:
 	_check_name(where, sink)
 	if not sink["items"] is Array or sink["items"].is_empty():
 		_err("bad_sink", where, "items needs at least one entry")
+	elif ANY_ITEM in sink["items"] and sink["items"].size() != 1:
+		_err("bad_sink", where, "\"*\" stands alone as the whole list")
 
 
 ## Adds the item each module has while uninstalled (schemas section 3).
@@ -643,7 +652,13 @@ func _derive_module_items() -> void:
 		}
 
 
+func _accepts_any(sink: Dictionary) -> bool:
+	return sink["items"] == [ANY_ITEM]
+
+
 func _cross_sink(sink: Dictionary) -> void:
+	if _accepts_any(sink):
+		return
 	for item: Variant in sink["items"]:
 		if not _items.has(item):
 			_err("unknown_item", "sinks.json:%s" % sink["id"], str(item))
@@ -750,7 +765,9 @@ func _check_recipe_facility(where: String, recipe: Dictionary) -> void:
 		if capabilities.get("facility", {}).get("type") != recipe["facility"]:
 			continue
 		found = true
-		if float(recipe["power_kw"]) > float(_modules[id]["power_kw"]):
+		# A slower facility draws the recipe's power in proportion to its work rate.
+		var rate: float = float(capabilities["facility"]["work_per_tick"]) / FULL_RATE_WORK_PER_TICK
+		if float(recipe["power_kw"]) * rate > float(_modules[id]["power_kw"]):
 			_err("recipe_over_power", where, "above the rating of %s" % id)
 	if not found:
 		_err("unknown_facility", where, "no module has type %s" % recipe["facility"])
@@ -804,7 +821,7 @@ func _check_sink_route(where: String, entry: Dictionary) -> void:
 	if entry.has("sink"):
 		if not _sinks.has(entry["sink"]):
 			_err("unknown_sink", where, entry["sink"])
-		elif not id in _sinks[entry["sink"]]["items"]:
+		elif not _accepts_any(_sinks[entry["sink"]]) and not id in _sinks[entry["sink"]]["items"]:
 			_err("sink_refuses_item", where, "%s does not accept %s" % [entry["sink"], id])
 		return
 	# Waste such as slag has no use but its sink, so it must always go there. Goods that some
@@ -815,7 +832,7 @@ func _check_sink_route(where: String, entry: Dictionary) -> void:
 	if _is_recipe_input(id):
 		return
 	for sink_id: String in _sorted(_sinks):
-		if id in _sinks[sink_id]["items"]:
+		if not _accepts_any(_sinks[sink_id]) and id in _sinks[sink_id]["items"]:
 			_err("sink_route_missing", where, "%s must route to a sink" % id)
 
 
@@ -997,6 +1014,10 @@ func _shape_scenario(scenario: Variant) -> void:
 	var where := "scenarios/%s" % scenario["id"]
 	if not _has_fields(where, scenario, SCENARIO_FIELDS, SCENARIO_OPTIONAL):
 		return
+	if scenario.has("research"):
+		var research: Variant = scenario["research"]
+		if not research is Dictionary or not _has_fields(where + ".research", research, ["theories"]) 				or not research["theories"] is Array 				or not research["theories"].all(func(v: Variant) -> bool: return v is String):
+			_err("bad_scenario", where, "research is { theories: [IDs] }")
 	if scenario["schema_version"] != SCHEMA_VERSION:
 		_err("bad_schema_version", where, str(scenario["schema_version"]))
 	_check_name(where, scenario)
@@ -1257,7 +1278,8 @@ func _check_coverage() -> void:
 		sources[_deposits[id]["item"]] = true
 	for id: String in _sorted(_sinks):
 		for item: Variant in _sinks[id]["items"]:
-			uses[item] = true
+			if item != ANY_ITEM:
+				uses[item] = true
 	for id: String in _sorted(_recipes):
 		for entry: Dictionary in _recipes[id]["inputs"]:
 			uses[entry["item"]] = true
@@ -1302,8 +1324,10 @@ func _fits_somewhere(module: Dictionary) -> bool:
 
 func _shape_theory(theory: Dictionary) -> void:
 	var where := "theories.json:%s" % theory["id"]
-	if not _has_fields(where, theory, THEORY_FIELDS):
+	if not _has_fields(where, theory, THEORY_FIELDS, THEORY_OPTIONAL):
 		return
+	if theory.has("qualify"):
+		_shape_inputs(where + ".qualify", theory["qualify"])
 	_check_name(where, theory)
 	# Era I is known from the start, so a theory belongs to era II or later.
 	_check_whole(where, "era", theory["era"], 2, 6)
@@ -1424,7 +1448,47 @@ func _cross_theory_output(where: String, recipe: Dictionary, entry: Dictionary) 
 			_err("theory_output_not_alone", where, "only sink routes may sit beside a theory")
 
 
+func _shape_inputs(where: String, inputs: Variant) -> void:
+	if not inputs is Array or inputs.is_empty():
+		_err("bad_recipe", where, "inputs needs at least one entry")
+		return
+	for entry: Variant in inputs:
+		_shape_amount(where, entry, [])
+
+
+## The default bench test that qualifies a prototype (C12 section 5). Its inputs, work and power
+## are data, so the derived `qualify:<design>` recipes take them from here.
+func _shape_bench_test() -> void:
+	var where := "theories.json:bench_test"
+	if _bench_test == null:
+		if not _theories.is_empty():
+			_err("missing_field", "theories.json", "bench_test")
+		return
+	if not _bench_test is Dictionary or not _has_fields(where, _bench_test, BENCH_TEST_FIELDS):
+		return
+	_shape_inputs(where, _bench_test["inputs"])
+	_check_whole(where, "work", _bench_test["work"], 1, MAX_RATE)
+	_check_number(where, "power_kw", _bench_test["power_kw"], 1000, MAX_RATE)
+
+
+func _check_research_inputs(where: String, inputs: Array) -> void:
+	for entry: Dictionary in inputs:
+		_entry_grams(where, entry)
+
+
 func _cross_research() -> void:
+	if _bench_test is Dictionary:
+		_check_research_inputs("theories.json:bench_test", _bench_test["inputs"])
+		for id: String in _sorted(_modules):
+			if _modules[id]["capabilities"].get("facility", {}).get("type") == "lab" 					and float(_bench_test["power_kw"]) > float(_modules[id]["power_kw"]):
+				_err("recipe_over_power", "theories.json:bench_test", "above the rating of %s" % id)
+	for scenario: Dictionary in _scenarios:
+		for id: String in scenario.get("research", {}).get("theories", []):
+			if not _theories.has(id):
+				_err("unknown_theory", "scenarios/%s.research" % scenario["id"], id)
+	for id: String in _sorted(_theories):
+		if _theories[id].has("qualify"):
+			_check_research_inputs("theories.json:%s.qualify" % id, _theories[id]["qualify"])
 	for id: String in _sorted(_recipes):
 		var recipe: Dictionary = _recipes[id]
 		if recipe["facility"] == "lab" and not recipe["outputs"].any(

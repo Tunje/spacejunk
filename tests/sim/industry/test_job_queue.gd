@@ -5,6 +5,8 @@ extends GutTest
 const STATION := 8
 const FABRICATOR := 14
 const RUN_TICKS := 3
+## A full-size facility's work_per_tick, so a recipe of RUN_TICKS * FULL_RATE work takes RUN_TICKS.
+const FULL_RATE := 100
 const COPPER_RUN_G := 10000
 const IRON_RUN_G := 50000
 const WIRING_G := 10000
@@ -24,8 +26,8 @@ func before_each() -> void:
 	state = sim._state
 	sim._ctx.defs = sim._ctx.defs.duplicate(true)
 	defs = sim._ctx.defs
-	defs["recipes"]["wiring"]["ticks"] = RUN_TICKS
-	defs["recipes"]["structural_frame"]["ticks"] = RUN_TICKS
+	defs["recipes"]["wiring"]["work"] = RUN_TICKS * FULL_RATE
+	defs["recipes"]["structural_frame"]["work"] = RUN_TICKS * FULL_RATE
 
 
 ## Puts stock at the station, counted as starting matter.
@@ -162,7 +164,7 @@ func test_queue_job_checks_what_start_job_checks() -> void:
 
 
 func test_move_job_reorders_the_queue_behind_the_run() -> void:
-	defs["recipes"]["wiring"]["ticks"] = LONG_TICKS
+	defs["recipes"]["wiring"]["work"] = LONG_TICKS * FULL_RATE
 	_give("copper", COPPER_RUN_G)
 	var order := _queued(["wiring", "wiring", "wiring", "wiring"])
 	sim.take_events()
@@ -208,7 +210,7 @@ func test_a_job_stuck_on_missing_inputs_can_be_moved_out_of_the_way() -> void:
 
 
 func test_move_job_refuses_a_job_with_a_run_in_progress() -> void:
-	defs["recipes"]["wiring"]["ticks"] = LONG_TICKS
+	defs["recipes"]["wiring"]["work"] = LONG_TICKS * FULL_RATE
 	_give("copper", COPPER_RUN_G)
 	var order := _queued(["wiring", "wiring"])
 	sim.take_events()
@@ -280,9 +282,9 @@ func test_a_queue_saves_and_loads_unchanged_and_runs_on_identically() -> void:
 	var loaded := Sim.from_save(text)
 	assert_not_null(loaded)
 	assert_eq(loaded.to_save(), text)
+	loaded._ctx.defs = defs
 	assert_eq(loaded.view()["jobs"], sim.view()["jobs"])
 	sim.step(RUN_TICKS * 3 + 3)
-	loaded._ctx.defs = defs
 	loaded.step(RUN_TICKS * 3 + 3)
 	assert_eq(loaded.state_hash(), sim.state_hash())
 	assert_true(sim.view()["jobs"].is_empty())

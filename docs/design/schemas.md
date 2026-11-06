@@ -140,7 +140,7 @@ A whole number converts by integer multiplication, so a value such as the star's
 | `port` | `transfer_kg_per_s`, `dock_seconds` (whole), `undock_seconds` (whole) | Docking ports |
 | `thruster` | `speed_m_s`, `propellant_kg_per_s`, `rated_mass_kg`, `exhaust_m_s`, `thrust_kn` | Thrusters |
 | `landing_gear` | `max_touchdown_m_s` | Landing legs |
-| `facility` | `type`: `refinery` or `fabricator`; `work_per_tick` (whole, optional) | Station facilities. `work_per_tick` is the work points removed from a running recipe each tick (C11): 100 for full-size facilities, which gives 1% steps for research ideas. Compact facilities will have their own, lower rate |
+| `facility` | `type`: `refinery` or `fabricator`; `work_per_tick` (whole, optional) | Facilities. `work_per_tick` (required) is the work points removed from a running recipe each tick (C11): 100 for full-size facilities, which gives 1% steps for research ideas, and 50 for the probe's compact refinery and fabricator (B11b). A recipe draws its `power_kw` at 100 and in proportion at other rates, so the validator compares `power_kw` × `work_per_tick` / 100 with the facility's rating |
 | `always_on` | `true` | A load that runs whenever healthy, such as a command hub |
 
 ```json
@@ -155,9 +155,9 @@ A multi-role part has one `power_kw` and one `heat_kw`, which apply whenever it 
 
 A trip's cost is its travel time at `propellant_kg_per_s`, scaled by the unit's mass at departure over `rated_mass_kg`, and paid in one lump at departure ([autonomy.md](autonomy.md) section 4). The network spec holds the exact formula.
 
-**Two kinds of thruster figure.** Trips inside a frame read `speed_m_s`, `propellant_kg_per_s` and `rated_mass_kg`, exactly as above. Burns outside a frame read only `exhaust_m_s` (loaded as `exhaust_mm_s`) and `thrust_kn` (loaded as `thrust_n`), through the rocket equation of [orbital_flight.md](orbital_flight.md) section 7. The two kinds are independent. `chemical_thruster_mk1` has `thrust_kn` 10 (task B11), so a fully fuelled probe can lift off from the icy moon at more than twice its gravity, while its in-frame figures stay 1 kg/s at 500 m/s. A burn's propellant flow is `thrust_kn` over `exhaust_m_s`, about 3.3 kg/s at 3000 m/s. `small_chemical_thruster_mk1` stays at 0.15 kN, where both kinds still agree. All five fields are required, and the validator checks them (task B13). A thruster is not a power or heat load during a trip, so in the slice its `power_kw` and `heat_kw` count only toward fitting budgets.
+**Two kinds of thruster figure.** Trips inside a frame read `speed_m_s`, `propellant_kg_per_s` and `rated_mass_kg`, exactly as above. Burns outside a frame read only `exhaust_m_s` (loaded as `exhaust_mm_s`) and `thrust_kn` (loaded as `thrust_n`), through the rocket equation of [orbital_flight.md](orbital_flight.md) section 7. The two kinds are independent. `chemical_thruster_mk1` has `thrust_kn` 15 (tasks B11 and B11b), so a fully fuelled probe lifts off from Frost at about three times its gravity, and a hand-flown landing loses less to gravity. Its in-frame figures stay 1 kg/s at 500 m/s. A burn's propellant flow is `thrust_kn` over `exhaust_m_s`, 5 kg/s at 3000 m/s. `small_chemical_thruster_mk1` stays at 0.15 kN, where both kinds still agree. All five fields are required, and the validator checks them (task B13). A thruster is not a power or heat load during a trip, so in the slice its `power_kw` and `heat_kw` count only toward fitting budgets.
 
-**Landing gear.** `max_touchdown_m_s` is the fastest touchdown the part survives, above 0, and it loads as `max_touchdown_mm_s` (task B15). A unit's touchdown limit is the highest figure among its healthy parts with landing gear, and 0 when it has none. A touchdown at or under the limit lands, and one over it crashes. Hand-flown landings and the core autopilot's `land` both obey this, so a unit with no gear cannot land. `max_slope_mdeg` is reserved on this object for a later slope limit. It is not part of the schema yet, and the validator rejects nothing for its absence. Today's parts are `landing_legs_mk1` (6 m/s, 150 kg, three structural frames) and `small_landing_legs_mk1` (4 m/s, 50 kg, one frame), both side-mounted. The long legs mount on the four low side connectors of `propellant_tank_mk1`, 2.6 m below its top, and reach 2.8 m below their mount, which is 0.4 m below the thruster's nozzle (task B11). The client stands a landed craft on its lowest collision point, so the legs' collision box sets where it stands. It is provisional until the long-leg model arrives, and is then fitted to it.
+**Landing gear.** `max_touchdown_m_s` is the fastest touchdown the part survives, above 0, and it loads as `max_touchdown_mm_s` (task B15). A unit's touchdown limit is the highest figure among its healthy parts with landing gear, and 0 when it has none. A touchdown at or under the limit lands, and one over it crashes. Hand-flown landings and the core autopilot's `land` both obey this, so a unit with no gear cannot land. `max_slope_mdeg` is reserved on this object for a later slope limit. It is not part of the schema yet, and the validator rejects nothing for its absence. Today's parts are `landing_legs_mk1` (6 m/s, 150 kg, three structural frames) and `small_landing_legs_mk1` (4 m/s, 50 kg, one frame), both side-mounted. The long legs mount on the four low side connectors of the probe's `propellant_tank_mk2`, 0.4 m above its bottom, and reach 2.8 m below their mount, which is 0.4 m below the thruster's nozzle (task B11). The client stands a landed craft on its lowest collision point, so the legs' collision box sets where it stands. It is provisional until the long-leg model arrives, and is then fitted to it.
 
 ## 6. Connectors
 
@@ -189,8 +189,7 @@ The `core` size is used only by cores and the core connector on root parts, whic
 | ----- | ---- | ------- |
 | `id` | string | Recipe ID |
 | `facility` | `refinery`, `fabricator` | Runs on a part with this `facility.type` |
-| `seconds` | whole, above 0 | Length of one run |
-| `work` | whole, above 0 | Work points one run needs (C11). While `seconds` is still present, `work` must equal `seconds` × 1000. A facility removes its `work_per_tick` each tick, so at 100 per tick and 10 ticks a second, a run lasts `seconds`. `seconds` goes in B11b. |
+| `work` | whole, above 0 | Work points one run needs (C11, contract v4). A facility removes its `work_per_tick` each tick, so a run lasts `work` / `work_per_tick` ticks: at 100 per tick and 10 ticks a second, 1000 work is one second. There is no `seconds` field (B11b) |
 | `power_kw` | number | Draw while a run is active |
 | `inputs` | array | At least one entry |
 | `outputs` | array | At least one entry |
@@ -210,11 +209,11 @@ A unit output must be the recipe's only output. An item appears at most once on 
 
 ```json
 [
-  { "id": "refine_hematite", "facility": "refinery", "seconds": 60, "power_kw": 200,
+  { "id": "refine_hematite", "facility": "refinery", "work": 60000, "power_kw": 200,
     "inputs": [{ "item": "hematite", "kg": 100 }],
     "outputs": [{ "item": "iron", "kg": 69 }, { "item": "slag", "kg": 31, "sink": "slag_vent" }],
     "abstract": true },
-  { "id": "small_craft", "facility": "fabricator", "seconds": 60, "power_kw": 100,
+  { "id": "small_craft", "facility": "fabricator", "work": 60000, "power_kw": 100,
     "inputs": [{ "item": "structural_frame", "count": 2 }, { "item": "wiring", "count": 2 }],
     "outputs": [{ "unit_template": "small_craft" }],
     "abstract": true }
@@ -389,25 +388,48 @@ The other settings in [planets.md](planets.md) section 1 (`kind`, `temperature`,
 
 **Start state.** Batteries start full and heat loops start at 0. Every deposit starts unfound. A template with a core has it assigned (section 10). A docked unit starts with `at_target` set to its host, as after arrival.
 
-## 15. Research (draft, task B19)
+## 15. Research (task B19, contract version 5)
 
-Draft data for [research.md](research.md). It stays off `main` until the research contract round. Both files are optional to the validator, so a dataset without research still passes.
+Data for [research.md](research.md) under contract version 5 (C12). Both files are optional to the validator, so a dataset without research still passes.
 
-**`theories.json`:** `id`, `name`, `era` (whole, 2 to 6), `requires` (theory IDs, no cycles, none of a later era), `evidence` (`{ kind, count }`, where `kind` is a `science.json` ID), `test` (a lab recipe whose output is `{ "theory": id }`), and `unlocks` (module IDs, each unlocked by one theory at most).
+**`theories.json`:** the usual `schema_version` and `entries`, plus a top-level `bench_test`.
+- **`bench_test`** is the default bench test that qualifies a prototype: `{ inputs, work, power_kw }`, which loads as `power_w`. It is required once any theory exists. The data sets 10 processors, work 300000 and 100 kW.
+- **An entry has:**
+  - `id` and `name`;
+  - `era`, whole, 2 to 6;
+  - `requires`, theory IDs, with no cycles and none of a later era;
+  - `evidence`, a list of `{ kind, count }`: `count` distinct keys of that `science.json` kind paid at least once;
+  - `test`, a lab recipe whose output is `{ "theory": id }`;
+  - `unlocks`, module IDs, each unlocked by one theory at most;
+  - optionally `qualify`, inputs that replace the bench test's for the designs it unlocks.
 
-**`science.json`:** `id`, `name`, `place` (`asteroid`, `orbit` or `landed`), `capability` (the part capability that takes it, or `ai_core`), optional `seconds` (absent means the part's own time, or one orbit), and `points`, which maps body classes (`asteroid`, `moon`, `planet`) to base points.
+**`science.json`:** each entry has:
+- `id` and `name`;
+- `place`: `asteroid`, `orbit` or `landed`;
+- `capability`: the part capability that takes it, or `ai_core`;
+- optionally `seconds`; without it, the time is the part's own, or one orbit;
+- `points`, which maps body classes (`asteroid`, `moon`, `planet`) to base points.
+
+The nth payment of a key such as `composition:12` is base >> n.
 
 **Recipes:**
 - the facility type `lab`;
-- an optional `points` input, which is whole and above 0;
-- the output `{ "theory": id }`, which weighs nothing and may sit only beside sink routes.
+- an optional `points` input, whole and above 0;
+- the output `{ "theory": id }`, which weighs nothing and may sit only beside sink routes. Every lab recipe proves a theory.
 
-Every lab recipe proves a theory. The sink `test_consumed` takes a test's goods.
+**Derived, not authored:** `prototype:<design>`, which is both an item and its recipe, and `qualify:<design>`. ':' and '+' never appear in an authored ID; the ID pattern `^[a-z][a-z0-9_]*$` already excludes them.
 
-**Modules:** optional `ideas`. An idea has `id`, `name`, `points`, `complexity` (whole, -10 to 10, negative exactly when `simplifies` is true) and `deltas`. It may also have `theory`, `simplifies`, `hidden` (a simplification only, which needs `discover_ppm`) and `discover_ppm` (1 to 1000000).
-- `deltas` maps a field path, such as `capabilities.mine.rate_kg_per_s`, to ppm of the base value.
-- Each delta is whole, not 0, and above -1000000.
-- The validator's direction table lists the allowed fields. Each idea makes at least one field better and one worse.
+**Sinks:**
+- An `items` list of exactly `["*"]` accepts any item, derived prototypes included. `test_consumed` takes a test's goods, and `fab_scrap` takes a prototype's or variant's input mass beyond the part.
+- A route is required only for waste: an item that no recipe takes as input, such as slag. Propellant may also stay in a hold.
 
-**The sink rule, generalised:** an output of an item that a sink accepts must route to that sink, unless some recipe takes the item as an input, or it is propellant. Slag still always vents.
+**Modules:** optional `ideas`. An idea has:
+- `id` and `name`;
+- `points`;
+- `complexity`, whole, from -10 to 10, and negative exactly when `simplifies` is true;
+- `deltas`;
+- optionally `theory` (no nulls: an idea needing none leaves it out), `simplifies`, `hidden` (a simplification only, which needs `discover_ppm`) and `discover_ppm` (1 to 1000000).
 
+`deltas` maps a field path, such as `capabilities.mine.rate_kg_per_s`, to ppm of the base value. Each delta is whole, not 0, and above -1000000. The validator's direction table lists the allowed fields, and each idea makes at least one field better and one worse.
+
+**Scenarios:** an optional `research: { theories: [...] }`. Those theories are proven at load, and their unlocks are qualified. `reference.json` proves all three of today's theories, because its station already carries the refinery and the solar farm. `new_start.json` proves none.

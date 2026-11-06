@@ -3,7 +3,7 @@ extends RefCounted
 ## The public simulation API (contracts section 3) and the tick loop (section 4).
 
 const TICKS_PER_SECOND := 10
-const CONTRACT_VERSION := 3
+const CONTRACT_VERSION := 4
 const SCENARIO_EMPTY := "empty"
 ## Undrained events past this are dropped, oldest first.
 const MAX_QUEUED_EVENTS := 65536
