@@ -80,6 +80,9 @@ func before_each() -> void:
 					{ "item": "slag", "kg": 40, "sink": "slag_vent" }],
 				"abstract": true },
 			_fabrication("refinery", 1, "refinery"),
+			{ "id": "tanker", "facility": "fabricator", "seconds": 5, "power_kw": 1,
+				"inputs": [{ "item": "frame", "count": 10 }],
+				"outputs": [{ "unit_template": "tanker" }], "abstract": true },
 		]),
 		"deposits": _envelope([
 			{ "id": "hematite_small", "item": "hematite", "mass_kg": 1000, "hardness": 5 },
@@ -920,3 +923,42 @@ func test_work_per_tick_must_be_whole_and_positive() -> void:
 func test_facility_rejects_other_fields() -> void:
 	_entry("modules", "refinery")["capabilities"]["facility"]["speed"] = 2
 	_assert_error("unknown_field")
+
+
+## Everything is buildable (task B11).
+func test_root_built_only_by_a_template_passes() -> void:
+	assert_eq(DataValidator.validate(data), [] as Array[String])
+	assert_null(_entry("modules", "hull")["fabrication"])
+
+
+func test_module_nothing_builds() -> void:
+	data["recipes"]["entries"] = data["recipes"]["entries"].filter(
+		func(recipe: Dictionary) -> bool: return recipe["id"] != "tanker")
+	_assert_error("not_buildable")
+
+
+func test_part_inside_a_built_template_counts() -> void:
+	var tanker: Dictionary = _entry("templates", "tanker")
+	tanker["root"]["children"].append(
+		{ "part": "laser", "parent_connector": "side_a", "connector": "mount", "children": [] })
+	_entry("recipes", "tanker")["inputs"][0]["count"] = 12
+	data["recipes"]["entries"] = data["recipes"]["entries"].filter(
+		func(recipe: Dictionary) -> bool: return recipe["id"] != "laser")
+	_entry("modules", "laser")["fabrication"] = null
+	var errors := DataValidator.validate(data)
+	assert_false(errors.any(func(error: String) -> bool: return error.begins_with("not_buildable ")),
+		str(errors))
+
+
+## Propellant is a product of ice (task B11), so a recipe may keep it rather than vent it.
+func test_propellant_output_may_stay_in_the_hold() -> void:
+	var recipe: Dictionary = _entry("recipes", "refine")
+	recipe["outputs"] = [{ "item": "propellant", "kg": 60 }, { "item": "slag", "kg": 40, "sink": "slag_vent" }]
+	var errors := DataValidator.validate(data)
+	assert_false(errors.any(func(error: String) -> bool: return error.begins_with("sink_route_missing ")),
+		str(errors))
+
+
+func test_slag_must_still_be_vented() -> void:
+	_entry("recipes", "refine")["outputs"][1].erase("sink")
+	_assert_error("sink_route_missing")

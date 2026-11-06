@@ -2,6 +2,163 @@
   "schema_version": 1,
   "entries": [
     {
+      "id": "large_station",
+      "name": "Large Station",
+      "kind": "station",
+      "root": {
+        "part": "command_hub",
+        "children": [
+          {
+            "part": "docking_port_mk1",
+            "parent_connector": "stack_top",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "solar_panel_mk1",
+            "parent_connector": "side_a_px",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "heat_radiator_mk1",
+            "parent_connector": "side_a_nx",
+            "connector": "mount",
+            "children": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "medium_craft",
+      "name": "Medium Craft",
+      "kind": "ship",
+      "root": {
+        "part": "starter_hull",
+        "children": [
+          {
+            "part": "docking_port_mk1",
+            "parent_connector": "stack_top",
+            "connector": "mount",
+            "children": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "probe",
+      "name": "Probe",
+      "kind": "ship",
+      "root": {
+        "part": "starter_hull",
+        "children": [
+          {
+            "part": "basic_core",
+            "parent_connector": "core",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "propellant_tank_mk1",
+            "parent_connector": "stack_bottom",
+            "connector": "mount",
+            "children": [
+              {
+                "part": "chemical_thruster_mk1",
+                "parent_connector": "stack_bottom",
+                "connector": "mount",
+                "children": []
+              },
+              {
+                "part": "landing_legs_mk1",
+                "parent_connector": "side_px",
+                "connector": "mount",
+                "children": []
+              },
+              {
+                "part": "landing_legs_mk1",
+                "parent_connector": "side_nx",
+                "connector": "mount",
+                "children": []
+              },
+              {
+                "part": "landing_legs_mk1",
+                "parent_connector": "side_pz",
+                "connector": "mount",
+                "children": []
+              },
+              {
+                "part": "landing_legs_mk1",
+                "parent_connector": "side_nz",
+                "connector": "mount",
+                "children": []
+              }
+            ]
+          },
+          {
+            "part": "docking_port_mk1",
+            "parent_connector": "stack_top",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "solar_panel_mk1",
+            "parent_connector": "side_a_px",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "solar_panel_mk1",
+            "parent_connector": "side_a_nx",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "battery_bank_mk1",
+            "parent_connector": "side_a_pz",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "battery_bank_mk1",
+            "parent_connector": "side_a_nz",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "ore_container_mk1",
+            "parent_connector": "side_b_px",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "heat_radiator_mk1",
+            "parent_connector": "side_b_nx",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "mining_laser_mk1",
+            "parent_connector": "side_b_pz",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "lidar_mk1",
+            "parent_connector": "side_c_px",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "goods_container_mk1",
+            "parent_connector": "side_c_nx",
+            "connector": "mount",
+            "children": []
+          }
+        ]
+      }
+    },
+    {
       "id": "small_craft",
       "name": "Small Craft",
       "kind": "drone",
@@ -11,6 +168,28 @@
           {
             "part": "small_docking_port_mk1",
             "parent_connector": "stack_top",
+            "connector": "mount",
+            "children": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "small_station",
+      "name": "Small Station",
+      "kind": "station",
+      "root": {
+        "part": "small_hub",
+        "children": [
+          {
+            "part": "docking_port_mk1",
+            "parent_connector": "stack_top",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "docking_port_mk1",
+            "parent_connector": "stack_px",
             "connector": "mount",
             "children": []
           }

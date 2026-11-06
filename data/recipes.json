@@ -154,6 +154,26 @@
       "abstract": true
     },
     {
+      "id": "goods_container_mk1",
+      "facility": "fabricator",
+      "seconds": 120,
+      "work": 120000,
+      "power_kw": 60,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 6
+        }
+      ],
+      "outputs": [
+        {
+          "item": "goods_container_mk1",
+          "count": 1
+        }
+      ],
+      "abstract": true
+    },
+    {
       "id": "goods_storage_mk1",
       "facility": "fabricator",
       "seconds": 300,
@@ -206,13 +226,36 @@
       "inputs": [
         {
           "item": "structural_frame",
-          "count": 2
+          "count": 3
         }
       ],
       "outputs": [
         {
           "item": "landing_legs_mk1",
           "count": 1
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "large_station",
+      "facility": "fabricator",
+      "seconds": 1800,
+      "work": 1800000,
+      "power_kw": 100,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 108
+        },
+        {
+          "item": "wiring",
+          "count": 10
+        }
+      ],
+      "outputs": [
+        {
+          "unit_template": "large_station"
         }
       ],
       "abstract": true
@@ -241,6 +284,29 @@
         {
           "item": "lidar_mk1",
           "count": 1
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "medium_craft",
+      "facility": "fabricator",
+      "seconds": 600,
+      "work": 600000,
+      "power_kw": 100,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 40
+        },
+        {
+          "item": "wiring",
+          "count": 15
+        }
+      ],
+      "outputs": [
+        {
+          "unit_template": "medium_craft"
         }
       ],
       "abstract": true
@@ -465,6 +531,55 @@
       "abstract": true
     },
     {
+      "id": "refine_water_ice",
+      "facility": "refinery",
+      "seconds": 60,
+      "work": 60000,
+      "power_kw": 200,
+      "inputs": [
+        {
+          "item": "water_ice",
+          "kg": 100
+        }
+      ],
+      "outputs": [
+        {
+          "item": "propellant",
+          "kg": 90
+        },
+        {
+          "item": "slag",
+          "kg": 10,
+          "sink": "slag_vent"
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "small_battery_bank_mk1",
+      "facility": "fabricator",
+      "seconds": 60,
+      "work": 60000,
+      "power_kw": 60,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 1
+        },
+        {
+          "item": "copper",
+          "kg": 10
+        }
+      ],
+      "outputs": [
+        {
+          "item": "small_battery_bank_mk1",
+          "count": 1
+        }
+      ],
+      "abstract": true
+    },
+    {
       "id": "small_chemical_thruster_mk1",
       "facility": "fabricator",
       "seconds": 40,
@@ -663,6 +778,29 @@
         {
           "item": "small_solar_panel_mk1",
           "count": 1
+        }
+      ],
+      "abstract": true
+    },
+    {
+      "id": "small_station",
+      "facility": "fabricator",
+      "seconds": 600,
+      "work": 600000,
+      "power_kw": 100,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 24
+        },
+        {
+          "item": "wiring",
+          "count": 10
+        }
+      ],
+      "outputs": [
+        {
+          "unit_template": "small_station"
         }
       ],
       "abstract": true

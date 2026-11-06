@@ -2,6 +2,13 @@ extends GutTest
 ## D22: a part shows the generated model its data names, through ModelLook, and a
 ## labelled placeholder when there is no model; picking, glow and growth work on both.
 
+## Models allowed off their collision centre, and why. Each is still counted and placed.
+const OFF_CENTRE_OK := {
+	# Provisional collision reaches 2.8 m below the mount until the long-leg model
+	# arrives (B11); remove when it lands.
+	"landing_legs_mk1": true,
+}
+
 var modules: Dictionary
 var craft: CraftNode
 
@@ -50,7 +57,8 @@ func test_every_model_sits_on_its_collision_box() -> void:
 			box = b if first else box.merge(b)
 			first = false
 		var centre := CraftLayout.to_metres(modules[id]["collision"]["center_mm"])
-		assert_lt(box.get_center().distance_to(centre), 0.5, "%s: model %s, data %s" % [id, box.get_center(), centre])
+		if not OFF_CENTRE_OK.has(id):
+			assert_lt(box.get_center().distance_to(centre), 0.5, "%s: model %s, data %s" % [id, box.get_center(), centre])
 		checked += 1
 	assert_gte(checked, 14, "the 13 B12 parts and the hull")
 
