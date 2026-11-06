@@ -37,12 +37,22 @@ func _ready() -> void:
 	_list = VBoxContainer.new()
 	_list.visible = false
 	column.add_child(_list)
-	for goal: Dictionary in GoalTracker.GOALS:
-		var line := Label.new()
-		_list.add_child(line)
+	_build_list()
 
 
-func bind(new_bridge: SimBridge, log_panel: EventLog, fitting: FittingScreen) -> void:
+## One line a goal in the tracker's list.
+func _build_list() -> void:
+	for child: Node in _list.get_children():
+		child.free()
+	for goal: Dictionary in tracker.goals:
+		_list.add_child(Label.new())
+
+
+## `scenario` picks the goal list, so the new start gets its own.
+func bind(new_bridge: SimBridge, log_panel: EventLog, fitting: FittingScreen, scenario := "") -> void:
+	if scenario != "":
+		tracker = GoalTracker.new(scenario)
+		_build_list()
 	bridge = new_bridge
 	event_log = log_panel
 	_defs = bridge.defs()
@@ -60,15 +70,15 @@ func toggle_list() -> void:
 func refresh() -> void:
 	var goal := tracker.current()
 	if goal.is_empty():
-		_title.text = "All ten goals done"
+		_title.text = "All ten goals done" if tracker.goals.size() == 10 else "All %d goals done" % tracker.goals.size()
 		_hint.text = "The base can run itself now. Keep going, or try the Policy screen."
 	else:
 		_title.text = "Goal %d of %d: %s" % [
-			GoalTracker.GOALS.find(goal) + 1, GoalTracker.GOALS.size(), goal["title"],
+			tracker.goals.find(goal) + 1, tracker.goals.size(), goal["title"],
 		]
 		_hint.text = goal["hint"]
-	for index in range(GoalTracker.GOALS.size()):
-		var entry: Dictionary = GoalTracker.GOALS[index]
+	for index in range(tracker.goals.size()):
+		var entry: Dictionary = tracker.goals[index]
 		var line: Label = _list.get_child(index)
 		var finished: bool = tracker.done.has(entry["id"])
 		line.text = "%s %d. %s" % ["[x]" if finished else "[  ]", index + 1, entry["title"]]
@@ -88,4 +98,4 @@ func _on_events(events: Array[Dictionary]) -> void:
 
 func _announce(finished: Array[String]) -> void:
 	for id: String in finished:
-		event_log.add_line("Goal done: %s" % GoalTracker.title_of(id))
+		event_log.add_line("Goal done: %s" % tracker.title_of(id))

@@ -11,6 +11,7 @@ const ONE := OrbitMath.ONE
 const PROPELLANT_G := 12_000_000
 
 const GEAR_MM_S := 6000
+const STRONG_THRUST_N := 600_000
 
 var sim: Sim
 var keys := {}
@@ -65,6 +66,15 @@ func _put_in_orbit(orbit: Dictionary) -> void:
 	_ship()["orbit"] = orbit
 	_ship()["pos_mm"] = OrbitMath.position_at(orbit, sim.current_tick())
 	sim._ctx.index.clear()
+
+
+## The land and take_off commands need thrust over weight above 1 (A27), and the starter ship's
+## 15 kN can't hold up 16 t at Kerbin's gravity. Tests of the commands fit it with a 600 kN thruster,
+## in this sim's own defs, so the cached data and its hash are untouched.
+func _strong_thruster() -> void:
+	sim._ctx.defs = sim._ctx.defs.duplicate(true)
+	var part: int = BurnSystem.thruster(sim._ctx, keys["Ship"])["part"]
+	Units.module_of(sim._state, sim._ctx.defs, part)["capabilities"]["thruster"]["thrust_n"] = STRONG_THRUST_N
 
 
 func _land(cell: int) -> Dictionary:

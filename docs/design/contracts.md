@@ -228,8 +228,8 @@ A burn whose tick comes while the unit has another operation, a route or a task 
 
 | Command | Arguments | Effect |
 | ------- | --------- | ------ |
-| `land` | `body`, `cell` | From an orbit around `body`, an atomic autopilot descent to the cell. It needs landing gear, as a hand-flown landing does, and is refused with `no_landing_gear` without it. Its cost is the burn down half an ellipse to the surface, plus killing the remaining speed with a 3% gravity loss, by the rocket equation. It is paid at the start, and the op `landing` lasts the half ellipse. Refused with `not_flying` when not on an orbit around that body, `invalid_target` for a cell outside the grid, `no_propellant`, `module_missing` or `part_busy`. |
-| `take_off` | `altitude_mm` | From a landed place, the same in reverse (op `taking_off`), onto a circular orbit at that altitude through the cell's direction, moving east around +Y. Refused with `not_landed`, `malformed_command`, or `invalid_target` at or past the body's sphere of influence. |
+| `land` | `body`, `cell` | From an orbit around `body`, an atomic autopilot descent to the cell. It needs landing gear, as a hand-flown landing does, and is refused with `no_landing_gear` without it. Its cost is the burn down half an ellipse to the surface, plus killing the remaining speed with a gravity loss that grows as thrust over weight at the surface falls ([orbital_flight.md](orbital_flight.md) 11.20, A27), by the rocket equation. It is paid at the start, and the op `landing` lasts the half ellipse. Refused with `not_flying` when not on an orbit around that body, `invalid_target` for a cell outside the grid, `thrust_too_low`, `no_propellant`, `module_missing` or `part_busy`. |
+| `take_off` | `altitude_mm` | From a landed place, the same in reverse (op `taking_off`), onto a circular orbit at that altitude through the cell's direction, moving east around +Y. Refused with `not_landed`, `malformed_command`, `thrust_too_low`, or `invalid_target` at or past the body's sphere of influence. |
 
 A unit on an orbit whose position falls below its parent body's radius crashes. It comes down landed on the cell below, a running burn ends with `burn_short` reason `crashed`, a transfer ends, and `crashed` fires. Damage is not modelled yet. Landing doesn't yet check a cell's surface type or slope, which waits for planets.md's rule tables in `data/`.
 
@@ -284,6 +284,7 @@ Orbit reason codes:
 - `no_window`: from `next_window`, when the trip costs more than the cap.
 - `not_landed`: a `take_off` from anywhere but the ground.
 - `no_landing_gear`: an autopilot `land` by a unit with no healthy landing gear.
+- `thrust_too_low`: a `land` or `take_off` whose thrust over weight at the body's surface is 1 or less, at the unit's mass then (A27).
 - Dropped: `too_fast_to_join`, because a unit arriving too fast simply doesn't join, and the view shows it. `not_over_cell` is also dropped, because landing costs don't depend on where the orbit passes.
 
 Orbit events:

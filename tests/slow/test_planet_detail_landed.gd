@@ -32,7 +32,7 @@ func test_close_up_tiles_appear_under_a_landed_craft() -> void:
 				"planet": { "seed": SEED, "height_range_m": RANGE_M } },
 		],
 		"units": [{ "key": "ship", "template": "starter_ship", "name": "Probe", "pos_mm": [0, 0, 0],
-			"inventory": [{ "item": "propellant", "grams": 1_000_000 }], "dock": null }],
+			"inventory": [{ "item": "propellant", "grams": 2_000_000 }], "dock": null }],
 	}, {}), "")
 	var ship := 0
 	var planet := 0
