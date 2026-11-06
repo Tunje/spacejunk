@@ -192,7 +192,7 @@
           "id": "core",
           "type": "side",
           "size": "core",
-          "pos_mm": [2500, 3000, 2000],
+          "pos_mm": [2500, 4500, 0],
           "facing": "+x",
           "up": "+y",
           "load_limit_kg": 100
@@ -594,11 +594,11 @@
       ],
       "collision": {
         "shape": "box",
-        "center_mm": [0, -800, 400],
-        "size_mm": [800, 2000, 800]
+        "center_mm": [0, -580, 675],
+        "size_mm": [1000, 2000, 1350]
       },
       "visual": {
-        "model": null,
+        "model": "landing_legs_mk1",
         "tint": "#8a8d91"
       }
     },
@@ -758,8 +758,8 @@
       ],
       "collision": {
         "shape": "box",
-        "center_mm": [0, 0, 1750],
-        "size_mm": [3000, 3500, 3500]
+        "center_mm": [0, 0, 960],
+        "size_mm": [3130, 3500, 1920]
       },
       "visual": {
         "model": "ore_refinery_mk1",
