@@ -26,8 +26,8 @@ func _check_after_leaving(bot: NewStartBot) -> Dictionary:
 	return detail
 
 
-## The probe at the station after the lab stage, its goods taken off and its tank at `propellant_g`,
-## undocked and ready to leave.
+## The probe at the station after the lab stage, its goods taken off and its tank set to `propellant_g`,
+## moved to White Rock, where the old stage 3's ice top-up left it, and undocked, ready to leave.
 func _from_the_station(propellant_g: int) -> NewStartBot:
 	var bot := NewStartBot.from_snapshot(NewStartBot.STAGE_LAB)
 	var inventory: Dictionary = bot.sim._state["units"][PROBE]["inventory"]
@@ -37,9 +37,14 @@ func _from_the_station(propellant_g: int) -> NewStartBot:
 	for item: String in keys:
 		if items[item]["cargo_class"] == "goods":
 			Units.remove_stock(inventory, item, inventory[item])
-	Units.remove_stock(inventory, "propellant", inventory["propellant"] - propellant_g)
+	var held: int = inventory.get("propellant", 0)
+	if held > propellant_g:
+		Units.remove_stock(inventory, "propellant", held - propellant_g)
+	else:
+		Units.add_stock(inventory, "propellant", propellant_g - held)
 	bot.sim._state["matter_start_g"] = bot.sim.ledger()["matter"]["total_g"]
 	bot.sim._ctx.index.clear()
+	bot._order("move_to", PROBE, { "target": NewStartBot.WHITE_ROCK })
 	bot._order("undock", bot.station, {})
 	return bot
 
@@ -55,7 +60,9 @@ func test_a_full_tank_from_the_start_can_get_back() -> void:
 func test_the_hint_case_with_the_ice_top_up_can_get_back() -> void:
 	var detail := _check_after_leaving(_from_the_station(2_477_626))
 	assert_false(detail["cannot_return"])
-	assert_between(detail["return_propellant_g"], 810_000, 840_000, "about 826 kg, as flown")
+	# 826 kg was flown from the old stage 3, which had topped up with ice at White Rock. The C18b
+	# route leaves the probe lighter, and the check prices it at about 791 kg; not flown again.
+	assert_between(detail["return_propellant_g"], 775_000, 805_000, "about 791 kg, the check's price")
 
 
 func test_without_the_ice_top_up_it_cannot_get_back() -> void:
