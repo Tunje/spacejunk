@@ -10,13 +10,13 @@ func commands() -> PackedStringArray:
 	return PackedStringArray()
 
 
-## Phase 1 validation, and the body of Sim.check. Must not change anything.
 ## Command types of commands() that may be sent with unit 0, meaning the player rather than a unit,
 ## such as designing a variant (C12). The kernel skips its unit check for these alone.
 func unitless_commands() -> PackedStringArray:
 	return PackedStringArray()
 
 
+## Phase 1 validation, and the body of Sim.check. Must not change anything.
 func validate(_ctx: SimContext, _command: Dictionary) -> Dictionary:
 	return SimSystem.ok()
 
