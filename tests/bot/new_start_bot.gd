@@ -344,6 +344,24 @@ func _unload_to_station(counts: Dictionary) -> void:
 		_order("unload_cargo", PROBE, { "to": station, "item": item, "grams": grams })
 
 
+## Steps until `type` happens to `unit`, or the limit. A crash is a problem. The route no longer
+## flies, but tests/sim/networks/test_land_return.gd drives the probe with it.
+func _until(type: String, unit: int, limit: int, batch: int = 1) -> Dictionary:
+	for i in limit / batch:
+		if not problems.is_empty():
+			return {}
+		for event in _step(batch):
+			if event["unit"] != unit:
+				continue
+			if event["type"] == type:
+				return event
+			if event["type"] in ["crashed", "burn_short"]:
+				problems.append("%s while waiting for %s" % [event["type"], type])
+				return {}
+	problems.append("no %s within %d ticks" % [type, limit])
+	return {}
+
+
 func _haul() -> void:
 	_order("unload_cargo", PROBE, { "to": station, "item": "hematite" })
 	mark("hauled")
