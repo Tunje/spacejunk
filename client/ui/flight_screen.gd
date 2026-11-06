@@ -303,6 +303,17 @@ func cancel_burn(burn_id: int) -> void:
 	bridge.submit(FlightLogic.cancel_command(unit_id(), burn_id))
 
 
+## Above 8× nothing is flown by hand (orbital_flight.md 11.22): burns can still be
+## planned, and the warp drops to 1× when one starts.
+func _show_warp_limits() -> void:
+	var warping := bridge.speed > WarpLogic.STEP_MAX
+	var why := "Slow to %d× or less to fly by hand" % WarpLogic.STEP_MAX
+	_now_button.disabled = warping
+	_now_button.tooltip_text = why if warping else ""
+	_lift_button.disabled = warping
+	_lift_button.tooltip_text = why if warping else "Fill in a burn straight up, now"
+
+
 func refresh() -> void:
 	if not visible or unit().is_empty():
 		return
@@ -313,6 +324,7 @@ func refresh() -> void:
 		burn_tick = tick + 1
 	_title.text = "Flight: %s" % shown["name"]
 	_place.text = FlightLogic.place_text(view, unit_id())
+	_show_warp_limits()
 	_when.set_value_no_signal(float(burn_tick - tick - 1) / bridge.ticks_per_second())
 	# A19: a burn on the ground is a lift-off, so only docking stops one.
 	var flying: bool = shown["dock"].is_empty()

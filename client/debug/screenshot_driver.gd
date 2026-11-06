@@ -260,7 +260,7 @@ static func _fit_part(bridge: SimBridge, drone: int, item: String, connector: St
 static func _step(bridge: SimBridge) -> void:
 	var was_paused := bridge.paused
 	bridge.set_paused(false)
-	bridge.set_speed(SimBridge.SPEEDS[-1])
+	bridge.set_speed(WarpLogic.STEP_MAX)
 	bridge.advance(RUN_STEP_S)
 	bridge.set_paused(was_paused)
 
@@ -322,7 +322,7 @@ func _open_jobs() -> void:
 					screen.choose_facility(entry)
 					screen.start(recipe)
 	ScreenshotDriver._step(main.bridge)
-	for i in roundi(float(parsed.get("jobs-run", "0")) / (RUN_STEP_S * SimBridge.SPEEDS[-1])):
+	for i in roundi(float(parsed.get("jobs-run", "0")) / (RUN_STEP_S * WarpLogic.STEP_MAX)):
 		ScreenshotDriver._step(main.bridge)
 	main.bridge.set_paused(true)
 	screen.refresh()
