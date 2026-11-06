@@ -1,5 +1,5 @@
 extends GutTest
-## D31, stage 3 in the real client (NewStartPlayer): the tank topped up from ice, the lab built into the station, its core assigned through Auto. Starts from the bot's
+## D31, stage 3 in the real client (NewStartPlayer): the lab built into the station, its core assigned through Auto. Starts from the bot's
 ## snapshot after stage 2 and plays this stage by the client's own controls.
 
 var main: Node

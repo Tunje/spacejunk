@@ -61,7 +61,7 @@ func _ready() -> void:
 	column.add_child(_amount_row)
 	var amount_label := _add_label(_amount_row)
 	amount_label.text = "Amount (0 = all)"
-	amount_label.tooltip_text = "How much Unload and Load move: whole items, or kilograms of bulk cargo"
+	amount_label.tooltip_text = "How much Unload, Load and Mine move: whole items, or kilograms of bulk cargo and ore"
 	amount_label.mouse_filter = Control.MOUSE_FILTER_PASS
 	amount_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	amount = SpinBox.new()
@@ -109,7 +109,7 @@ func refresh() -> void:
 	_orders = OrderList.build(view, _modules, _items, commanded, local_view.selected_kind, local_view.selected_id, _science)
 	var moves := false
 	for order: Dictionary in _orders:
-		if ["unload_cargo", "load_cargo"].has(order["command"]["type"]):
+		if ["unload_cargo", "load_cargo", "start_mining"].has(order["command"]["type"]):
 			moves = true
 			OrderList.set_amount(order["command"], int(amount.value), _items)
 	_amount_row.visible = moves

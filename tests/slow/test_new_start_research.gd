@@ -1,13 +1,13 @@
 extends GutTest
-## The new start, stage 7 (C16): research.md section 5's route at the station:
+## The new start, stage 5 (C16): research.md section 5's route at the station:
 ## Autonomous Navigation proven at the station's lab, the Assisted Core prototyped on the probe and
-## bench-tested, so it is qualified. Starts from the game saved after test_new_start_home.gd's stage.
+## bench-tested, so it is qualified. Starts from the game saved after test_new_start_lap.gd's stage.
 
 var bot: NewStartBot
 
 
 func before_all() -> void:
-	bot = NewStartBot.from_snapshot(NewStartBot.STAGE_RETURN)
+	bot = NewStartBot.from_snapshot(NewStartBot.STAGE_LAP)
 	var start := bot.total_ticks()
 	bot.play_through(NewStartBot.STAGE_RESEARCH)
 	gut.p("research: ticks %d to %d (%.1f game hours in all)" % [start, bot.total_ticks(),

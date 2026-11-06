@@ -5,12 +5,12 @@ class_name FittingLogic extends RefCounted
 const ROOT_MOUNT := "mount"
 
 
-## Uninstalled modules this unit can reach: its own stock and that of every unit docked
-## with it, either way (a ship at a station, or a station built at a ship's port).
+## Uninstalled modules this unit can reach: its own stock, then that of every unit in its
+## docked group (C21): a probe and a drone docked at one station both reach each other.
 static func stock(view: Dictionary, unit_id: int, modules: Dictionary) -> Array[Dictionary]:
 	var entries: Array[Dictionary] = []
 	var sources: Array[int] = [unit_id]
-	sources.append_array(FittingLogic.docked_with(view, unit_id))
+	sources.append_array(FittingLogic.docked_group(view, unit_id))
 	for source: int in sources:
 		var inventory: Dictionary = view["units"][source]["inventory"]
 		var ids: Array = inventory.keys()
@@ -48,6 +48,25 @@ static func docked_with(view: Dictionary, unit_id: int) -> Array[int]:
 		var other: Dictionary = view["units"][id]["dock"]
 		if (not own.is_empty() and own["target_unit"] == id) or (not other.is_empty() and other["target_unit"] == unit_id):
 			found.append(id)
+	return found
+
+
+## Every other unit joined to this one through dock records, followed both ways, in ID
+## order: the C21 docked group that attach_part takes its `from` from.
+static func docked_group(view: Dictionary, unit_id: int) -> Array[int]:
+	var seen: Dictionary = { unit_id: true }
+	var frontier: Array[int] = [unit_id]
+	while not frontier.is_empty():
+		var at: int = frontier.pop_back()
+		for next: int in FittingLogic.docked_with(view, at):
+			if not seen.has(next):
+				seen[next] = true
+				frontier.append(next)
+	var found: Array[int] = []
+	for id: int in seen:
+		if id != unit_id:
+			found.append(id)
+	found.sort()
 	return found
 
 
