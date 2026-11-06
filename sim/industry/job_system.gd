@@ -2,9 +2,11 @@ class_name JobSystem
 extends SimSystem
 ## Refining, fabrication and building units: start_job and cancel_job, the job states of
 ## autonomy.md section 9 and the matter rules of accounting.md section 2. Jobs belong to facilities
-## and need no core. A run takes its inputs and reserves its outputs in phase 4, counts down in
-## phase 5 and delivers in phase 6, all at once. A run that builds a unit claims a port only on its
-## last tick, so a long build never shuts other craft out.
+## and need no core. A run takes its inputs and reserves its outputs in phase 4, works in phase 5
+## and delivers in phase 6, all at once. A run needs its recipe's `work` points, and its facility
+## does its `work_per_tick` each tick it runs, so a slower facility takes longer at the same recipe.
+## Work left over on the last tick is lost. A run that builds a unit claims a port only on its last
+## tick, so a long build never shuts other craft out.
 ##
 ## A facility holds an ordered queue of jobs. The job at queue_pos 0 is active and has the states
 ## above. The rest are queued at 1..n, hold nothing, and wait their turn. When the active job ends,
@@ -35,8 +37,7 @@ const REASON_CARGO_FULL := "cargo_full"
 const REASON_QUEUE_FULL := "queue_full"
 const REASON_JOB_BUSY := "job_busy"
 const VIEW_FIELDS: Array[String] = [
-	"unit", "facility", "recipe", "count_left", "status", "reason", "start_tick", "end_tick",
-	"queue_pos",
+	"unit", "facility", "recipe", "count_left", "status", "reason", "start_tick", "queue_pos", "work_left",
 ]
 
 
@@ -125,7 +126,6 @@ func apply_delta(ctx: SimContext, payload: Dictionary) -> void:
 	else:
 		job["status"] = STATUS_WAITING
 		job["start_tick"] = 0
-		job["end_tick"] = 0
 
 
 func fill_view(ctx: SimContext, view: Dictionary) -> void:
@@ -134,6 +134,8 @@ func fill_view(ctx: SimContext, view: Dictionary) -> void:
 		var shown := {}
 		for field in VIEW_FIELDS:
 			shown[field] = jobs[id][field]
+		shown["work"] = _recipe(ctx, jobs[id])["work"]
+		shown["work_per_tick"] = work_per_tick(ctx, jobs[id]["facility"])
 		view["jobs"][id] = shown
 
 
@@ -169,7 +171,7 @@ func _create(ctx: SimContext, command: Dictionary) -> void:
 	ctx.state["jobs"][id] = {
 		"id": id, "unit": command["unit"], "facility": args["facility"], "recipe": args["recipe"],
 		"count_left": args["count"], "status": STATUS_WAITING if position == 0 else STATUS_QUEUED,
-		"reason": "", "start_tick": 0, "end_tick": 0, "remaining_tick": 0, "since_tick": ctx.tick,
+		"reason": "", "start_tick": 0, "work_left": 0, "since_tick": ctx.tick,
 		"command": command["id"], "started": false, "held": {}, "reserved": {}, "port": 0,
 		"queue_pos": position,
 	}
@@ -263,9 +265,8 @@ func _start_run(ctx: SimContext, job: Dictionary) -> void:
 	_reserve_outputs(ctx, job, recipe)
 	job["status"] = STATUS_RUNNING
 	job["reason"] = ""
-	job["remaining_tick"] = recipe["ticks"]
+	job["work_left"] = recipe["work"]
 	job["start_tick"] = ctx.tick
-	job["end_tick"] = ctx.tick + recipe["ticks"] - 1
 	if not job["started"]:
 		job["started"] = true
 		ctx.emit_event("job_started", job["unit"], { "job": job["id"], "command": job["command"] })
@@ -308,8 +309,8 @@ func _release_outputs(ctx: SimContext, job: Dictionary) -> void:
 
 ## True on the tick a run that builds a unit would end, if it has no port yet.
 func _needs_port(ctx: SimContext, job: Dictionary) -> bool:
-	return (job["status"] == STATUS_RUNNING or job["status"] == STATUS_PAUSED) \
-		and job["remaining_tick"] == 1 and job["port"] == 0 and _template_of(_recipe(ctx, job)) != ""
+	return (job["status"] == STATUS_RUNNING or job["status"] == STATUS_PAUSED) and job["port"] == 0 \
+		and job["work_left"] <= work_per_tick(ctx, job["facility"]) and _template_of(_recipe(ctx, job)) != ""
 
 
 ## Takes the first free healthy port, or holds the run with its inputs until one is free.
@@ -354,8 +355,8 @@ func _count_down(ctx: SimContext, job: Dictionary) -> void:
 		return
 	if job["status"] == STATUS_PAUSED:
 		_resume(ctx, job)
-	job["remaining_tick"] -= 1
-	if job["remaining_tick"] == 0:
+	job["work_left"] = maxi(0, job["work_left"] - work_per_tick(ctx, job["facility"]))
+	if job["work_left"] == 0:
 		ctx.record_delta(job["id"], self, { "job": job["id"] })
 
 
@@ -363,11 +364,9 @@ func _resume(ctx: SimContext, job: Dictionary) -> void:
 	ctx.emit_event("job_resumed", job["unit"], { "job": job["id"], "reason": job["reason"] })
 	job["status"] = STATUS_RUNNING
 	job["reason"] = ""
-	job["end_tick"] = ctx.tick + job["remaining_tick"] - 1
 
 
 func _pause(ctx: SimContext, job: Dictionary, reason: String) -> void:
-	job["end_tick"] = 0
 	_set_reason(ctx, job, STATUS_PAUSED, reason)
 
 
@@ -385,7 +384,6 @@ func _cancel(ctx: SimContext, job: Dictionary) -> void:
 		return
 	_release_outputs(ctx, job)
 	_release_port(ctx, job)
-	job["end_tick"] = 0
 	_try_return(ctx, job)
 	if ctx.state["jobs"].has(job["id"]):
 		_set_reason(ctx, job, STATUS_CANCELLING, REASON_CARGO_FULL)
@@ -408,6 +406,11 @@ func _emit_ended(ctx: SimContext, job: Dictionary, type: String) -> void:
 	ctx.emit_event(type, job["unit"], {
 		"job": job["id"], "recipe": job["recipe"], "facility": job["facility"],
 	})
+
+
+## The work points a facility part does per tick it runs.
+static func work_per_tick(ctx: SimContext, facility: int) -> int:
+	return Units.module_of(ctx.state, ctx.defs, facility)["capabilities"]["facility"]["work_per_tick"]
 
 
 func _recipe(ctx: SimContext, job: Dictionary) -> Dictionary:

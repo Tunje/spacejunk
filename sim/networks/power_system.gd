@@ -8,6 +8,8 @@ extends SimSystem
 
 const SET_PRIORITY := "set_priority"
 const SHED_HOLD_SECONDS := 5
+## The work_per_tick of a full-size facility, at which a recipe draws its stated power.
+const FULL_RATE_WORK_PER_TICK := 100
 const PPM := 1000000
 const REASON_NO_POWER := "no_power"
 const REASON_MALFORMED := "malformed_command"
@@ -134,11 +136,18 @@ func _wanted_draws(ctx: SimContext, unit_id: int, jobs: Array) -> Dictionary:
 	if op["part"] != 0 and op["type"] != OP_IDLE and op["type"] != OP_MOVING and powers.has(op["part"]):
 		wanted[op["part"]] = powers[op["part"]]
 	for job: Dictionary in jobs:
-		wanted[job["facility"]] = ctx.defs["recipes"][job["recipe"]]["power_w"]
+		wanted[job["facility"]] = job_draw_w(ctx, job)
 	for part_id: int in wanted.keys():
 		if parts[part_id]["fault"] != "":
 			wanted.erase(part_id)
 	return wanted
+
+
+## A job's draw: its recipe's power at the full-size rate, scaled to its facility's rate and rounded
+## up, so a run uses about the same energy on any size of facility (contracts section 5).
+static func job_draw_w(ctx: SimContext, job: Dictionary) -> int:
+	return IntMath.mul_div_ceil(ctx.defs["recipes"][job["recipe"]]["power_w"],
+		JobSystem.work_per_tick(ctx, job["facility"]), FULL_RATE_WORK_PER_TICK)
 
 
 ## Load-making jobs by the unit their facility is on, in ascending job ID.
