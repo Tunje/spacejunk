@@ -152,12 +152,18 @@ static func tonnes(grams: int) -> String:
 
 
 ## One log line for an event, or "" if the player does not need to see it.
-static func event(entry: Dictionary, unit_name: String, items: Dictionary, bodies: Dictionary = {}) -> String:
+## `part_names` (part ID to name) lets a power shed or fault name the part.
+static func event(entry: Dictionary, unit_name: String, items: Dictionary, bodies: Dictionary = {},
+		part_names: Dictionary = {}) -> String:
 	var data: Dictionary = entry["data"]
 	match entry["type"]:
+		"power_shed":
+			var part: String = part_names.get(int(data.get("module", 0)), "a part")
+			return "%s: %s shut down (%s). It restarts when power returns." % [unit_name, part,
+				reason(data.get("reason", "power_shed")).to_lower()]
 		"command_rejected", "attach_failed":
 			return "%s: %s" % [unit_name, reason(data["reason"], data.get("detail", {}))]
-		"task_blocked", "fault", "power_shed":
+		"task_blocked", "fault":
 			return "%s: %s" % [unit_name, reason(data["reason"], data.get("detail", {}))]
 		"mining_stopped":
 			return "%s: mining stopped. %s" % [unit_name, reason(data["reason"])]
