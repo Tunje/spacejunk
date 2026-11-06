@@ -294,3 +294,95 @@ func test_a_blocked_fit_reaches_the_tracker() -> void:
 		if slot["connector"] == "ext_a":
 			screen.choose_slot(slot)
 	assert_true(main.goal_panel.tracker._blocked_items.has("stub_laser"))
+
+
+# --- D26: the new start's list (C13), picked by scenario ---
+
+func _new_start() -> GoalTracker:
+	return GoalTracker.new("new_start")
+
+
+func test_the_start_picks_its_list() -> void:
+	assert_eq(GoalTracker.new().goals, GoalTracker.GOALS, "reference by default")
+	assert_eq(GoalTracker.new("reference").goals, GoalTracker.GOALS)
+	var ids: Array = _new_start().goals.map(func(goal: Dictionary) -> String: return goal["id"])
+	assert_eq(ids, ["scan", "science", "mine", "refine", "fabricate", "station", "install", "fix", "haul",
+		"research", "drone", "handover", "expand"])
+	for goal: Dictionary in GoalTracker.NEW_START_GOALS:
+		assert_ne(goal["title"], "")
+		assert_ne(goal["hint"], "")
+		assert_false(goal["hint"].contains("Undock"), "nothing to undock from in the new start")
+
+
+func test_science_needs_points() -> void:
+	var goals := _new_start()
+	var data := { "kind": "survey", "target": 4, "key": "survey:4", "points": 0 }
+	assert_eq(goals.observe_event(_event("science_gained", 1, data), _view(), defs), [] as Array[String], "0 points")
+	data["points"] = 12
+	assert_eq(goals.observe_event(_event("science_gained", 1, data), _view(), defs), ["science"] as Array[String])
+
+
+func test_a_built_station_finishes_station() -> void:
+	var goals := _new_start()
+	var with_templates := defs.duplicate()
+	with_templates["templates"] = { "small_station": { "kind": "station" }, "small_craft": { "kind": "drone" } }
+	var craft := { "unit": 30, "def": "small_craft", "job": 9 }
+	assert_eq(goals.observe_event(_event("unit_created", 1, craft), _view(), with_templates), [] as Array[String])
+	var station := { "unit": 31, "def": "small_station", "job": 10 }
+	assert_eq(goals.observe_event(_event("unit_created", 1, station), _view(), with_templates), ["station"] as Array[String])
+
+
+func test_research_is_the_assisted_core_qualified() -> void:
+	var goals := _new_start()
+	assert_eq(goals.observe_event(_event("design_qualified", 5, { "design": "other_core" }), _view(), defs), [] as Array[String])
+	assert_eq(goals.observe_event(_event("design_qualified", 5, { "design": "assisted_core" }), _view(), defs),
+		["research"] as Array[String])
+
+
+func test_new_start_install_counts_only_on_something_built() -> void:
+	var goals := _new_start()
+	var view := _view({ 1: _unit("ship", {}, _tree(["laser"])), 31: _unit("station", {}, _tree(["laser"])) })
+	assert_eq(goals.observe_event(_event("part_attached", 1, { "part": 2 }), view, defs), [] as Array[String],
+		"the probe was never built")
+	goals.observe_event(_event("unit_created", 1, { "unit": 31, "def": "small_station", "job": 10 }), view, defs)
+	assert_eq(goals.observe_event(_event("part_attached", 31, { "part": 2 }), view, defs), ["install"] as Array[String])
+
+
+func test_reference_install_still_needs_a_ship_and_ignores_built_drones() -> void:
+	var view := _view({ 1: _unit("ship", {}, _tree(["laser"])), 30: _unit("drone", {}, _tree(["laser"])) })
+	tracker.observe_event(_event("unit_created", 2, { "unit": 30, "def": "small_craft", "job": 9 }), view, defs)
+	assert_eq(tracker.observe_event(_event("part_attached", 30, { "part": 2 }), view, defs), [] as Array[String])
+	assert_eq(tracker.observe_event(_event("part_attached", 1, { "part": 2 }), view, defs), ["install"] as Array[String])
+
+
+func test_new_start_expand_waits_for_handover() -> void:
+	var goals := _new_start()
+	var view := _view({ 31: _unit("station", {}, _tree(["laser"])) })
+	assert_eq(goals.observe_event(_event("part_attached", 31, { "part": 2 }), view, defs), [] as Array[String],
+		"a station fit before handover is not yet expanding")
+	goals.observe_event(_event("task_cycle_done", 30, {}), view, defs)
+	assert_eq(goals.observe_event(_event("part_attached", 31, { "part": 2 }), view, defs), ["expand"] as Array[String])
+
+
+func test_built_units_survive_a_save() -> void:
+	var goals := _new_start()
+	goals.observe_event(_event("unit_created", 1, { "unit": 31, "def": "small_station", "job": 10 }), _view(), defs)
+	var again := _new_start()
+	again.restore_state(JSON.parse_string(JSON.stringify(goals.save_state())))
+	var view := _view({ 31: _unit("station", {}, _tree(["laser"])) })
+	assert_eq(again.observe_event(_event("part_attached", 31, { "part": 2 }), view, defs), ["install"] as Array[String])
+
+
+func test_the_new_start_panel_shows_thirteen_goals() -> void:
+	var main: Node = load("res://client/main.tscn").instantiate()
+	main.scenario = Main.NEW_START
+	add_child_autofree(main)
+	main.get_node("Bridge").set_paused(true)
+	var panel: GoalPanel = main.goal_panel
+	assert_eq(panel.tracker.goals, GoalTracker.NEW_START_GOALS)
+	assert_eq(panel._title.text, "Goal 1 of 13: Scan a rock")
+	assert_eq(panel._list.get_child_count(), 13)
+	for goal: Dictionary in panel.tracker.goals:
+		panel.tracker.complete(goal["id"])
+	panel.refresh()
+	assert_eq(panel._title.text, "All 13 goals done")
