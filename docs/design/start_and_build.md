@@ -180,16 +180,7 @@ The two places D flagged keep working: "haul" still means a station holding ore,
 
 ## 5. Research: proving new tech by testing
 
-First proposal, kept short.
-
-- **A tech** is a data entry with: an ID, the recipes it unlocks, a prototype recipe and a test recipe.
-- **A prototype** is built from its own recipe, at about twice the normal inputs. It is an ordinary item.
-- **A test** is a job at a `test_bay_mk1`, which only fits a station. Its inputs are the prototype plus some processors, it runs with power and heat like any job, and its output is the unlock. The prototype goes to a new declared sink, `test_scrap`, so the matter ledger holds.
-- **Unlocked tech** is a sorted list in the state. A recipe that names a tech is refused with `tech_locked` until it is in the list. A new event `tech_unlocked` reports it.
-- **What starts unproven:** `assisted_core`, `ore_refinery_mk1` and `solar_farm_mk1`. Everything on the probe, every hull template and every material recipe is known from the start, so the bootstrap can never dead-end.
-- **Later:** field tests, where a fitted prototype has to run for a set time or a set amount of work, and tech that improves an existing part rather than unlocking a new one.
-
-Gating `assisted_core` puts research inside the core loop, before the handover, as the owner asked. If that's too much for the first build, the test can gate only `solar_farm_mk1` and the chain can skip Part F.
+Replaced by [research.md](research.md) (task B17), which follows the owner's ruling on research of 2026-11-06. In short: measurements earn science points, a theory is proven at a station's research lab with points and evidence, and each new design is prototyped and bench-tested before its normal recipe unlocks. Parts can be improved with ideas that trade stats and add complexity. `research_lab_mk1` replaces `test_bay_mk1` in sections 3 and 4, and research.md section 5 replaces Part F.
 
 ## 6. What assumes the starter station
 
