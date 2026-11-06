@@ -22,6 +22,8 @@ var _ideas_box: VBoxContainer
 var _preview: Label
 var _design_button: Button
 var _message: Label
+var _designs_heading: Label
+var _scroll: ScrollContainer
 
 
 func _ready() -> void:
@@ -42,15 +44,17 @@ func _ready() -> void:
 	close.focus_mode = Control.FOCUS_NONE
 	close.pressed.connect(toggle)
 	header.add_child(close)
+	# The points stay in view above the list, set off from it.
 	_points = _add_label(column, "")
-	var scroll := ScrollContainer.new()
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.custom_minimum_size = Vector2(0, LIST_HEIGHT_PX)
-	column.add_child(scroll)
+	column.add_child(HSeparator.new())
+	_scroll = ScrollContainer.new()
+	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_scroll.custom_minimum_size = Vector2(0, LIST_HEIGHT_PX)
+	column.add_child(_scroll)
 	_body = VBoxContainer.new()
 	_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_body.add_theme_constant_override("separation", 4)
-	scroll.add_child(_body)
+	_scroll.add_child(_body)
 
 
 func bind(new_bridge: SimBridge) -> void:
@@ -104,7 +108,7 @@ func _rebuild(view: Dictionary) -> void:
 		_add_detail("Evidence: %s" % ResearchLogic.evidence_text(theory, view))
 		if status != "Proven":
 			_add_detail("%s. Run it at a Lab in Jobs (J)." % ResearchLogic.test_cost(theory, _defs))
-	_heading("Designs")
+	_designs_heading = _heading("Designs")
 	for design: String in ResearchLogic.designs(view, _defs):
 		_add_label(_body, IndustryLogic.name_of(design, _defs))
 		_add_detail(ResearchLogic.next_step(design, view, _defs))
@@ -195,9 +199,17 @@ func design() -> void:
 	chosen.clear()
 
 
-func _heading(text: String) -> void:
+func _heading(text: String) -> Label:
 	var label := _add_label(_body, text)
 	label.modulate = ClientTheme.ORANGE.lightened(0.2)
+	return label
+
+
+## Puts the Designs heading at the top of the list, with the designer below it, so
+## no line is left half cut by the list's top edge.
+func scroll_to_designs() -> void:
+	if _designs_heading != null:
+		_scroll.scroll_vertical = int(_designs_heading.position.y)
 
 
 func _add_detail(text: String) -> Label:

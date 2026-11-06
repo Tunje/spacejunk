@@ -142,7 +142,7 @@ func _run() -> void:
 			# Down to the designer, once the list has its size.
 			await get_tree().process_frame
 			await get_tree().process_frame
-			(main.research_screen._body.get_parent() as ScrollContainer).scroll_vertical = 100000
+			main.research_screen.scroll_to_designs()
 	if parsed.has("cycle"):
 		await _start_demo_cycle()
 	if parsed.has("copy"):
