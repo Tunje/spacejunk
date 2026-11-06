@@ -199,3 +199,12 @@ func test_trip_text_names_a_plane_change() -> void:
 		% FlightLogic.speed(35_000_000))
 	quote["plane_change_dv_um_s"] = 0
 	assert_eq(SystemMap.trip_text(quote, 0, 10), "Departs in 1 min 0 s, 2 min 0 s trip", "one plane: unchanged")
+
+
+## A trip already ordered is shown as such, not quoted again.
+func test_a_trip_under_way_is_reported_not_quoted_again() -> void:
+	var view := { "tick": 100, "units": { 1: { "op": { "type": "idle" }, "transfer": { "target": 9, "arrive_tick": 700 } } } }
+	assert_eq(SystemMap.trip_under_way(view, 1, 9, 10), "On the way, arrives in 1 min 0 s")
+	assert_eq(SystemMap.trip_under_way(view, 1, 8, 10), "", "elsewhere: quote it")
+	view["units"][1] = { "op": { "type": "waiting", "plan": { "target": 9, "depart_tick": 400, "arrive_tick": 1300 } }, "transfer": {} }
+	assert_eq(SystemMap.trip_under_way(view, 1, 9, 10), "Waiting for the window: departs in 30 s, arrives in 2 min 0 s")
