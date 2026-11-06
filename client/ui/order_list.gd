@@ -103,6 +103,16 @@ static func _add_measure_orders(orders: Array[Dictionary], body_kind: String, sc
 			_add(orders, label, commanded, "measure", { "target": body, "kind": kind }, "Measure %s" % kind)
 
 
+## Sets how much an Unload or Load moves: `count` whole items for an item with a
+## unit mass, otherwise `count` kilograms; 0 leaves it out, which moves all that fits.
+static func set_amount(command: Dictionary, count: int, items: Dictionary) -> void:
+	command["args"].erase("grams")
+	if count <= 0:
+		return
+	var unit_g: int = items.get(command["args"]["item"], {}).get("unit_mass_g", 0)
+	command["args"]["grams"] = count * (unit_g if unit_g > 0 else 1000)
+
+
 static func _add(orders: Array[Dictionary], label: String, unit: int, type: String, args: Dictionary, key: String = "") -> void:
 	orders.append({
 		"key": label if key.is_empty() else key, "label": label,
