@@ -1,6 +1,6 @@
 # Simulation Contracts
 
-Contract version: 8. Signed off by the Lead (task L7) after review by Agents A, C and D. Version 2 added the job queue (C9). Version 3 adds orbits and frames ([orbital_flight.md](orbital_flight.md) section 11, task A10). Version 4 makes jobs take work points, not time (C11). Version 5 adds research: science, theories, prototypes and variants (C12). Version 6 adds fabricating in place, `install_to` on jobs (C15). Version 7 adds an optional `grams` to `start_mining` (C19), and lets `attach_part` and `copy_fit` take parts from any unit in the docked group (C21). Version 8 lets a queued job go ahead of a starved active job (C24), and gives `set_cycle` an optional `laps` count (C25), with a one-shot plan open to tier 1 (C27). Changes go through the Lead.
+Contract version: 8. Signed off by the Lead (task L7) after review by Agents A, C and D. Version 2 added the job queue (C9). Version 3 adds orbits and frames ([orbital_flight.md](orbital_flight.md) section 11, task A10). Version 4 makes jobs take work points, not time (C11). Version 5 adds research: science, theories, prototypes and variants (C12). Version 6 adds fabricating in place, `install_to` on jobs (C15). Version 7 adds an optional `grams` to `start_mining` (C19), and lets `attach_part` and `copy_fit` take parts from any unit in the docked group (C21). Version 8 lets a queued job go ahead of a starved active job (C24), and gives `set_cycle` an optional `laps` count (C25), with a one-shot plan open to tier 1 (C27), and lets a cycle scan (C28). Changes go through the Lead.
 
 These contracts expand section 5 of `plan/workplan.md`. If the two disagree, raise it with the Lead.
 
@@ -190,7 +190,7 @@ Every command has this envelope. `submit` fills in `id` and `tick`.
 
 **Transfers.** Omitting `grams` means all that fits, since a fixed cycle cannot name an amount in advance. Refuelling is `load_cargo` of the propellant item.
 
-**Cycles.** `set_cycle` steps are `{ type, args }`, taken from a whitelist of the unit orders above.
+**Cycles.** `set_cycle` steps are `{ type, args }`, taken from a whitelist of the unit orders above: `move_to`, `dock`, `undock`, `load_cargo`, `unload_cargo`, `start_mining`, `measure` and `scan` (C28). A cycle's `scan` of a body already scanned passes as done in one tick, revealing and paying nothing. A `start_mining` step still names a deposit already found, so a cycle cannot plan to mine what a scan in it would reveal.
 
 **Uninstalled parts.** An uninstalled part is an inventory stack of an item with the same ID as its module. Items with `unit_mass_kg` move only in exact multiples, or the command is rejected with `not_whole_unit`. The simulation issues the part ID on attach.
 
