@@ -21,10 +21,13 @@ func _drone(sim: Sim) -> int:
 	return sim._state["units"].keys().max()
 
 
+## Warps `ticks`, which test_a_counted_cycle_coasts_exactly shows is the same as stepping, and
+## returns the drone's task events.
 func _run(sim: Sim, ticks: int) -> Array[Dictionary]:
 	var seen: Array[Dictionary] = []
-	for i in ticks:
-		sim.step()
+	var left := ticks
+	while left > 0:
+		left -= sim.coast(left)["ticks"]
 		seen.append_array(sim.take_events().filter(func(event: Dictionary) -> bool:
 			return event["unit"] == _drone(sim) and event["type"].begins_with("task_")))
 	return seen
