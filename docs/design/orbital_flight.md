@@ -1251,3 +1251,23 @@ Fewer flight times would cost the arc's quality (28.2 t became 38.7 t), and an a
 
 **Later stages:** trips across spheres, between planes, and from eccentric orbits; then the belt.
 
+### 11.34 A49: home from any orbit round the target's body
+
+The autopilot refused any orbit more eccentric than 0.01 or more than a degree out of the target's plane. So after any hand-flown burn, take-off or nudge, `move_to` home said `unsupported_orbit`. B's 20 m/s retrograde out of the cluster leaves an eccentricity of about 0.45 round Frost.
+
+**The arc from anywhere.** The timed arc (11.33) now starts from any bound orbit round the target's own parent; the target must still be near-circular.
+- In one plane it stays in that plane, as before.
+- Between planes, each arc's plane is the one through the unit now and the target at arrival, on the side the unit moves round. The plane change is in the burns' exact velocity differences.
+- A flight time whose ends are within a degree of in line with the parent, where the arc has no plane of its own, is skipped.
+
+**Cheap from an eccentric orbit.** No window can be worked out from an eccentric orbit, so cheap and fast alike take the arc. That is the one place a cheap quote searches one: about 2 ms from Frost's eccentric orbits.
+
+**Measured:**
+- From B's orbit (e 0.45) the way home undoes the burn, 20 m/s for 65 kg, and meets the cluster a lap later, after 6.8 hours.
+- It flies, arrives in the cluster and pays exactly its quote, and a save mid-arc plays the same.
+- On test_plane_change's small fast planet many arcs between planes dip under the surface and are rightly refused; some starts give one that stays up and hits.
+
+**Soak:** seeds 17, 33, 49 and so on burn by hand out of the cluster and are ordered home. Six passed byte-equal.
+
+**Seen there, not A49's:** while the probe is still within the cluster's join distance after its burn, BurnSystem's frame-join bound is 0, so the coast steps it until it is clear, 300 to 1,300 ticks. That is A33's bound and a follow-up.
+
