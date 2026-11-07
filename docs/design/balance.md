@@ -267,7 +267,7 @@ The build-up takes 59,883 ticks, 1.7 game hours. Then the loop runs on its own.
 | Per cycle | Estimated | Measured (C23) |
 | --------- | --------- | -------------- |
 | Cycle length | about 14,500 ticks | **12,552 ticks, 20.9 game minutes** |
-| Propellant burned | about 51 kg | **42.1 kg** |
+| Propellant burned | about 51 kg | **47.1 kg** |
 | Propellant made | about 166 kg from 184 kg of ice | 184 kg of ice a cycle, refined in 90 kg runs |
 | Depot | about +115 kg | **+117.9 kg on average**, lumpy as the ice runs land |
 | Hematite in, iron out | 500 kg in, 345 kg out | 500 kg in. 27 runs made 1,863 kg of iron before the goods container filled |

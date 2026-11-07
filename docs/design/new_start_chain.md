@@ -309,14 +309,14 @@ At the end of Part F the depot's 337 kg lasts about 11 laps, and then the drone 
 **The loop.**
 - **Every cycle is 12,552 ticks, 20.9 game minutes.** Lap 1 was 12,548.
 - Each cycle delivers 500 kg of hematite and 184 kg of ice.
-- The drone burns 42.1 kg a cycle on the two legs, and ends each with 57.9 kg aboard.
+- The drone burns 47.1 kg a cycle on the two legs. It fills to about 105 kg and ends each cycle with 57.9 kg aboard. A lap with no ice run shows the same figure, as the depot drops by exactly the drone's 47.1 kg refill.
 
 | Lap | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Depot, kg | 308.5 | 351.4 | 484.3 | 617.1 | 570.0 | 882.9 | 1,015.8 | 1,058.6 | 1,191.5 | 1,324.4 | 1,277.3 | 1,590.1 | 1,723.0 |
 | Ore store hematite, t | 0 | 0 | 0 | 0.2 | 0.7 | 0.6 | 0.8 | 1.3 | 1.8 | 2.3 | 2.8 | 3.3 | 3.8 |
 
-- **Propellant: sustained.** The depot gains 117.9 kg a lap on average, against an estimate of 115. It's lumpy because the 90 kg ice runs land unevenly: a lap with no ice run drops by the drone's 47 kg load. At this rate it would reach its 2,000 kg cap in 2 or 3 more laps. **The drone never runs dry.**
+- **Propellant: sustained.** The depot gains 117.9 kg a lap on average, against an estimate of 115. It's lumpy because the 90 kg ice runs land unevenly: a lap with no ice run drops by the drone's 47.1 kg refill. At this rate it would reach its 2,000 kg cap in 2 or 3 more laps. **The drone never runs dry.**
 - **The refinery,** over the stage:
   - 27 `refine_hematite` runs made 1,863 kg of iron, and 23 `refine_water_ice` runs made 2,070 kg of propellant.
   - Every hematite run went ahead of the waiting ice job under C24, 27 `job_went_ahead` events. The ice job waited 105,016 ticks on `missing_inputs` in all.
@@ -373,7 +373,7 @@ Measured through the whole chain:
 - **Making it back:** ice is cheap to make. 100 kg of ice is 51 ticks of mining and 1,200 of refining for 90 kg of propellant. So a person who wastes propellant in the cluster can always make it back once the compact refinery runs.
 - **Research (Part D):** the probe never burns after Part C, and reaches goal 9 with 1,701 kg.
 - **The drone (Part E):** the material trips, towing the station, cost 339 kg. The depot takes 500 kg, and the probe ends Part F with 862 kg.
-- **The drone's laps:** 28.8 kg each in Part E, and 42.1 kg each with the ice leg in F2. Its 100 kg tank covers two of F2's laps without a refuel. It refuels every lap from the depot.
+- **The drone's laps:** 28.8 kg each in Part E, and 47.1 kg each with the ice leg in F2. Its tank, filled to about 105 kg, covers two of F2's laps without a refuel. It refuels every lap from the depot.
 - **The loop (Part F2):** the depot gains about 118 kg a lap. The F2 build-up's trips leave the probe with 534 kg. Person-paced times and the loop's pricing are in [balance.md](balance.md) section 9.
 
 **Landing on Frost** is optional, and the optional part of Part D prices it. Following the hint, it leaves about 227 m/s spare; without the ice top-up, the probe strands. After F2 the probe has 534 kg. A landing for Photovoltaic Arrays (research.md 5.1) needs the tank filled from ice first: about 1,970 kg, three or four ore holds of ice. The station's depot can also refill it once the loop has run, since it holds up to 2 t.
