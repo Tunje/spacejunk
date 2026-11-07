@@ -88,3 +88,35 @@ func test_a_task_saved_without_laps_repeats() -> void:
 	assert_eq(loaded.view()["tasks"][task]["laps"], 0)
 	var types: Array = _run(loaded, 12_000).map(func(event: Dictionary) -> String: return event["type"])
 	assert_does_not_have(types, "task_finished")
+
+
+## C27: a one-shot plan is a list of orders, so a tier 1 core runs it; repeating stays tier 2.
+func test_a_tier_one_core_flies_a_one_shot_plan() -> void:
+	var sim := _mining_cycle({}, true, "basic_core", { "laps": 1 })
+	var drone := _drone(sim)
+	assert_eq(sim.view()["units"][drone]["core_tier"], 1)
+	var types: Array = _run(sim, 8_000).map(func(event: Dictionary) -> String: return event["type"])
+	assert_eq(types, ["task_cycle_done", "task_finished"])
+	assert_gt(sim._state["units"][STATION]["inventory"].get("hematite", 0), 0, "the trip unloaded ore")
+	assert_eq(sim.ledger()["violations"], PackedStringArray())
+
+
+func test_a_tier_one_core_may_not_repeat() -> void:
+	var sim := _mining_cycle({}, false, "basic_core", { "laps": 2 })
+	var drone := _drone(sim)
+	var steps: Array = sim._state["units"][drone]["last_cycle"]
+	for args: Dictionary in [{ "steps": steps, "laps": 2 }, { "steps": steps }]:
+		assert_eq(sim.check({ "type": "set_cycle", "unit": drone, "args": args })["reason"], "tier_too_low",
+			str(args.get("laps", "none")))
+
+
+func test_a_tier_one_core_keeps_its_one_shot_but_not_a_repeat() -> void:
+	var sim := _mining_cycle({}, true, "assisted_core", { "laps": 1 })
+	var drone := _drone(sim)
+	var basic := Units.add_part(sim._ctx, drone, "basic_core", sim._state["units"][drone]["root"], "side_b_nx", "mount")
+	sim._state["parts"][sim._state["units"][drone]["root"]]["children"].append(basic)
+	sim._ctx.index.clear()
+	sim._state["matter_start_g"] = sim.ledger()["matter"]["total_g"]
+	sim.submit({ "type": "assign_core", "unit": drone, "args": { "core": basic } })
+	sim.step()
+	assert_ne(sim._state["units"][drone]["task"], 0, "the one-shot plan goes on")

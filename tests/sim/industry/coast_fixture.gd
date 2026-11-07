@@ -92,7 +92,9 @@ func _laser(sim: Sim, unit: int) -> int:
 
 ## Returns the reference world with a drone docked at the station, given a mining cycle whose
 ## start_mining step carries `extra` args, after one tick.
-func _mining_cycle(extra: Dictionary, accepted: bool = true) -> Sim:
+## `core` is the drone's core and `cycle` more set_cycle args, such as laps (C27).
+func _mining_cycle(extra: Dictionary, accepted: bool = true, core: String = "assisted_core",
+		cycle: Dictionary = {}) -> Sim:
 	var stepped := _reference()
 	var state := stepped._state
 	state["bodies"][ROCK]["pos_mm"] = [2_000_000, 0, 0]
@@ -106,7 +108,7 @@ func _mining_cycle(extra: Dictionary, accepted: bool = true) -> Sim:
 	_fit(stepped, drone, "small_chemical_thruster_mk1", fits["small_propellant_tank_mk1"], "stack_bottom")
 	_fit(stepped, drone, "small_ore_container_mk1", root, "side_a_pz")
 	var laser := _fit(stepped, drone, "small_mining_laser_mk1", root, "side_a_nz")
-	state["units"][drone]["core"] = _fit(stepped, drone, "assisted_core", root, "core")
+	state["units"][drone]["core"] = _fit(stepped, drone, core, root, "core")
 	state["units"][drone]["dock"] = { "port": Units.ports(state, stepped._ctx.defs, drone)[0],
 		"target_unit": STATION, "target_port": FREE_PORT }
 	state["units"][drone]["at_target"] = STATION
@@ -115,7 +117,9 @@ func _mining_cycle(extra: Dictionary, accepted: bool = true) -> Sim:
 	var port: int = Units.ports(state, stepped._ctx.defs, drone)[0]
 	var mining := { "deposit": DEPOSIT, "module": laser }
 	mining.merge(extra)
-	stepped.submit({ "type": "set_cycle", "unit": drone, "args": { "steps": [
+	var args := { "steps": [] }
+	args.merge(cycle)
+	args["steps"] = [
 		{ "type": "load_cargo", "args": { "from": STATION, "item": "propellant" } },
 		{ "type": "undock", "args": {} },
 		{ "type": "move_to", "args": { "target": ROCK } },
@@ -123,7 +127,8 @@ func _mining_cycle(extra: Dictionary, accepted: bool = true) -> Sim:
 		{ "type": "move_to", "args": { "target": STATION } },
 		{ "type": "dock", "args": { "port": port, "target_port": FREE_PORT } },
 		{ "type": "unload_cargo", "args": { "to": STATION, "item": "hematite" } },
-	] } })
+	]
+	stepped.submit({ "type": "set_cycle", "unit": drone, "args": args })
 	stepped.step()
 	var types: Array = stepped.take_events().map(func(event: Dictionary) -> String: return event["type"])
 	assert_eq(types.has("command_rejected"), not accepted, str(types))
