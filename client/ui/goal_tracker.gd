@@ -32,7 +32,7 @@ const GOALS: Array[Dictionary] = [
 ## Lists by scenario ID; any other start uses the reference list.
 const NEW_START_GOALS: Array[Dictionary] = [
 	{ "id": "scan", "title": "Scan a rock",
-		"hint": "Open the Map (M), click a rock in the Cluster and press Move to. On arrival, press Scan in the Orders panel." },
+		"hint": "Open the Map (M), click a rock in the Cluster and press Move to. The flight takes a couple of minutes: speed time up with 50x at the top. On arrival, press Scan in the Orders panel." },
 	{ "id": "science", "title": "Earn your first science points",
 		"hint": "A finished scan pays survey points. Stay at the rock and Measure its composition for more. New rocks and bodies are worth the most." },
 	{ "id": "mine", "title": "Mine ore",

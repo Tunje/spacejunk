@@ -44,3 +44,12 @@ func test_a_load_takes_the_saves_start() -> void:
 	main._apply_load(sandbox, {})
 	assert_eq(main.scenario, Main.REFERENCE)
 	assert_eq(main.goal_panel.tracker.goals, GoalTracker.GOALS)
+
+
+## D38: an empty orders panel says how to get orders.
+func test_with_nothing_selected_the_orders_panel_says_what_to_do() -> void:
+	var main: Node = add_child_autofree(load("res://client/main.tscn").instantiate())
+	main.get_node("Bridge").set_paused(true)
+	main.local_view.select("", 0, 0)
+	main.order_panel.refresh()
+	assert_eq(main.order_panel._why_label.text, OrderPanel.NOTHING_SELECTED)
