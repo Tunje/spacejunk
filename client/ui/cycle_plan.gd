@@ -91,7 +91,8 @@ static func step_text(step: Dictionary, view: Dictionary, defs: Dictionary) -> S
 	var args: Dictionary = step["args"]
 	match step["type"]:
 		"move_to":
-			return "Fly to %s" % CyclePlan.target_name(args["target"], view)
+			var fast: String = " (faster plan)" if args.get("prefer", "") == "fast" else ""
+			return "Fly to %s%s" % [CyclePlan.target_name(args["target"], view), fast]
 		"dock":
 			return "Dock at %s" % CyclePlan.target_name(CyclePlan.unit_of_part(view, args["target_port"]), view)
 		"undock":
@@ -120,6 +121,8 @@ static func block_text(task: Dictionary, unit: Dictionary, modules: Dictionary) 
 	if task.get("state", "") != "blocked":
 		return ""
 	var text := OrderText.reason(task["reason"])
+	if task["reason"] == "core_offline" and CyclePlan.first_fault(unit).is_empty():
+		return InspectText.core_offline(unit)
 	if task["reason"] == "core_offline" or task["reason"] == "module_fault":
 		var fault := CyclePlan.first_fault(unit)
 		if not fault.is_empty():

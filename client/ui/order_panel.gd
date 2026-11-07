@@ -31,6 +31,11 @@ var _buttons: Dictionary = {}
 ## An atomic order just pressed, shown as started until the next tick runs it.
 var _clicked_key := ""
 var _clicked_tick := 0
+## The selection's trip quote for "Move to, faster" (D40): quote() may search for a
+## window, so it is asked at most every SystemMap.QUOTE_REFRESH_MS.
+var _quote: Dictionary = {}
+var _quote_key := ""
+var _quote_ms := 0
 
 var _commanded_label: Label
 var _status_label: Label
@@ -110,6 +115,7 @@ func refresh() -> void:
 	_detail_label.text = _selection_detail(view)
 	_detail_label.visible = not _detail_label.text.is_empty()
 	_orders = OrderList.build(view, _modules, _items, commanded, local_view.selected_kind, local_view.selected_id, _science)
+	TripChoice.add_fast_option(_orders, _trip_quote(view, commanded), view["tick"], bridge.ticks_per_second())
 	var moves := false
 	for order: Dictionary in _orders:
 		if ["unload_cargo", "load_cargo", "start_mining"].has(order["command"]["type"]):
@@ -122,6 +128,20 @@ func refresh() -> void:
 	if other:
 		take_command.text = "Take command of %s" % view["units"][local_view.selected_id]["name"]
 	_sync_buttons()
+
+
+## The quote for a trip to the selection, or {} when nothing to fly to is selected.
+func _trip_quote(view: Dictionary, commanded: int) -> Dictionary:
+	var target: int = local_view.selected_id
+	if local_view.selected_kind.is_empty() or target == commanded or not bridge.sim.has_method("quote"):
+		return {}
+	var key := "%d:%d" % [commanded, target]
+	var now := Time.get_ticks_msec()
+	if key != _quote_key or now - _quote_ms >= SystemMap.QUOTE_REFRESH_MS:
+		_quote_key = key
+		_quote_ms = now
+		_quote = bridge.sim.quote(commanded, target, view["tick"])
+	return _quote
 
 
 func press(key: String) -> bool:
@@ -206,6 +226,11 @@ func _continue_measuring() -> void:
 
 
 func _refusal_text(check: Dictionary) -> String:
+	if check["reason"] == "core_offline":
+		var offline := InspectText.core_offline(bridge.current_view["units"].get(local_view.commanded_unit, {}),
+			bridge.current_view["tick"], bridge.ticks_per_second())
+		if not offline.is_empty():
+			return offline
 	if check["reason"] == "busy_docking":
 		return OrderText.busy(bridge.current_view["units"][local_view.commanded_unit]["op"]["type"])
 	return OrderText.reason(check["reason"], check["detail"])
