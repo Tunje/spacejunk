@@ -16,6 +16,8 @@ extends NewStartBot
 
 ## Every command's tick, in order.
 var command_ticks: Array[int] = []
+## Every command, in order: { tick, type, unit, stage, what, count }, for B24's order count.
+var commands: Array[Dictionary] = []
 ## The tick each goal finished, by goal ID.
 var goal_ticks := {}
 var tracker := GoalTracker.new("new_start")
@@ -26,6 +28,9 @@ var _attach_items := {}
 
 func _command(type: String, unit: int, args: Dictionary) -> int:
 	command_ticks.append(sim.current_tick())
+	commands.append({ "tick": sim.current_tick(), "type": type, "unit": unit, "stage": stage,
+		"what": str(args.get("recipe", args.get("item", args.get("kind", args.get("target", ""))))),
+		"count": int(args.get("count", 1)) })
 	var id := super._command(type, unit, args)
 	if type == "attach_part":
 		_attach_items[id] = args["item"]
