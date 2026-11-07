@@ -128,7 +128,7 @@ static func in_shadow(state: Dictionary, unit_id: int, casters: Array = []) -> b
 		var across: Array[int] = []
 		for axis in 3:
 			across.append(offset[axis] - OrbitMath.smul_div(direction[axis], along, OrbitMath.ONE))
-		if IntMath.dist(across, [0, 0, 0]) < caster[2]:
+		if IntMath.dist_below(across, caster[2]):
 			return true
 	return false
 

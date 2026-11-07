@@ -499,10 +499,14 @@ func _apply_choice(ctx: SimContext, unit: int, loads: Array[Dictionary]) -> void
 				part["shed_until_tick"] = ctx.tick + SHED_HOLD_SECONDS * Sim.TICKS_PER_SECOND
 			ctx.emit_event("power_shed", unit, { "module": entry["part"], "reason": REASON_NO_POWER })
 	ctx.state["units"][unit]["demand_w"] = demand_w
+	# Written only when it changes, which leaves the same state for less work (A40).
 	for part_id: int in UnitIndex.of(ctx, unit)["ids"]:
 		if not is_load.has(part_id):
-			parts[part_id]["shed"] = false
-			parts[part_id]["draw_w"] = 0
+			var part: Dictionary = parts[part_id]
+			if part["shed"]:
+				part["shed"] = false
+			if part["draw_w"] != 0:
+				part["draw_w"] = 0
 
 
 ## Splits the kept loads across supply and batteries, in ascending part ID.
