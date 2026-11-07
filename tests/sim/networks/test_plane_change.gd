@@ -233,3 +233,56 @@ func test_a_combined_trip_flies_saves_and_coasts_exactly() -> void:
 	assert_eq(ledger["matter"]["total_g"], ledger["matter"]["start_g"])
 	assert_eq(ledger["violations"], PackedStringArray())
 
+
+
+## A43: `prefer` picks between the two plans. Going up 10 degrees to Far, A41b is cheaper and A41a
+## sooner, so "cheap" and "fast" take different plans, and each quote summarises the other.
+func test_prefer_picks_the_cheap_or_the_fast_plan_and_shows_the_other() -> void:
+	sim = _build(10_000)
+	var cheap := sim.quote(keys["Ship"], keys["Rock"], 0)
+	var fast := sim.quote(keys["Ship"], keys["Rock"], 0, "fast")
+	assert_eq(cheap["plane_change_at"], "arrival", "the cheaper plan: %s" % str(cheap))
+	assert_eq(fast["plane_change_at"], "start", "the sooner plan: %s" % str(fast))
+	assert_lt(cheap["cost_g"], fast["cost_g"])
+	assert_lt(fast["arrive_tick"], cheap["arrive_tick"])
+	assert_eq(cheap["other"], { "arrive_tick": fast["arrive_tick"], "cost_g": fast["cost_g"] })
+	assert_eq(fast["other"], { "arrive_tick": cheap["arrive_tick"], "cost_g": cheap["cost_g"] })
+	assert_eq(sim.quote(keys["Ship"], keys["Rock"], 0, "slow"), { "reason": "malformed_command" })
+	# One plane has one plan, and no other.
+	sim = _build(0)
+	assert_false(sim.quote(keys["Ship"], keys["Rock"], 0, "fast").has("other"))
+
+
+## A43: a move_to with prefer "fast" waits for and flies the fast plan, pays its price, and keeps
+## its preference through a save while it waits. A bad preference is refused.
+func test_a_fast_move_flies_the_fast_plan() -> void:
+	sim = _build(10_000)
+	var fast := sim.quote(keys["Ship"], keys["Rock"], 0, "fast")
+	var move := { "type": "move_to", "unit": keys["Ship"], "args": { "target": keys["Rock"], "prefer": "fast" } }
+	var checked := sim.check(move)
+	assert_true(checked["ok"], str(checked))
+	assert_eq(checked["detail"]["arrive_tick"], fast["arrive_tick"])
+	var bad := move.duplicate(true)
+	bad["args"]["prefer"] = "slow"
+	assert_eq(sim.check(bad)["reason"], "malformed_command")
+	sim._strict = true
+	sim.submit(move)
+	sim.step(2)
+	assert_eq(_ship()["op"].get("prefer", ""), "fast", "the wait keeps the preference")
+	var loaded := Sim.from_save(sim.to_save())
+	assert_eq(loaded.to_save(), sim.to_save(), "byte-exact while waiting")
+	sim.step(fast["arrive_tick"] + 5 - sim.current_tick())
+	loaded.step(fast["arrive_tick"] + 5 - loaded.current_tick())
+	assert_eq(loaded.to_save(), sim.to_save(), "the same play after the load")
+	assert_eq(_ship()["frame"], keys["Far"], "arrived")
+	assert_eq(PROPELLANT_G - int(_ship()["inventory"]["propellant"]), fast["cost_g"], "paid the fast plan's price")
+
+
+## A43: a cycle's move step takes `prefer` too.
+func test_a_cycles_move_step_takes_prefer() -> void:
+	sim = _build(10_000)
+	var step := MoveStep.new()
+	var ok := step.validate(sim._ctx, keys["Ship"], { "target": keys["Rock"], "prefer": "fast" })
+	assert_true(ok["ok"], str(ok))
+	assert_eq(ok["detail"]["arrive_tick"], sim.quote(keys["Ship"], keys["Rock"], sim.current_tick(), "fast")["arrive_tick"])
+	assert_eq(step.validate(sim._ctx, keys["Ship"], { "target": keys["Rock"], "prefer": 3 })["reason"], "malformed_command")

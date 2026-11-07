@@ -83,7 +83,7 @@ func _depart(ctx: SimContext, id: int) -> void:
 	if op["type"] == MoveStep.OP_WAITING and op["depart_tick"] == ctx.tick and op.has("plan"):
 		quoted = op["plan"].duplicate(true)
 	else:
-		quoted = Travel.quote(ctx, id, op["target"])
+		quoted = Travel.quote(ctx, id, op["target"], MoveStep.prefer_of(op))
 	if quoted.has("reason"):
 		op["reason"] = quoted["reason"]
 		return

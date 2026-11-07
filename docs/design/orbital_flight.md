@@ -1174,3 +1174,12 @@ A41a changes plane on the unit's own circle, which is simple but dear when that 
 
 The cheaper plan is taken, so the land check now prices 879 kg. The 27 hours are mostly phasing on the cluster's slow ring, which is why the quote's `arrive_tick` matters. A player who would rather be quick can still fly the change by hand.
 
+### 11.31 A43: cheap or fast
+
+Between two plans for one trip, such as Frost's way back at 235 kg in 27 hours or 401 kg in 2.5, the choice is the player's. `move_to`, a cycle's move step, `quote` and `next_window` take `prefer`, `"cheap"` by default or `"fast"`.
+- **Cheap** keeps A41b's rule: the lower cost, ties to A41a's plan.
+- **Fast** takes the earlier arrival, ties to the lower cost.
+- **The other plan:** the quote carries `other: { arrive_tick, cost_g }`, so the client can offer both.
+- **In the op:** a move asked to be fast keeps `prefer` in its op through its wait, so a re-quote, a retry after missing propellant and a save mid-wait all fly the same plan. A move left at the default writes nothing, so every other save is as it was.
+- **The land check** prices the way back by the cheap plan.
+

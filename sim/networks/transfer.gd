@@ -15,6 +15,10 @@ const REASON_UNSUPPORTED := "unsupported_orbit"
 const REASON_NO_THRUSTER := "module_missing"
 const REASON_NO_WINDOW := "no_window"
 const KIND := "transfer"
+## How a move_to or quote picks between two ways to fly a trip (A43).
+const PREFER_CHEAP := "cheap"
+const PREFER_FAST := "fast"
+const PREFERENCES := [PREFER_CHEAP, PREFER_FAST]
 ## Orbits more eccentric than this, 0.01 in Q30, are refused.
 const MAX_E_Q30 := 10_737_418
 ## cos 1 degree in Q30: orbit planes must be within a degree of each other.
@@ -28,20 +32,23 @@ const PHASING_STEP := 10
 ## The trip from unit to target leaving at the first chance at or after from_tick, as
 ## { kind, target, depart_tick, arrive_tick, ticks, cost_g, dv_um_s, orbit_a_mm, speed_um_s } or
 ## { reason }. `ticks` counts from departure to arrival inclusive, as a route's does.
-static func plan(ctx: SimContext, unit_id: int, target: int, from_tick: int) -> Dictionary:
+static func plan(ctx: SimContext, unit_id: int, target: int, from_tick: int, prefer: String = PREFER_CHEAP) -> Dictionary:
 	return plan_from(ctx, unit_id, unit_orbit(ctx, unit_id), target,
-		Units.unit_mass(ctx.state, ctx.defs, unit_id), from_tick)
+		Units.unit_mass(ctx.state, ctx.defs, unit_id), from_tick, prefer)
 
 
 ## As plan, from any orbit at any mass, for pricing a leg the unit has not reached yet.
 static func plan_from(ctx: SimContext, unit_id: int, mine: Dictionary, target: int, mass_g: int,
-		from_tick: int) -> Dictionary:
-	return plan_between(ctx, unit_id, mine, target_orbit(ctx, target), target, mass_g, from_tick)
+		from_tick: int, prefer: String = PREFER_CHEAP) -> Dictionary:
+	return plan_between(ctx, unit_id, mine, target_orbit(ctx, target), target, mass_g, from_tick, prefer)
 
 
-## As plan_from, onto a given orbit, such as a frame's, which `target` only names (A39).
+## As plan_from, onto a given orbit, such as a frame's, which `target` only names (A39). Where there
+## are two ways to fly it (A41b), `prefer` picks, as _better says: PREFER_CHEAP the lower cost and
+## PREFER_FAST the earlier arrival (A43). The plan not taken is summarised in `other` as
+## { arrive_tick, cost_g }.
 static func plan_between(ctx: SimContext, unit_id: int, mine: Dictionary, theirs: Dictionary, target: int,
-		mass_g: int, from_tick: int) -> Dictionary:
+		mass_g: int, from_tick: int, prefer: String = PREFER_CHEAP) -> Dictionary:
 	if mine.is_empty() or theirs.is_empty():
 		return { "reason": REASON_UNSUPPORTED }
 	var found := BurnSystem.thruster(ctx, unit_id)
@@ -57,12 +64,18 @@ static func plan_between(ctx: SimContext, unit_id: int, mine: Dictionary, theirs
 		return { "reason": REASON_UNSUPPORTED }
 	var gm: int = ctx.state["bodies"][mine["parent"]]["gm"]
 	if not _coplanar(mine, theirs):
-		# Both ways of changing plane are planned, and the cheaper flown, ties to the first (A41b).
+		# Both ways of changing plane are planned, and `prefer` picks one (A41b, A43).
 		var low := _plane_change_plan(mine, theirs, target, gm, mass_g, from_tick, found)
 		var high := _combined_plan(mine, theirs, target, gm, mass_g, from_tick, found)
-		if high.has("reason") or (not low.has("reason") and int(low["cost_g"]) <= int(high["cost_g"])):
+		if high.has("reason"):
 			return low
-		return high
+		if low.has("reason"):
+			return high
+		var take_low := _better(low, high, prefer)
+		var chosen := low if take_low else high
+		var other := high if take_low else low
+		chosen["other"] = { "arrive_tick": other["arrive_tick"], "cost_g": other["cost_g"] }
+		return chosen
 	var plan := _coplanar_plan(mine, theirs, target, gm, mass_g, from_tick, found)
 	plan["plane_change_dv_um_s"] = 0
 	plan["plane_change_at"] = ""
@@ -115,6 +128,14 @@ static func target_orbit(ctx: SimContext, target: int) -> Dictionary:
 	if body["frame"] != 0:
 		return ctx.state["frames"][body["frame"]]["orbit"]
 	return {}
+
+
+## Whether plan `a`, A41a's, is to be taken over `b`, A41b's. PREFER_CHEAP takes the lower cost,
+## ties to `a` (A41b). PREFER_FAST takes the earlier arrival, ties to the lower cost, then `a` (A43).
+static func _better(a: Dictionary, b: Dictionary, prefer: String) -> bool:
+	if prefer == PREFER_FAST and int(a["arrive_tick"]) != int(b["arrive_tick"]):
+		return int(a["arrive_tick"]) < int(b["arrive_tick"])
+	return int(a["cost_g"]) <= int(b["cost_g"])
 
 
 static func _compatible(mine: Dictionary, theirs: Dictionary) -> bool:
