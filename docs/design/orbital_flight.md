@@ -1271,3 +1271,5 @@ The autopilot refused any orbit more eccentric than 0.01 or more than a degree o
 
 **Seen there, not A49's:** while the probe is still within the cluster's join distance after its burn, BurnSystem's frame-join bound is 0, so the coast steps it until it is clear, 300 to 1,300 ticks. That is A33's bound and a follow-up.
 
+**A51, sharing casters across a view.** `casters_at` takes a cache by tick, and the view keeps one per view, so units in shadow whose walks pass the same ticks work each tick's casters out once. Answers are unchanged. At 20 times the slice the view's 99th percentile came down to about 33 ms, and step and view stay under the spike line.
+

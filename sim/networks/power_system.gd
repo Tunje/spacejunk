@@ -235,8 +235,9 @@ const SUN_MAX_STEPS := 256
 ## or -1 if that can't be foreseen within SUN_LOOKAHEAD_TICKS. It is found as the coast's horizon
 ## is: the shadow bound walked forward while it stays dark, then each tick near the edge worked out
 ## exactly at the places the power phase will use. It assumes nothing else changes the unit's
-## motion first, as a coast would stop at that change anyway. Read-only.
-static func sun_tick(state: Dictionary, unit_id: int) -> int:
+## motion first, as a coast would stop at that change anyway. Read-only. `casters` keeps casters_at's
+## answers by tick across the units of one view, since they are the same for every unit (A51).
+static func sun_tick(state: Dictionary, unit_id: int, casters: Dictionary = {}) -> int:
 	# A burn changes the orbit every tick it runs, so nothing ahead of it can be foreseen.
 	var host := _still_host(state["units"], unit_id)
 	if not state["units"][host]["burn"].is_empty():
@@ -254,14 +255,14 @@ static func sun_tick(state: Dictionary, unit_id: int) -> int:
 		var place: Array = here if dark_until == now else world_at(state, "units", unit_id, dark_until)
 		if place.is_empty():
 			return -1
-		var more := _shadow_horizon_at(state, place, base, 0, casters_at(state, dark_until), chains)
+		var more := _shadow_horizon_at(state, place, base, 0, casters_at(state, dark_until, casters), chains)
 		if more > 0:
 			dark_until += more
 			continue
 		var next := world_at(state, "units", unit_id, dark_until + 1)
 		if next.is_empty():
 			return -1
-		if not shadowed_at(next, casters_at(state, dark_until + 1)):
+		if not shadowed_at(next, casters_at(state, dark_until + 1, casters)):
 			return dark_until + 1
 		dark_until += 1
 	return -1
@@ -341,7 +342,17 @@ static func world_at(state: Dictionary, table: String, id: int, tick: int) -> Ar
 
 
 ## The casters as _coast_casters gives them, where the rails will have put them at a tick (A46).
-static func casters_at(state: Dictionary, tick: int) -> Array:
+## With a `cache`, each tick's answer is worked out once and kept there (A51).
+static func casters_at(state: Dictionary, tick: int, cache: Dictionary = {}) -> Array:
+	if cache.has(tick):
+		return cache[tick]
+	var found := _casters_at(state, tick)
+	if not cache.is_read_only():
+		cache[tick] = found
+	return found
+
+
+static func _casters_at(state: Dictionary, tick: int) -> Array:
 	var bodies: Dictionary = state["bodies"]
 	var star := 0
 	for id: int in _sorted_static(bodies):
