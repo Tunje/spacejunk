@@ -98,6 +98,8 @@ func _power_view(ctx: SimContext, id: int) -> Dictionary:
 		"supply_w": 0 if shadow else UnitIndex.healthy_total(ctx, index["generators"]), "in_shadow": shadow,
 		"demand_w": ctx.state["units"][id]["demand_w"], "stored_j": stored_j,
 		"capacity_j": index["capacity_j"], "max_discharge_w": index["max_discharge_w"],
+		# While in shadow, the first tick it is lit again, or -1 if that can't be foreseen; 0 if lit (A48).
+		"sun_tick": PowerSystem.sun_tick(ctx.state, id) if shadow else 0,
 	}
 
 

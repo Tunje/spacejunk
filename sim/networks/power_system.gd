@@ -225,6 +225,44 @@ static func _shadow_horizon(ctx: SimContext, unit_id: int, casters: Array, chain
 	return total
 
 
+## How far ahead sun_tick looks for the way out of a shadow: about 28 hours (A48).
+const SUN_LOOKAHEAD_TICKS := 1_000_000
+## The most steps sun_tick takes, bound steps and single ticks at the edge together (A48).
+const SUN_MAX_STEPS := 256
+
+
+## For the view's power.sun_tick (A48): the first tick on which a unit now in shadow is lit again,
+## or -1 if that can't be foreseen within SUN_LOOKAHEAD_TICKS. It is found as the coast's horizon
+## is: the shadow bound walked forward while it stays dark, then each tick near the edge worked out
+## exactly at the places the power phase will use. It assumes nothing else changes the unit's
+## motion first, as a coast would stop at that change anyway. Read-only.
+static func sun_tick(state: Dictionary, unit_id: int) -> int:
+	var base := CoastBounds.unit_base(state, unit_id)
+	if base[1] >= CoastBounds.UNBOUNDED_UM_S:
+		return -1
+	var now: int = state["tick"]
+	var chains := {}
+	var dark_until := now
+	var here := RailSystem.world_mm(state, "units", unit_id)
+	for step in SUN_MAX_STEPS:
+		if dark_until - now > SUN_LOOKAHEAD_TICKS:
+			return -1
+		var place: Array = here if dark_until == now else world_at(state, "units", unit_id, dark_until)
+		if place.is_empty():
+			return -1
+		var more := _shadow_horizon_at(state, place, base, 0, casters_at(state, dark_until), chains)
+		if more > 0:
+			dark_until += more
+			continue
+		var next := world_at(state, "units", unit_id, dark_until + 1)
+		if next.is_empty():
+			return -1
+		if not shadowed_at(next, casters_at(state, dark_until + 1)):
+			return dark_until + 1
+		dark_until += 1
+	return -1
+
+
 ## Whether a point is in any caster's shadow, by RailSystem.in_shadow's cylinder test and its very
 ## arithmetic, given the casters as _coast_casters or casters_at lists them (A46).
 static func shadowed_at(point: Array, casters: Array) -> bool:
