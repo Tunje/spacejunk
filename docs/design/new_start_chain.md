@@ -284,6 +284,39 @@ The tail of C22's stage 6.
 - It builds a second `ore_container_mk1` in place on the station's next free side (2,400 ticks).
 - **The second ore store is in at tick 510,976, 14.2 game hours.** That's goal 12, and the end of the chain.
 
+### Part F2: the depot feeds itself, planned (C24, then C23)
+
+At the end of Part F the depot's 337 kg lasts about 11 laps, and then the drone stops. The owner's premise is that cores automate. So the Lead has ruled that the chain must end on a loop that feeds itself. It needs no data change.
+
+1. **Free a side.** All eight of the station's side connectors are in use. The depot's own sides carry 500 kg, and a compact refinery weighs 900 kg. The station's LIDAR on `side_a_px` has done nothing since goal 7, so it is detached into the station's goods hold.
+2. **A refinery on the station.** `compact_refinery_mk1` is built in place on `side_a_px`. It takes 15 frames, 10 wiring and 10 processors, then 6,000 ticks at compact speed.
+   - The frames use about 1,090 kg of hematite: the station's 1,000 kg plus some of the next lap's.
+   - The wiring and processors need about 110 kg of copper and 40 kg of silicon: one Brass and one Green trip by the probe.
+   - About 1.4 game hours, with the processors as the long pole.
+3. **Two standing jobs on it.** Both have a large count:
+   - `refine_water_ice`, with propellant going to the depot;
+   - `refine_hematite`, with iron going to the station's goods container.
+
+   C24 lets one facility run both: a paused job with no run in progress, waiting on `missing_inputs` or `output_full`, lets the lowest-queued job that can start run instead.
+   - Power: 100 kW of the station's 120 kW, when the lab is idle.
+   - Heat: 75 kW of the 200 kW the radiator rejects.
+   - The station has no battery, so the refinery pauses in Frost's shadow.
+4. **The drone's cycle gains an ice leg.** It goes to 13 steps, under the limit of 16. After unloading hematite it adds: `undock`, `move_to` White Rock, `start_mining` water ice, `move_to` the station, `dock`, `unload` the ice.
+   - The small container takes about 184 kg of ice, limited by its 200 L volume.
+   - Ice hardness is 2, and the deposit holds 300 t.
+
+**Estimated balance per cycle.** C23's run will measure it.
+- The hematite leg burns 28.8 kg. The ice leg burns about 22 kg, since White Rock is 46 km away and the drone comes back lighter.
+- The 184 kg of ice gives about 166 kg of propellant, so the depot gains about 115 kg a cycle and fills towards its 2,000 kg. **The drone never runs dry.**
+- The refinery works about 2,200 ticks on ice and 6,000 on hematite in a cycle of about 14,500 ticks, before shadow pauses.
+
+**The honest limit: the hematite.**
+- Each cycle brings 500 kg of hematite and makes 345 kg of iron.
+- The 2,000 kg goods container fills in about 5.8 cycles. After that the hematite job waits on `output_full`, and the 4,000 kg of ore stores fill in about 8 more cycles.
+- At about 14 cycles, **about 5.6 game hours** after F2 starts, the drone can't unload, and its cycle stops.
+- Without the iron job the stores would fill in about 8 cycles, 3.2 h. So the iron job delays the stop by about 2.4 h, but it doesn't hold the loop steady.
+- A steady loop needs something that uses the iron: the player hauling it away, or a fabricator on the station, which needs a side the station hasn't got. That's the player's next job, and the push to expand.
+
 ## 4. End state
 
 At tick 510,976, which is 14.2 game hours:
