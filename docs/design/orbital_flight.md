@@ -1119,3 +1119,25 @@ Before A41a, a trip between orbits round one parent whose planes were more than 
 - A 3-degree trip flies, arrives in the tilted frame and pays exactly its quote, with the ledger strict.
 - A 10-degree trip saves byte-exact mid-flight, and coasts byte-equal to stepping.
 - From Frost, the way back to the cluster from a cell at 40 degrees latitude is priced at 1,045 kg, against 803 kg from the equator. Before A41a it was -1, which meant cannot_return.
+
+### 11.29 A40: the stepped tick at 20 times the slice
+
+**Which clock.** The Lead rules that the 8 ms coast budget is judged at the sustained clock, the one a long session gets. A CPU's turbo lasts a few seconds. Every earlier figure in this section, A17's, A35's (11.24) and A38's (11.27), came from a test run alone and so ran at turbo. The coast PERF line now prints two windows: one at its start, which is turbo only if the CPU was idle before it, and one after 6 seconds more of the same work.
+
+**What A40 cut.** The stepped tick at 20 times the idle slice was profiled per system and phase. Most of `BurnSystem.run` and `LandingSystem.run` went on exact integer square roots that were only compared with a limit: low flight, a sphere's edge, a frame's join distance and the ground.
+- `IntMath.dist_above` and `dist_below` settle each comparison exactly from the largest axis, which is at most the floored distance, and the sum of the axes, which is at least it. Only between the two do they take the root. They are checked against `dist` on 20,000 random vectors, from millimetres to an AU, at the limit and either side of it.
+- `RailSystem.in_shadow` uses them too.
+- `BurnSystem.run` builds each parent's sorted SOI children and frames, with their join distances, once per tick instead of once per unit.
+- Power's choice writes a part's shed flag and draw only when they change.
+Nothing changes what a tick computes.
+
+| Part of the stepped tick, alone (turbo) | Before A40 | After A40 |
+| --- | --- | --- |
+| BurnSystem.run | 2.22 ms | 0.29 ms |
+| LandingSystem.run | 0.38 ms | 0.06 ms |
+| PowerSystem, three passes | 2.05 ms | 1.87 ms |
+| RailSystem.update_tasks | 0.61 ms | 0.60 ms |
+| HeatSystem, two passes | 0.52 ms | 0.50 ms |
+| Whole tick | 6.1 ms | 3.65 ms |
+
+A coast jump, run alone, fell from 9.0 ms to 6.6 ms. After the CPU has been busy, the same jump is about 14 ms, against 19 ms before A40, so it is still well over the 8 ms budget at the sustained clock. What is left is spread thinly: power's three passes, rails' positions and heat. No single part dominates.

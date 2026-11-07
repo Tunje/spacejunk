@@ -223,6 +223,10 @@ func _selected_position(view: Dictionary) -> Array:
 func _eta_for_selection(view: Dictionary) -> String:
 	if _selected_position(view).is_empty():
 		return ""
+	var under_way := SystemMap.trip_under_way(view, local_view.commanded_unit, local_view.selected_id,
+		bridge.ticks_per_second())
+	if under_way != "":
+		return under_way
 	if bridge.sim.has_method("quote"):
 		var key := "%d:%d" % [local_view.commanded_unit, local_view.selected_id]
 		var now := Time.get_ticks_msec()
@@ -240,6 +244,24 @@ func _eta_for_selection(view: Dictionary) -> String:
 	return OrderText.duration(float(result["detail"]["ticks"]) / bridge.ticks_per_second())
 
 
+## The trip already ordered to `target`, waiting for its window or flying, so the map
+## doesn't quote a new one beside it; "" when there is none.
+static func trip_under_way(view: Dictionary, unit_id: int, target: int, ticks_per_second: int) -> String:
+	var unit: Dictionary = view["units"].get(unit_id, {})
+	if unit.is_empty():
+		return ""
+	var tick: int = view["tick"]
+	var plan: Dictionary = unit.get("op", {}).get("plan", {})
+	if not plan.is_empty() and int(plan.get("target", 0)) == target:
+		return "Waiting for the window: departs in %s, arrives in %s" % [
+			OrderText.duration(float(maxi(0, int(plan["depart_tick"]) - tick)) / ticks_per_second),
+			OrderText.duration(float(maxi(0, int(plan["arrive_tick"]) - tick)) / ticks_per_second)]
+	var trip: Dictionary = unit.get("transfer", {})
+	if not trip.is_empty() and int(trip.get("target", 0)) == target:
+		return "On the way, arrives in %s" % OrderText.duration(float(maxi(0, int(trip["arrive_tick"]) - tick)) / ticks_per_second)
+	return ""
+
+
 ## "12 min", or for a transfer "Departs in 40 min, 31 min trip". "" if refused.
 static func trip_text(quote: Dictionary, tick: int, ticks_per_second: int) -> String:
 	if quote.is_empty() or quote.has("reason"):
@@ -248,9 +270,12 @@ static func trip_text(quote: Dictionary, tick: int, ticks_per_second: int) -> St
 	if quote.get("kind", "") != "transfer":
 		return trip
 	var wait: int = quote["depart_tick"] - tick
+	# A41a: a trip between planes burns into the target's plane first, part of its delta-v.
+	var plane := int(quote.get("plane_change_dv_um_s", 0))
+	var plane_text := "" if plane <= 0 else ", including a %s plane change" % FlightLogic.speed(plane)
 	if wait <= 0:
-		return "%s trip" % trip
-	return "Departs in %s, %s trip" % [OrderText.duration(float(wait) / ticks_per_second), trip]
+		return "%s trip%s" % [trip, plane_text]
+	return "Departs in %s, %s trip%s" % [OrderText.duration(float(wait) / ticks_per_second), trip, plane_text]
 
 
 func _unhandled_input(event: InputEvent) -> void:
