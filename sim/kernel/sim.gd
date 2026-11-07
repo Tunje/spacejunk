@@ -140,11 +140,14 @@ func _horizon(most: int) -> int:
 		_ctx.coast_cap = "command"
 		return 0
 	for system in _systems:
+		_ctx.coast_limit = skip
 		skip = mini(skip, system.horizon(_ctx))
 		if skip <= 0:
+			_ctx.coast_limit = 0
 			if _ctx.coast_cap == "":
 				_ctx.coast_cap = system.get_script().get_global_name()
 			return 0
+	_ctx.coast_limit = 0
 	return skip
 
 
