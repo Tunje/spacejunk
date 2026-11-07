@@ -72,6 +72,32 @@ static func dist(a: Array, b: Array) -> int:
 	return _dist_wide(dx, dy, dz)
 
 
+## Exactly `dist(v, [0, 0, 0]) > limit`, mostly without the square root (A40). The floored
+## distance is at least the largest axis and at most the sum of the axes, so either settles it;
+## only between the two is the root taken.
+static func dist_above(v: Array, limit: int) -> bool:
+	var dx := absi(int(v[0]))
+	var dy := absi(int(v[1]))
+	var dz := absi(int(v[2]))
+	if maxi(dx, maxi(dy, dz)) > limit:
+		return true
+	if dx + dy + dz <= limit:
+		return false
+	return dist(v, [0, 0, 0]) > limit
+
+
+## Exactly `dist(v, [0, 0, 0]) < limit`, by the same bounds as dist_above.
+static func dist_below(v: Array, limit: int) -> bool:
+	var dx := absi(int(v[0]))
+	var dy := absi(int(v[1]))
+	var dz := absi(int(v[2]))
+	if maxi(dx, maxi(dy, dz)) >= limit:
+		return false
+	if dx + dy + dz < limit:
+		return true
+	return dist(v, [0, 0, 0]) < limit
+
+
 ## Floored square root of a non-negative integer.
 static func isqrt(value: int) -> int:
 	assert(value >= 0, "isqrt takes non-negative values")
