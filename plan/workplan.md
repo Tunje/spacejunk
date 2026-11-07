@@ -28,6 +28,15 @@ The core idea of the game is as follows:
 
 **Owner's rule, 2026-11-07: "Shortcuts are not welcome in my game if it loses out on what I have asked for."** The straight-line, gravity-free co-moving frame (orbital_flight.md 11.2) is to be removed entirely. Every ship and rock moves on real orbits, including travel between asteroids, rendezvous and docking approaches. No simplification may be approved that drops anything the owner asked for; if in doubt, ask the owner first.
 
+**Owner's rulings, 2026-11-07, applying that rule.** Simplified options are never offered as choices; the realistic version is the default.
+- **Factories:** a job's speed is the lowest of the power supplied, the heat the radiators can reject, and the machine's material throughput. Work points as a bare number go.
+- **Fitting:** no hard power checks. Fitting warns ("this can draw 202 kW, you make 120 kW") and allows; running out of power is handled in play.
+- **Landing:** land anywhere, at an exact position, with slope and height from the terrain under the legs. One site per hex goes.
+- **Research tests:** prototypes are proven by field trials judged on performance (the design must actually do the job), plus a chance of manufacturing defects. Tests that always pass go.
+- **Production:** deep, real chains: reductants for refining, water electrolysis to hydrogen and oxygen, real propellants per engine, slag kept, steel, wafers to chips, and so on.
+- **Gravity:** patched conics (one body's pull at a time) stay, as the owner accepted.
+- **Every other simplification** in A53's and the audits' lists is to be done; only the order is open.
+
 **Planets:** hexes are a fixed size of about 7 km ([planets.md](../docs/design/planets.md)).
 
 **Pacing:** leave the figures as they are for now ([balance.md](../docs/design/balance.md)).
