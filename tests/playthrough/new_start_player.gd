@@ -41,6 +41,8 @@ func _init(new_main: Node, after_stage: int) -> void:
 	flight = main.flight_screen
 	bridge.set_paused(true)
 	bridge.frame_budget_ms = TEST_FRAME_BUDGET_MS
+	# Frames counted in ticks, not wall time, so a snapshot always plays out the same.
+	bridge.fixed_ticks = true
 	if after_stage > 0:
 		var text := FileAccess.get_file_as_string(NewStartBot.snapshot_path(after_stage))
 		var sim := Sim.from_save(text) if text != "" else null
@@ -451,6 +453,9 @@ const DRONE_LAPS := 3
 ## The last lap in step mode, so the warp stops within a few ticks of its end, still
 ## docked; a lap at this speed needs up to LAST_LAP_FRAMES.
 const LAST_LAP_SPEED := 4
+## The laps before it at a speed whose frame is shorter than a lap, so a frame can't run
+## past the last lap now that a cycle's laps don't drop the warp (D40).
+const LAP_SPEED := 1000
 const LAST_LAP_FRAMES := 1000
 
 var drone := 0
@@ -557,7 +562,7 @@ func _repeat_with_auto() -> void:
 			if event["unit"] == drone and ["task_blocked", "task_cancelled"].has(event["type"]):
 				_problem("the drone's cycle %s: %s" % [event["type"], event["data"].get("reason", "")])
 	bridge.events_received.connect(count)
-	warp_until(func() -> bool: return laps >= DRONE_LAPS - 1 or not problems.is_empty(), "drone laps")
+	warp_until(func() -> bool: return laps >= DRONE_LAPS - 1 or not problems.is_empty(), "drone laps", LAP_SPEED)
 	warp_until(func() -> bool: return laps >= DRONE_LAPS or not problems.is_empty(), "last lap", LAST_LAP_SPEED, LAST_LAP_FRAMES)
 	bridge.events_received.disconnect(count)
 	take_command(drone)

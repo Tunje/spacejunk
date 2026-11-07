@@ -226,3 +226,21 @@ func test_the_view_tells_the_bridge_which_craft_is_commanded() -> void:
 	assert_eq(shown.commanded_unit, local.commanded_unit)
 	local.commanded_unit = 77
 	assert_eq(shown.commanded_unit, 77)
+
+
+## The playthrough's fixed ticks: a slow world still advances the whole frame, in fixed
+## batches, stopping only at its tick budget or at an attention event, the same every run.
+func test_fixed_ticks_ignore_the_clock() -> void:
+	var sim := FakeSim.new()
+	sim.step_usec = 1000
+	bridge.start(sim)
+	bridge.fixed_ticks = true
+	bridge.set_speed(50)
+	bridge.advance(1.0)
+	assert_eq(sim.tick, 500, "all 50x of the frame, though each step takes 1 ms")
+	assert_eq(bridge.capped_by, "")
+	sim.step_usec = 0
+	sim.event_at = 650
+	bridge.advance(1.0)
+	assert_eq(sim.tick, 700, "an attention event stops the frame at its batch's end")
+	assert_eq(bridge.speed, 1, "and drops the warp, as in play")
