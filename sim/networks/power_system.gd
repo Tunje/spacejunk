@@ -237,6 +237,10 @@ const SUN_MAX_STEPS := 256
 ## exactly at the places the power phase will use. It assumes nothing else changes the unit's
 ## motion first, as a coast would stop at that change anyway. Read-only.
 static func sun_tick(state: Dictionary, unit_id: int) -> int:
+	# A burn changes the orbit every tick it runs, so nothing ahead of it can be foreseen.
+	var host := _still_host(state["units"], unit_id)
+	if not state["units"][host]["burn"].is_empty():
+		return -1
 	var base := CoastBounds.unit_base(state, unit_id)
 	if base[1] >= CoastBounds.UNBOUNDED_UM_S:
 		return -1
