@@ -20,6 +20,8 @@ const FRAME_BUDGET_MS := 8.0
 const BATCH_SLICE_MS := 4.0
 ## A momentary cap is shown only once it has lasted this long.
 const CAP_SHOWN_AFTER_S := 0.5
+## The selection's trip quote with A47's comparison is asked again at most this often.
+const TRIP_QUOTE_REFRESH_MS := 1000
 
 var sim: RefCounted
 var paused := false
@@ -28,6 +30,9 @@ var previous_view: Dictionary = {}
 ## The craft the player is giving orders to (LocalView keeps it): when one of its
 ## orders finishes, the warp stops, so the next can be given (D40).
 var commanded_unit := 0
+var _trip_key := ""
+var _trip_ms := 0
+var _trip: Dictionary = {}
 var current_view: Dictionary = {}
 ## Keep warping when a job finishes, rather than dropping to 1×.
 var warp_through_jobs := false
@@ -180,6 +185,22 @@ func _note_speed(advanced: int, delta: float, cap: String) -> void:
 ## display runs one tick behind, so this stays continuous across step batches.
 func interpolation_alpha() -> float:
 	return clampf((_last_span - 1 + _ticks_owed) / _last_span, 0.0, 1.0)
+
+
+## The trip a move_to would take, with A47's comparison: the leave-now arc as `other`
+## when there is one. Shared by the map and Orders, so it is asked once: when the
+## target changes, then at most every TRIP_QUOTE_REFRESH_MS, never per frame. Display
+## only; cores and cycles never compare. {} on a Sim without quote().
+func trip_quote(unit_id: int, target: int) -> Dictionary:
+	if sim == null or not sim.has_method("quote"):
+		return {}
+	var key := "%d:%d" % [unit_id, target]
+	var now := Time.get_ticks_msec()
+	if key != _trip_key or now - _trip_ms >= TRIP_QUOTE_REFRESH_MS:
+		_trip_key = key
+		_trip_ms = now
+		_trip = sim.quote(unit_id, target, int(current_view.get("tick", 0)), "cheap", true)
+	return _trip
 
 
 func submit(command: Dictionary) -> int:

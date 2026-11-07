@@ -59,7 +59,7 @@ static func mode(speed: int) -> String:
 ## was its job's last (the job has left the view), not every run of a 24-run job.
 ## `view`, the view the events came from, says which craft run a cycle. An order of
 ## `commanded`, the craft the player is ordering, needs attention when it finishes,
-## unless it is a step of that craft's own cycle (D40).
+## unless it is a step of that craft's own cycle (D40); a one-shot plan's end counts.
 static func needs_attention(events: Array, through_jobs := false, live_jobs: Dictionary = {},
 		view: Dictionary = {}, commanded := 0) -> bool:
 	for event: Dictionary in events:
@@ -71,7 +71,9 @@ static func needs_attention(events: Array, through_jobs := false, live_jobs: Dic
 		if ATTENTION.has(event["type"]):
 			return true
 		var mine: bool = commanded != 0 and int(event.get("unit", 0)) == commanded
-		if event["type"] == "task_finished" and mine and not WarpLogic.in_cycle(commanded, view):
+		# D41: a one-shot plan (laps 1, the trip panel) ending is the order finishing.
+		var plan_ended: bool = int(view.get("tasks", {}).get(int(data.get("task", 0)), {}).get("laps", 0)) > 0
+		if event["type"] == "task_finished" and mine and (plan_ended or not WarpLogic.in_cycle(commanded, view)):
 			return true
 		if not through_jobs and JOB_EVENTS.has(event["type"]) and not live_jobs.has(data.get("job", 0)):
 			return true
