@@ -15,6 +15,7 @@ var laps_before_load := 0
 func before_all() -> void:
 	SaveStore.autosave_path = AUTO_PATH
 	main = load("res://client/main.tscn").instantiate()
+	main.scenario = "reference"
 	add_child(main)
 	player = PanelPlayer.new(main)
 	var started := Time.get_ticks_msec()

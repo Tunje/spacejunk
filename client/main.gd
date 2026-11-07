@@ -1,18 +1,22 @@
 class_name Main extends Node3D
 ## Client root: starts the backend and wires the bridge to the view and overlay.
 
-const SCENARIO := "reference"
+## The station sandbox: the older start, a ship docked at a ready-built station.
+const REFERENCE := "reference"
 ## The new start: only the probe, in the rock cluster round the icy moon Frost.
 const NEW_START := "new_start"
-## The real starts, chosen with `--scenario=<id>` after `--` until there is a start menu.
-const STARTS: Array[String] = [SCENARIO, NEW_START]
+## What a launch with no arguments plays (D38).
+const DEFAULT_START := NEW_START
+## The real starts, in the order the New menu lists them, with their names there.
+const STARTS: Array[String] = [NEW_START, REFERENCE]
+const START_NAMES: Dictionary = { NEW_START: "New game", REFERENCE: "Station sandbox" }
 const SEED_VALUE := 1
 ## Real seconds between autosaves, counted whether or not the game is paused.
 const AUTOSAVE_SECONDS := 300.0
 
-## Which start: `reference` by default, `new_start` with `--scenario=new_start` after
-## `--`. The stub stays reachable for tests and tools, with `--scenario=stub`.
-@export var scenario := SCENARIO
+## Which start: the new start by default, the sandbox with `--scenario=reference` after
+## `--` or the New menu. The stub stays reachable for tests and tools, with `--scenario=stub`.
+@export var scenario := DEFAULT_START
 
 @onready var bridge: SimBridge = $Bridge
 @onready var local_view: LocalView = $LocalView
@@ -69,6 +73,7 @@ func _ready() -> void:
 	time_controls.research_pressed.connect(toggle_research)
 	time_controls.save_pressed.connect(save_game)
 	time_controls.load_pressed.connect(load_game)
+	time_controls.new_game_pressed.connect(new_game)
 	time_controls.auto_pressed.connect(toggle_automation)
 	ScreenshotDriver.attach_if_requested(self, args)
 	ScreenshotRunner.attach_if_requested(self, args)
@@ -264,10 +269,32 @@ func _load_failure_line(slot: Dictionary, reason: String) -> String:
 	return ("Autosave failed to load: %s" if slot["auto"] else "Load failed: %s") % text
 
 
+## Starts a fresh game of a start, from the New menu. The game in progress is left
+## as it was saved (autosave runs on its own timer), as Load does.
+func new_game(id: String) -> void:
+	var backend := _new_backend(id)
+	if backend == null:
+		event_log.add_line("Could not start %s: %s" % [START_NAMES.get(id, id), Sim.last_error()])
+		return
+	scenario = id
+	_close_screens()
+	bridge.start(backend)
+	local_view.rebuild()
+	goal_panel.set_scenario(id, true)
+	automation_screen.restore_state({})
+	goal_panel.refresh()
+	event_log.add_line("Started: %s" % START_NAMES.get(id, id))
+
+
 func _apply_load(loaded: RefCounted, client_state: Dictionary) -> void:
 	_close_screens()
 	bridge.start(loaded)
 	local_view.rebuild()
+	# The save's own start sets the goal list, whatever was being played.
+	var state: Variant = loaded.get("_state")
+	if state is Dictionary and (state as Dictionary).has("scenario"):
+		scenario = state["scenario"]
+	goal_panel.set_scenario(scenario)
 	goal_panel.tracker.restore_state(client_state.get("goals", {}))
 	automation_screen.restore_state(client_state.get("automation", {}))
 	goal_panel.refresh()

@@ -33,7 +33,8 @@ func test_the_launch_flag_chooses_the_start() -> void:
 	var parsed := ScreenshotRunner.parse_args(PackedStringArray(["--scenario=new_start"]))
 	assert_eq(parsed.get("scenario"), Main.NEW_START)
 	assert_true(Main.STARTS.has(Main.NEW_START), "listed as a start")
-	assert_true(Main.STARTS.has(Main.SCENARIO), "and the default still is")
+	assert_true(Main.STARTS.has(Main.REFERENCE), "and the sandbox still is")
+	assert_eq(Main.DEFAULT_START, Main.NEW_START, "D38: the new start is the default")
 
 
 func test_it_starts_with_only_the_probe_on_the_real_sim() -> void:

@@ -15,6 +15,7 @@ var keys := {}
 
 func before_each() -> void:
 	main = load("res://client/main.tscn").instantiate()
+	main.scenario = "reference"
 	add_child_autofree(main)
 	bridge = main.get_node("Bridge")
 	bridge.set_paused(true)

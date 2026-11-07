@@ -6,6 +6,9 @@ const WIDTH_PX := 300
 
 signal order_issued(command: Dictionary)
 
+## The panel with no orders to show says how to get some (D38: a new player's first screen).
+const NOTHING_SELECTED := "Select a rock, a planet or a craft (the map, M, shows them all) to see its orders."
+
 var bridge: SimBridge
 var local_view: LocalView
 var _modules: Dictionary = {}
@@ -164,6 +167,8 @@ func _sync_buttons() -> void:
 		shown.tooltip_text = "" if check["ok"] else _refusal_text(check)
 		if why.is_empty() and not check["ok"]:
 			why = shown.tooltip_text
+	if _orders.is_empty() and why.is_empty():
+		why = NOTHING_SELECTED
 	_why_label.text = why
 	_why_label.visible = not why.is_empty()
 

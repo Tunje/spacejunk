@@ -4,6 +4,7 @@ class_name GoalPanel extends PanelContainer
 const WIDTH_PX := 460
 
 var tracker := GoalTracker.new()
+var _fitting: FittingScreen
 var bridge: SimBridge
 var event_log: EventLog
 var _items: Dictionary = {}
@@ -50,6 +51,7 @@ func _build_list() -> void:
 
 ## `scenario` picks the goal list, so the new start gets its own.
 func bind(new_bridge: SimBridge, log_panel: EventLog, fitting: FittingScreen, scenario := "") -> void:
+	_fitting = fitting
 	if scenario != "":
 		tracker = GoalTracker.new(scenario)
 		_build_list()
@@ -60,8 +62,22 @@ func bind(new_bridge: SimBridge, log_panel: EventLog, fitting: FittingScreen, sc
 	bridge.defs_changed.connect(_reread_defs)
 	bridge.view_updated.connect(_on_view)
 	bridge.events_received.connect(_on_events)
-	fitting.fit_blocked.connect(tracker.note_fit_blocked)
+	fitting.fit_blocked.connect(_note_fit_blocked)
 	_on_view()
+
+
+## A new game or a load: the start's own goal list. A load of the same start keeps
+## the tracker, whose state it restores; `fresh` (a new game) always starts over.
+func set_scenario(scenario: String, fresh := false) -> void:
+	if not fresh and GoalTracker.goals_for(scenario) == tracker.goals:
+		return
+	tracker = GoalTracker.new(scenario)
+	_build_list()
+	refresh()
+
+
+func _note_fit_blocked(item: String, reason: String) -> void:
+	tracker.note_fit_blocked(item, reason)
 
 
 func _reread_defs() -> void:
