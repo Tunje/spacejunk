@@ -260,7 +260,7 @@ func queue(on: int, facility_type: String, recipe: String, runs: int, into: Arra
 					pressed = true
 		if not pressed and problems.is_empty():
 			_problem("no Build into spot %s for %s" % [into[1], recipe])
-	if not industry._message.text.is_empty():
+	if not industry._message.text.is_empty() and not industry._message.text.begins_with("Queued"):
 		_problem("%s: %s" % [recipe, industry._message.text])
 	main.toggle_industry()
 	bridge.set_paused(false)
@@ -652,7 +652,6 @@ func stage_drone_by_design() -> void:
 	load_from_host(names["hematite"]["name"], 0)
 	var short := design_short(DRONE_DESIGN)
 	short["hematite"] = int(short.get("hematite", 0)) + DEPOT_HEMATITE_G
-	note("The depot's propellant tank isn't in the design, so its refining and frames are still queued one by one: a Start with components on any recipe row would take them in one press too.")
 	var items: Array = short.keys()
 	items.sort()
 	for item: String in items:
@@ -667,9 +666,10 @@ func stage_drone_by_design() -> void:
 	if not still.is_empty():
 		_problem("the design still lacks %s after mining" % str(still))
 	build_design(DRONE_DESIGN)
-	queue(probe, "refinery", "refine_hematite", DEPOT_HEMATITE_G / 100_000)
-	queue(probe, "fabricator", "structural_frame", 2)
+	# Build into, with "Make its components too" ticked: one press for the depot (D43).
 	queue(probe, "fabricator", "propellant_tank_mk1", 1, [station, ""])
+	if industry.picker_with == null or not industry.picker_with.button_pressed:
+		_problem("Build into didn't offer the depot tank's components")
 	wait_jobs()
 	for id: int in bridge.current_view["units"]:
 		if unit(id)["kind"] == "drone":

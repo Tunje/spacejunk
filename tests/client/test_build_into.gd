@@ -65,6 +65,8 @@ func test_the_picker_lists_checked_slots_and_builds_onto_the_ship() -> void:
 	sim._state["units"][station]["inventory"]["structural_frame"] = 300_000
 	screen.open_picker(recipe)
 	assert_true(screen._picker.visible)
+	# The part alone, as before D43's "Make its components too".
+	screen.picker_with.button_pressed = false
 	var enabled: Array = screen._slot_buttons.filter(func(row: Dictionary) -> bool: return not row["button"].disabled)
 	var refused: Array = screen._slot_buttons.filter(func(row: Dictionary) -> bool: return row["button"].disabled)
 	assert_gt(enabled.size(), 0, "some spots take it")
