@@ -1,6 +1,6 @@
 # Simulation Contracts
 
-Contract version: 8. Signed off by the Lead (task L7) after review by Agents A, C and D. Version 2 added the job queue (C9). Version 3 adds orbits and frames ([orbital_flight.md](orbital_flight.md) section 11, task A10). Version 4 makes jobs take work points, not time (C11). Version 5 adds research: science, theories, prototypes and variants (C12). Version 6 adds fabricating in place, `install_to` on jobs (C15). Version 7 adds an optional `grams` to `start_mining` (C19), and lets `attach_part` and `copy_fit` take parts from any unit in the docked group (C21). Version 8 lets a queued job go ahead of a starved active job (C24). Changes go through the Lead.
+Contract version: 8. Signed off by the Lead (task L7) after review by Agents A, C and D. Version 2 added the job queue (C9). Version 3 adds orbits and frames ([orbital_flight.md](orbital_flight.md) section 11, task A10). Version 4 makes jobs take work points, not time (C11). Version 5 adds research: science, theories, prototypes and variants (C12). Version 6 adds fabricating in place, `install_to` on jobs (C15). Version 7 adds an optional `grams` to `start_mining` (C19), and lets `attach_part` and `copy_fit` take parts from any unit in the docked group (C21). Version 8 lets a queued job go ahead of a starved active job (C24), and gives `set_cycle` an optional `laps` count (C25). Changes go through the Lead.
 
 These contracts expand section 5 of `plan/workplan.md`. If the two disagree, raise it with the Lead.
 
@@ -183,7 +183,7 @@ Every command has this envelope. `submit` fills in `id` and `tick`.
 | `detach_part` | `part`, `to` | Remove a part and everything below it |
 | `assign_core` | `core` | Set a core installed on this unit |
 | `design_variant` | `base`, `ideas` | Design a variant of a qualified module with up to four of its ideas. Sent with unit 0 (C12) |
-| `set_cycle` | `steps` | Set the repeating cycle for tier 2 |
+| `set_cycle` | `steps`, `laps` (optional) | Set the repeating cycle for tier 2. With `laps`, a whole number above 0, the cycle finishes after that many laps: `task_cycle_done` for the last lap, then `task_finished`, and the unit is idle. `laps` 1 is a one-shot plan. Without it the cycle repeats until stopped or replaced. A bad `laps` is `malformed_command` (C25) |
 | `set_priority` | `module`, `priority` | Change a module's power priority |
 
 **Tasks.** Every long-running unit order is a task: scan, move, dock, undock, load, unload and mining. A single order is a one-step task, so tier 1 and tier 2 share one state machine and one owner rule.
