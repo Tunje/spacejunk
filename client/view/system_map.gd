@@ -303,7 +303,7 @@ func _eta_for_selection(view: Dictionary) -> String:
 			return eta_text
 		_eta_key = key
 		_eta_ms = now
-		return SystemMap.trip_text(bridge.sim.quote(local_view.commanded_unit, local_view.selected_id, view["tick"]),
+		return SystemMap.trip_text(bridge.trip_quote(local_view.commanded_unit, local_view.selected_id),
 			view["tick"], bridge.ticks_per_second())
 	var result: Dictionary = bridge.check({
 		"type": "move_to", "unit": local_view.commanded_unit, "args": { "target": local_view.selected_id },
