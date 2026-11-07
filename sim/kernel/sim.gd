@@ -170,17 +170,23 @@ func predict(unit_id: int, from_tick: int, ticks: int, step: int) -> Dictionary:
 
 
 ## The trip a move_to would take from the next chance at or after from_tick (contracts section 3).
-func quote(unit_id: int, target: int, from_tick: int) -> Dictionary:
+## `prefer` is "cheap" or "fast" (A43), as the move_to's own.
+func quote(unit_id: int, target: int, from_tick: int, prefer: String = Transfer.PREFER_CHEAP) -> Dictionary:
 	if not _state["units"].has(unit_id):
 		return { "reason": REASON_UNKNOWN_UNIT }
-	return Travel.quote_trip(_ctx, unit_id, target, from_tick)
+	if not Transfer.PREFERENCES.has(prefer):
+		return { "reason": REASON_MALFORMED }
+	return Travel.quote_trip(_ctx, unit_id, target, from_tick, prefer)
 
 
 ## As quote, or { reason: no_window } if it costs more than cap_g.
-func next_window(unit_id: int, target: int, from_tick: int, cap_g: int) -> Dictionary:
+func next_window(unit_id: int, target: int, from_tick: int, cap_g: int,
+		prefer: String = Transfer.PREFER_CHEAP) -> Dictionary:
 	if not _state["units"].has(unit_id):
 		return { "reason": REASON_UNKNOWN_UNIT }
-	return Travel.next_window(_ctx, unit_id, target, from_tick, cap_g)
+	if not Transfer.PREFERENCES.has(prefer):
+		return { "reason": REASON_MALFORMED }
+	return Travel.next_window(_ctx, unit_id, target, from_tick, cap_g, prefer)
 
 
 func defs() -> Dictionary:

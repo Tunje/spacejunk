@@ -20,6 +20,8 @@ static func wait_for(ctx: SimContext, unit_id: int, depart_tick: int, plan: Dict
 		"type": OP_WAITING, "target": op["target"], "part": 0, "start_tick": op["start_tick"],
 		"end_tick": maxi(op["start_tick"], depart_tick - 1), "depart_tick": depart_tick,
 	}
+	if op.has("prefer"):
+		ctx.state["units"][unit_id]["op"]["prefer"] = op["prefer"]
 	if not plan.is_empty():
 		ctx.state["units"][unit_id]["op"]["plan"] = plan.duplicate(true)
 
@@ -38,7 +40,10 @@ func validate(ctx: SimContext, unit_id: int, args: Dictionary) -> Dictionary:
 	var is_unit: bool = ctx.state["units"].has(target) and target != unit_id
 	if not is_unit and not ctx.state["bodies"].has(target):
 		return SimSystem.reject(TaskSystem.REASON_INVALID_TARGET)
-	var quoted := Travel.quote(ctx, unit_id, target)
+	var prefer: Variant = args.get("prefer", Transfer.PREFER_CHEAP)
+	if typeof(prefer) != TYPE_STRING or not Transfer.PREFERENCES.has(prefer):
+		return SimSystem.reject(TaskSystem.REASON_MALFORMED)
+	var quoted := Travel.quote(ctx, unit_id, target, prefer)
 	if quoted.has("reason"):
 		return SimSystem.reject(quoted["reason"])
 	var detail := { "ticks": quoted["ticks"], "propellant_g": quoted["cost_g"] }
@@ -57,6 +62,14 @@ func validate(ctx: SimContext, unit_id: int, args: Dictionary) -> Dictionary:
 
 func begin(ctx: SimContext, unit_id: int, args: Dictionary) -> void:
 	TaskStep.set_op(ctx, unit_id, OP_MOVING, args["target"], 0, 1)
+	# Kept only when it isn't the default, so saves of every other move are as they were (A43).
+	if args.get("prefer", Transfer.PREFER_CHEAP) == Transfer.PREFER_FAST:
+		ctx.state["units"][unit_id]["op"]["prefer"] = Transfer.PREFER_FAST
+
+
+## The way a move's op was asked to pick between two plans (A43).
+static func prefer_of(op: Dictionary) -> String:
+	return op.get("prefer", Transfer.PREFER_CHEAP)
 
 
 func references_exist(ctx: SimContext, unit_id: int, args: Dictionary) -> bool:
@@ -98,7 +111,7 @@ func retry(ctx: SimContext, unit_id: int) -> void:
 	var op: Dictionary = ctx.state["units"][unit_id]["op"]
 	if op["type"] != OP_WAITING or op.get("reason", "") != REASON_NO_PROPELLANT:
 		return
-	var quoted := Travel.quote_trip(ctx, unit_id, op["target"], ctx.tick)
+	var quoted := Travel.quote_trip(ctx, unit_id, op["target"], ctx.tick, prefer_of(op))
 	if quoted.has("reason") or quoted["cost_g"] > Reservations.free_stock(ctx, unit_id, Travel.PROPELLANT):
 		return
 	op.erase("reason")
