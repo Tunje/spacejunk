@@ -1206,3 +1206,5 @@ At 20 times the slice a coast call now covers 383 ticks instead of 81, for about
 
 **A48, `power.sun_tick`.** The view carries, while a unit is in shadow, the first tick it is lit again, found by the same walk: the bound while it stays dark, then each tick near the edge exactly. It is 0 while lit, and -1 if the way out can't be foreseen. `test_sun_tick.gd` checks the answer against the tick the probe really comes out on: dark the tick before, lit on it.
 
+
+**Follow-up (logged by the Lead after A48):** in the 20 times slice world, the view's 99th percentile can pass the 100 ms spike line on ticks where many shadowed units need a fresh sun_tick at once, as they enter shadow or set off. Sharing `casters_at` per tick across the units of one view would cut that without changing any answer. Accepted for now.
