@@ -1183,3 +1183,24 @@ Between two plans for one trip, such as Frost's way back at 235 kg in 27 hours o
 - **In the op:** a move asked to be fast keeps `prefer` in its op through its wait, so a re-quote, a retry after missing propellant and a save mid-wait all fly the same plan. A move left at the default writes nothing, so every other save is as it was.
 - **The land check** prices the way back by the cheap plan.
 
+### 11.32 A46: walking to the shadow's edge
+
+Near a shadow's edge the shadow bound shrinks with the gap. Each coast call stepped a tick and bounded again, so an edge took tens of calls. PowerSystem now walks the bound forward within one horizon pass:
+- **From any point.** A bound is good from wherever it is worked out. So the walk works it out again from where the rails will have put the unit and the casters at its end, using `world_at` and `casters_at` on a coming tick.
+- **Places it can foresee:** bodies, frames, units on an orbit (up to their transfer's next leg), landed, docked or still in a frame, and units on a route, by its closed form up to arrival. A route moves after the power phase, so on a tick the unit is where the tick before left it.
+- **Within a tick's motion of an edge,** the bound is 0, and a unit moving along the edge can stay there for many ticks. The next tick's shadow is then worked out exactly, with RailSystem.in_shadow's own arithmetic at the very places the power phase will use. Unchanged, the tick is safe; changed, the walk stops just before it.
+- **The shadow bound's own slack** is now 16 mm plus a part in 2^28 of the distances involved. The bound is worked out with the same arithmetic as the test it guards. The other bounds keep GAP_SLACK_MM's metre.
+- **The walk stops** past `SimContext.coast_limit`, the skip already found by the coast and the systems asked before PowerSystem, after 32 steps, or at anything it can't foresee. It only starts from a bound under a minute.
+
+| Case | Coast calls before | After |
+| --- | --- | --- |
+| A 38,000-tick lap through a moon's shadow | 17 | 2 |
+| The new start's probe past its edge, ticks 125,000 to 135,000 | 11 | 7 |
+| A gravity-field lap | 16 | 9 |
+| The probe flying between rocks across the edge | 55 | 10 |
+| A 10 degree plane-change trip | 85 | 29 |
+
+The calls left at an edge are mostly the battery filling to its last joule. A charge limited by the room left is stepped, and it closes a factor of ten a tick.
+
+At 20 times the slice a coast call now covers 383 ticks instead of 81, for about the same time a call. A round costs more, 8.4 ms against 6.75 at turbo, but warp is about five times cheaper per tick. Every case still matches stepping byte for byte, and the soak passes.
+

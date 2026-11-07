@@ -17,8 +17,10 @@ const SPEED_SLACK_PERMILLE := 1010
 
 
 ## The ticks before a gap of gap_mm can close at speed_um_s, less one, or 0 if it already has.
-static func ticks_to_close(gap_mm: int, speed_um_s: int) -> int:
-	var gap := gap_mm - GAP_SLACK_MM
+## `slack_mm` is what the gap gives away for rounding: GAP_SLACK_MM unless the caller knows its
+## own rounding better, as the shadow bound does (A46).
+static func ticks_to_close(gap_mm: int, speed_um_s: int, slack_mm: int = GAP_SLACK_MM) -> int:
+	var gap := gap_mm - slack_mm
 	if gap <= 0:
 		return 0
 	var speed := IntMath.mul_div(maxi(1, speed_um_s), SPEED_SLACK_PERMILLE, 1000) + 1
