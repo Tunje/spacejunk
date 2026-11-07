@@ -15,6 +15,8 @@ extends RefCounted
 ## Seeds 9, 25, 41 ... start from the new start's stage-6 snapshot and run its drone's real cycle to
 ## Red Rock and back for two laps (C22).
 ## Seed 1 is D's shadow edge case from A35: new start seed 1, ticks 125,000 to 135,000.
+## Seeds 17, 33, 49 ... are the new start's probe burning out of its cluster by hand onto an
+## eccentric orbit, then ordered home, which flies a Lambert arc (A49).
 
 const GM_STAR := 132_712_440_018_000_000
 const GM_PLANET := 3_531_600_000
@@ -45,6 +47,9 @@ static func run_seed(seed: int, ticks: int) -> Dictionary:
 	elif seed % 16 == 9:
 		stepped = _stage_six(rng)
 		ticks = STAGE_SIX_TICKS
+	elif seed % 16 == 1:
+		stepped = _new_start(rng.randi_range(1, 1000), rng.randi_range(0, 250_000))
+		actions = _burn_then_home(stepped, rng)
 	else:
 		var built := _moon_probe(rng, ticks)
 		stepped = built[0]
@@ -136,6 +141,22 @@ static func _shuttle(rng: RandomNumberGenerator) -> Sim:
 	sim.step()
 	sim.take_events()
 	return sim
+
+
+## A hand burn out of the cluster, retrograde or prograde by 5 to 30 m/s, then a move_to home to a
+## rock in it once the burn is done (A49).
+static func _burn_then_home(sim: Sim, rng: RandomNumberGenerator) -> Array:
+	var probe := 0
+	for id: int in _sorted(sim._state["units"]):
+		if sim._state["units"][id]["name"] == "Probe":
+			probe = id
+	var dv: int = rng.randi_range(5, 30) * 1_000_000 * (1 if rng.randi_range(0, 1) == 1 else -1)
+	var rock: int = [4, 6, 8, 10][rng.randi_range(0, 3)]
+	return [
+		[0, { "type": "plan_burn", "unit": probe, "args": { "tick": sim.current_tick() + 1, "prograde_um_s": dv,
+			"normal_um_s": 0, "radial_um_s": 0 } }],
+		[rng.randi_range(400, 1500), { "type": "move_to", "unit": probe, "args": { "target": rock } }],
+	]
 
 
 ## Up to three move_to orders for the new start's probe, to rocks in its frame at random ticks. One
