@@ -148,9 +148,16 @@ func test_the_cost_of_planning_queries() -> void:
 	start = Time.get_ticks_usec()
 	var checked := sim.check(command)
 	var check_us := Time.get_ticks_usec() - start
-	print("PERF ORBITS queries: quote (window) %.0f us; check of a %d-tick burn %d us" % [
-		quote_us, checked["detail"]["burn_ticks"], check_us])
+	# A fast quote also searches the Lambert arc that leaves at once (A47): reported, with a generous
+	# limit, since cores and cycles quote cheap and only a player's fast order or comparison pays it.
+	start = Time.get_ticks_usec()
+	for i in 10:
+		sim.quote(id, keys["Rock 2"], i, "fast")
+	var fast_us := float(Time.get_ticks_usec() - start) / 10
+	print("PERF ORBITS queries: quote (window) %.0f us; fast quote with the arc %.0f us; check of a %d-tick burn %d us" % [
+		quote_us, fast_us, checked["detail"]["burn_ticks"], check_us])
 	assert_lt(quote_us, 5000.0)
+	assert_lt(fast_us, 100_000.0, "a fast quote stays well under a frame's worth of work")
 
 
 ## The fastest time warp at the slice's real size: the reference scenario with the ship on a trip,

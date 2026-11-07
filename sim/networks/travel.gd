@@ -38,14 +38,15 @@ static func quote(ctx: SimContext, unit_id: int, target: int, prefer: String = T
 ## Inside one frame, or in the old world, it is today's route, with `kind` "route" and leaving at
 ## from_tick. Between places it is a transfer from Transfer.plan, leaving at its window. Both carry
 ## { kind, target, depart_tick, arrive_tick, ticks, cost_g }, or the trip gives { reason }.
+## `compare` (A47) also plans the arc that leaves at once for a cheap trip, to show it as `other`.
 static func quote_trip(ctx: SimContext, unit_id: int, target: int, from_tick: int,
-		prefer: String = Transfer.PREFER_CHEAP) -> Dictionary:
+		prefer: String = Transfer.PREFER_CHEAP, compare: bool = false) -> Dictionary:
 	var place := RailSystem.unit_place(ctx.state, unit_id)
 	if place != RailSystem.ON_ORBIT and place == RailSystem.target_place(ctx.state, target):
 		var at := Units.at(ctx.state, unit_id, target)
 		return _route(ctx, unit_id, ctx.state["units"][unit_id]["pos_mm"], target,
 			Units.unit_mass(ctx.state, ctx.defs, unit_id), at, from_tick)
-	return Transfer.plan(ctx, unit_id, target, from_tick, prefer)
+	return Transfer.plan(ctx, unit_id, target, from_tick, prefer, compare)
 
 
 ## As quote_trip, if the trip costs no more than cap_g, otherwise { reason: no_window }.

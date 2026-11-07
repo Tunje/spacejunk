@@ -134,7 +134,7 @@ Further rejection reasons are `out_of_range`, `docked`, `not_docked`, `unknown_d
 
 `set_cycle` replaces any existing cycle, and cancels any order, each with `player_order`. It is rejected with `bad_cycle`, and `detail.step` set to the failing index, unless all of these hold:
 - It has 2 to 16 steps.
-- All steps are in the whitelist: `move_to`, `dock`, `undock`, `load_cargo`, `unload_cargo`, `start_mining`.
+- All steps are in the whitelist: `move_to`, `dock`, `undock`, `load_cargo`, `unload_cargo`, `start_mining`, `measure` and `scan` (C28). A `scan` of a body already scanned passes as done in one tick, with nothing revealed or paid, and a `start_mining` step names a deposit already found.
 - At least one step is `move_to`. This guarantees that each lap takes time.
 - Each step's references exist, and each `deposit` is known.
 - The cycle closes: walking the steps from step 0 and back to step 0, each step's placement follows from the one before.

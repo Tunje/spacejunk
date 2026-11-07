@@ -18,7 +18,7 @@ const MAX_CYCLE_STEPS := 16
 const MINING_STEP := "start_mining"
 const MOVE_STEP := "move_to"
 const CYCLE_STEPS: Array[String] = [
-	MOVE_STEP, "dock", "undock", "load_cargo", "unload_cargo", MINING_STEP, "measure",
+	MOVE_STEP, "dock", "undock", "load_cargo", "unload_cargo", MINING_STEP, "measure", "scan",
 ]
 const REASON_MALFORMED := "malformed_command"
 const REASON_INVALID_TARGET := "invalid_target"
