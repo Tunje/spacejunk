@@ -574,3 +574,117 @@ func stage_part_f() -> void:
 	queue(probe, "fabricator", "structural_frame", 6)
 	queue(probe, "fabricator", "ore_container_mk1", 1, [station, ""])
 	wait_jobs()
+
+
+# --- Stage 6 by design (D42) ---
+
+const DRONE_DESIGN := "mining_drone"
+## The station's propellant tank, the drone's depot, isn't part of the design: its two
+## frames and 100 kg of iron come from about 300 kg of hematite, refined in 3 runs.
+const DEPOT_HEMATITE_G := 300_000
+
+
+## Opens Jobs on the probe's fabricator, where the design's row is.
+func _open_design_jobs() -> void:
+	select("unit", probe)
+	if not industry.visible:
+		main.toggle_industry()
+	industry.refresh()
+	for entry: Dictionary in IndustryLogic.facilities(unit(probe), bridge.defs()["modules"]):
+		if entry["type"] == "fabricator":
+			industry.choose_facility(entry)
+	industry.refresh()
+
+
+## What the design's plan still lacks on the probe, by item, as its row shows it.
+func design_short(design: String) -> Dictionary:
+	_open_design_jobs()
+	var short: Dictionary = industry.design_plan(design)["short"]
+	main.toggle_industry()
+	return short
+
+
+## One press: Build with components.
+func build_design(design: String) -> void:
+	_open_design_jobs()
+	var pressed := false
+	for row: Dictionary in industry.design_rows:
+		if row["design"] == design:
+			(row["button"] as Button).pressed.emit()
+			pressed = true
+	if not pressed:
+		_problem("no Build with components row for %s" % design)
+	elif not industry._message.text.begins_with("Queued"):
+		_problem("Build with components: %s" % industry._message.text)
+	main.toggle_industry()
+	_kick()
+
+
+## One press: Fit all from the design, then the warp while it fits a part a tick.
+func fit_all_from(id: int, design: String) -> void:
+	select("unit", id)
+	main.toggle_fitting()
+	fitting.refresh()
+	var name: String = bridge.defs()["templates"][design]["name"]
+	var pressed := false
+	for button: Node in fitting._design_box.get_children():
+		if button is Button and (button as Button).text == "Fit all from %s" % name:
+			(button as Button).pressed.emit()
+			pressed = true
+	if not pressed:
+		_problem("no Fit all from %s" % name)
+	else:
+		warp_until(func() -> bool: return fitting.fit_all_design.is_empty(), "fit all", 1)
+		if fitting.fit_all_message.text != "%s is complete" % name:
+			_problem(fitting.fit_all_message.text)
+	main.toggle_fitting()
+
+
+## Stage 6 with the design: the ore its plan lacks mined where the rocks have it, then
+## Build with components and Fit all in place of the jobs and fits one by one.
+func stage_drone_by_design() -> void:
+	var names: Dictionary = bridge.defs()["items"]
+	load_from_host(names["hematite"]["name"], 0)
+	var short := design_short(DRONE_DESIGN)
+	short["hematite"] = int(short.get("hematite", 0)) + DEPOT_HEMATITE_G
+	note("The depot's propellant tank isn't in the design, so its refining and frames are still queued one by one: a Start with components on any recipe row would take them in one press too.")
+	var items: Array = short.keys()
+	items.sort()
+	for item: String in items:
+		var rock := _rock_with(item)
+		if rock == "":
+			_problem("no rock shows %s" % item)
+			return
+		fly_to("body", rocks[rock])
+		mine(rock, item, held(probe, item) + int(short[item]))
+	# Checked before the press: a started job has already taken its ore from the hold.
+	var still := design_short(DRONE_DESIGN)
+	if not still.is_empty():
+		_problem("the design still lacks %s after mining" % str(still))
+	build_design(DRONE_DESIGN)
+	queue(probe, "refinery", "refine_hematite", DEPOT_HEMATITE_G / 100_000)
+	queue(probe, "fabricator", "structural_frame", 2)
+	queue(probe, "fabricator", "propellant_tank_mk1", 1, [station, ""])
+	wait_jobs()
+	for id: int in bridge.current_view["units"]:
+		if unit(id)["kind"] == "drone":
+			drone = id
+	if drone == 0:
+		_problem("no drone was built")
+		return
+	fit_all_from(drone, DRONE_DESIGN)
+	if not problems.is_empty():
+		return
+	unload(names["propellant"]["name"], DEPOT_KG)
+	_wait_for_core(drone)
+	_fly_drone_lap_by_hand(names)
+	_repeat_with_auto()
+
+
+## A rock whose deposits show this item, by name.
+func _rock_with(item: String) -> String:
+	for id: int in bridge.current_view["deposits"]:
+		var shown: Dictionary = bridge.current_view["deposits"][id]
+		if shown["item"] == item:
+			return bridge.current_view["bodies"][shown["body"]]["name"]
+	return ""
