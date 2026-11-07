@@ -76,7 +76,7 @@ func test_load_moves_only_the_amount_asked() -> void:
 	panel.amount.value = 100
 	var key := ""
 	for order: Dictionary in panel._orders:
-		if order["command"]["type"] == "load_cargo":
+		if order["command"]["type"] == "load_cargo" and order["command"]["args"]["item"] == "propellant":
 			key = order["key"]
 	assert_ne(key, "")
 	assert_true(panel.press(key))
@@ -85,6 +85,29 @@ func test_load_moves_only_the_amount_asked() -> void:
 		if bridge.current_view["units"][ship]["op"]["type"] == "idle":
 			break
 	assert_eq(bridge.current_view["units"][ship]["inventory"].get("propellant", 0), 100_000, "100 kg, not a full tank")
+
+
+## D39b: Load offers whatever the host holds that the craft has a hold for, and Unload
+## anything aboard, propellant first in each, so a drone depot can be filled and ore
+## fetched back from a station.
+func test_load_and_unload_offer_every_held_item() -> void:
+	var items := {
+		"propellant": { "name": "Propellant", "cargo_class": "propellant" },
+		"hematite": { "name": "Hematite", "cargo_class": "ore" },
+		"wiring": { "name": "Wiring", "cargo_class": "goods" },
+	}
+	var shown := {
+		"units": {
+			1: { "inventory": { "propellant": 9, "hematite": 5 }, "dock": { "target_unit": 2 },
+				"cargo": { "ore": { "cap_g": 10 }, "propellant": { "cap_g": 10 } } },
+			2: { "inventory": { "wiring": 3, "propellant": 4, "hematite": 0 }, "dock": {}, "cargo": {} },
+		},
+	}
+	var orders: Array[Dictionary] = []
+	OrderList._add_transfer_orders(orders, shown, items, 1, 2)
+	var labels: Array = orders.map(func(order: Dictionary) -> String: return order["label"])
+	assert_eq(labels, ["Unload Propellant", "Unload Hematite", "Load Propellant"],
+		"no hold for wiring here, and none of the host's hematite left")
 
 
 func test_mine_takes_an_amount_in_kilograms() -> void:

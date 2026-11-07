@@ -85,7 +85,7 @@ func note(text: String) -> void:
 
 ## Warps until `done`, as a player would: at WARP, picking the speed up again after
 ## each drop to 1× (each one is a press for the player, so they are counted).
-func warp_until(done: Callable, label: String, speed := WARP) -> bool:
+func warp_until(done: Callable, label: String, speed := WARP, max_frames := MAX_FRAMES) -> bool:
 	print("PLAYER %s from tick %d" % [label, bridge.current_view["tick"]])
 	bridge.set_speed(speed)
 	bridge.set_paused(false)
@@ -94,10 +94,10 @@ func warp_until(done: Callable, label: String, speed := WARP) -> bool:
 	var collect := func(events: Array[Dictionary]) -> void:
 		seen = events.size()
 		for event: Dictionary in events:
-			if bridge.speed == 1 and WarpLogic.needs_attention([event], bridge.warp_through_jobs, bridge.current_view.get("jobs", {})):
+			if bridge.speed == 1 and WarpLogic.needs_attention([event], bridge.warp_through_jobs, bridge.current_view.get("jobs", {}), bridge.previous_view):
 				drops[event["type"]] = int(drops.get(event["type"], 0)) + 1
 	bridge.events_received.connect(collect)
-	while not done.call() and frames < MAX_FRAMES:
+	while not done.call() and frames < max_frames:
 		if bridge.speed != speed:
 			bridge.set_speed(speed)
 		bridge.advance(FRAME_SECONDS)
@@ -106,7 +106,7 @@ func warp_until(done: Callable, label: String, speed := WARP) -> bool:
 	bridge.set_paused(true)
 	view.refresh(0.016)
 	orders.refresh()
-	if frames >= MAX_FRAMES:
+	if frames >= max_frames:
 		var open := PackedStringArray()
 		for id: int in bridge.current_view["jobs"]:
 			var job: Dictionary = bridge.current_view["jobs"][id]
@@ -198,11 +198,20 @@ func mine(rock: String, item: String, target_g: int) -> void:
 
 
 func unload(item_name: String, count: int) -> void:
-	take_command(probe)
+	transfer("Unload", item_name, count)
+
+
+## Load from the docked host: `count` items, or kilograms of bulk cargo, 0 for all that fits.
+func load_from_host(item_name: String, count: int) -> void:
+	transfer("Load", item_name, count)
+
+
+func transfer(verb: String, item_name: String, count: int, id := 0) -> void:
+	take_command(id if id != 0 else probe)
 	select("", 0)
 	orders.amount.value = count
 	orders.refresh()
-	order("Unload %s" % item_name)
+	order("%s %s" % [verb, item_name])
 	orders.amount.value = 0
 
 
@@ -237,8 +246,11 @@ func queue(on: int, facility_type: String, recipe: String, runs: int, into: Arra
 	else:
 		industry.open_picker(row["recipe"])
 		var pressed := false
+		# A connector of "" takes the first spot on offer on that unit, as a player would.
 		for slot: Dictionary in industry._slot_buttons:
-			if slot["unit"] == into[0] and slot["slot"]["connector"] == into[1]:
+			if pressed or (into[1] == "" and (slot["button"] as Button).disabled):
+				continue
+			if slot["unit"] == into[0] and (into[1] == "" or slot["slot"]["connector"] == into[1]):
 				if (slot["button"] as Button).disabled:
 					_problem("Build %s into %s refused: %s" % [recipe, into[1], (slot["button"] as Button).tooltip_text])
 				else:
@@ -266,10 +278,11 @@ func wait_jobs(recipes: Array = []) -> void:
 
 # --- Fitting ---
 
-## Fits a part from the probe's hold onto the station with Fit, and returns the verdict
-## when it's refused ("" when it fitted).
-func fit(item: String, connector: String) -> String:
-	select("unit", station)
+## Fits a part from the docked group's holds onto a unit (the station by default) with
+## Fit, on `connector` of the part made from `parent_def` (any, for ""), and returns
+## the verdict when it's refused ("" when it fitted).
+func fit(item: String, connector: String, on := 0, parent_def := "") -> String:
+	select("unit", on if on != 0 else station)
 	main.toggle_fitting()
 	fitting.refresh()
 	var name_text: String = bridge.defs()["modules"][item]["name"]
@@ -282,8 +295,11 @@ func fit(item: String, connector: String) -> String:
 		_problem("no %s in Fit's stock" % item)
 		main.toggle_fitting()
 		return "missing"
+	var defs_by_part: Dictionary = {}
+	for part: Dictionary in InspectText.flatten(fitting.unit()["parts"]):
+		defs_by_part[part["id"]] = part["def"]
 	for slot: Dictionary in FittingLogic.free_slots(fitting.unit(), fitting._modules):
-		if slot["connector"] == connector:
+		if slot["connector"] == connector and (parent_def == "" or defs_by_part[slot["part"]] == parent_def):
 			fitting.choose_slot(slot)
 	var refused := ""
 	if fitting._attach_button.disabled:
@@ -414,4 +430,129 @@ func stage_research() -> void:
 	unload(names["prototype:assisted_core"]["name"], 1)
 	unload(names["processor"]["name"], 10)
 	queue(station, "lab", "qualify:assisted_core", 1)
+	wait_jobs()
+
+
+## Stage 6 (C22): ore gathered and refined, the drone's parts and hull built (the hull
+## at a free port of the group), fitted from the probe's hold with Fit, its Assisted
+## Core assigned in Auto, one lap flown by hand and repeated with Auto, three laps run
+## and stopped; then Part F's second ore store built into the station.
+const DRONE_ORE := [["Red Rock", "hematite", 900_000, "refine_hematite", 9],
+	["Brass Rock", "chalcopyrite", 400_000, "refine_chalcopyrite", 4],
+	["Green Rock", "olivine", 200_000, "refine_olivine", 2]]
+const DRONE_FIT := [["small_solar_panel_mk1", "side_a_px", ""], ["small_heat_radiator_mk1", "side_a_nx", ""],
+	["small_propellant_tank_mk1", "stack_bottom", "small_hull"],
+	["small_chemical_thruster_mk1", "stack_bottom", "small_propellant_tank_mk1"],
+	["small_ore_container_mk1", "side_a_pz", ""], ["small_mining_laser_mk1", "side_a_nz", ""],
+	["small_battery_bank_mk1", "side_b_nx", ""], ["assisted_core", "core", ""]]
+const DEPOT_KG := 500
+const LAP_KG := 500
+const DRONE_LAPS := 3
+## The last lap in step mode, so the warp stops within a few ticks of its end, still
+## docked; a lap at this speed needs up to LAST_LAP_FRAMES.
+const LAST_LAP_SPEED := 4
+const LAST_LAP_FRAMES := 1000
+
+var drone := 0
+var laps := 0
+
+
+func stage_drone() -> void:
+	var names: Dictionary = bridge.defs()["items"]
+	load_from_host(names["hematite"]["name"], 0)
+	for trip: Array in DRONE_ORE:
+		fly_to("body", rocks[trip[0]])
+		mine(trip[0], trip[1], trip[2])
+		queue(probe, "refinery", trip[3], trip[4])
+	for job: Array in [["structural_frame", 11], ["wiring", 11], ["processor", 14], ["basic_core", 1], ["assisted_core", 1]]:
+		queue(probe, "fabricator", job[0], job[1])
+	for entry: Array in DRONE_FIT:
+		if entry[0] != "assisted_core":
+			queue(probe, "fabricator", entry[0], 1)
+	queue(probe, "fabricator", "small_craft", 1)
+	queue(probe, "fabricator", "propellant_tank_mk1", 1, [station, ""])
+	wait_jobs()
+	for id: int in bridge.current_view["units"]:
+		if unit(id)["kind"] == "drone":
+			drone = id
+	if drone == 0:
+		_problem("no drone was built")
+		return
+	for entry: Array in DRONE_FIT:
+		var refused := fit(entry[0], entry[1], drone, entry[2])
+		if refused != "":
+			_problem("Fit %s on the drone refused: %s" % [entry[0], refused])
+			return
+	take_command(drone)
+	if not main.automation_screen.visible:
+		main.toggle_automation()
+	main.automation_screen.refresh()
+	for core: Dictionary in CyclePlan.cores(unit(drone), bridge.defs()["modules"]):
+		main.automation_screen.assign(core["part"])
+	_kick()
+	if int(unit(drone)["core_tier"]) < 2:
+		_problem("the drone's Assisted Core was not assigned: %s" % main.automation_screen._message.text)
+	main.toggle_automation()
+	unload(names["propellant"]["name"], DEPOT_KG)
+	_fly_drone_lap_by_hand(names)
+	_repeat_with_auto()
+
+
+## The lap a player flies once so Auto can repeat it: fuel, out to Red Rock, mine a
+## hold's worth, back, dock and unload.
+func _fly_drone_lap_by_hand(names: Dictionary) -> void:
+	transfer("Load", names["propellant"]["name"], 0, drone)
+	order("Undock")
+	select("body", rocks["Red Rock"])
+	order("Move to")
+	var deposit := 0
+	for id: int in bridge.current_view["deposits"]:
+		var shown: Dictionary = bridge.current_view["deposits"][id]
+		if shown["body"] == rocks["Red Rock"] and shown["item"] == "hematite":
+			deposit = id
+	orders.amount.value = LAP_KG
+	orders.refresh()
+	order("Mine %d" % deposit)
+	orders.amount.value = 0
+	select("unit", station)
+	order("Move to")
+	select("unit", station)
+	order("Dock")
+	transfer("Unload", names["hematite"]["name"], 0, drone)
+
+
+## Auto's Repeat this route, three laps warped, then Stop cycle while docked.
+func _repeat_with_auto() -> void:
+	take_command(drone)
+	main.toggle_automation()
+	main.automation_screen.refresh()
+	main.automation_screen.repeat_route()
+	_kick()
+	main.toggle_automation()
+	if CyclePlan.running_cycle(unit(drone), bridge.current_view).is_empty():
+		_problem("Repeat this route did not start a cycle: %s" % main.automation_screen._message.text)
+		return
+	var count := func(events: Array[Dictionary]) -> void:
+		for event: Dictionary in events:
+			if event["unit"] == drone and event["type"] == "task_cycle_done":
+				laps += 1
+			if event["unit"] == drone and ["task_blocked", "task_cancelled"].has(event["type"]):
+				_problem("the drone's cycle %s: %s" % [event["type"], event["data"].get("reason", "")])
+	bridge.events_received.connect(count)
+	warp_until(func() -> bool: return laps >= DRONE_LAPS - 1 or not problems.is_empty(), "drone laps")
+	warp_until(func() -> bool: return laps >= DRONE_LAPS or not problems.is_empty(), "last lap", LAST_LAP_SPEED, LAST_LAP_FRAMES)
+	bridge.events_received.disconnect(count)
+	take_command(drone)
+	select("", 0)
+	press("Stop")
+	_kick()
+
+
+## Part F: ore from the station refined into a second ore store, built into the station.
+func stage_part_f() -> void:
+	var names: Dictionary = bridge.defs()["items"]
+	load_from_host(names["hematite"]["name"], 500)
+	queue(probe, "refinery", "refine_hematite", 5)
+	queue(probe, "fabricator", "structural_frame", 6)
+	queue(probe, "fabricator", "ore_container_mk1", 1, [station, ""])
 	wait_jobs()
