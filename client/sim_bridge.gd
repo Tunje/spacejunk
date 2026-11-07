@@ -33,6 +33,12 @@ var current_view: Dictionary = {}
 var warp_through_jobs := false
 ## FRAME_BUDGET_MS for play; a headless test may allow more, to warp through hours fast.
 var frame_budget_ms := FRAME_BUDGET_MS
+## For tests only (the playthrough): a warp frame's work is counted in ticks, not wall
+## time, with steps in FIXED_BATCH batches and at most FIXED_STEP_BUDGET stepped ticks a
+## frame, so the same start gives the same tick for every action. Off in play.
+var fixed_ticks := false
+const FIXED_BATCH := 100
+const FIXED_STEP_BUDGET := 20_000
 ## Game speed actually reached, smoothed, and why it was held back ("" when not).
 var achieved_speed := 1.0
 var capped_by := ""
@@ -130,8 +136,10 @@ func _warp(due: int, events: Array[Dictionary]) -> Dictionary:
 	var coasting := WarpLogic.mode(speed) == "coast" and sim.has_method("coast")
 	var cap := "no_coast" if WarpLogic.mode(speed) == "coast" and not coasting else ""
 	var advanced := 0
+	var stepped := 0
 	while advanced < due:
-		if (Time.get_ticks_usec() - started) / 1000.0 >= frame_budget_ms:
+		var spent: bool = stepped >= FIXED_STEP_BUDGET if fixed_ticks else (Time.get_ticks_usec() - started) / 1000.0 >= frame_budget_ms
+		if spent:
 			if cap.is_empty():
 				cap = "busy_world"
 			break
@@ -144,12 +152,15 @@ func _warp(due: int, events: Array[Dictionary]) -> Dictionary:
 		else:
 			# Unmeasured, one tick first, so a slow world can't blow the frame before it's known.
 			var per_batch := 1 if _ms_per_tick <= 0.0 else maxi(1, floori(BATCH_SLICE_MS / _ms_per_tick))
+			if fixed_ticks:
+				per_batch = FIXED_BATCH
 			var batch := mini(due - advanced, per_batch)
 			var before := Time.get_ticks_usec()
 			sim.step(batch)
 			var measured := (Time.get_ticks_usec() - before) / 1000.0 / batch
 			_ms_per_tick = measured if measured > _ms_per_tick else lerpf(_ms_per_tick, measured, 0.3)
 			advanced += batch
+			stepped += batch
 		var got: Array[Dictionary] = sim.take_events()
 		events.append_array(got)
 		# A finished run is judged against the view after the frame, so not here.
