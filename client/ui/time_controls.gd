@@ -8,6 +8,8 @@ signal policy_pressed
 signal fit_pressed
 signal jobs_pressed
 signal research_pressed
+## A fresh game of a start (Main.STARTS), from the New menu.
+signal new_game_pressed(scenario: String)
 signal auto_pressed
 signal save_pressed
 signal load_pressed
@@ -88,6 +90,14 @@ func _ready() -> void:
 	load_button.focus_mode = Control.FOCUS_NONE
 	load_button.pressed.connect(func() -> void: load_pressed.emit())
 	row.add_child(load_button)
+	var new_button := MenuButton.new()
+	new_button.text = "New"
+	new_button.focus_mode = Control.FOCUS_NONE
+	new_button.flat = false
+	for index in range(Main.STARTS.size()):
+		new_button.get_popup().add_item(Main.START_NAMES[Main.STARTS[index]], index)
+	new_button.get_popup().id_pressed.connect(func(index: int) -> void: new_game_pressed.emit(Main.STARTS[index]))
+	row.add_child(new_button)
 	_clock = Label.new()
 	_clock.custom_minimum_size = Vector2(190, 0)
 	_clock.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
