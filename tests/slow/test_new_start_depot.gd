@@ -14,12 +14,12 @@ func before_all() -> void:
 	bot.play_through(NewStartBot.STAGE_DEPOT)
 	gut.p("the depot: ticks %d to %d (%.1f game hours in all)" % [start, bot.total_ticks(),
 		bot.total_ticks() / 36000.0])
-	for line in bot.report(start, ["refinery_built", "cycle_stopped"]):
+	for line in bot.report(start, ["depot_ore", "panels_on", "refinery_built", "cycle_stopped"]):
 		gut.p(line)
 	for i in bot.laps.size():
 		gut.p("  lap %d: %s" % [i + 1, str(bot.laps[i])])
-	gut.p("  runs %s, paused %s, skips %d, goods full at %d, stop %s" % [str(bot.runs),
-		str(bot.paused_ticks), bot.skips, bot.goods_full_tick, str(bot.stop)])
+	gut.p("  runs %s, last runs %s, paused %s, skips %d, stop %s" % [str(bot.runs), str(bot.last_run),
+		str(bot.paused_ticks), bot.skips, str(bot.stop)])
 
 
 func test_the_stage_runs_with_every_ledger_balanced() -> void:
@@ -35,6 +35,7 @@ func test_the_refinery_is_built_where_the_lidar_was() -> void:
 	var defs: Array = InspectText.flatten(station["parts"]).map(func(part: Dictionary) -> String: return part["def"])
 	assert_has(defs, "compact_refinery_mk1")
 	assert_does_not_have(defs, "lidar_mk1")
+	assert_eq(defs.count("solar_panel_mk1"), 4, "two on the depot's sides")
 	assert_gt(bot.sim._state["units"][bot.station]["inventory"].get("lidar_mk1", 0), 0, "in the goods hold")
 
 

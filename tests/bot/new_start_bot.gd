@@ -71,11 +71,16 @@ const DRONE_LAPS := 3
 ## six frames (Part F).
 const STORE_ORE_G := 500_000
 const DRONE_LIMIT_TICKS := 200_000
-## Stage 7 (C23): ore held for compact_refinery_mk1's 15 frames, 10 wiring and 10 processors,
-## with the station's hematite loaded first, and the runs that refine it.
-const REFINERY_ORE := [[RED_ROCK, "hematite", 1_200_000, "refine_hematite", 12],
-	[BRASS_ROCK, "chalcopyrite", 400_000, "refine_chalcopyrite", 4],
-	[GREEN_ROCK, "olivine", 300_000, "refine_olivine", 3]]
+## Stage 7 (C23): ore held for compact_refinery_mk1's 15 frames, 10 wiring and 10 processors, and
+## two solar_panel_mk1's 4 frames, 4 wiring and 60 kg of silicon, with the station's hematite loaded
+## first, and the runs that refine it. The hold cannot take it all at once, so the hematite is
+## refined before the olivine trip.
+const REFINERY_ORE := [[RED_ROCK, "hematite", 1_400_000, "refine_hematite", 14],
+	[BRASS_ROCK, "chalcopyrite", 500_000, "refine_chalcopyrite", 5],
+	[GREEN_ROCK, "olivine", 600_000, "refine_olivine", 6]]
+## The depot's sides that carry the refinery's extra power: the station's two panels give 120 kW
+## against 202 kW rated with the refinery, and these two make it 240 (B, Part F2).
+const DEPOT_PANEL_SIDES := ["side_px", "side_nx"]
 ## The station refinery's two standing jobs, ice first so propellant wins when there is ice.
 const STANDING_RUNS := 10_000
 const DEPOT_LIMIT_TICKS := 600_000
@@ -110,14 +115,14 @@ var lab := 0
 var drone := 0
 var station_refinery := 0
 ## Stage 7's figures: each two-rock lap, grams delivered by item, the station refinery's runs by
-## recipe and ticks paused by reason, its job_went_ahead count, when its goods filled, and how the
-## cycle stopped.
+## recipe, the tick of each recipe's last run, ticks paused by reason, its job_went_ahead count, and
+## how the cycle stopped.
 var laps: Array[Dictionary] = []
 var delivered := {}
 var runs := {}
+var last_run := {}
 var paused_ticks := {}
 var skips := 0
-var goods_full_tick := 0
 var stop := {}
 ## The last stage run.
 var stage := 0
@@ -439,11 +444,24 @@ func _depot_stage() -> void:
 	_coast(1)
 	_order("load_cargo", PROBE, { "from": station, "item": "hematite" })
 	for entry: Array in REFINERY_ORE:
+		if entry[1] == "olivine":
+			_wait_for(["refine_hematite"], true)
 		_order("move_to", PROBE, { "target": entry[0] })
 		_mine(entry[1], entry[2])
 		_queue([[refinery, entry[3], entry[4]]])
-	_queue([[fabricator, "structural_frame", 15], [fabricator, "wiring", 10], [fabricator, "processor", 10],
-		[fabricator, "compact_refinery_mk1", 1, _on_station(_free_station_mount("compact_refinery_mk1"))]])
+	mark("depot_ore")
+	var depot := 0
+	for part: int in Units.sorted_part_ids(sim._state, station):
+		if sim._state["parts"][part]["def"] == "propellant_tank_mk1":
+			depot = part
+	_queue([[fabricator, "structural_frame", 19], [fabricator, "wiring", 14], [fabricator, "processor", 10]])
+	for side: String in DEPOT_PANEL_SIDES:
+		_queue([[fabricator, "solar_panel_mk1", 1,
+			{ "unit": station, "parent_part": depot, "parent_connector": side, "part_connector": "mount" }]])
+	# The refinery's own fit is dry-run when it is queued, so the panels go on first.
+	_wait_for(["solar_panel_mk1"], true)
+	mark("panels_on")
+	_queue([[fabricator, "compact_refinery_mk1", 1, _on_station(_free_station_mount("compact_refinery_mk1"))]])
 	_wait_for([], true)
 	if not problems.is_empty():
 		return
@@ -509,20 +527,18 @@ func _run_two_rock_cycle() -> void:
 		problems.append("the drone's two-rock cycle did not stop within %d ticks" % DEPOT_LIMIT_TICKS)
 
 
-## Counts the station refinery's runs and paused ticks by reason, and when its goods fill.
+## Counts the station refinery's runs, the tick of each recipe's last, and paused ticks by reason.
+## A queued job holds no reason, so the goods filling shows as the last hematite run.
 func _on_station_job(event: Dictionary, paused_since: Dictionary) -> void:
 	var data: Dictionary = event["data"]
-	var job: Dictionary = sim._state["jobs"].get(data.get("job", 0), {})
 	match event["type"]:
 		"job_finished":
 			runs[data["recipe"]] = runs.get(data["recipe"], 0) + 1
+			last_run[data["recipe"]] = event["tick"]
 		"job_went_ahead":
 			skips += 1
 		"job_paused":
 			paused_since[data["job"]] = [data["reason"], event["tick"]]
-			if data["reason"] == "output_full" and not job.is_empty() and job["recipe"] == "refine_hematite" \
-					and goods_full_tick == 0:
-				goods_full_tick = event["tick"]
 		"job_resumed":
 			if paused_since.has(data["job"]):
 				var since: Array = paused_since[data["job"]]
