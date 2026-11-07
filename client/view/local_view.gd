@@ -26,7 +26,12 @@ var bridge: SimBridge
 var selected_kind := ""
 var selected_id := 0
 var selected_part := 0
-var commanded_unit := 0
+## The craft given orders; the bridge is told too, so its orders end a warp (D40).
+var commanded_unit := 0:
+	set(value):
+		commanded_unit = value
+		if bridge != null:
+			bridge.commanded_unit = value
 var focus_kind := "unit"
 var focus_id := 0
 var crafts: Dictionary = {}
@@ -69,6 +74,7 @@ func rebuild() -> void:
 
 func bind(new_bridge: SimBridge) -> void:
 	bridge = new_bridge
+	bridge.commanded_unit = commanded_unit
 	_modules = bridge.defs()["modules"]
 	bridge.defs_changed.connect(func() -> void: _modules = bridge.defs()["modules"])
 	_sync_entities()

@@ -72,6 +72,14 @@ try {
                 Write-Output ("SLOW: {0} took {1:N0} s, over the 20 s per file guide" -f $suite.name, $seconds)
             }
         }
+        # The failing tests and their asserts, last, so they stay in the tail of any capture (A45).
+        foreach ($case in $report.SelectNodes('//testcase[failure or error]')) {
+            foreach ($problem in $case.SelectNodes('failure|error')) {
+                $text = ($problem.InnerText -replace '\s+', ' ').Trim()
+                if ($text.Length -gt 300) { $text = $text.Substring(0, 300) + '...' }
+                Write-Output ("FAILED TEST: {0} :: {1} :: {2}" -f $case.classname, $case.name, $text)
+            }
+        }
         Remove-Item $junit -ErrorAction SilentlyContinue
     }
 } catch {

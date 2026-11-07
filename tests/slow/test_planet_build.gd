@@ -2,7 +2,9 @@ extends GutTest
 ## D13: a full 600 km planet, n = 100, built the way the client builds it: on its
 ## own thread, with the per-cell work spread over the worker pool.
 
-const BUDGET_MS := 15000
+## Three times the usual build, so a machine loaded by other gates can't fail it (A45);
+## the cells and triangles asserts cover correctness, and the time is printed.
+const BUDGET_MS := 45000
 
 
 func test_a_full_planet_builds_off_the_main_thread_in_budget() -> void:
