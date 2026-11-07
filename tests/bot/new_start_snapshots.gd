@@ -8,7 +8,7 @@ extends SceneTree
 ## The stage each slow file ends on, in order.
 const FILE_ENDS: Array[int] = [
 	NewStartBot.STAGE_CHAIN, NewStartBot.STAGE_PREP, NewStartBot.STAGE_LAB, NewStartBot.STAGE_LAP,
-	NewStartBot.STAGE_RESEARCH, NewStartBot.STAGE_DRONE,
+	NewStartBot.STAGE_RESEARCH, NewStartBot.STAGE_DRONE, NewStartBot.STAGE_DEPOT,
 ]
 
 

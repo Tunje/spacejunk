@@ -384,7 +384,7 @@ This shape is frozen. Fields may be added, but changes or removals go through th
     cargo = { "ore": { used_g = 0, cap_g = 0, used_l = 0, cap_l = 0 } },
     fit = { mass_g = 0, mass_limit_g = 0, power_budget_w = 0, power_rated_w = 0,
             heat_budget_w = 0, heat_rated_w = 0 },
-    power = { supply_w = 0, in_shadow = false, demand_w = 0, stored_j = 0, capacity_j = 0, max_discharge_w = 0 },
+    power = { supply_w = 0, in_shadow = false, demand_w = 0, stored_j = 0, capacity_j = 0, max_discharge_w = 0, sun_tick = 0 },
     heat = { stored_j = 0, limit_j = 0, reject_w = 0, input_w = 0 },
   } },
   bodies = { 3: { kind = "asteroid", pos_mm = [], radius_mm = 0, visual_seed = 0, scanned = false,
@@ -403,6 +403,7 @@ This shape is frozen. Fields may be added, but changes or removals go through th
 ```
 
 - `power.supply_w` is what the generators give this tick. Generators are solar, so it is 0 while `in_shadow`: a body with gravity stands between the unit and the star, by a cylinder test (from A16).
+- `power.sun_tick` is 0 while the unit is lit. While `in_shadow` it is the first tick the unit is lit again, worked out exactly by the coast's shadow walk (A46). It is -1 if that can't be foreseen: the unit's place ahead isn't on rails or a route, a transfer leg or an arrival comes first, or there is no way out within about 28 hours of ticks. It assumes nothing else changes the unit's motion first (A48).
 - `op.type`: `idle`, `moving`, `waiting`, `docking`, `undocking`, `loading`, `unloading`, `mining`, `scanning`, `measuring` or `burning`. A `move_to` between places is `waiting` until its window. Its op carries `depart_tick`, and `end_tick` is `depart_tick - 1`. Nothing is paid while waiting, and `stop` cancels it freely. From departure it is `moving`, with the unit's `transfer` set to `{ target, depart_tick, arrive_tick, legs }` and `route` left `{}`. A paid transfer is atomic and runs to arrival.
 - A trip across a sphere of influence (from A18) is a chain of orbits. `transfer.legs` lists the legs still to come, each `{ orbit, from_tick }`, and the unit's `orbit` switches to each in turn in phase 2 of its tick. That is a Hohmann ellipse, then a hyperbola around the moon or planet, then a phasing orbit, or the reverse. A trip within one sphere has `legs = []`. A trip two levels apart (from A22), such as from a star orbit to a moon of its planet, is two such chains joined at a parking circle around the planet, six legs in all. Its approach to the moon may be an ellipse rather than a hyperbola.
 - While waiting, the op keeps the trip it will fly as `plan`. It is the same dictionary `quote` gives, so a save mid-wait leaves on exactly the same legs. While `burning`, `part` is the thruster, which draws power and gives heat like any running load. A shed thruster gives no thrust that tick.

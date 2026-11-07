@@ -38,6 +38,14 @@ var _copy_scroll: ScrollContainer
 var _copy_box: VBoxContainer
 var _copy_key := ""
 var _copy_rows: Array[Dictionary] = []
+## "Fit all from <design>" (D42): one button per design this craft can become, and
+## the run in progress, one part a tick, each checked before it is sent.
+var _design_box: VBoxContainer
+var _design_key := ""
+var fit_all_design := ""
+var fit_all_unit := 0
+var fit_all_message: Label
+var _fit_all_sent_tick := -10
 
 
 func _ready() -> void:
@@ -76,6 +84,12 @@ func _ready() -> void:
 	_attach_button.pressed.connect(attach)
 	_remove_button = _add_button(column, "Remove selected part")
 	_remove_button.pressed.connect(remove_selected)
+	_design_box = VBoxContainer.new()
+	_design_box.add_theme_constant_override("separation", 4)
+	column.add_child(_design_box)
+	fit_all_message = _add_label(column)
+	fit_all_message.modulate = ClientTheme.GOLD
+	fit_all_message.visible = false
 	column.add_child(HSeparator.new())
 	_copy_heading = _add_label(column)
 	_copy_heading.text = "Fit like another craft"
@@ -97,6 +111,7 @@ func bind(new_bridge: SimBridge, view: LocalView, new_markers: FittingMarkers) -
 	_modules = bridge.defs()["modules"]
 	bridge.defs_changed.connect(func() -> void: _modules = bridge.defs()["modules"])
 	bridge.view_updated.connect(refresh)
+	bridge.view_updated.connect(_continue_fit_all)
 	local_view.selection_changed.connect(refresh)
 	local_view.click_filter = allows_click
 
@@ -183,6 +198,7 @@ func refresh() -> void:
 	var remove := _remove_command()
 	_remove_button.disabled = remove.is_empty() or not bridge.check(remove)["ok"]
 	_sync_copy()
+	_sync_designs(shown)
 
 
 ## The copy_fit order for one source, taking parts from the first stock that
@@ -329,3 +345,77 @@ func _add_button(parent: Control, text: String) -> Button:
 	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	parent.add_child(button)
 	return button
+
+
+# --- Fit all from a design (D42) ---
+
+## The design buttons, rebuilt only when the craft or its root part changes.
+func _sync_designs(shown: Dictionary) -> void:
+	var key := "%d:%s" % [fit_unit(), shown.get("parts", {}).get("def", "")]
+	if key == _design_key:
+		return
+	_design_key = key
+	for child: Node in _design_box.get_children():
+		_design_box.remove_child(child)
+		child.queue_free()
+	var defs: Dictionary = bridge.defs()
+	for design: String in DesignLogic.designs_for_unit(shown, defs):
+		var template: Dictionary = defs["templates"][design]
+		var button := _add_button(_design_box, "Fit all from %s" % template["name"])
+		button.tooltip_text = template.get("summary", "")
+		button.pressed.connect(fit_all.bind(design))
+
+
+## Starts fitting every part of a design the craft still lacks, in the design's order,
+## then assigns its core. Each part goes on once the one before is on.
+func fit_all(design: String) -> void:
+	fit_all_design = design
+	fit_all_unit = fit_unit()
+	_fit_all_sent_tick = -10
+	_show_fit_all("")
+	_continue_fit_all()
+
+
+func _continue_fit_all() -> void:
+	if fit_all_design.is_empty() or bridge.current_view["tick"] < _fit_all_sent_tick + 1:
+		return
+	var view: Dictionary = bridge.current_view
+	var shown: Dictionary = view["units"].get(fit_all_unit, {})
+	var defs: Dictionary = bridge.defs()
+	var name: String = defs["templates"][fit_all_design]["name"]
+	if shown.is_empty():
+		_stop_fit_all("Fit all stopped: the craft is gone")
+		return
+	var node := DesignLogic.next_fit(fit_all_design, shown, defs)
+	var command := {}
+	if node.is_empty():
+		var core := DesignLogic.core_to_assign(fit_all_design, shown, defs)
+		if core == 0:
+			_stop_fit_all("%s is complete" % name)
+			return
+		command = { "type": "assign_core", "unit": fit_all_unit, "args": { "core": core } }
+	else:
+		var group: Array = [fit_all_unit]
+		group.append_array(FittingLogic.docked_group(view, fit_all_unit))
+		command = DesignLogic.fit_command(node, fit_all_unit, view, group)
+		if command.is_empty():
+			_stop_fit_all("Fit all stopped: no %s in this craft or any docked with it" % IndustryLogic.name_of(node["part"], defs))
+			return
+	var result: Dictionary = bridge.check(command)
+	if not result["ok"]:
+		_stop_fit_all("Fit all stopped: %s" % OrderText.reason(result["reason"], result["detail"]))
+		return
+	bridge.submit(command)
+	_fit_all_sent_tick = view["tick"]
+	_show_fit_all("Fitting %s: %s" % [name, IndustryLogic.name_of(node.get("part", "core"), defs) if not node.is_empty() else "assigning its core"])
+
+
+func _stop_fit_all(text: String) -> void:
+	fit_all_design = ""
+	_show_fit_all(text)
+
+
+func _show_fit_all(text: String) -> void:
+	fit_all_message.text = text
+	fit_all_message.visible = not text.is_empty()
+
