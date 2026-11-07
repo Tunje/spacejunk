@@ -353,5 +353,6 @@ Measured through the whole chain:
 - **Research (Part D):** the probe never burns after Part C, and reaches goal 9 with 1,701 kg.
 - **The drone (Part E):** the material trips, towing the station, cost 339 kg. The depot takes 500 kg, and the probe ends with 862 kg.
 - **The drone's laps:** 28.8 kg each. Its 100 kg tank covers three laps without a refuel. It refuels every lap from the depot.
+- **The loop (Part F2):** the ice leg makes about 166 kg a cycle against about 51 kg burned, so the depot fills. The ore stores fill instead, in about 5.6 game hours. Person-paced times and the loop's pricing are in [balance.md](balance.md) section 9.
 
 **Landing on Frost** is optional, and the optional part of Part D prices it. Following the hint, it leaves about 227 m/s spare; without the ice top-up, the probe strands. At the end state the probe has 862 kg. A landing for Photovoltaic Arrays (research.md 5.1) needs the tank filled from ice first: about 1,640 kg, roughly three ore holds of ice.
