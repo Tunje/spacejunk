@@ -51,14 +51,21 @@ static func plan_between(ctx: SimContext, unit_id: int, mine: Dictionary, theirs
 		var crossing := SoiTransfer.plan(ctx, unit_id, mine, theirs, target, mass_g, from_tick, found)
 		if not crossing.has("reason"):
 			crossing["plane_change_dv_um_s"] = 0
+			crossing["plane_change_at"] = ""
 		return crossing
 	if not _near_circular(mine, theirs):
 		return { "reason": REASON_UNSUPPORTED }
 	var gm: int = ctx.state["bodies"][mine["parent"]]["gm"]
 	if not _coplanar(mine, theirs):
-		return _plane_change_plan(mine, theirs, target, gm, mass_g, from_tick, found)
+		# Both ways of changing plane are planned, and the cheaper flown, ties to the first (A41b).
+		var low := _plane_change_plan(mine, theirs, target, gm, mass_g, from_tick, found)
+		var high := _combined_plan(mine, theirs, target, gm, mass_g, from_tick, found)
+		if high.has("reason") or (not low.has("reason") and int(low["cost_g"]) <= int(high["cost_g"])):
+			return low
+		return high
 	var plan := _coplanar_plan(mine, theirs, target, gm, mass_g, from_tick, found)
 	plan["plane_change_dv_um_s"] = 0
+	plan["plane_change_at"] = ""
 	return plan
 
 
@@ -138,21 +145,9 @@ static func _plane_change_plan(mine: Dictionary, theirs: Dictionary, target: int
 	if node < 0:
 		return { "reason": REASON_UNSUPPORTED }
 	var now := OrbitMath.state_at(mine, gm, node)
-	var r: Array = now["r"]
-	var off := OrbitMath.dot(r, normal)
-	var flat: Array[int] = []
-	for axis in 3:
-		flat.append(int(r[axis]) - OrbitMath.smul_div(normal[axis], off, OrbitMath.ONE))
-	var radius := IntMath.dist(flat, [0, 0, 0])
-	var p := OrbitMath.unit(flat)
-	var q := OrbitMath.unit(OrbitMath.cross(normal, p))
-	var circle := OrbitMath.make_orbit(gm, radius, 0, p, q, 0, node)
-	circle["parent"] = mine["parent"]
-	var speed := OrbitMath.speed_um_s(gm, radius, radius)
-	var after: Array[int] = []
-	for axis in 3:
-		after.append(OrbitMath.smul_div(q[axis], speed, OrbitMath.ONE))
-	var change := IntMath.dist(now["v"], after)
+	var ring := _ring_through(now["r"], normal, gm, mine["parent"], node)
+	var circle: Dictionary = ring[0]
+	var change := IntMath.dist(now["v"], ring[1])
 	var change_g := OrbitMath.burn_g(mass_g, change, found["exhaust_mm_s"])
 	var rest := _coplanar_plan(circle, theirs, target, gm, mass_g - change_g, node + 1, found)
 	var ellipse := launch_orbit(circle, gm, rest["orbit_a_mm"], rest["depart_tick"])
@@ -162,8 +157,99 @@ static func _plane_change_plan(mine: Dictionary, theirs: Dictionary, target: int
 		"kind": KIND, "target": target, "depart_tick": node, "arrive_tick": rest["arrive_tick"],
 		"ticks": rest["arrive_tick"] - node + 1, "cost_g": change_g + rest["cost_g"],
 		"dv_um_s": change + rest["dv_um_s"], "orbit_a_mm": rest["orbit_a_mm"],
-		"plane_change_dv_um_s": change,
+		"plane_change_dv_um_s": change, "plane_change_at": "start",
 		"legs": [{ "orbit": circle, "from_tick": node }, { "orbit": ellipse, "from_tick": rest["depart_tick"] }],
+	}
+
+
+## [the circle round the parent in the plane with this normal through point r moved into it, the
+## circle's velocity there]: the point is at most a tick's motion off the plane, so the circle starts
+## up to a few metres from it (A41a, A41b).
+static func _ring_through(r: Array, normal: Array, gm: int, parent: int, tick: int) -> Array:
+	var off := OrbitMath.dot(r, normal)
+	var flat: Array[int] = []
+	for axis in 3:
+		flat.append(int(r[axis]) - OrbitMath.smul_div(normal[axis], off, OrbitMath.ONE))
+	var radius := IntMath.dist(flat, [0, 0, 0])
+	var p := OrbitMath.unit(flat)
+	var q := OrbitMath.unit(OrbitMath.cross(normal, p))
+	var circle := OrbitMath.make_orbit(gm, radius, 0, p, q, 0, tick)
+	circle["parent"] = parent
+	var speed := OrbitMath.speed_um_s(gm, radius, radius)
+	var velocity: Array[int] = []
+	for axis in 3:
+		velocity.append(OrbitMath.smul_div(q[axis], speed, OrbitMath.ONE))
+	return [circle, velocity]
+
+
+## The cheaper way to change plane when the radius changes too (A41b): leave on the node on a
+## Hohmann half-ellipse, so its far end is on the other node, and make the plane change at the high
+## end, where the speed is lowest. Going up it joins the far burn, onto the target's ring; going down
+## it joins the departure burn. The unit then sits on the target's ring at the far node at whatever
+## phase, so a phasing orbit on that ring brings it to the target. Each burn is the exact difference
+## of velocities, and every burn is in the price.
+static func _combined_plan(mine: Dictionary, theirs: Dictionary, target: int, gm: int, mass_g: int,
+		from_tick: int, found: Dictionary) -> Dictionary:
+	var normal := OrbitMath.unit(OrbitMath.cross(theirs["p_q30"], theirs["q_q30"]))
+	var node := node_tick(mine, normal, from_tick)
+	if node < 0:
+		return { "reason": REASON_UNSUPPORTED }
+	var parent: int = mine["parent"]
+	var now := OrbitMath.state_at(mine, gm, node)
+	var r1 := IntMath.dist(now["r"], [0, 0, 0])
+	var r2: int = theirs["a_mm"]
+	var a_t := (r1 + r2) / 2
+	var going_up := r2 > r1
+	var ellipse: Dictionary
+	var first_dv: int
+	var at := "arrival" if going_up else "departure"
+	var coplanar_first := absi(OrbitMath.speed_um_s(gm, r1, a_t) - OrbitMath.speed_um_s(gm, r1, r1))
+	if going_up:
+		ellipse = launch_orbit(mine, gm, a_t, node)
+		first_dv = coplanar_first
+	else:
+		# The departure burn turns into the target's plane too: the ellipse leaves from the point
+		# moved into the plane, along the ring's direction there, at the ellipse's speed.
+		var ring := _ring_through(now["r"], normal, gm, parent, node)
+		var circle: Dictionary = ring[0]
+		var start := OrbitMath.position_at(circle, node)
+		var speed := OrbitMath.speed_um_s(gm, int(circle["a_mm"]), a_t)
+		var along: Array[int] = []
+		for axis in 3:
+			along.append(OrbitMath.smul_div(circle["q_q30"][axis], speed, OrbitMath.ONE))
+		ellipse = OrbitMath.from_state(start, along, gm, node)
+		first_dv = IntMath.dist(now["v"], along)
+	if ellipse.is_empty():
+		return { "reason": REASON_UNSUPPORTED }
+	ellipse["parent"] = parent
+	var half := maxi(1, (OrbitMath.period_sub(gm, a_t) + OrbitMath.SUB_TICKS) / (2 * OrbitMath.SUB_TICKS))
+	var arrive := node + half
+	var there := OrbitMath.state_at(ellipse, gm, arrive)
+	var ring := _ring_through(there["r"], normal, gm, parent, arrive)
+	var on_ring: Dictionary = ring[0]
+	var second_dv := IntMath.dist(there["v"], ring[1])
+	var coplanar_second := absi(OrbitMath.speed_um_s(gm, r2, r2) - OrbitMath.speed_um_s(gm, r2, a_t))
+	var phase := _phasing(null, on_ring, theirs, gm, arrive + 1)
+	var phasing := launch_orbit(on_ring, gm, phase["orbit_a_mm"], phase["depart_tick"])
+	if phasing.is_empty():
+		return { "reason": REASON_UNSUPPORTED }
+	var burns: Array[int] = [first_dv, second_dv, phase["dv1_um_s"], phase["dv2_um_s"]]
+	var mass := mass_g
+	var cost := 0
+	var dv := 0
+	for burn: int in burns:
+		var grams := OrbitMath.burn_g(mass, burn, found["exhaust_mm_s"])
+		cost += grams
+		mass -= grams
+		dv += burn
+	var extra := (second_dv - coplanar_second) if going_up else (first_dv - coplanar_first)
+	var arrive_tick: int = phase["depart_tick"] + phase["ticks"] - 1
+	return {
+		"kind": KIND, "target": target, "depart_tick": node, "arrive_tick": arrive_tick,
+		"ticks": arrive_tick - node + 1, "cost_g": cost, "dv_um_s": dv, "orbit_a_mm": a_t,
+		"plane_change_dv_um_s": maxi(0, extra), "plane_change_at": at,
+		"legs": [{ "orbit": ellipse, "from_tick": node }, { "orbit": on_ring, "from_tick": arrive },
+			{ "orbit": phasing, "from_tick": phase["depart_tick"] }],
 	}
 
 

@@ -11,6 +11,7 @@ extends RefCounted
 ##   refused.
 ## Every fourth seed (3, 7, 11 ...) is the new start coasted to a random tick, then compared over a
 ## window in which the probe flies to up to three rocks in its cluster (A37).
+## Seeds 5, 13, 21 ... are the reference station's drone on a mining cycle (C20).
 ## Seed 1 is D's shadow edge case from A35: new start seed 1, ticks 125,000 to 135,000.
 
 const GM_STAR := 132_712_440_018_000_000
@@ -35,6 +36,8 @@ static func run_seed(seed: int, ticks: int) -> Dictionary:
 	elif seed % 4 == 3:
 		stepped = _new_start(rng.randi_range(1, 1000), rng.randi_range(0, 250_000))
 		actions = _moves(stepped, rng, ticks)
+	elif seed % 8 == 5:
+		stepped = _shuttle(rng)
 	else:
 		var built := _moon_probe(rng, ticks)
 		stepped = built[0]
@@ -44,6 +47,57 @@ static func run_seed(seed: int, ticks: int) -> Dictionary:
 	if coasted == null:
 		return _result(false, "seed %d: the copy didn't load: %s" % [seed, Sim.last_error()], 0, 0, {})
 	return _compare(seed, stepped, coasted, ticks, actions)
+
+
+## The reference station with a drone on a mining cycle to a rock and back (C20's case): load
+## propellant, undock, fly out, mine, fly back, dock and unload, with the rock's distance, the
+## amount mined and the propellant load at random. Docking, undocking, loading, unloading, mining
+## and the moves all coast in closed form.
+static func _shuttle(rng: RandomNumberGenerator) -> Sim:
+	const STATION := 8
+	const ROCK := 2
+	const DEPOSIT := 3
+	const FREE_PORT := 11
+	var sim := Sim.new_game("reference", 12345)
+	var state := sim._state
+	state["bodies"][ROCK]["pos_mm"] = [rng.randi_range(500_000, 5_000_000), rng.randi_range(-500_000, 500_000), 0]
+	state["deposits"][DEPOSIT]["found"] = true
+	var drone := Units.create(sim._ctx, "small_craft", "Drone", state["units"][STATION]["pos_mm"])
+	var root: int = state["units"][drone]["root"]
+	var fit := func(def: String, parent: int, connector: String) -> int:
+		var part := Units.add_part(sim._ctx, drone, def, parent, connector, "mount")
+		state["parts"][parent]["children"].append(part)
+		return part
+	fit.call("small_solar_panel_mk1", root, "side_a_px")
+	fit.call("small_heat_radiator_mk1", root, "side_a_nx")
+	var tank: int = fit.call("small_propellant_tank_mk1", root, "stack_bottom")
+	fit.call("small_chemical_thruster_mk1", tank, "stack_bottom")
+	fit.call("small_ore_container_mk1", root, "side_a_pz")
+	var laser: int = fit.call("small_mining_laser_mk1", root, "side_a_nz")
+	state["units"][drone]["core"] = fit.call("assisted_core", root, "core")
+	var port: int = Units.ports(state, sim._ctx.defs, drone)[0]
+	state["units"][drone]["dock"] = { "port": port, "target_unit": STATION, "target_port": FREE_PORT }
+	state["units"][drone]["at_target"] = STATION
+	sim._ctx.index.clear()
+	state["matter_start_g"] = sim.ledger()["matter"]["total_g"]
+	var load := { "from": STATION, "item": "propellant" }
+	if rng.randi_range(0, 1) == 1:
+		load["grams"] = rng.randi_range(1, 20) * 1_000
+	var mine := { "deposit": DEPOSIT, "module": laser }
+	if rng.randi_range(0, 1) == 1:
+		mine["grams"] = rng.randi_range(1, 6) * 10_000
+	sim.submit({ "type": "set_cycle", "unit": drone, "args": { "steps": [
+		{ "type": "load_cargo", "args": load },
+		{ "type": "undock", "args": {} },
+		{ "type": "move_to", "args": { "target": ROCK } },
+		{ "type": "start_mining", "args": mine },
+		{ "type": "move_to", "args": { "target": STATION } },
+		{ "type": "dock", "args": { "port": port, "target_port": FREE_PORT } },
+		{ "type": "unload_cargo", "args": { "to": STATION, "item": "hematite" } },
+	] } })
+	sim.step()
+	sim.take_events()
+	return sim
 
 
 ## Up to three move_to orders for the new start's probe, to rocks in its frame at random ticks. One
