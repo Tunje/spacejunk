@@ -44,6 +44,7 @@ const STAGE_LAB := 3
 const STAGE_LAP := 4
 const STAGE_RESEARCH := 5
 const STAGE_DRONE := 6
+const STAGE_DEPOT := 7
 const FROST := 3
 ## A lap of the cluster round Frost is 245,692 ticks.
 const LAP_LIMIT_TICKS := 300_000
@@ -70,6 +71,19 @@ const DRONE_LAPS := 3
 ## six frames (Part F).
 const STORE_ORE_G := 500_000
 const DRONE_LIMIT_TICKS := 200_000
+## Stage 7 (C23): ore held for compact_refinery_mk1's 15 frames, 10 wiring and 10 processors, and
+## two solar_panel_mk1's 4 frames, 4 wiring and 60 kg of silicon, with the station's hematite loaded
+## first, and the runs that refine it. The hold cannot take it all at once, so the hematite is
+## refined before the olivine trip.
+const REFINERY_ORE := [[RED_ROCK, "hematite", 1_400_000, "refine_hematite", 14],
+	[BRASS_ROCK, "chalcopyrite", 500_000, "refine_chalcopyrite", 5],
+	[GREEN_ROCK, "olivine", 600_000, "refine_olivine", 6]]
+## The depot's sides that carry the refinery's extra power: the station's two panels give 120 kW
+## against 202 kW rated with the refinery, and these two make it 240 (B, Part F2).
+const DEPOT_PANEL_SIDES := ["side_px", "side_nx"]
+## The station refinery's two standing jobs, ice first so propellant wins when there is ice.
+const STANDING_RUNS := 10_000
+const DEPOT_LIMIT_TICKS := 600_000
 ## Waiting on jobs steps this many ticks between looks, as a player at speed would.
 const WAIT_BATCH_TICKS := 10
 
@@ -99,6 +113,17 @@ var station_hub := 0
 var station_core := 0
 var lab := 0
 var drone := 0
+var station_refinery := 0
+## Stage 7's figures: each two-rock lap, grams delivered by item, the station refinery's runs by
+## recipe, the tick of each recipe's last run, ticks paused by reason, its job_went_ahead count, and
+## how the cycle stopped.
+var laps: Array[Dictionary] = []
+var delivered := {}
+var runs := {}
+var last_run := {}
+var paused_ticks := {}
+var skips := 0
+var stop := {}
 ## The last stage run.
 var stage := 0
 ## Queued jobs by command ID until job_queued names them, then by job ID until their last run.
@@ -149,6 +174,8 @@ func play_through(last: int) -> void:
 				_research()
 			STAGE_DRONE:
 				_drone_stage()
+			STAGE_DEPOT:
+				_depot_stage()
 
 
 ## "" if the game is where the committed snapshot after `after_stage` says, otherwise why not.
@@ -402,11 +429,143 @@ func _drone_stage() -> void:
 	mark("store_added")
 
 
-## Finds the hull the probe built, fits it from the probe's hold, and assigns its core.
-func _fit_drone() -> void:
+## Stage 7 (C23, new_start_chain.md Part F2): the depot feeds itself. The station's LIDAR comes off
+## to free a side; the probe mines and makes a compact refinery's goods and builds it in place
+## there; the refinery is given two standing jobs, ice then hematite, which C24 lets take turns;
+## and the drone's cycle grows to fetch ice from White Rock as well as hematite from Red Rock.
+## It runs, warped, until the cycle blocks, which with the ore stores full is the plan.
+func _depot_stage() -> void:
+	_find_drone()
+	var lidar := 0
+	for part: int in Units.sorted_part_ids(sim._state, station):
+		if sim._state["parts"][part]["def"] == "lidar_mk1":
+			lidar = part
+	_command("detach_part", station, { "part": lidar, "to": station })
+	_coast(1)
+	_order("load_cargo", PROBE, { "from": station, "item": "hematite" })
+	for entry: Array in REFINERY_ORE:
+		if entry[1] == "olivine":
+			_wait_for(["refine_hematite"], true)
+		_order("move_to", PROBE, { "target": entry[0] })
+		_mine(entry[1], entry[2])
+		_queue([[refinery, entry[3], entry[4]]])
+	mark("depot_ore")
+	var depot := 0
+	for part: int in Units.sorted_part_ids(sim._state, station):
+		if sim._state["parts"][part]["def"] == "propellant_tank_mk1":
+			depot = part
+	_queue([[fabricator, "structural_frame", 19], [fabricator, "wiring", 14], [fabricator, "processor", 10]])
+	for side: String in DEPOT_PANEL_SIDES:
+		_queue([[fabricator, "solar_panel_mk1", 1,
+			{ "unit": station, "parent_part": depot, "parent_connector": side, "part_connector": "mount" }]])
+	# The refinery's own fit is dry-run when it is queued, so the panels go on first.
+	_wait_for(["solar_panel_mk1"], true)
+	mark("panels_on")
+	_queue([[fabricator, "compact_refinery_mk1", 1, _on_station(_free_station_mount("compact_refinery_mk1"))]])
+	_wait_for([], true)
+	if not problems.is_empty():
+		return
+	for part: int in Units.sorted_part_ids(sim._state, station):
+		if sim._state["parts"][part]["def"] == "compact_refinery_mk1":
+			station_refinery = part
+	mark("refinery_built")
+	_queue_on(station, [[station_refinery, "refine_water_ice", STANDING_RUNS],
+		[station_refinery, "refine_hematite", STANDING_RUNS]])
+	_coast(1)
+	_run_two_rock_cycle()
+
+
+## The drone's cycle to both rocks, warped until it blocks. Each lap's figures are kept in `laps`.
+func _run_two_rock_cycle() -> void:
+	var dock: Dictionary = sim._state["units"][drone]["dock"]
+	var laser_part := 0
+	for part: int in Units.sorted_part_ids(sim._state, drone):
+		if Units.module_of(sim._state, sim.defs(), part)["capabilities"].has("mine"):
+			laser_part = part
+	var home := { "type": "dock", "args": { "port": dock["port"], "target_port": dock["target_port"] } }
+	_command("set_cycle", drone, { "steps": [
+		{ "type": "load_cargo", "args": { "from": station, "item": "propellant" } },
+		{ "type": "undock", "args": {} },
+		{ "type": "move_to", "args": { "target": RED_ROCK } },
+		{ "type": "start_mining", "args": { "deposit": deposits["hematite"], "module": laser_part,
+			"grams": DRONE_LAP_G } },
+		{ "type": "move_to", "args": { "target": station } },
+		home,
+		{ "type": "unload_cargo", "args": { "to": station, "item": "hematite" } },
+		{ "type": "undock", "args": {} },
+		{ "type": "move_to", "args": { "target": WHITE_ROCK } },
+		{ "type": "start_mining", "args": { "deposit": deposits["water_ice"], "module": laser_part } },
+		{ "type": "move_to", "args": { "target": station } },
+		home,
+		{ "type": "unload_cargo", "args": { "to": station, "item": "water_ice" } },
+	] })
+	var start := sim.current_tick() + 1
+	var lap_start := start
+	var deadline := sim.current_tick() + DEPOT_LIMIT_TICKS
+	var paused_since := {}
+	while sim.current_tick() < deadline and problems.is_empty():
+		for event in _coast(deadline - sim.current_tick()):
+			var data: Dictionary = event["data"]
+			if event["unit"] == station:
+				_on_station_job(event, paused_since)
+			if event["unit"] != drone:
+				continue
+			match event["type"]:
+				"transfer_done":
+					if data["to"] == station:
+						delivered[data["item"]] = delivered.get(data["item"], 0) + data["grams"]
+				"task_cancelled":
+					problems.append("the drone's cycle was cancelled: %s" % data["reason"])
+				"task_blocked":
+					stop = { "tick": event["tick"], "reason": data["reason"], "laps": laps.size() }
+					mark("cycle_stopped")
+					return
+				"task_cycle_done":
+					laps.append(_lap_figures(event["tick"] - lap_start + 1))
+					lap_start = event["tick"] + 1
+	if problems.is_empty():
+		problems.append("the drone's two-rock cycle did not stop within %d ticks" % DEPOT_LIMIT_TICKS)
+
+
+## Counts the station refinery's runs, the tick of each recipe's last, and paused ticks by reason.
+## A queued job holds no reason, so the goods filling shows as the last hematite run.
+func _on_station_job(event: Dictionary, paused_since: Dictionary) -> void:
+	var data: Dictionary = event["data"]
+	match event["type"]:
+		"job_finished":
+			runs[data["recipe"]] = runs.get(data["recipe"], 0) + 1
+			last_run[data["recipe"]] = event["tick"]
+		"job_went_ahead":
+			skips += 1
+		"job_paused":
+			paused_since[data["job"]] = [data["reason"], event["tick"]]
+		"job_resumed":
+			if paused_since.has(data["job"]):
+				var since: Array = paused_since[data["job"]]
+				paused_ticks[since[0]] = paused_ticks.get(since[0], 0) + event["tick"] - since[1]
+				paused_since.erase(data["job"])
+
+
+## One lap of the two-rock cycle: its ticks and the station's stores at its end.
+func _lap_figures(ticks: int) -> Dictionary:
+	var inventory: Dictionary = sim._state["units"][station]["inventory"]
+	return {
+		"ticks": ticks, "tick": sim.current_tick(), "depot_g": inventory.get("propellant", 0),
+		"iron_g": inventory.get("iron", 0), "hematite_g": inventory.get("hematite", 0),
+		"ice_g": inventory.get("water_ice", 0), "delivered": delivered.duplicate(), "runs": runs.duplicate(),
+		"drone_propellant_g": sim._state["units"][drone]["inventory"].get("propellant", 0),
+	}
+
+
+func _find_drone() -> void:
 	for id: int in _sorted_ids(sim._state["units"]):
 		if sim._state["units"][id]["kind"] == "drone":
 			drone = id
+
+
+## Finds the hull the probe built, fits it from the probe's hold, and assigns its core.
+func _fit_drone() -> void:
+	_find_drone()
 	if drone == 0:
 		problems.append("no drone was built")
 		return
@@ -550,41 +709,21 @@ func _cargo(cargo_class: String) -> Dictionary:
 	return sim.view()["units"][PROBE]["cargo"][cargo_class]
 
 
-## Mines `item` until the hold holds `target_g` of it, or until the hold is full when 0.
+## Mines `item` until the hold holds `target_g` of it, or until the hold is full when 0. The order
+## names the grams still wanted (C19), so it ends itself, as the client's amount box does, with no
+## stop order after it (B24).
 func _mine(item: String, target_g: int) -> void:
 	if not problems.is_empty():
 		return
-	var id := _command("start_mining", PROBE, { "deposit": deposits[item], "module": laser })
-	var start := sim.current_tick() + 1
-	var task := 0
-	var stopping := false
-	for i in ORDER_LIMIT_TICKS:
-		for event in _step():
-			var data: Dictionary = event["data"]
-			match event["type"]:
-				"command_rejected":
-					if data["command"] == id:
-						problems.append("mining %s refused: %s" % [item, data["reason"]])
-						return
-				"task_started":
-					if data["command"] == id:
-						task = data["task"]
-				"task_cancelled":
-					if data["task"] == task:
-						if not stopping:
-							problems.append("mining %s cancelled: %s" % [item, data["reason"]])
-						else:
-							_record("mine " + item, start)
-						return
-				"task_finished":
-					if data["task"] == task:
-						_record("mine " + item, start)
-						return
-		var held: int = sim._state["units"][PROBE]["inventory"].get(item, 0)
-		if target_g > 0 and held >= target_g and not stopping:
-			stopping = true
-			_command("stop", PROBE, {})
-	problems.append("mining %s never finished" % item)
+	var args := { "deposit": deposits[item], "module": laser }
+	if target_g > 0:
+		var wanted: int = target_g - sim._state["units"][PROBE]["inventory"].get(item, 0)
+		if wanted <= 0:
+			return
+		args["grams"] = wanted
+	_order("start_mining", PROBE, args)
+	if steps.size() > 0 and steps[-1]["label"] == "start_mining":
+		steps[-1]["label"] = "mine " + item
 
 
 ## Gives an order and steps until its task ends, `batch` ticks at a time for a long one, or warped

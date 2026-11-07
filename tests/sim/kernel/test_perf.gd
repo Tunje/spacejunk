@@ -147,10 +147,10 @@ func test_a_full_tick_with_one_view_stays_inside_the_budget() -> void:
 	_report("view", views)
 	var total := _report("step+view", both)
 	assert_gt(state["tasks"].size(), SHIPS / 2, "the fleet stayed busy")
-	# The alarm is on the median tick, which ticks slowed by other work on the machine don't move.
-	# The mean and the 99th percentile are in the PERF line: under load they measure the machine as
-	# much as the code (A45).
-	assert_lt(total["median"], MEAN_ALARM_USEC, "median step and view")
+	# On the quietest window's median: over the alarm is a report, and only three times it fails,
+	# since parallel gates can load the machine for the whole run (A45, A45b). The mean and the
+	# 99th percentile are in the PERF line.
+	preload("res://tests/sim/kernel/timing.gd").alarm(self, "step+view", both, MEAN_ALARM_USEC)
 	if total["p99"] >= SPIKE_ALARM_USEC:
 		print("PERF ALARM: 99th percentile step and view %d us, over %d us" % [total["p99"], SPIKE_ALARM_USEC])
 
