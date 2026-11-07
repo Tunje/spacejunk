@@ -228,9 +228,67 @@ func _orbit_horizon(ctx: SimContext, unit: Dictionary, neighbours: Dictionary = 
 		skip = mini(skip, CoastBounds.ticks_to_close(soi - IntMath.dist(here, [0, 0, 0]), speed))
 	if not neighbours.has(parent_id):
 		neighbours[parent_id] = _neighbours_of(ctx, parent_id)
+	var close := []
 	for near: Array in neighbours[parent_id]:
-		skip = mini(skip, _approach_horizon(here, periapsis, apoapsis, speed, near))
-	return skip
+		var bound := _approach_horizon(here, periapsis, apoapsis, speed, near)
+		if bound <= 0 and int(near[5]) != 0:
+			close.append(near)
+		else:
+			skip = mini(skip, bound)
+	if skip <= 0 or close.is_empty():
+		return skip
+	# Within a frame's join reach the bound is 0, but whether the unit joins on a coming tick is
+	# _try_join's own test on the rails' places then, so the ticks near the edge are tried (A50).
+	var limit := mini(skip, ctx.coast_limit if ctx.coast_limit > 0 else NO_LIMIT)
+	return mini(skip, _join_walk(orbit, parent["gm"], close, periapsis, apoapsis, speed, ctx.state["tick"], limit))
+
+
+## The most ticks MAX_JOIN_STEPS ahead.
+const MAX_JOIN_STEPS := 128
+
+
+## How many coming ticks a unit on `orbit` can pass without joining any of the frames in `close`,
+## each [place, reach, periapsis, apoapsis, top speed, frame ID, join distance, frame orbit] as
+## _neighbours_of gives them (A50). Each tick is tried by _try_join's own arithmetic: the coarse
+## distance, then the exact local distance and relative speed. Once the unit is outside every
+## frame's reach, the ordinary bound from that tick adds the rest. Stops at `limit`, since more
+## can't lengthen the skip, or after MAX_JOIN_STEPS.
+static func _join_walk(orbit: Dictionary, gm: int, close: Array, periapsis: int, apoapsis: int, speed: int,
+		now: int, limit: int) -> int:
+	for k in range(1, MAX_JOIN_STEPS + 1):
+		if k > limit:
+			return limit
+		var tick := now + k
+		var unit_mm := OrbitMath.position_at(orbit, tick)
+		var inside := false
+		for near: Array in close:
+			var frame_orbit: Dictionary = near[7]
+			var join_mm: int = near[6]
+			var frame_mm := OrbitMath.position_at(frame_orbit, tick)
+			var gap := [unit_mm[0] - frame_mm[0], unit_mm[1] - frame_mm[1], unit_mm[2] - frame_mm[2]]
+			if IntMath.dist_above(gap, int(near[1])):
+				continue
+			inside = true
+			if IntMath.dist_above(gap, join_mm + JOIN_SLACK_MM):
+				continue
+			var mine := OrbitMath.state_at(orbit, gm, tick)
+			var theirs := OrbitMath.state_at(frame_orbit, gm, tick)
+			var local: Array[int] = []
+			var rel_v: Array[int] = []
+			for axis in 3:
+				local.append(int(mine["r"][axis]) - int(theirs["r"][axis]))
+				rel_v.append(int(mine["v"][axis]) - int(theirs["v"][axis]))
+			if not IntMath.dist_above(local, join_mm) and IntMath.dist(rel_v, [0, 0, 0]) < JOIN_SPEED_UM_S:
+				return k - 1
+		if not inside:
+			# Clear of every reach: the bound from here, against where the frames are now.
+			var rest := NO_LIMIT
+			for near: Array in close:
+				var moved := near.duplicate()
+				moved[0] = OrbitMath.position_at(near[7], tick)
+				rest = mini(rest, _approach_horizon(unit_mm, periapsis, apoapsis, speed, moved))
+			return mini(k + maxi(rest, 0), NO_LIMIT)
+	return MAX_JOIN_STEPS
 
 
 ## What an orbiter round a parent could come within reach of, as [position, reach, its periapsis,
@@ -250,13 +308,16 @@ func _neighbours_of(ctx: SimContext, parent_id: int) -> Array:
 		var frame: Dictionary = frames[frame_id]
 		if frame["orbit"]["parent"] != parent_id:
 			continue
-		var reach: int = frame["radius_mm"] + join_margin_mm(ctx, frame) + JOIN_SLACK_MM
-		result.append(_neighbour(frame["pos_mm"], frame["orbit"], gm, reach))
+		var join_mm: int = frame["radius_mm"] + join_margin_mm(ctx, frame)
+		result.append(_neighbour(frame["pos_mm"], frame["orbit"], gm, join_mm + JOIN_SLACK_MM, frame_id, join_mm))
 	return result
 
 
-static func _neighbour(there: Array, orbit: Dictionary, gm: int, reach: int) -> Array:
-	return [there, reach, CoastBounds.periapsis_mm(orbit), apoapsis_mm(orbit), CoastBounds.orbit_max_um_s(gm, orbit)]
+## [place, reach, periapsis, apoapsis, top speed, frame ID or 0, join distance, orbit].
+static func _neighbour(there: Array, orbit: Dictionary, gm: int, reach: int, frame_id: int = 0,
+		join_mm: int = 0) -> Array:
+	return [there, reach, CoastBounds.periapsis_mm(orbit), apoapsis_mm(orbit), CoastBounds.orbit_max_um_s(gm, orbit),
+		frame_id, join_mm, orbit]
 
 
 ## The ticks before a unit could come within reach of something on another orbit round the same

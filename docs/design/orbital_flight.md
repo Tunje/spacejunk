@@ -1271,3 +1271,15 @@ The autopilot refused any orbit more eccentric than 0.01 or more than a degree o
 
 **Seen there, not A49's:** while the probe is still within the cluster's join distance after its burn, BurnSystem's frame-join bound is 0, so the coast steps it until it is clear, 300 to 1,300 ticks. That is A33's bound and a follow-up.
 
+
+### 11.35 A50: coasting out of a frame's join reach
+
+After a unit leaves a frame by a hand burn it is still within the frame's join reach: the join distance plus `JOIN_SLACK_MM`. There BurnSystem's join bound is 0, so the coast stepped it tick by tick until it was clear: 300 to 1,300 ticks after leaving the new start's cluster (11.34).
+
+Whether it joins on a coming tick is `_try_join`'s own test on the rails' places then. That test is the coarse distance, then the exact local distance and the relative speed under `JOIN_SPEED_UM_S`. So the horizon now tries each coming tick by that same arithmetic:
+- **No join:** that tick is safe.
+- **A join:** the horizon stops just before that tick.
+- **Clear of every frame's reach:** the ordinary bound from that tick, against where the frames will be then, adds the rest.
+- **Limits:** it stops at `SimContext.coast_limit` or after 128 ticks.
+
+**Measured** on soak seeds 17 to 97: the burn-then-home runs fell from 431 to 1,399 coast calls to 56 to 201, the rest being the burn itself. All matched stepping byte for byte. `test_coast_leave_cluster.gd` holds seed 17, with no calls near the boundary, and a unit put inside Home's join distance that joins on the stepped tick, coasted byte-equal.
