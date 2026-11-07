@@ -74,8 +74,20 @@ func test_status_shows_progress() -> void:
 
 
 func test_core_line() -> void:
-	assert_eq(InspectText.core({ "core_tier": 0 }), "No AI core")
-	assert_eq(InspectText.core({ "core_tier": 2 }), "AI core: tier 2")
+	assert_eq(InspectText.core({ "core_tier": 0 }), "No core fitted")
+	assert_eq(InspectText.core({ "core_tier": 1 }), "Core: Basic (flies simple orders)")
+	assert_eq(InspectText.core({ "core_tier": 2 }), "Core: Assisted (repeats a route)")
+	assert_eq(InspectText.core({ "core_tier": 7 }), "Core: tier 7", "a tier with no words yet")
+
+
+## D39: the parts list starts folded, its count on the toggle, and a click opens it.
+func test_parts_list_starts_folded() -> void:
+	assert_false(panel.parts_open())
+	assert_gt(panel.part_line_count(), 0)
+	assert_eq(panel.parts_toggle.text, "> Parts (%d)" % panel.part_line_count())
+	panel.parts_toggle.pressed.emit()
+	assert_true(panel.parts_open())
+	assert_string_starts_with(panel.parts_toggle.text, "v Parts")
 
 
 func test_part_lines_show_state() -> void:

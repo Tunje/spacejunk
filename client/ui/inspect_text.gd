@@ -81,8 +81,19 @@ static func status(unit: Dictionary, view: Dictionary, ticks_per_second := 10) -
 	return text
 
 
+## The assigned core in plain words (D39), by tier.
+const CORE_WORDS: Dictionary = {
+	1: "Core: Basic (flies simple orders)",
+	2: "Core: Assisted (repeats a route)",
+	3: "Core: Autonomous (picks its own work)",
+}
+
+
 static func core(unit: Dictionary) -> String:
-	return "AI core: tier %d" % unit["core_tier"] if unit["core_tier"] > 0 else "No AI core"
+	var tier := int(unit["core_tier"])
+	if tier <= 0:
+		return "No core fitted"
+	return CORE_WORDS.get(tier, "Core: tier %d" % tier)
 
 
 static func part_line(part: Dictionary, module: Dictionary) -> String:

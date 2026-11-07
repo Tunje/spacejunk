@@ -7,7 +7,13 @@ const RADIUS_PER_DECADE := 6.0
 const NEAR_DECADES := 2.0
 const FAR_DECADE_FACTOR := 0.35
 const KM_IN_M := 1000.0
-const RINGS_KM: Array[float] = [1.0, 10.0, 100.0, 10000.0, 100000000.0]
+const AU_KM := 149597870.7
+## Distance rings (D39): decades close in, then 1-3-10 steps across to the planets,
+## in AU once past three million km.
+const RINGS_KM: Array[float] = [
+	1.0, 10.0, 100.0, 300.0, 1000.0, 3000.0, 10000.0, 30000.0, 100000.0, 300000.0,
+	1000000.0, 3000000.0, 0.1 * AU_KM, 0.3 * AU_KM, AU_KM, 3.0 * AU_KM,
+]
 const RING_SEGMENTS := 96
 const RING_COLOUR := Color(0.2, 0.22, 0.27)
 const ROUTE_SEGMENTS := 24
@@ -55,9 +61,21 @@ static func map_radius(distance_m: float) -> float:
 
 
 static func ring_label(km: float) -> String:
+	if km >= 0.05 * AU_KM:
+		return "%s AU" % String.num(km / AU_KM, 1).trim_suffix(".0")
 	if km >= 1000000.0:
 		return "%s million km" % String.num(km / 1000000.0, 0)
-	return "%s km" % String.num(km, 0)
+	return "%s km" % SystemMap.thousands(roundi(km))
+
+
+## 300000 as "300,000".
+static func thousands(value: int) -> String:
+	var digits := str(absi(value))
+	var grouped := ""
+	while digits.length() > 3:
+		grouped = "," + digits.right(3) + grouped
+		digits = digits.left(digits.length() - 3)
+	return ("-" if value < 0 else "") + digits + grouped
 
 
 func bind(new_bridge: SimBridge, view: LocalView) -> void:
