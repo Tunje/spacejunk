@@ -53,7 +53,7 @@ func test_an_order_makes_a_one_step_task() -> void:
 	assert_eq(view["tasks"][task_id], {
 		"id": task_id, "owner": SHIP, "kind": "order", "state": "running", "reason": "", "hold": false,
 		"steps": [{ "type": "scan", "args": { "target": ROCK } }],
-		"step": 0, "cycle": 0, "since_tick": 1, "command": command_id,
+		"step": 0, "cycle": 0, "since_tick": 1, "command": command_id, "laps": 0,
 	})
 
 
