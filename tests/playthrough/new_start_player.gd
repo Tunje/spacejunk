@@ -41,6 +41,8 @@ func _init(new_main: Node, after_stage: int) -> void:
 	flight = main.flight_screen
 	bridge.set_paused(true)
 	bridge.frame_budget_ms = TEST_FRAME_BUDGET_MS
+	# Frames counted in ticks, not wall time, so a snapshot always plays out the same.
+	bridge.fixed_ticks = true
 	if after_stage > 0:
 		var text := FileAccess.get_file_as_string(NewStartBot.snapshot_path(after_stage))
 		var sim := Sim.from_save(text) if text != "" else null
