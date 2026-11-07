@@ -129,8 +129,9 @@ func test_an_orbital_tick_with_one_view_stays_inside_the_budget() -> void:
 	var total := _report("step+view", both)
 	for op_type: String in ["moving", "waiting", "burning"]:
 		assert_true(ops.has(op_type), op_type)
-	# On the median tick, as test_perf.gd; the 99th percentile is reported (A45).
-	assert_lt(total["median"], MEAN_ALARM_USEC)
+	# As test_perf.gd: the quietest window's median, an alarm over budget and a failure at three
+	# times it; the 99th percentile is reported (A45, A45b).
+	preload("res://tests/sim/kernel/timing.gd").alarm(self, "ORBITS step+view", both, MEAN_ALARM_USEC)
 	if total["p99"] >= SPIKE_ALARM_USEC:
 		print("PERF ALARM: 99th percentile step and view %d us, over %d us" % [total["p99"], SPIKE_ALARM_USEC])
 
