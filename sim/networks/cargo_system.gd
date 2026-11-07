@@ -83,7 +83,7 @@ func _depart(ctx: SimContext, id: int) -> void:
 	if op["type"] == MoveStep.OP_WAITING and op["depart_tick"] == ctx.tick and op.has("plan"):
 		quoted = op["plan"].duplicate(true)
 	else:
-		quoted = Travel.quote(ctx, id, op["target"])
+		quoted = Travel.quote(ctx, id, op["target"], MoveStep.prefer_of(op))
 	if quoted.has("reason"):
 		op["reason"] = quoted["reason"]
 		return
@@ -253,13 +253,16 @@ func _transfer(ctx: SimContext, id: int) -> void:
 	var item: String = op["item"]
 	var rate := _transfer_rate(ctx, from, to)
 	var remainder: int = task.get("transfer_remainder", 0)
-	var grams: int = task.get("credit_g", 0) + Rate.amount(rate, remainder)
+	var unit_mass_g: int = ctx.defs["items"][item].get("unit_mass_g", 0)
+	# The credit is what a whole-unit item has built up towards its next unit. Only such an item
+	# carries one (A42): a bulk item moves its grams as they come.
+	var credit: int = task.get("credit_g", 0) if unit_mass_g != 0 else 0
+	var grams: int = credit + Rate.amount(rate, remainder)
 	task["transfer_remainder"] = Rate.carry(rate, remainder)
 	var limit := mini(Reservations.free_stock(ctx, from, item), Reservations.free_space(ctx, to, item))
 	if op["limit_g"] != 0:
 		limit = mini(limit, op["limit_g"] - task.get("moved_g", 0))
 	var moved := mini(grams, limit)
-	var unit_mass_g: int = ctx.defs["items"][item].get("unit_mass_g", 0)
 	if unit_mass_g != 0:
 		moved -= moved % unit_mass_g
 		task["credit_g"] = mini(grams - moved, unit_mass_g)
@@ -275,7 +278,7 @@ func _transfer(ctx: SimContext, id: int) -> void:
 
 
 ## The smaller of the two docked ports' rates.
-func _transfer_rate(ctx: SimContext, from: int, to: int) -> int:
+static func _transfer_rate(ctx: SimContext, from: int, to: int) -> int:
 	var units: Dictionary = ctx.state["units"]
 	var dock: Dictionary = units[from]["dock"]
 	if dock.get("target_unit", 0) != to:
@@ -299,8 +302,12 @@ func horizon(ctx: SimContext) -> int:
 			skip = mini(skip, route_horizon(unit["route"]))
 		match op["type"]:
 			TransferStep.OP_LOADING, TransferStep.OP_UNLOADING, DockStep.OP_DOCKING, UndockStep.OP_UNDOCKING:
-				ctx.coast_cap = "docking_or_cargo"
-				return 0
+				var bound := transfer_horizon(ctx, id) if op["type"] in [TransferStep.OP_LOADING,
+					TransferStep.OP_UNLOADING] else dock_horizon(ctx, id)
+				if bound <= 0:
+					ctx.coast_cap = "docking_or_cargo"
+					return 0
+				skip = mini(skip, bound)
 			MoveStep.OP_WAITING:
 				skip = mini(skip, int(op["depart_tick"]) - now - 1)
 			MoveStep.OP_MOVING:
@@ -316,10 +323,15 @@ func horizon(ctx: SimContext) -> int:
 ## Coast (A33): docked units are where their hosts are. A route's progress over the ticks is the sum
 ## of its per-tick amounts, with its remainder carried, as _advance would add them one by one (A37).
 ## route_horizon keeps the coast short of arrival, so _advance's cap at the length never applies.
+## A transfer moves the sum of its ticks the same way (C20); transfer_horizon keeps it short of
+## every bound, so no tick of it would have been cut short. A dock or undock under way changes
+## nothing until its end tick.
 func coast(ctx: SimContext, ticks: int) -> void:
 	var units: Dictionary = ctx.state["units"]
 	for id: int in _sorted(units):
 		var unit: Dictionary = units[id]
+		if unit["op"]["type"] in [TransferStep.OP_LOADING, TransferStep.OP_UNLOADING]:
+			_coast_transfer(ctx, id, ticks)
 		var route: Dictionary = unit["route"]
 		if route.is_empty():
 			continue
@@ -330,6 +342,74 @@ func coast(ctx: SimContext, ticks: int) -> void:
 			unit["pos_mm"][axis] = Travel.along(route["from_mm"][axis], route["to_mm"][axis],
 				route["progress_mm"], route["length_mm"])
 	_follow_hosts(ctx)
+
+
+## The ticks a dock or undock under way can skip before its end tick, which is stepped (C20). A dock
+## whose ports are not yet granted steps, since granting is a change.
+static func dock_horizon(ctx: SimContext, id: int) -> int:
+	var op: Dictionary = ctx.state["units"][id]["op"]
+	if op.has("reason") or (op["type"] == DockStep.OP_DOCKING and not op.has("granted")):
+		return 0
+	return maxi(0, int(op["end_tick"]) - int(ctx.state["tick"]) - 1)
+
+
+## The most ticks a transfer can be summed over with every tick moving its full amount (C20): the
+## sum stays strictly below the source's stock, the destination's room and the order's limit, so
+## the tick that is cut short, and the one end_test ends it on, are stepped. Room falls by exactly
+## the grams that go in, so the bound read now holds for the whole skip. It steps instead when it
+## is held, when the item moves in whole units, when a credit is carried, or when another transfer
+## or a miner shares either end, whose claims would share the bounds.
+static func transfer_horizon(ctx: SimContext, id: int) -> int:
+	var state := ctx.state
+	var unit: Dictionary = state["units"][id]
+	var op: Dictionary = unit["op"]
+	if op.has("reason") or not TaskSystem.is_running(ctx, unit):
+		return 0
+	var item: String = op["item"]
+	if ctx.defs["items"][item].get("unit_mass_g", 0) != 0:
+		return 0
+	var task: Dictionary = state["tasks"][unit["task"]]
+	if task.get("credit_g", 0) != 0:
+		return 0
+	var from: int = op["from"]
+	var to: int = op["to"]
+	var ids: Array = state["units"].keys()
+	ids.sort()
+	for other: int in ids:
+		if other == id:
+			continue
+		var other_op: Dictionary = state["units"][other]["op"]
+		if other_op["type"] == MiningStep.OP_MINING and (other == from or other == to):
+			return 0
+		if other_op["type"] in [TransferStep.OP_LOADING, TransferStep.OP_UNLOADING] \
+				and [from, to].any(func(end: int) -> bool: return end == other_op["from"] or end == other_op["to"]):
+			return 0
+	var room := mini(state["units"][from]["inventory"].get(item, 0),
+		Units.grams_that_fit(state, ctx.defs, to, item))
+	if op["limit_g"] != 0:
+		room = mini(room, int(op["limit_g"]) - int(task.get("moved_g", 0)))
+	var rate := _transfer_rate(ctx, from, to)
+	if rate <= 0:
+		return 0
+	# The most ticks k with k * rate + remainder <= TICKS_PER_SECOND * room - 1.
+	return maxi(0, (Sim.TICKS_PER_SECOND * room - 1 - int(task.get("transfer_remainder", 0))) / rate)
+
+
+## A transfer's skipped ticks in one step, as _transfer and apply_delta would make them one by one.
+func _coast_transfer(ctx: SimContext, id: int, ticks: int) -> void:
+	var unit: Dictionary = ctx.state["units"][id]
+	var op: Dictionary = unit["op"]
+	var task: Dictionary = ctx.state["tasks"][unit["task"]]
+	var total: int = ticks * _transfer_rate(ctx, op["from"], op["to"]) + int(task.get("transfer_remainder", 0))
+	var grams := total / Sim.TICKS_PER_SECOND
+	task["transfer_remainder"] = total % Sim.TICKS_PER_SECOND
+	if grams <= 0:
+		return
+	var units: Dictionary = ctx.state["units"]
+	Units.remove_stock(units[op["from"]]["inventory"], op["item"], grams)
+	Units.add_stock(units[op["to"]]["inventory"], op["item"], grams)
+	task["moved_g"] = task.get("moved_g", 0) + grams
+	unit[TransferStep.OPEN_KEY]["grams"] += grams
 
 
 ## The most ticks a route can be summed over and still be short of its length, so the tick it

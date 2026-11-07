@@ -15,6 +15,7 @@ func before_each() -> void:
 	SaveStore.autosave_path = AUTO_PATH
 	_remove_slot()
 	main = load("res://client/main.tscn").instantiate()
+	main.scenario = "reference"
 	add_child_autofree(main)
 	_wire()
 
@@ -217,6 +218,7 @@ func test_goals_survive_a_fresh_start_of_the_client() -> void:
 	main.goal_panel.tracker.complete("scan")
 	main.save_game()
 	var second: Node = load("res://client/main.tscn").instantiate()
+	second.scenario = "reference"
 	add_child_autofree(second)
 	second.get_node("Bridge").set_paused(true)
 	assert_false(second.goal_panel.tracker.done.has("refine"))
@@ -310,6 +312,7 @@ func test_closing_the_window_autosaves() -> void:
 	main._notification(NOTIFICATION_WM_CLOSE_REQUEST)
 	assert_true(SaveStore.exists(AUTO_PATH))
 	var second: Node = load("res://client/main.tscn").instantiate()
+	second.scenario = "reference"
 	add_child_autofree(second)
 	second.get_node("Bridge").set_paused(true)
 	second.load_game()
@@ -319,6 +322,7 @@ func test_closing_the_window_autosaves() -> void:
 
 func test_a_game_that_never_started_does_not_autosave() -> void:
 	var unstarted: Node = load("res://client/main.tscn").instantiate()
+	unstarted.scenario = "reference"
 	unstarted._notification(NOTIFICATION_WM_CLOSE_REQUEST)
 	unstarted._process(main.AUTOSAVE_SECONDS * 2.0)
 	unstarted.free()
@@ -463,6 +467,7 @@ func test_startup_with_version_1_saves_on_disk_is_quiet() -> void:
 	_write_version_1(TEST_PATH)
 	_write_version_1(AUTO_PATH)
 	var second: Node = load("res://client/main.tscn").instantiate()
+	second.scenario = "reference"
 	add_child_autofree(second)
 	assert_true(second._started, "the game starts; saves are only read on a load")
 	for line: String in second.event_log.lines:

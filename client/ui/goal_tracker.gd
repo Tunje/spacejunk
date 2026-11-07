@@ -32,7 +32,7 @@ const GOALS: Array[Dictionary] = [
 ## Lists by scenario ID; any other start uses the reference list.
 const NEW_START_GOALS: Array[Dictionary] = [
 	{ "id": "scan", "title": "Scan a rock",
-		"hint": "Open the Map (M), click a rock in the Cluster and press Move to. On arrival, press Scan in the Orders panel." },
+		"hint": "Open the Map (M), click a rock in the Cluster and press Move to. The flight takes a couple of minutes: speed time up with 50x at the top. On arrival, press Scan in the Orders panel." },
 	{ "id": "science", "title": "Earn your first science points",
 		"hint": "A finished scan pays survey points. Stay at the rock and Measure its composition for more. New rocks and bodies are worth the most." },
 	{ "id": "mine", "title": "Mine ore",
@@ -52,7 +52,7 @@ const NEW_START_GOALS: Array[Dictionary] = [
 	{ "id": "research", "title": "Prove a new tech",
 		"hint": "Fit a Research Lab and a Basic Core on the station. Survey three rocks and map Frost's gravity field: select Frost and Measure. You can do that without landing: stay in the cluster for one lap. Prove Autonomous Navigation at the lab in Jobs (J), then fabricate the Assisted Core prototype and bench-test it at the lab. To land on Frost too, fill the tank from White Rock's ice first, empty the goods hold, and leave straight from the station. The landing and the climb back take most of a tank." },
 	{ "id": "drone", "title": "Build a mining drone",
-		"hint": "Fabricate a Small Craft: it appears bare at a free port. Fabricate a Small Solar Panel, Small Heat Radiator, Small Propellant Tank, Small Thruster, Small Ore Container and Small Mining Laser, and fit them in that order with Fit (G). The thruster goes under the tank. A craft fits parts from its own hold or the station's, so unload them from the probe into the station first." },
+		"hint": "Fabricate a Small Craft: it appears bare at a free port. Fabricate a Small Solar Panel, Small Heat Radiator, Small Propellant Tank, Small Thruster, Small Ore Container and Small Mining Laser, and fit them in that order with Fit (G). The thruster goes under the tank. Fit takes them from any craft docked at the same station." },
 	{ "id": "handover", "title": "Hand the job to an AI core",
 		"hint": "Fabricate an Assisted Core and fit it to the drone. Then in Auto (K) use it and press Repeat this route." },
 	{ "id": "expand", "title": "Expand the station", "after": "handover",

@@ -13,7 +13,7 @@ func before_all() -> void:
 	add_child(main)
 	bridge = main.get_node("Bridge")
 	bridge.set_paused(true)
-	var sim := Sim.from_save(FileAccess.get_file_as_string(NewStartBot.snapshot_path(NewStartBot.STAGE_RETURN)))
+	var sim := Sim.from_save(FileAccess.get_file_as_string(NewStartBot.snapshot_path(NewStartBot.STAGE_LAP)))
 	bridge.start(sim)
 	main.local_view.rebuild()
 
@@ -107,3 +107,14 @@ func test_a_bench_test_says_what_is_missing_and_where() -> void:
 	view["units"][40]["inventory"]["prototype:assisted_core"] = defs["items"]["prototype:assisted_core"]["unit_mass_g"]
 	assert_eq(ResearchLogic.missing_inputs(view, defs, "qualify:assisted_core", 40), "", "all at the lab")
 	assert_gt(ResearchLogic.facilities_of(bridge.current_view, defs, "fabricator").size(), 0, "the probe's fabricator")
+
+
+func test_a_theory_short_of_a_surface_sample_carries_the_landing_advice() -> void:
+	var defs := bridge.defs()
+	var pv: Dictionary = defs["theories"]["photovoltaic_arrays"]
+	var view := { "science": { "evidence": {} } }
+	assert_eq(ResearchLogic.landing_advice(pv, view), ResearchLogic.LANDING_ADVICE)
+	view["science"]["evidence"]["surface"] = 1
+	assert_eq(ResearchLogic.landing_advice(pv, view), "", "sampled already")
+	assert_eq(ResearchLogic.landing_advice(defs["theories"]["autonomous_navigation"], { "science": { "evidence": {} } }), "",
+		"no landing needed for it")

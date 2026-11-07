@@ -364,7 +364,7 @@ func _check_crash(ctx: SimContext, unit_id: int) -> void:
 	var unit: Dictionary = ctx.state["units"][unit_id]
 	var body_id: int = unit["orbit"]["parent"]
 	var body: Dictionary = ctx.state["bodies"][body_id]
-	if body["gm"] <= 0 or IntMath.dist(unit["pos_mm"], [0, 0, 0]) >= body["radius_mm"]:
+	if body["gm"] <= 0 or not IntMath.dist_below(unit["pos_mm"], body["radius_mm"]):
 		return
 	var cell := cell_below(ctx, body_id, unit["pos_mm"])
 	if not unit["burn"].is_empty():

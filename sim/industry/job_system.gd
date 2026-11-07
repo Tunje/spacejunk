@@ -487,13 +487,16 @@ func _claim_port(ctx: SimContext, job: Dictionary) -> void:
 	_pause(ctx, job, REASON_NO_FREE_PORT)
 
 
-## Ports a built unit may dock at: the builder's own, then those of the unit it is docked to, so a
-## probe docked at its station builds onto the station's spare port (start_and_build.md section 5).
+## Ports a built unit may dock at: the builder's own, then those of the units docked with it, either
+## way, by ID, so a probe and its station build onto the station's spare port whichever of them
+## holds the dock record (start_and_build.md section 5; C22: the new start's station is docked to
+## the probe).
 func _build_ports(ctx: SimContext, unit_id: int) -> Array[int]:
 	var ports := Units.ports(ctx.state, ctx.defs, unit_id)
-	var dock: Dictionary = ctx.state["units"][unit_id]["dock"]
-	if not dock.is_empty():
-		ports.append_array(Units.ports(ctx.state, ctx.defs, dock["target_unit"]))
+	var units: Dictionary = ctx.state["units"]
+	for other: int in _sorted(units):
+		if other != unit_id and Units.are_docked(ctx.state, unit_id, other):
+			ports.append_array(Units.ports(ctx.state, ctx.defs, other))
 	return ports
 
 
@@ -606,24 +609,51 @@ func _sorted(table: Dictionary) -> Array:
 ## Coast (A33, C17). A running job works work_per_tick a tick, so it coasts until its run's last
 ## tick, which is stepped, and with it a build's port claim. A queued, paused or cancelling job, or a
 ## waiting one held for a reason, changes nothing until something else does, which is stepped. But
-## a job about to start its next run (waiting, no reason) steps, and so does one waiting while its
-## own unit mines, whose ore could clear missing_inputs mid-skip.
+## a job about to start its next run (waiting, no reason) steps, and so does any held job whose
+## unit, or install target, has stores coasting in closed form (C20): mined ore could clear
+## missing_inputs mid-skip, and a transfer could bring inputs or free room.
 func horizon(ctx: SimContext) -> int:
 	var skip := NO_LIMIT
 	var jobs: Dictionary = ctx.state["jobs"]
+	var moving := {}
+	var checked := false
 	for id: int in _sorted(jobs):
 		var job: Dictionary = jobs[id]
 		match job["status"]:
 			STATUS_RUNNING:
 				var rate := work_per_tick(ctx, job["facility"])
 				skip = mini(skip, (job["work_left"] + rate - 1) / rate - 1)
-			STATUS_WAITING:
-				if job["reason"] == "" or ctx.state["units"][job["unit"]]["op"]["type"] == MiningStep.OP_MINING:
+			STATUS_QUEUED:
+				pass
+			_:
+				# A held job waits on its unit's stores, or an install target's (C15). If they are
+				# changing in closed form, mined or transferred, it could go on mid-skip (C20).
+				if job["status"] == STATUS_WAITING and job["reason"] == "":
 					skip = 0
+				else:
+					if not checked:
+						moving = _stores_moving(ctx)
+						checked = true
+					if moving.has(job["unit"]) or moving.has(job["install_to"].get("unit", 0)):
+						skip = 0
 		if skip <= 0:
 			ctx.coast_cap = "jobs"
 			return 0
 	return skip
+
+
+## Units whose stores coast changes in closed form: miners, and both ends of a transfer.
+func _stores_moving(ctx: SimContext) -> Dictionary:
+	var moving := {}
+	var units: Dictionary = ctx.state["units"]
+	for id: int in _sorted(units):
+		var op: Dictionary = units[id]["op"]
+		if op["type"] == MiningStep.OP_MINING:
+			moving[id] = true
+		elif op["type"] in [TransferStep.OP_LOADING, TransferStep.OP_UNLOADING]:
+			moving[op["from"]] = true
+			moving[op["to"]] = true
+	return moving
 
 
 ## Coast (C17): each running job does its work for the skipped ticks.

@@ -1,12 +1,13 @@
 extends GutTest
 ## The coast soak's fixed gate seeds (task A35): each runs a random game once stepped and once
 ## coasted and compares them at every coast return. tools/coast_soak.gd runs many more seeds.
-## Seed 1 is D's shadow edge case on the new start, and 3 flies the new start's probe between rocks
-## (A37). 4 and 8 burn, 8 with a hot loop, and 6 just laps. Seeds that land and take off run 20 to 30
-## seconds each, so they are left to the deep run.
+## Seed 1 is D's shadow edge case on the new start, 3 flies the new start's probe between rocks
+## (A37), and 5 runs the reference station's drone on a mining cycle (C20). 4 and 8 burn, 8 with a
+## hot loop, and 6 just laps. Seeds that land and take off run 20 to 30 seconds each, so they are
+## left to the deep run.
 
 const CoastSoak := preload("res://tests/sim/kernel/coast_soak.gd")
-const SEEDS := [1, 3, 4, 6, 8]
+const SEEDS := [1, 3, 4, 5, 6, 8]
 const TICKS := 8_000
 
 

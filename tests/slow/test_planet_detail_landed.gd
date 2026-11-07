@@ -17,6 +17,7 @@ func _has_level(keys: Array[String], level: int) -> bool:
 ## The real Sim: land on a small planet and look at what the client draws.
 func test_close_up_tiles_appear_under_a_landed_craft() -> void:
 	var main: Node = load("res://client/main.tscn").instantiate()
+	main.scenario = "reference"
 	add_child_autofree(main)
 	var bridge: SimBridge = main.get_node("Bridge")
 	bridge.set_paused(true)

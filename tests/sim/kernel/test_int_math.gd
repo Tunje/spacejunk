@@ -105,3 +105,20 @@ func test_dist_reports_a_length_past_63_bits() -> void:
 	var limit := 4_000_000_000_000_000_000
 	assert_eq(IntMath.dist([-limit, -limit, -limit], [limit, limit, limit]), MAX)
 	assert_push_error("does not fit")
+
+
+## A40: dist_above and dist_below give exactly what comparing dist does, across scales from
+## millimetres to an AU, and at the limit itself.
+func test_distance_comparisons_match_the_distance() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4040
+	for n in 20_000:
+		var scale: int = [1_000, 1_000_000, 1_000_000_000, 150_000_000_000_000][n % 4]
+		var v := [rng.randi_range(-scale, scale), rng.randi_range(-scale, scale), rng.randi_range(-scale, scale)]
+		var d := IntMath.dist(v, [0, 0, 0])
+		for limit: int in [d - 1, d, d + 1, rng.randi_range(0, 2 * scale)]:
+			if IntMath.dist_above(v, limit) != (d > limit) or IntMath.dist_below(v, limit) != (d < limit):
+				assert_eq([IntMath.dist_above(v, limit), IntMath.dist_below(v, limit)], [d > limit, d < limit],
+					"%s against %d" % [str(v), limit])
+				return
+	assert_true(true)

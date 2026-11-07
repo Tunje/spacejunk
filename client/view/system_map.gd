@@ -22,6 +22,11 @@ var entries: Array[Dictionary] = []
 ## the frame's centre, not something to click.
 var frame_labels: Array[Dictionary] = []
 var eta_text := ""
+## The System view (D37): the star at the centre and every orbit drawn, instead of
+## distances round the commanded craft. Y or the map's button toggles it.
+var system_view := false
+## Orbit rings colour in the System view.
+const ORBIT_COLOUR := Color(0.32, 0.36, 0.44)
 var _press_position := Vector2.ZERO
 var _pressed := false
 var _orbiting := false
@@ -91,7 +96,16 @@ func _process(delta: float) -> void:
 		refresh(delta)
 
 
+func toggle_system() -> void:
+	system_view = not system_view
+	rings.mesh = _build_rings() if not system_view else ImmediateMesh.new()
+	refresh(0.0)
+
+
 func refresh(delta: float) -> void:
+	if system_view:
+		_refresh_system(delta)
+		return
 	var after: Dictionary = bridge.current_view
 	var before: Dictionary = bridge.previous_view
 	var alpha := bridge.interpolation_alpha()
@@ -117,6 +131,43 @@ func refresh(delta: float) -> void:
 		frame_labels.append({ "label": frame["name"], "map_pos": SystemMap.project(relative) })
 	_draw_routes(after, centre_after)
 	eta_text = _eta_for_selection(after)
+	camera.update_view(delta)
+	overlay.update_entries()
+
+
+## The System view: positions and orbit rings from SystemLayout, no routes.
+func _refresh_system(delta: float) -> void:
+	var view: Dictionary = bridge.current_view
+	var placed := SystemLayout.positions(view)
+	entries.clear()
+	# At this scale the rocks of a frame and other craft crowd their moon's name, so
+	# the view lists the star, planets and moons and the craft in command; a frame
+	# shows by its name.
+	for kind: String in ["body", "unit"]:
+		var table: Dictionary = view["bodies"] if kind == "body" else view["units"]
+		for id: int in table:
+			if kind == "body" and table[id]["kind"] == "asteroid":
+				continue
+			if kind == "unit" and id != local_view.commanded_unit:
+				continue
+			entries.append({
+				"kind": kind, "id": id, "label": table[id]["name"], "map_pos": placed["%s:%d" % [kind, id]]["pos"],
+				"selected": local_view.selected_kind == kind and local_view.selected_id == id,
+			})
+	frame_labels.clear()
+	for id: int in view.get("frames", {}):
+		frame_labels.append({ "label": view["frames"][id]["name"], "map_pos": placed["frame:%d" % id]["pos"] })
+	var mesh: ImmediateMesh = rings.mesh
+	mesh.clear_surfaces()
+	for ring: Dictionary in SystemLayout.orbit_rings(view, placed):
+		mesh.surface_begin(Mesh.PRIMITIVE_LINE_STRIP)
+		for index in range(RING_SEGMENTS + 1):
+			var angle := TAU * index / RING_SEGMENTS
+			mesh.surface_set_color(ORBIT_COLOUR)
+			mesh.surface_add_vertex(ring["centre"] + (ring["p"] * cos(angle) + ring["q"] * sin(angle)) * ring["radius"])
+		mesh.surface_end()
+	(routes.mesh as ImmediateMesh).clear_surfaces()
+	eta_text = _eta_for_selection(view)
 	camera.update_view(delta)
 	overlay.update_entries()
 
@@ -223,6 +274,10 @@ func _selected_position(view: Dictionary) -> Array:
 func _eta_for_selection(view: Dictionary) -> String:
 	if _selected_position(view).is_empty():
 		return ""
+	var under_way := SystemMap.trip_under_way(view, local_view.commanded_unit, local_view.selected_id,
+		bridge.ticks_per_second())
+	if under_way != "":
+		return under_way
 	if bridge.sim.has_method("quote"):
 		var key := "%d:%d" % [local_view.commanded_unit, local_view.selected_id]
 		var now := Time.get_ticks_msec()
@@ -240,6 +295,24 @@ func _eta_for_selection(view: Dictionary) -> String:
 	return OrderText.duration(float(result["detail"]["ticks"]) / bridge.ticks_per_second())
 
 
+## The trip already ordered to `target`, waiting for its window or flying, so the map
+## doesn't quote a new one beside it; "" when there is none.
+static func trip_under_way(view: Dictionary, unit_id: int, target: int, ticks_per_second: int) -> String:
+	var unit: Dictionary = view["units"].get(unit_id, {})
+	if unit.is_empty():
+		return ""
+	var tick: int = view["tick"]
+	var plan: Dictionary = unit.get("op", {}).get("plan", {})
+	if not plan.is_empty() and int(plan.get("target", 0)) == target:
+		return "Waiting for the window: departs in %s, arrives in %s" % [
+			OrderText.duration(float(maxi(0, int(plan["depart_tick"]) - tick)) / ticks_per_second),
+			OrderText.duration(float(maxi(0, int(plan["arrive_tick"]) - tick)) / ticks_per_second)]
+	var trip: Dictionary = unit.get("transfer", {})
+	if not trip.is_empty() and int(trip.get("target", 0)) == target:
+		return "On the way, arrives in %s" % OrderText.duration(float(maxi(0, int(trip["arrive_tick"]) - tick)) / ticks_per_second)
+	return ""
+
+
 ## "12 min", or for a transfer "Departs in 40 min, 31 min trip". "" if refused.
 static func trip_text(quote: Dictionary, tick: int, ticks_per_second: int) -> String:
 	if quote.is_empty() or quote.has("reason"):
@@ -248,13 +321,21 @@ static func trip_text(quote: Dictionary, tick: int, ticks_per_second: int) -> St
 	if quote.get("kind", "") != "transfer":
 		return trip
 	var wait: int = quote["depart_tick"] - tick
+	# A41a: a trip between planes burns into the target's plane first, part of its delta-v.
+	var plane := int(quote.get("plane_change_dv_um_s", 0))
+	var plane_text := "" if plane <= 0 else ", including a %s plane change" % FlightLogic.speed(plane)
 	if wait <= 0:
-		return "%s trip" % trip
-	return "Departs in %s, %s trip" % [OrderText.duration(float(wait) / ticks_per_second), trip]
+		return "%s trip%s" % [trip, plane_text]
+	return "Departs in %s, %s trip%s" % [OrderText.duration(float(wait) / ticks_per_second), trip, plane_text]
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not visible:
+		return
+	var key := event as InputEventKey
+	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_Y:
+		toggle_system()
+		get_viewport().set_input_as_handled()
 		return
 	var button := event as InputEventMouseButton
 	if button != null:

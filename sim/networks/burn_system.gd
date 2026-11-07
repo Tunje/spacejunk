@@ -123,6 +123,9 @@ func run(ctx: SimContext) -> void:
 	for id: int in _sorted(units):
 		if not units[id]["burn"].is_empty():
 			_thrust(ctx, id)
+	# The frames and spheres each parent's orbiters are tested against, sorted and with their join
+	# distances, once per tick rather than once per unit (A40).
+	var near := {}
 	for id: int in _sorted(units):
 		var unit: Dictionary = units[id]
 		if not unit["dock"].is_empty() or not unit["route"].is_empty() or not unit["transfer"].is_empty():
@@ -136,8 +139,36 @@ func run(ctx: SimContext) -> void:
 		elif _is_low(ctx, unit):
 			LowFlight.enter(ctx, id)
 		else:
-			_cross_soi(ctx, id)
-			_try_join(ctx, id)
+			var parent: int = unit["orbit"]["parent"]
+			if not near.has(parent):
+				near[parent] = _near_of(ctx, parent)
+			_cross_soi(ctx, id, near[parent]["children"])
+			# A crossing this tick re-bases the orbit, and the join test then uses the new parent's
+			# frames, as it always has.
+			if unit["orbit"].is_empty():
+				continue
+			parent = unit["orbit"]["parent"]
+			if not near.has(parent):
+				near[parent] = _near_of(ctx, parent)
+			_try_join(ctx, id, near[parent]["frames"])
+
+
+## For orbiters round a parent: { children: [child IDs with a sphere], frames: [[frame ID, join
+## distance]] }, each in ascending ID.
+func _near_of(ctx: SimContext, parent_id: int) -> Dictionary:
+	var children: Array = []
+	var bodies: Dictionary = ctx.state["bodies"]
+	for child_id: int in _sorted(bodies):
+		var child: Dictionary = bodies[child_id]
+		if child.get("soi_mm", 0) > 0 and child["orbit"].get("parent", 0) == parent_id:
+			children.append(child_id)
+	var frames: Array = []
+	var all: Dictionary = ctx.state["frames"]
+	for frame_id: int in _sorted(all):
+		var frame: Dictionary = all[frame_id]
+		if frame["orbit"]["parent"] == parent_id:
+			frames.append([frame_id, int(frame["radius_mm"]) + join_margin_mm(ctx, frame)])
+	return { "children": children, "frames": frames }
 
 
 ## Coast (A33): a running burn, low flight and drift in a frame change every tick, so they are
@@ -625,21 +656,21 @@ func _leave(ctx: SimContext, unit_id: int, frame_id: int) -> void:
 
 
 ## Joins the first frame, in ID order, that the unit is inside and nearly at rest in.
-func _try_join(ctx: SimContext, unit_id: int) -> void:
+## `candidates` are [frame ID, join distance] for the frames round the unit's parent, by ID.
+func _try_join(ctx: SimContext, unit_id: int, candidates: Array) -> void:
 	var unit: Dictionary = ctx.state["units"][unit_id]
 	var orbit: Dictionary = unit["orbit"]
 	var frames: Dictionary = ctx.state["frames"]
-	for frame_id: int in _sorted(frames):
+	for candidate: Array in candidates:
+		var frame_id: int = candidate[0]
 		var frame: Dictionary = frames[frame_id]
-		if frame["orbit"]["parent"] != orbit["parent"]:
-			continue
 		# Positions are already this tick's, so test distance first and leave the dearer velocities
 		# to the rare unit that is close (A17).
 		var unit_mm: Array = unit["pos_mm"]
 		var frame_mm: Array = frame["pos_mm"]
 		var near := [unit_mm[0] - frame_mm[0], unit_mm[1] - frame_mm[1], unit_mm[2] - frame_mm[2]]
-		var join_mm: int = frame["radius_mm"] + join_margin_mm(ctx, frame)
-		if IntMath.dist(near, [0, 0, 0]) > join_mm + JOIN_SLACK_MM:
+		var join_mm: int = candidate[1]
+		if IntMath.dist_above(near, join_mm + JOIN_SLACK_MM):
 			continue
 		var gm: int = ctx.state["bodies"][orbit["parent"]]["gm"]
 		var mine := OrbitMath.state_at(orbit, gm, ctx.tick)
@@ -664,24 +695,23 @@ func _try_join(ctx: SimContext, unit_id: int) -> void:
 
 ## Moves a unit's orbit to a new parent body if it has crossed a sphere of influence this tick.
 ## Checked every tick, so the change happens on the first tick past the boundary, whatever the speed.
-func _cross_soi(ctx: SimContext, unit_id: int) -> void:
+## `children` are the IDs of the parent's children with a sphere, ascending.
+func _cross_soi(ctx: SimContext, unit_id: int, children: Array) -> void:
 	var unit: Dictionary = ctx.state["units"][unit_id]
 	var bodies: Dictionary = ctx.state["bodies"]
 	var parent_id: int = unit["orbit"]["parent"]
 	var parent: Dictionary = bodies[parent_id]
 	var pos: Array = unit["pos_mm"]
 	if parent.get("soi_mm", 0) > 0 and not parent["orbit"].is_empty() \
-			and IntMath.dist(pos, [0, 0, 0]) > parent.get("soi_mm", 0):
+			and IntMath.dist_above(pos, parent.get("soi_mm", 0)):
 		var up: int = parent["orbit"]["parent"]
 		var carried := OrbitMath.state_at(parent["orbit"], bodies[up]["gm"], ctx.tick)
 		_rebase(ctx, unit_id, up, carried, 1)
 		return
-	for child_id: int in _sorted(bodies):
+	for child_id: int in children:
 		var child: Dictionary = bodies[child_id]
-		if child.get("soi_mm", 0) <= 0 or child["orbit"].get("parent", 0) != parent_id:
-			continue
 		var gap: Array = child["pos_mm"]
-		if IntMath.dist([pos[0] - gap[0], pos[1] - gap[1], pos[2] - gap[2]], [0, 0, 0]) < child["soi_mm"]:
+		if IntMath.dist_below([pos[0] - gap[0], pos[1] - gap[1], pos[2] - gap[2]], child["soi_mm"]):
 			_rebase(ctx, unit_id, child_id, OrbitMath.state_at(child["orbit"], parent["gm"], ctx.tick), -1)
 			return
 
@@ -710,7 +740,7 @@ func _rebase(ctx: SimContext, unit_id: int, new_parent: int, between: Dictionary
 ## True if an orbiting unit is below LowFlight.ENTER_MM over a body with gravity (A19).
 static func _is_low(ctx: SimContext, unit: Dictionary) -> bool:
 	var body: Dictionary = ctx.state["bodies"][unit["orbit"]["parent"]]
-	return body["gm"] > 0 and IntMath.dist(unit["pos_mm"], [0, 0, 0]) - int(body["radius_mm"]) < LowFlight.ENTER_MM
+	return body["gm"] > 0 and IntMath.dist_below(unit["pos_mm"], int(body["radius_mm"]) + LowFlight.ENTER_MM)
 
 
 ## Division rounding towards minus infinity, so drift steps the same either way along an axis.

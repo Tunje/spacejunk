@@ -5,6 +5,7 @@ class_name ScreenshotDriver extends Node
 ##   --order=<order key>             pressed after --delay frames
 ##   --scenario=<id>  (read by main)  --speed=1|2|4|8  --zoom=<metres>  --yaw=<radians>  --pitch=<radians>
 ##   --map=1                         opens the system map
+##   --system=1                      and switches it to the System view (D37)
 ##   --policy=1                      opens the standing-orders mock
 ##   --then=<order key>              pressed --then-delay frames after --order
 ##   --last=<order key>              pressed --last-delay frames after --then
@@ -17,6 +18,9 @@ class_name ScreenshotDriver extends Node
 ##   --fly-plan=<frames>             plans the burn, then runs that many frames
 ##   --outlines=1                    shows the hex outlines on planets
 ##   --planet-wait=1                 waits for every planet's terrain before the rest
+##   --plane-demo=quote|path         (reference) two frames round a planet, 30 degrees apart, the
+##                                   ship in one and a rock in the other selected on the map (A41a):
+##                                   the trip's quote, or the plan once sent
 ##   --transfer-demo=<seconds>       (reference) a planet with two frames on the real Sim, the ship
 ##                                   sent to the far one's rock, run that long past departure
 ##   --propellant=<kg>               the landing demo's propellant, 1000 by default
@@ -76,6 +80,8 @@ func _ready() -> void:
 
 func _run() -> void:
 	var view: LocalView = main.local_view
+	if parsed.has("plane-demo"):
+		_plane_demo(parsed["plane-demo"])
 	if parsed.has("transfer-demo"):
 		_transfer_demo(float(parsed["transfer-demo"]))
 	if parsed.has("soi-demo"):
@@ -123,6 +129,8 @@ func _run() -> void:
 		camera.distance_m = camera.target_distance_m
 	if parsed.has("map"):
 		main.toggle_map()
+		if parsed.has("system"):
+			main.system_map.toggle_system()
 		camera = main.system_map.camera
 		if parsed.has("yaw"):
 			camera.yaw = float(parsed["yaw"])
@@ -508,6 +516,49 @@ func _transfer_demo(seconds_after_departure: float) -> void:
 	main.bridge.start(sim)
 	main.bridge.set_paused(true)
 	main.local_view.rebuild()
+	main.local_view.select("body", rock, 0)
+
+
+## Two frames round one planet whose planes are 30 degrees apart, so a trip from the ship
+## in one to the rock in the other burns into the rock's plane first (A41a).
+func _plane_demo(stage: String) -> void:
+	var defs := DataLoader.load_defs()
+	var sim := Sim.new()
+	sim._setup(Sim._new_state("reference", 7, defs), defs)
+	ScenarioBuilder.populate(sim._ctx, {
+		"bodies": [
+			{ "key": "star", "name": "Star", "kind": "star", "pos_mm": [0, 0, 0], "radius_mm": 696_000_000_000,
+				"visual_seed": 1, "deposits": [], "gm": 132_712_440_018_000_000 },
+			{ "key": "planet", "name": "Planet", "kind": "planet", "radius_mm": 600_000_000, "visual_seed": 2,
+				"deposits": [], "gm": 3_531_600_000, "orbit": { "parent": "star", "a_mm": 149_597_870_700_000 } },
+			{ "key": "rock", "name": "Rock", "kind": "asteroid", "frame": "far", "pos_mm": [20_000_000, 0, 0],
+				"radius_mm": 500_000, "visual_seed": 3, "deposits": [] },
+		],
+		"frames": [
+			{ "key": "home", "name": "Home", "radius_mm": 1_000_000,
+				"orbit": { "parent": "planet", "a_mm": 9_000_000_000 } },
+			{ "key": "far", "name": "Far", "radius_mm": 1_000_000,
+				"orbit": { "parent": "planet", "a_mm": 11_000_000_000, "mean_anomaly_mdeg": 123_000, "inclination_mdeg": 30_000 } },
+		],
+		"units": [{ "key": "ship", "template": "starter_ship", "name": "Ship", "pos_mm": [150_000, 0, 0],
+			"frame": "home", "inventory": [{ "item": "propellant", "grams": 2_000_000 }], "dock": null }],
+	}, {})
+	var rock := 0
+	var ship := 0
+	for id: int in sim._state["bodies"]:
+		if sim._state["bodies"][id]["name"] == "Rock":
+			rock = id
+	for id: int in sim._state["units"]:
+		ship = id
+	# Sent, so the map draws the plan it waits to fly: the ride to the plane crossing,
+	# then the transfer.
+	if stage == "path":
+		sim.submit({ "type": "move_to", "unit": ship, "args": { "target": rock } })
+		sim.step(2)
+	main.bridge.start(sim)
+	main.bridge.set_paused(true)
+	main.local_view.rebuild()
+	main.toggle_map()
 	main.local_view.select("body", rock, 0)
 
 
