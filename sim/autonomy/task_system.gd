@@ -41,6 +41,7 @@ const ATOMIC_OPS: Array[String] = ["docking", "undocking"]
 ## The fields a task shows in the view. `op_ended`, `enter` and `moved_g` stay internal.
 const VIEW_FIELDS: Array[String] = [
 	"id", "owner", "kind", "state", "reason", "hold", "steps", "step", "cycle", "since_tick", "command",
+	"laps",
 ]
 
 var _steps := {}
@@ -180,6 +181,9 @@ func _validate_cycle(ctx: SimContext, command: Dictionary) -> Dictionary:
 	var unit_id: int = command["unit"]
 	if tier_of(ctx, ctx.state["units"][unit_id]) < CYCLE_TIER:
 		return SimSystem.reject(REASON_TIER_TOO_LOW)
+	var laps: Variant = command["args"].get("laps", 0)
+	if typeof(laps) != TYPE_INT or (command["args"].has("laps") and laps <= 0):
+		return SimSystem.reject(REASON_MALFORMED)
 	var steps: Variant = command["args"].get("steps")
 	if typeof(steps) != TYPE_ARRAY or steps.size() < MIN_CYCLE_STEPS or steps.size() > MAX_CYCLE_STEPS:
 		return _bad_cycle(0)
@@ -226,6 +230,8 @@ func _create(ctx: SimContext, unit: Dictionary, command: Dictionary, kind: Strin
 		"id": id, "owner": unit["id"], "kind": kind, "state": STATE_RUNNING, "reason": "", "hold": false,
 		"steps": steps.duplicate(true), "step": 0, "cycle": 0, "since_tick": ctx.tick,
 		"command": command["id"], "op_ended": false, "enter": kind == KIND_CYCLE,
+		# Laps a cycle runs before it finishes (C25); 0 repeats until it is stopped or replaced.
+		"laps": command["args"].get("laps", 0) if kind == KIND_CYCLE else 0,
 	}
 	unit["task"] = id
 	ctx.emit_event("task_started", unit["id"], { "task": id, "command": command["id"] })
@@ -279,6 +285,11 @@ func _update_cycle(ctx: SimContext, unit: Dictionary) -> void:
 	var task: Dictionary = ctx.state["tasks"][unit["task"]]
 	if task["op_ended"]:
 		_complete_step(ctx, unit, task)
+		# The last of its laps done (C25): the cycle finishes, as an order does, and the unit idles.
+		if task["laps"] > 0 and task["step"] == 0 and task["cycle"] >= task["laps"]:
+			_forget(ctx, unit)
+			ctx.emit_event("task_finished", unit["id"], { "task": task["id"] })
+			return
 	if task["enter"] and not _reenter(ctx, unit, task):
 		_block(ctx, unit, task, REASON_NO_SAFE_STEP)
 		return

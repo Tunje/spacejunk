@@ -143,6 +143,8 @@ For the closure walk, `move_to` leaves the unit at its target, `dock` leaves it 
 
 The cycle then starts through re-entry (below), with `step` at 0. So a unit can be handed a cycle from anywhere.
 
+An optional `laps`, a whole number above 0, ends the cycle after that many laps (C25): the lap's `task_cycle_done`, then `task_finished`, and the unit is idle with no task. `laps` 1 is a one-shot plan, such as a single trip. A bad `laps` is `malformed_command`. Without it the cycle repeats until stopped or replaced, as before. The task's view shows `laps`, 0 for a repeating cycle and for orders.
+
 The spec's check 8 requires a propellant load in the cycle. That is a content rule for the bot and the player, and `set_cycle` does not enforce it.
 
 ### Example
