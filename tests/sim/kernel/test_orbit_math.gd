@@ -2,6 +2,7 @@ extends GutTest
 ## OrbitMath (task A9). The float functions here are the reference the client draws orbits with:
 ## a client drawing an orbit record must match position_float within 1 m.
 
+const Timing := preload("res://tests/sim/kernel/timing.gd")
 const ONE := OrbitMath.ONE
 const TURN := OrbitMath.TURN
 ## GM in the sim unit of 1000 m^3/s^2.
@@ -312,19 +313,22 @@ func test_cost_per_call() -> void:
 	var orbits: Array[Dictionary] = []
 	for i in 200:
 		orbits.append(_random_orbit(GM_PLANET, 900_000_000, rng.randi_range(0, ONE * 3 / 10)))
-	var start := Time.get_ticks_usec()
-	for orbit in orbits:
-		OrbitMath.position_at(orbit, 4242)
-	var position_us := float(Time.get_ticks_usec() - start) / orbits.size()
 	var states: Array[Dictionary] = []
-	start = Time.get_ticks_usec()
 	for orbit in orbits:
 		states.append(OrbitMath.state_at(orbit, GM_PLANET, 4242))
-	var state_us := float(Time.get_ticks_usec() - start) / orbits.size()
-	start = Time.get_ticks_usec()
-	for state in states:
-		OrbitMath.from_state(state["r"], state["v"], GM_PLANET, 4242)
-	var convert_us := float(Time.get_ticks_usec() - start) / orbits.size()
+	var positions := func() -> void:
+		for orbit in orbits:
+			OrbitMath.position_at(orbit, 4242)
+	var to_states := func() -> void:
+		for orbit in orbits:
+			OrbitMath.state_at(orbit, GM_PLANET, 4242)
+	var to_orbits := func() -> void:
+		for state in states:
+			OrbitMath.from_state(state["r"], state["v"], GM_PLANET, 4242)
+	# Each cost is the fastest of five runs, so a loaded machine doesn't fail it (A45).
+	var position_us := float(Timing.best_usec(positions)) / orbits.size()
+	var state_us := float(Timing.best_usec(to_states)) / orbits.size()
+	var convert_us := float(Timing.best_usec(to_orbits)) / orbits.size()
 	print("ORBIT cost: position %.1f us, state %.1f us, state to orbit %.1f us" % [position_us, state_us, convert_us])
 	assert_lt(position_us, 200.0)
 	assert_lt(convert_us, 1000.0)

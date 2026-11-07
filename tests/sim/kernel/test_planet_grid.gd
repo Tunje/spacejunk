@@ -1,6 +1,7 @@
 extends GutTest
 ## PlanetGrid (task A14): the Goldberg grid, its IDs and neighbours, and integer terrain.
 
+const Timing := preload("res://tests/sim/kernel/timing.gd")
 const ONE := OrbitMath.ONE
 const WEIGHTS := [4, 2, 1]
 ## SHA-256 of every cell's height, moisture and roll on the n = 33 planet with seed 48213.
@@ -174,17 +175,18 @@ func test_a_fixed_planet_matches_its_golden_hash() -> void:
 
 func test_cost_per_cell() -> void:
 	var n := 100
-	var start := Time.get_ticks_usec()
-	for cell in range(0, PlanetGrid.cell_count(n), 100):
-		var dir := PlanetGrid.direction(cell, n)
-		PlanetGrid.height_m(48213, dir, WEIGHTS, 8000)
-		PlanetGrid.moisture(48213, dir, WEIGHTS)
-		PlanetGrid.roll(48213, cell, 1)
-	var cell_us := float(Time.get_ticks_usec() - start) / (PlanetGrid.cell_count(n) / 100)
-	start = Time.get_ticks_usec()
-	for cell in range(0, PlanetGrid.cell_count(n), 100):
-		PlanetGrid.neighbours(cell, n)
-	var neighbour_us := float(Time.get_ticks_usec() - start) / (PlanetGrid.cell_count(n) / 100)
+	var cells := func() -> void:
+		for cell in range(0, PlanetGrid.cell_count(n), 100):
+			var dir := PlanetGrid.direction(cell, n)
+			PlanetGrid.height_m(48213, dir, WEIGHTS, 8000)
+			PlanetGrid.moisture(48213, dir, WEIGHTS)
+			PlanetGrid.roll(48213, cell, 1)
+	var neighbours := func() -> void:
+		for cell in range(0, PlanetGrid.cell_count(n), 100):
+			PlanetGrid.neighbours(cell, n)
+	# Each cost is the fastest of five runs, so a loaded machine doesn't fail it (A45).
+	var cell_us := float(Timing.best_usec(cells)) / (PlanetGrid.cell_count(n) / 100)
+	var neighbour_us := float(Timing.best_usec(neighbours)) / (PlanetGrid.cell_count(n) / 100)
 	print("PLANET cost: one cell's direction, height, moisture and roll %.1f us; neighbours %.1f us" % [
 		cell_us, neighbour_us])
 	assert_lt(cell_us, 500.0)
