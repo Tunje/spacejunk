@@ -192,18 +192,23 @@ func test_a_job_stuck_on_missing_inputs_can_be_moved_out_of_the_way() -> void:
 	var order := _queued(["wiring", "structural_frame"])
 	var stuck: Dictionary = sim.view()["jobs"][order[0]]
 	assert_eq([stuck["status"], stuck["reason"]], ["waiting", "missing_inputs"])
+	# The frame job has already gone ahead of the starved one (C24); moving the stuck job back
+	# still puts it behind, with the running job at the front.
+	var ahead: Dictionary = sim.view()["jobs"][order[1]]
+	assert_eq([ahead["status"], ahead["queue_pos"]], ["running", 1], "gone ahead in its place")
+	var started_at: int = ahead["start_tick"]
 	sim.take_events()
 
 	sim.submit(_move(order[0], 1))
 	_step_balanced(1)
 	assert_eq(_order(), [order[1], order[0]])
 	var events := sim.take_events()
-	assert_eq(_types(events), ["job_resumed", "job_moved", "job_started"])
+	assert_eq(_types(events), ["job_resumed", "job_moved"])
 	assert_eq(events[0]["data"], { "job": order[0], "reason": "missing_inputs" })
 	var jobs: Dictionary = sim.view()["jobs"]
 	assert_eq([jobs[order[0]]["status"], jobs[order[0]]["reason"]], ["queued", ""])
-	assert_eq(jobs[order[1]]["status"], "running")
-	assert_eq(jobs[order[1]]["start_tick"], sim.current_tick(), "it starts on the tick it moves up")
+	assert_eq([jobs[order[1]]["status"], jobs[order[1]]["queue_pos"]], ["running", 0])
+	assert_eq(jobs[order[1]]["start_tick"], started_at, "its run goes on unbroken")
 	_step_balanced(RUN_TICKS)
 	assert_eq(_stock("structural_frame"), FRAME_G)
 	assert_eq(sim.view()["jobs"][order[0]]["reason"], "missing_inputs", "back in front, still waiting")

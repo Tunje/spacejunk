@@ -21,6 +21,12 @@ extends SimSystem
 ## A facility holds an ordered queue of jobs. The job at queue_pos 0 is active and has the states
 ## above. The rest are queued at 1..n, hold nothing, and wait their turn. When the active job ends,
 ## the next one becomes active straight away and can start its first run in the next phase 4.
+##
+## A starved queue skips (C24): while the active job waits on missing_inputs or output_full and the
+## facility has no run in progress, the queued job with the lowest queue_pos that can start a run
+## goes ahead for one run, with job_went_ahead. It keeps its place, goes back to queued when the run
+## ends, and the next phase 4 scans from queue_pos 0 again, so the active job takes the facility
+## back as soon as it can start. A run in progress is never broken.
 
 const START := "start_job"
 const CANCEL := "cancel_job"
@@ -49,6 +55,8 @@ const REASON_JOB_BUSY := "job_busy"
 const REASON_INSTALL_BLOCKED := "install_blocked"
 const REASON_NOT_DOCKED := "not_docked"
 const REASON_CONNECTOR_OCCUPIED := "connector_occupied"
+## The active job's reasons a queued job may go ahead of (C24).
+const STARVED_REASONS: Array[String] = [REASON_MISSING_INPUTS, REASON_OUTPUT_FULL]
 const INSTALL_FIELDS := {
 	"unit": TYPE_INT, "parent_part": TYPE_INT, "parent_connector": TYPE_STRING, "part_connector": TYPE_STRING,
 }
@@ -127,13 +135,45 @@ func allocate(ctx: SimContext) -> void:
 				_emit_ended(ctx, job, "job_cancelled", done)
 				_remove(ctx, job)
 				continue
+			# A queued job that went ahead (C24) keeps the facility until its run ends; the active
+			# job keeps the reason it starved on until then.
+			if _facility_has_run(ctx, job["facility"]):
+				continue
 			var reason := _blocker(ctx, job)
 			if reason == "":
 				_start_run(ctx, job)
 			else:
 				_set_reason(ctx, job, STATUS_WAITING, reason)
-		if _needs_port(ctx, job):
-			_claim_port(ctx, job)
+	_skip_starved(ctx)
+	for id: int in _sorted(jobs):
+		if _needs_port(ctx, jobs[id]):
+			_claim_port(ctx, jobs[id])
+
+
+## C24. For each facility, by part ID, whose active job waits starved with no run in progress: the
+## first queued job, by queue_pos, that can start a run now starts one.
+func _skip_starved(ctx: SimContext) -> void:
+	var jobs: Dictionary = ctx.state["jobs"]
+	var facilities := {}
+	for id: int in _sorted(jobs):
+		facilities[jobs[id]["facility"]] = true
+	for facility: int in _sorted(facilities):
+		var queue := _queue_of(ctx, facility)
+		var head: Dictionary = jobs[queue[0]]
+		if head["status"] != STATUS_WAITING or not STARVED_REASONS.has(head["reason"]):
+			continue
+		if _facility_has_run(ctx, facility):
+			continue
+		for position in range(1, queue.size()):
+			var job: Dictionary = jobs[queue[position]]
+			if job["status"] != STATUS_QUEUED or ResearchRules.done_reason(ctx, _recipe(ctx, job)) != "" \
+					or _blocker(ctx, job) != "":
+				continue
+			_start_run(ctx, job)
+			ctx.emit_event("job_went_ahead", job["unit"], {
+				"job": job["id"], "ahead_of": head["id"], "reason": head["reason"],
+			})
+			break
 
 
 ## Phase 5. Allocation has run, so a part's state is final for this tick.
@@ -229,7 +269,8 @@ func _end_run(ctx: SimContext, job: Dictionary) -> void:
 	if job["count_left"] == 0:
 		_remove(ctx, job)
 	else:
-		job["status"] = STATUS_WAITING
+		# A job that went ahead (C24) goes back to its place in the queue.
+		job["status"] = STATUS_WAITING if job["queue_pos"] == 0 else STATUS_QUEUED
 		job["start_tick"] = 0
 
 
@@ -617,6 +658,7 @@ func horizon(ctx: SimContext) -> int:
 	var jobs: Dictionary = ctx.state["jobs"]
 	var moving := {}
 	var checked := false
+	var busy := {}
 	for id: int in _sorted(jobs):
 		var job: Dictionary = jobs[id]
 		match job["status"]:
@@ -624,7 +666,16 @@ func horizon(ctx: SimContext) -> int:
 				var rate := work_per_tick(ctx, job["facility"])
 				skip = mini(skip, (job["work_left"] + rate - 1) / rate - 1)
 			STATUS_QUEUED:
-				pass
+				# A queued job may go ahead of a starved active job (C24), once its own stores let it,
+				# on an idle facility only.
+				if not checked:
+					moving = _stores_moving(ctx)
+					checked = true
+				if busy.is_empty():
+					busy = _busy_facilities(ctx)
+				if not busy.has(job["facility"]) \
+						and (moving.has(job["unit"]) or moving.has(job["install_to"].get("unit", 0))):
+					skip = 0
 			_:
 				# A held job waits on its unit's stores, or an install target's (C15). If they are
 				# changing in closed form, mined or transferred, it could go on mid-skip (C20).
@@ -640,6 +691,25 @@ func horizon(ctx: SimContext) -> int:
 			ctx.coast_cap = "jobs"
 			return 0
 	return skip
+
+
+## True when any job of the facility has a run in progress.
+func _facility_has_run(ctx: SimContext, facility: int) -> bool:
+	var jobs: Dictionary = ctx.state["jobs"]
+	for id: int in _queue_of(ctx, facility):
+		if _has_run(jobs[id]):
+			return true
+	return false
+
+
+## Facilities with a run in progress, plus a key of 0 so the table is never empty once built.
+func _busy_facilities(ctx: SimContext) -> Dictionary:
+	var busy := { 0: true }
+	var jobs: Dictionary = ctx.state["jobs"]
+	for id: int in _sorted(jobs):
+		if _has_run(jobs[id]):
+			busy[jobs[id]["facility"]] = true
+	return busy
 
 
 ## Units whose stores coast changes in closed form: miners, and both ends of a transfer.

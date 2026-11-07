@@ -12,6 +12,8 @@ extends RefCounted
 ## Every fourth seed (3, 7, 11 ...) is the new start coasted to a random tick, then compared over a
 ## window in which the probe flies to up to three rocks in its cluster (A37).
 ## Seeds 5, 13, 21 ... are the reference station's drone on a mining cycle (C20).
+## Seeds 9, 25, 41 ... start from the new start's stage-6 snapshot and run its drone's real cycle to
+## Red Rock and back for two laps (C22).
 ## Seed 1 is D's shadow edge case from A35: new start seed 1, ticks 125,000 to 135,000.
 
 const GM_STAR := 132_712_440_018_000_000
@@ -20,6 +22,8 @@ const GM_MOON := 1_765_800
 const AU_MM := 149_597_870_700_000
 const MOON_R_MM := 60_000_000
 const ONE := OrbitMath.ONE
+## Two of the stage-6 drone's laps, which take about 7,261 ticks each (C22).
+const STAGE_SIX_TICKS := 15_000
 
 
 ## Runs one seed over `ticks` ticks. Returns { ok, message, calls, ticks, caps, events }, with caps
@@ -38,6 +42,9 @@ static func run_seed(seed: int, ticks: int) -> Dictionary:
 		actions = _moves(stepped, rng, ticks)
 	elif seed % 8 == 5:
 		stepped = _shuttle(rng)
+	elif seed % 16 == 9:
+		stepped = _stage_six(rng)
+		ticks = STAGE_SIX_TICKS
 	else:
 		var built := _moon_probe(rng, ticks)
 		stepped = built[0]
@@ -47,6 +54,37 @@ static func run_seed(seed: int, ticks: int) -> Dictionary:
 	if coasted == null:
 		return _result(false, "seed %d: the copy didn't load: %s" % [seed, Sim.last_error()], 0, 0, {})
 	return _compare(seed, stepped, coasted, ticks, actions)
+
+
+## The new start after its drone stage (tests/slow/new_start/stage_6.save, C22), with the drone set
+## on the bot's own cycle again: propellant from the station, out to Red Rock, mine the lap's amount,
+## back, dock and unload. The lap's amount is the bot's, or a random one.
+static func _stage_six(rng: RandomNumberGenerator) -> Sim:
+	var bot := NewStartBot.from_snapshot(NewStartBot.STAGE_DRONE)
+	assert(bot.problems.is_empty(), str(bot.problems))
+	var sim := bot.sim
+	var drone := 0
+	for id: int in _sorted(sim._state["units"]):
+		if sim._state["units"][id]["kind"] == "drone":
+			drone = id
+	var laser := 0
+	for part: int in Units.sorted_part_ids(sim._state, drone):
+		if Units.module_of(sim._state, sim._ctx.defs, part)["capabilities"].has("mine"):
+			laser = part
+	var dock: Dictionary = sim._state["units"][drone]["dock"]
+	var lap_g: int = NewStartBot.DRONE_LAP_G if rng.randi_range(0, 1) == 0 else rng.randi_range(1, 10) * 50_000
+	sim.submit({ "type": "set_cycle", "unit": drone, "args": { "steps": [
+		{ "type": "load_cargo", "args": { "from": bot.station, "item": "propellant" } },
+		{ "type": "undock", "args": {} },
+		{ "type": "move_to", "args": { "target": NewStartBot.RED_ROCK } },
+		{ "type": "start_mining", "args": { "deposit": bot.deposits["hematite"], "module": laser, "grams": lap_g } },
+		{ "type": "move_to", "args": { "target": bot.station } },
+		{ "type": "dock", "args": { "port": dock["port"], "target_port": dock["target_port"] } },
+		{ "type": "unload_cargo", "args": { "to": bot.station, "item": "hematite" } },
+	] } })
+	sim.step()
+	sim.take_events()
+	return sim
 
 
 ## The reference station with a drone on a mining cycle to a rock and back (C20's case): load
