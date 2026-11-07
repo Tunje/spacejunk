@@ -53,6 +53,10 @@ func begin(ctx: SimContext, unit_id: int, args: Dictionary) -> void:
 	op["item"] = args["item"]
 	op["limit_g"] = args.get("grams", 0)
 	unit[OPEN_KEY] = { "from": from, "to": to, "item": args["item"], "grams": 0 }
+	# A cycle keeps one task across its steps, so a credit an earlier whole-unit transfer built up
+	# must not carry into this one (A42).
+	var task: Dictionary = ctx.state["tasks"].get(unit["task"], {})
+	task.erase("credit_g")
 
 
 func references_exist(ctx: SimContext, _unit_id: int, args: Dictionary) -> bool:
@@ -96,6 +100,11 @@ func end_test(ctx: SimContext, unit_id: int) -> bool:
 		return true
 	op["reason"] = REASON_CARGO_FULL
 	return false
+
+
+## Coast (C20): CargoSystem sums the transfer in closed form, short of every bound it meets.
+func coast_ticks(ctx: SimContext, unit_id: int) -> int:
+	return CargoSystem.transfer_horizon(ctx, unit_id)
 
 
 ## The port on this unit that the transfer runs through.

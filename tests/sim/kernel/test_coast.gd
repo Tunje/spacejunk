@@ -27,7 +27,9 @@ func test_a_planned_burn_stops_the_coast_on_its_tick_and_caps_it() -> void:
 	assert_eq(coasted.to_save(), stepped.to_save())
 
 
-func test_a_task_caps_the_coast_and_it_still_matches() -> void:
+## An undock under way coasts to its end tick since C20; the tick it ends on, with its events, is
+## stepped, and the result still matches.
+func test_a_task_coasts_to_its_end_and_it_still_matches() -> void:
 	var stepped := Sim.new_game("reference", 12345)
 	var coasted := _copy(stepped)
 	stepped.submit({ "type": "undock", "unit": 23, "args": {} })
@@ -35,7 +37,8 @@ func test_a_task_caps_the_coast_and_it_still_matches() -> void:
 	var caps: Array = []
 	for i in 5:
 		caps.append(coasted.coast(50)["capped_by"])
-	assert_has(caps, "tasks", "an undock under way steps the world: %s" % str(caps))
+	assert_does_not_have(caps, "tasks", "an undock under way no longer steps the world: %s" % str(caps))
+	assert_true(coasted._state["units"][23]["dock"].is_empty(), "it undocked")
 	stepped.step(coasted.current_tick())
 	assert_eq(coasted.to_save(), stepped.to_save())
 
