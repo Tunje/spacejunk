@@ -301,7 +301,11 @@ func fit(item: String, connector: String, on := 0, parent_def := "") -> String:
 	for part: Dictionary in InspectText.flatten(fitting.unit()["parts"]):
 		defs_by_part[part["id"]] = part["def"]
 	for slot: Dictionary in FittingLogic.free_slots(fitting.unit(), fitting._modules):
-		if slot["connector"] == connector and (parent_def == "" or defs_by_part[slot["part"]] == parent_def):
+		if connector == "":
+			# The first connector that takes it, as a player trying each would find.
+			if fitting.slot.is_empty() and fitting.slot_ok(slot):
+				fitting.choose_slot(slot)
+		elif slot["connector"] == connector and (parent_def == "" or defs_by_part[slot["part"]] == parent_def):
 			fitting.choose_slot(slot)
 	var refused := ""
 	if fitting._attach_button.disabled:
@@ -609,6 +613,30 @@ func design_short(design: String) -> Dictionary:
 	return short
 
 
+## One press: Start with components on a recipe's row (D43).
+func with_components(on: int, facility_type: String, recipe: String) -> void:
+	select("unit", on)
+	if not industry.visible:
+		main.toggle_industry()
+	for entry: Dictionary in IndustryLogic.facilities(unit(on), bridge.defs()["modules"]):
+		if entry["type"] == facility_type:
+			industry.choose_facility(entry)
+	industry._count.value = 1
+	industry.refresh()
+	var pressed := false
+	for row: Dictionary in industry._rows:
+		if row["recipe"]["id"] == recipe:
+			if not (row["with"] as Button).visible:
+				_problem("no Start with components on %s" % recipe)
+			else:
+				(row["with"] as Button).pressed.emit()
+				pressed = true
+	if pressed and not industry._message.text.begins_with("Queued"):
+		_problem("Start with components: %s" % industry._message.text)
+	main.toggle_industry()
+	_kick()
+
+
 ## One press: Build with components.
 func build_design(design: String) -> void:
 	_open_design_jobs()
@@ -652,7 +680,6 @@ func stage_drone_by_design() -> void:
 	load_from_host(names["hematite"]["name"], 0)
 	var short := design_short(DRONE_DESIGN)
 	short["hematite"] = int(short.get("hematite", 0)) + DEPOT_HEMATITE_G
-	note("The depot's propellant tank isn't in the design, so its refining and frames are still queued one by one: a Start with components on any recipe row would take them in one press too.")
 	var items: Array = short.keys()
 	items.sort()
 	for item: String in items:
@@ -667,10 +694,11 @@ func stage_drone_by_design() -> void:
 	if not still.is_empty():
 		_problem("the design still lacks %s after mining" % str(still))
 	build_design(DRONE_DESIGN)
-	queue(probe, "refinery", "refine_hematite", DEPOT_HEMATITE_G / 100_000)
-	queue(probe, "fabricator", "structural_frame", 2)
-	queue(probe, "fabricator", "propellant_tank_mk1", 1, [station, ""])
+	with_components(probe, "fabricator", "propellant_tank_mk1")
 	wait_jobs()
+	var refused := fit("propellant_tank_mk1", "")
+	if refused != "":
+		_problem("the depot tank refused on the station: %s" % refused)
 	for id: int in bridge.current_view["units"]:
 		if unit(id)["kind"] == "drone":
 			drone = id

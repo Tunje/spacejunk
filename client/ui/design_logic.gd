@@ -99,6 +99,21 @@ static func build_plan(design: String, stock: Dictionary, defs: Dictionary, faci
 		demand[node["part"]] = int(demand.get(node["part"], 0)) + DesignLogic._unit_grams(node["part"], defs)
 	if base_recipe != "":
 		DesignLogic._add_inputs(defs["recipes"][base_recipe], 1, demand)
+	return DesignLogic.plan_from(recipe_runs, demand, stock, defs, facility_types)
+
+
+## The same for runs of one recipe (D43, "Start with components" on a Jobs row): the
+## recipe itself, after everything its inputs need that the hold doesn't have.
+static func recipe_plan(recipe: String, runs: int, stock: Dictionary, defs: Dictionary, facility_types: Array) -> Dictionary:
+	var demand: Dictionary = {}
+	DesignLogic._add_inputs(defs["recipes"][recipe], runs, demand)
+	return DesignLogic.plan_from({ recipe: runs }, demand, stock, defs, facility_types)
+
+
+## Expands `demand` (grams by item) into producer jobs after `recipe_runs`, the jobs
+## asked for, and orders them all producers first.
+static func plan_from(recipe_runs: Dictionary, demand: Dictionary, stock: Dictionary, defs: Dictionary,
+		facility_types: Array) -> Dictionary:
 	var levels: Dictionary = {}
 	var short: Dictionary = {}
 	# Consumers before producers: an item's level is above everything it is made from,

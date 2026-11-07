@@ -42,6 +42,8 @@ var _slot_buttons: Array[Dictionary] = []
 ## "Build with components" rows (D42), one per design this facility builds the hull of,
 ## each { design, button, preview, short }.
 var design_rows: Array[Dictionary] = []
+## The stock the rows' "Start with components" plans were made for (D43).
+var _with_key := ""
 
 
 func _ready() -> void:
@@ -250,6 +252,7 @@ func refresh() -> void:
 	_show_queue(view)
 	_show_stock(unit["inventory"])
 	_show_design_plans(unit)
+	_show_with_components(unit)
 
 
 func _sync_tabs(found: Array[Dictionary]) -> void:
@@ -301,6 +304,15 @@ func _sync_recipes() -> void:
 			into.tooltip_text = "Build it straight onto a free connector here or on a docked craft"
 			into.pressed.connect(open_picker.bind(recipe))
 			title.add_child(into)
+		# D43: shown when an input still has to be made here, queuing it all producers first.
+		var with_button := Button.new()
+		with_button.text = "Start with components"
+		with_button.flat = true
+		with_button.focus_mode = Control.FOCUS_NONE
+		with_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		with_button.visible = false
+		with_button.pressed.connect(start_with_components.bind(recipe))
+		row.add_child(with_button)
 		var inputs := _add_label(row)
 		var outputs := _add_label(row)
 		outputs.text = "Makes %s in %s" % [
@@ -309,7 +321,8 @@ func _sync_recipes() -> void:
 		]
 		outputs.modulate = ClientTheme.MID_GREY.lightened(0.3)
 		_recipe_box.add_child(row)
-		_rows.append({ "recipe": recipe, "inputs": inputs, "start": button })
+		_rows.append({ "recipe": recipe, "inputs": inputs, "start": button, "with": with_button })
+	_with_key = ""
 
 
 # --- Build with components (D42) ---
@@ -361,9 +374,38 @@ func _show_design_plans(unit: Dictionary) -> void:
 ## Queues every job a design needs, producers first, after checking them all: one
 ## refused, and none is sent, with the reason.
 func build_design(design: String) -> void:
+	_queue_plan(design_plan(design), _defs["templates"][design]["name"])
+
+
+## The plan for the Runs count of a recipe on this unit, its components included (D43).
+func recipe_plan(recipe: Dictionary) -> Dictionary:
 	var unit: Dictionary = bridge.current_view["units"][unit_id]
-	var commands := DesignLogic.queue_commands(design_plan(design), unit_id,
-		IndustryLogic.facilities(unit, _defs["modules"]), _defs)
+	var types: Array = IndustryLogic.facilities(unit, _defs["modules"]).map(func(entry: Dictionary) -> String: return entry["type"])
+	return DesignLogic.recipe_plan(recipe["id"], int(_count.value), unit["inventory"], _defs, types)
+
+
+func start_with_components(recipe: Dictionary) -> void:
+	_queue_plan(recipe_plan(recipe), IndustryLogic.name_of(recipe["id"], _defs))
+
+
+## "Start with components" only where an input still has to be made: replanned when
+## the hold or the Runs count changes, not every tick.
+func _show_with_components(unit: Dictionary) -> void:
+	var key := "%d:%d:%s" % [unit_id, int(_count.value), str(unit["inventory"])]
+	if key == _with_key:
+		return
+	_with_key = key
+	for row: Dictionary in _rows:
+		var plan := recipe_plan(row["recipe"])
+		var button: Button = row["with"]
+		button.visible = plan["jobs"].size() > 1
+		var short := DesignLogic.short_text(plan, _defs)
+		button.tooltip_text = "Queues %s%s" % [DesignLogic.plan_text(plan, _defs), "" if short.is_empty() else ". " + short]
+
+
+func _queue_plan(plan: Dictionary, name: String) -> void:
+	var unit: Dictionary = bridge.current_view["units"][unit_id]
+	var commands := DesignLogic.queue_commands(plan, unit_id, IndustryLogic.facilities(unit, _defs["modules"]), _defs)
 	for command: Dictionary in commands:
 		var result: Dictionary = bridge.check(command)
 		if not result["ok"]:
@@ -372,7 +414,8 @@ func build_design(design: String) -> void:
 			return
 	for command: Dictionary in commands:
 		bridge.submit(command)
-	_message.text = "Queued %d jobs for %s" % [commands.size(), _defs["templates"][design]["name"]]
+	var short := DesignLogic.short_text(plan, _defs)
+	_message.text = "Queued %d jobs for %s%s" % [commands.size(), name, "" if short.is_empty() else ". " + short]
 
 
 func _show_job(view: Dictionary) -> void:

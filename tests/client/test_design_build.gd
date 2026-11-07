@@ -135,3 +135,40 @@ func test_jobs_offers_the_design_and_refuses_it_whole_while_locked() -> void:
 	bridge.set_paused(false)
 	bridge.advance(0.2)
 	assert_eq(bridge.current_view["jobs"].size(), jobs_before, "nothing queued")
+
+
+# --- Start with components on any recipe (D43) ---
+
+func test_a_recipe_plan_makes_its_inputs_first() -> void:
+	var plan := DesignLogic.recipe_plan("small_solar_panel_mk1", 2, {}, defs, BUILDER)
+	var recipes: Array = plan["jobs"].map(func(job: Dictionary) -> String: return job["recipe"])
+	assert_eq(recipes[recipes.size() - 1], "small_solar_panel_mk1", "the part itself last")
+	assert_eq(plan["jobs"][recipes.size() - 1]["runs"], 2)
+	assert_lt(recipes.find("refine_hematite"), recipes.find("structural_frame"), "iron before frames")
+	assert_true(recipes.has("wiring"))
+	var stocked := DesignLogic.recipe_plan("small_solar_panel_mk1", 1,
+		{ "structural_frame": 1_000_000, "wiring": 1_000_000 }, defs, BUILDER)
+	assert_eq(stocked["jobs"], [{ "recipe": "small_solar_panel_mk1", "runs": 1 }], "inputs aboard: just the part")
+
+
+func test_jobs_rows_offer_start_with_components_where_inputs_are_missing() -> void:
+	var main: Node = add_child_autofree(load("res://client/main.tscn").instantiate())
+	var bridge: SimBridge = main.get_node("Bridge")
+	bridge.set_paused(true)
+	main.toggle_industry()
+	var screen: IndustryScreen = main.industry_screen
+	for entry: Dictionary in IndustryLogic.facilities(bridge.current_view["units"][screen.unit_id], bridge.defs()["modules"]):
+		if entry["type"] == "fabricator":
+			screen.choose_facility(entry)
+	var row := {}
+	for candidate: Dictionary in screen._rows:
+		if candidate["recipe"]["id"] == "small_solar_panel_mk1":
+			row = candidate
+	assert_true((row["with"] as Button).visible, "frames and wiring still to make")
+	assert_string_contains((row["with"] as Button).tooltip_text, IndustryLogic.name_of("structural_frame", bridge.defs()))
+	var jobs_before: int = bridge.current_view["jobs"].size()
+	(row["with"] as Button).pressed.emit()
+	assert_string_starts_with(screen._message.text, "Queued ")
+	bridge.set_paused(false)
+	bridge.advance(0.2)
+	assert_gt(bridge.current_view["jobs"].size(), jobs_before + 1, "the part and its components")
