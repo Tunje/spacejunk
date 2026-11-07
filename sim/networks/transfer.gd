@@ -66,30 +66,35 @@ static func plan_between(ctx: SimContext, unit_id: int, mine: Dictionary, theirs
 			crossing["plane_change_dv_um_s"] = 0
 			crossing["plane_change_at"] = ""
 		return crossing
-	if not _near_circular(mine, theirs):
-		return { "reason": REASON_UNSUPPORTED }
 	var gm: int = ctx.state["bodies"][mine["parent"]]["gm"]
+	var parent: Dictionary = ctx.state["bodies"][mine["parent"]]
+	if mine.get("hyperbolic", false) or theirs.get("hyperbolic", false) or theirs["e_q30"] > MAX_E_Q30:
+		return { "reason": REASON_UNSUPPORTED }
+	if mine["e_q30"] > MAX_E_Q30:
+		# From an eccentric orbit no window can be worked out, so cheap and fast alike leave at once
+		# on the arc (A49). That is the one place a cheap quote searches it.
+		return _timed_plan(mine, theirs, target, gm, mass_g, from_tick, found, parent, NO_WINDOW)
+	var plan: Dictionary
 	if not _coplanar(mine, theirs):
 		# Both ways of changing plane are planned, and `prefer` picks one (A41b, A43).
 		var low := _plane_change_plan(mine, theirs, target, gm, mass_g, from_tick, found)
 		var high := _combined_plan(mine, theirs, target, gm, mass_g, from_tick, found)
-		if high.has("reason"):
-			return low
-		if low.has("reason"):
-			return high
-		var take_low := _better(low, high, prefer)
-		var chosen := low if take_low else high
-		var other := high if take_low else low
-		chosen["other"] = { "arrive_tick": other["arrive_tick"], "cost_g": other["cost_g"] }
-		return chosen
-	var plan := _coplanar_plan(mine, theirs, target, gm, mass_g, from_tick, found)
-	plan["plane_change_dv_um_s"] = 0
-	plan["plane_change_at"] = ""
-	# The arc that leaves at once is only planned when it can be chosen or is asked for (A47).
-	if prefer != PREFER_FAST and not compare:
+		if high.has("reason") or low.has("reason"):
+			plan = low if high.has("reason") else high
+		else:
+			var take_low := _better(low, high, prefer)
+			plan = low if take_low else high
+			var not_taken := high if take_low else low
+			plan["other"] = { "arrive_tick": not_taken["arrive_tick"], "cost_g": not_taken["cost_g"] }
+	else:
+		plan = _coplanar_plan(mine, theirs, target, gm, mass_g, from_tick, found)
+		plan["plane_change_dv_um_s"] = 0
+		plan["plane_change_at"] = ""
+	# The arc that leaves at once is only planned when it can be chosen or is asked for (A47), in
+	# one plane or, since A49, across planes too.
+	if plan.has("reason") or (prefer != PREFER_FAST and not compare):
 		return plan
-	var timed := _timed_plan(mine, theirs, target, gm, mass_g, from_tick, found, ctx.state["bodies"][mine["parent"]],
-		int(plan["arrive_tick"]))
+	var timed := _timed_plan(mine, theirs, target, gm, mass_g, from_tick, found, parent, int(plan["arrive_tick"]))
 	if timed.has("reason"):
 		return plan
 	# Fast takes the earlier arrival, ties to the lower cost; cheap keeps the window's plan.
@@ -104,11 +109,17 @@ static func plan_between(ctx: SimContext, unit_id: int, mine: Dictionary, theirs
 
 ## Flight times the timed plan tries, in eighths of the Hohmann transfer's (A47).
 const TIMED_EIGHTHS := [4, 5, 6, 7, 9, 10, 12, 14, 16]
+## A window arrival for the timed plan when there is no window plan to beat (A49).
+const NO_WINDOW := 1 << 60
+## sin 1 degree in Q30: an arc whose ends are within a degree of in line with the parent has no
+## plane of its own, so that flight time is skipped (A49).
+const MIN_ARC_SIN_Q30 := 18_739_142
 
 
 ## A trip that leaves at from_tick instead of waiting for a window (A47): a Lambert arc from where
 ## the unit is to where the target will be, for each flight time in TIMED_EIGHTHS of the Hohmann
-## transfer's, keeping the cheapest. An arc must be elliptic, stay above the height where low flight
+## transfer's, keeping the cheapest. Since A49 the unit's orbit may be eccentric or in another
+## plane; the target's must be near-circular. An arc must be elliptic, stay above the height where low flight
 ## starts and inside the parent's sphere. The burns are the exact velocity differences at each end.
 ## Only arcs that arrive before `window_arrive`, the window plan's arrival, are tried, since leaving
 ## at once is for arriving sooner; with the window under an eighth of a Hohmann time away there are
@@ -133,12 +144,25 @@ static func _timed_plan(mine: Dictionary, theirs: Dictionary, target: int, gm: i
 	var guess: Array[int] = []
 	for axis in 3:
 		guess.append(OrbitMath.smul_div(along[axis], speed, OrbitMath.ONE))
+	# In one plane the arc stays in it. Otherwise (A49) each arc's plane is the one through the unit
+	# now and the target at arrival, on the side the unit moves round, and the plane change is in
+	# the burns' velocity differences.
+	var shared := _coplanar(mine, theirs)
+	var radial_now := OrbitMath.unit(r1)
 	for eighths: int in TIMED_EIGHTHS:
 		var ticks: int = maxi(2, hohmann_ticks * eighths / 8)
 		var arrive := from_tick + ticks
 		if arrive >= window_arrive:
 			break
-		var hit := Lambert.solve(gm, r1, guess, theirs, from_tick, arrive, normal)
+		var plane: Array = normal
+		if not shared:
+			var across := OrbitMath.cross(radial_now, OrbitMath.unit(OrbitMath.position_at(theirs, arrive)))
+			if IntMath.dist(across, [0, 0, 0]) < MIN_ARC_SIN_Q30:
+				continue
+			plane = OrbitMath.unit(across)
+			if OrbitMath.dot(plane, normal) < 0:
+				plane = [-plane[0], -plane[1], -plane[2]]
+		var hit := Lambert.solve(gm, r1, guess, theirs, from_tick, arrive, plane)
 		if hit.is_empty():
 			continue
 		guess = hit["v"]
