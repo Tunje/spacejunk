@@ -79,6 +79,9 @@ const IDEA_DIRECTIONS := {
 const MAX_IDEAS_PER_VARIANT := 4
 const DEPOSIT_FIELDS := ["id", "item", "mass_kg", "hardness"]
 const TEMPLATE_FIELDS := ["id", "name", "kind", "root"]
+## A template with `base` is a design (B25): the buildable template it starts from, plus parts to
+## fit in the listed order. `summary` is one line for the client's tooltip.
+const TEMPLATE_OPTIONAL := ["base", "summary"]
 const SINK_FIELDS := ["id", "name", "items"]
 const SCENARIO_DIR := "scenarios/"
 const SCENARIO_FIELDS := ["schema_version", "id", "name", "seed", "bodies", "units"]
@@ -246,6 +249,8 @@ func _run(data: Dictionary) -> Array[String]:
 		_cross_deposit(_deposits[id])
 	for id: String in _sorted(_templates):
 		_cross_template(_templates[id])
+		if _templates[id].get("base") is String:
+			_cross_design(_templates[id])
 	for scenario: Dictionary in _scenarios:
 		_cross_scenario(scenario)
 	_check_coverage()
@@ -597,9 +602,12 @@ func _shape_deposit(deposit: Dictionary) -> void:
 
 func _shape_template(template: Dictionary) -> void:
 	var where := "templates.json:%s" % template["id"]
-	if not _has_fields(where, template, TEMPLATE_FIELDS):
+	if not _has_fields(where, template, TEMPLATE_FIELDS, TEMPLATE_OPTIONAL):
 		return
 	_check_name(where, template)
+	for field: String in TEMPLATE_OPTIONAL:
+		if template.has(field) and (not template[field] is String or template[field] == ""):
+			_err("bad_type", where, "%s is a non-empty string" % field)
 	_check_enum(where, "kind", template["kind"], UNIT_KINDS)
 	if not template["root"] is Dictionary:
 		_err("bad_node", where, "root is not an object")
@@ -878,6 +886,95 @@ func _cross_template(template: Dictionary) -> void:
 	if parts.is_empty():
 		return
 	_check_fit(where, template, parts, mass_g)
+
+
+## A design (B25): its base is a recipe-built template that is not itself a design, it starts
+## from the base's whole tree, no recipe builds it in one go, and fitting its other parts in the
+## listed order, depth first, passes the fitting checks at every step.
+func _cross_design(design: Dictionary) -> void:
+	var where := "templates.json:%s" % design["id"]
+	var base_id: String = design["base"]
+	if not _templates.has(base_id):
+		_err("unknown_template", where, "base %s" % base_id)
+		return
+	var base: Dictionary = _templates[base_id]
+	if base.has("base"):
+		_err("design_base_is_a_design", where, base_id)
+		return
+	if design["kind"] != base["kind"]:
+		_err("design_kind_mismatch", where, "%s against %s" % [design["kind"], base["kind"]])
+	var built_by := {}
+	for id: String in _sorted(_recipes):
+		for entry: Variant in _recipes[id].get("outputs", []):
+			if entry is Dictionary and entry.has("unit_template"):
+				built_by[entry["unit_template"]] = id
+	if not built_by.has(base_id):
+		_err("design_base_not_built", where, "no recipe makes %s" % base_id)
+	if built_by.has(design["id"]):
+		_err("design_built_whole", where, "%s makes it in one go" % built_by[design["id"]])
+	var base_paths := {}
+	_node_paths(base["root"], [], base_paths)
+	var design_order: Array[Dictionary] = []
+	_node_order(design["root"], [], design_order)
+	var design_paths := {}
+	for step: Dictionary in design_order:
+		design_paths[step["path"]] = step["part"]
+	for path: String in _sorted(base_paths):
+		if design_paths.get(path, "") != base_paths[path]:
+			_err("design_drops_base_part", where, "%s at %s" % [base_paths[path], path if path != "" else "root"])
+			return
+	var fitted: Array[Dictionary] = []
+	var mass_g := 0
+	for step: Dictionary in design_order:
+		if not _modules.has(step["part"]):
+			return
+		fitted.append(_modules[step["part"]])
+		mass_g += _to_sim(_modules[step["part"]]["mass_kg"], 1000)
+		if base_paths.has(step["path"]):
+			continue
+		var problem := _fit_problem(fitted, mass_g)
+		if problem != "":
+			_err("design_fit_order", where, "%s at %s fails %s" % [step["part"], step["path"], problem])
+			return
+
+
+## Each node's part by its path, the parent_connector chain from the root joined with "/".
+func _node_paths(node: Dictionary, path: Array, out: Dictionary) -> void:
+	out["/".join(PackedStringArray(path))] = node["part"]
+	for child: Dictionary in node["children"]:
+		_node_paths(child, path + [child["parent_connector"]], out)
+
+
+## The nodes depth first, in listed order: the order a design's parts are fitted.
+func _node_order(node: Dictionary, path: Array, out: Array[Dictionary]) -> void:
+	out.append({ "path": "/".join(PackedStringArray(path)), "part": node["part"] })
+	for child: Dictionary in node["children"]:
+		_node_order(child, path + [child["parent_connector"]], out)
+
+
+## The first fitting limit these parts break, root first, or "".
+func _fit_problem(parts: Array[Dictionary], mass_g: int) -> String:
+	var power_w := 0
+	var heat_w := 0
+	var budget_w := 0
+	var reject_w := 0
+	for module: Dictionary in parts:
+		var capabilities: Dictionary = module["capabilities"]
+		power_w += _to_sim(module["power_kw"], 1000)
+		heat_w += _to_sim(module["heat_kw"], 1000)
+		if capabilities.has("generate"):
+			budget_w += _to_sim(capabilities["generate"]["power_kw"], 1000)
+		if capabilities.has("battery"):
+			budget_w += _to_sim(capabilities["battery"]["max_discharge_kw"], 1000)
+		if capabilities.has("radiator"):
+			reject_w += _to_sim(capabilities["radiator"]["reject_kw"], 1000)
+	if mass_g > _to_sim(parts[0]["capabilities"].get("max_mass_kg", 0), 1000):
+		return "over_mass_limit"
+	if power_w > budget_w:
+		return "over_power_budget"
+	if heat_w > reject_w:
+		return "over_heat_budget"
+	return ""
 
 
 ## Checks a node's joins, collects its modules and returns the subtree's mass.

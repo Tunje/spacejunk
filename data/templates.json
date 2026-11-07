@@ -46,6 +46,73 @@
       }
     },
     {
+      "id": "mining_drone",
+      "name": "Mining Drone",
+      "kind": "drone",
+      "base": "small_craft",
+      "summary": "Mines 500 kg of ore a lap and brings it home, flown by an Assisted Core",
+      "root": {
+        "part": "small_hull",
+        "children": [
+          {
+            "part": "small_docking_port_mk1",
+            "parent_connector": "stack_top",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "small_solar_panel_mk1",
+            "parent_connector": "side_a_px",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "small_heat_radiator_mk1",
+            "parent_connector": "side_a_nx",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "small_propellant_tank_mk1",
+            "parent_connector": "stack_bottom",
+            "connector": "mount",
+            "children": [
+              {
+                "part": "small_chemical_thruster_mk1",
+                "parent_connector": "stack_bottom",
+                "connector": "mount",
+                "children": []
+              }
+            ]
+          },
+          {
+            "part": "small_ore_container_mk1",
+            "parent_connector": "side_a_pz",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "small_mining_laser_mk1",
+            "parent_connector": "side_a_nz",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "small_battery_bank_mk1",
+            "parent_connector": "side_b_nx",
+            "connector": "mount",
+            "children": []
+          },
+          {
+            "part": "assisted_core",
+            "parent_connector": "core",
+            "connector": "mount",
+            "children": []
+          }
+        ]
+      }
+    },
+    {
       "id": "probe",
       "name": "Probe",
       "kind": "ship",
