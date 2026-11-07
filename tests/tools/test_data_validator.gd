@@ -1177,3 +1177,93 @@ func test_ids_cannot_hold_colon_or_plus() -> void:
 	_assert_error("bad_id")
 	_entry("items", "prototype:iron")["id"] = "iron+fast"
 	_assert_error("bad_id")
+
+
+## A design (B25): the tanker hull plus a core and a laser, to fit in that order.
+func _add_design() -> Dictionary:
+	var design := { "id": "miner", "name": "Miner", "kind": "ship", "base": "tanker",
+		"summary": "Mines on its own", "root": { "part": "hull", "children": [
+			{ "part": "core", "parent_connector": "core", "connector": "mount", "children": [] },
+			{ "part": "laser", "parent_connector": "side_a", "connector": "mount", "children": [] },
+		] } }
+	_add_sorted("templates", design)
+	return design
+
+
+func test_a_design_passes() -> void:
+	_add_design()
+	assert_eq(DataValidator.validate(data), [] as Array[String])
+
+
+func test_a_design_needs_a_known_base() -> void:
+	_add_design()["base"] = "barge"
+	_assert_error("unknown_template")
+
+
+func test_a_design_summary_is_a_string() -> void:
+	_add_design()["summary"] = 3
+	_assert_error("bad_type")
+
+
+func test_a_design_base_must_be_built_by_a_recipe() -> void:
+	_add_design()["base"] = "ship"
+	_assert_error("design_base_not_built")
+
+
+func test_a_design_is_never_built_in_one_go() -> void:
+	_add_design()
+	_add_sorted("recipes", { "id": "miner", "facility": "fabricator", "work": 5000,
+		"power_kw": 1, "inputs": [{ "item": "frame", "count": 13 }],
+		"outputs": [{ "unit_template": "miner" }], "abstract": true })
+	_assert_error("design_built_whole")
+
+
+func test_a_design_keeps_its_base_parts() -> void:
+	var tanker := _entry("templates", "tanker")
+	tanker["root"]["children"].append(
+		{ "part": "laser", "parent_connector": "side_b", "connector": "mount", "children": [] })
+	_entry("recipes", "tanker")["inputs"][0]["count"] = 12
+	_add_design()
+	_assert_error("design_drops_base_part")
+
+
+func test_a_design_kind_matches_its_base() -> void:
+	_add_design()["kind"] = "drone"
+	_assert_error("design_kind_mismatch")
+
+
+func test_a_design_is_fitted_in_an_order_the_budgets_allow() -> void:
+	# The lamp needs the panel's power, so the panel must come first.
+	_add_sorted("modules", _module("lamp", 10, {}, [_connector("mount", "side", "medium")]))
+	_entry("modules", "lamp")["power_kw"] = 150
+	_add_sorted("modules", _module("panel", 10, { "generate": { "power_kw": 200 } },
+		[_connector("mount", "side", "medium")]))
+	_add_sorted("recipes", _fabrication("lamp", 1, "lamp"))
+	_add_sorted("recipes", _fabrication("panel", 1, "panel"))
+	var design := _add_design()
+	design["root"]["children"] = [
+		{ "part": "panel", "parent_connector": "side_a", "connector": "mount", "children": [] },
+		{ "part": "lamp", "parent_connector": "side_b", "connector": "mount", "children": [] },
+	]
+	assert_eq(DataValidator.validate(data), [] as Array[String], "panel first fits")
+	design["root"]["children"].reverse()
+	_assert_error("design_fit_order")
+
+
+func test_the_mining_drone_design_holds_the_drone_the_bot_flies() -> void:
+	var defs := DataLoader.load_defs()
+	var design: Dictionary = defs["templates"]["mining_drone"]
+	assert_eq(design["base"], "small_craft")
+	var fits: Array[String] = []
+	for child: Dictionary in design["root"]["children"]:
+		fits.append(child["part"])
+	assert_eq(fits, ["small_docking_port_mk1", "small_solar_panel_mk1", "small_heat_radiator_mk1",
+		"small_propellant_tank_mk1", "small_ore_container_mk1", "small_mining_laser_mk1",
+		"small_battery_bank_mk1", "assisted_core"] as Array[String])
+
+
+## Adds an entry in ID order, as the files keep them.
+func _add_sorted(file: String, entry: Dictionary) -> void:
+	var entries: Array = data[file]["entries"]
+	entries.append(entry)
+	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["id"] < b["id"])
