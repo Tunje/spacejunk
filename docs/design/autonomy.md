@@ -285,7 +285,7 @@ Jobs are not tasks. They belong to a facility part, have no owner task and need 
 
 | Condition | Status | `reason` | Clears when |
 | --------- | ------ | -------- | ----------- |
-| Inputs absent | `waiting` | `missing_inputs` | All inputs are present |
+| Inputs absent | `waiting` | `missing_inputs` | All inputs are present in the docked group (C26) |
 | No room for outputs | `waiting` | `output_full` | Room appears |
 | Facility faulted | `paused` | `module_fault` | State leaves `fault` |
 | Facility shed | `paused` | `no_power` | State is `on` |
