@@ -150,7 +150,8 @@ func fill_view(ctx: SimContext, view: Dictionary) -> void:
 	for id: int in _sorted(tasks):
 		var shown := {}
 		for field in VIEW_FIELDS:
-			shown[field] = tasks[id][field]
+			# A task saved before C25 has no laps, which means a repeating cycle.
+			shown[field] = tasks[id].get(field, 0)
 		view["tasks"][id] = shown.duplicate(true)
 
 
@@ -286,7 +287,8 @@ func _update_cycle(ctx: SimContext, unit: Dictionary) -> void:
 	if task["op_ended"]:
 		_complete_step(ctx, unit, task)
 		# The last of its laps done (C25): the cycle finishes, as an order does, and the unit idles.
-		if task["laps"] > 0 and task["step"] == 0 and task["cycle"] >= task["laps"]:
+		var laps: int = task.get("laps", 0)
+		if laps > 0 and task["step"] == 0 and task["cycle"] >= laps:
 			_forget(ctx, unit)
 			ctx.emit_event("task_finished", unit["id"], { "task": task["id"] })
 			return

@@ -76,3 +76,15 @@ func test_a_counted_cycle_coasts_exactly() -> void:
 	var coasted := _copy(stepped)
 	assert_lt(_same_both_ways(stepped, coasted, 12_000), 40)
 	assert_eq(stepped._state["units"][_drone(stepped)]["task"], 0)
+
+
+## A v8 save from before C25 holds tasks with no laps: they load, show 0 and repeat.
+func test_a_task_saved_without_laps_repeats() -> void:
+	var sim := _with_laps(null)
+	var task: int = sim._state["units"][_drone(sim)]["task"]
+	sim._state["tasks"][task].erase("laps")
+	var loaded := Sim.from_save(sim.to_save())
+	assert_not_null(loaded, Sim.last_error())
+	assert_eq(loaded.view()["tasks"][task]["laps"], 0)
+	var types: Array = _run(loaded, 12_000).map(func(event: Dictionary) -> String: return event["type"])
+	assert_does_not_have(types, "task_finished")
