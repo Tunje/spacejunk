@@ -37,6 +37,8 @@ class_name ScreenshotDriver extends Node
 ##                                   ends, for a landed shot where it can't yet fly down
 ##   --look-at=<body name>           turns the camera so that body is behind the craft (after --pitch)
 ##   --build-into=<recipe id>        opens Jobs on the facility that makes it, then its "Build into…" picker
+##   --design-jobs=<facility type>   opens Jobs on that facility, with its "Build with components" rows (D42)
+##   --fit-open=1                    after --drone, opens fitting on it, with "Fit all from …" (D42)
 ##   --research=1                    opens the research screen
 ##   --research-ideas=<base>:<idea>[,<idea>...]  then picks that base and those ideas in its designer
 ##   --copy=1                        (stub_load) strips two parts off the first ship and
@@ -162,6 +164,13 @@ func _run() -> void:
 				screen.choose_facility(entry)
 		screen.refresh()
 		screen.open_picker(recipe)
+	if parsed.has("design-jobs"):
+		main.toggle_industry()
+		var jobs: IndustryScreen = main.industry_screen
+		for entry: Dictionary in IndustryLogic.facilities(main.bridge.current_view["units"][jobs.unit_id], jobs._defs["modules"]):
+			if entry["type"] == parsed["design-jobs"]:
+				jobs.choose_facility(entry)
+		jobs.refresh()
 	if parsed.has("research"):
 		main.toggle_research()
 		if parsed.has("research-designs"):
@@ -215,6 +224,8 @@ func _show_demo_drone() -> void:
 		for entry: Dictionary in FittingLogic.stock(bridge.current_view, drone, screen._modules):
 			if entry["item"] == parsed["drone-fit"]:
 				screen.choose(entry)
+	if parsed.has("fit-open"):
+		main.toggle_fitting()
 	if parsed.has("drone-fly"):
 		ScreenshotDriver.send_drone_out(bridge, drone)
 

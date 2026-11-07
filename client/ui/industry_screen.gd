@@ -39,6 +39,9 @@ var _picker: VBoxContainer
 var _picker_scroll: ScrollContainer
 var _recipe_scroll: ScrollContainer
 var _slot_buttons: Array[Dictionary] = []
+## "Build with components" rows (D42), one per design this facility builds the hull of,
+## each { design, button, preview, short }.
+var design_rows: Array[Dictionary] = []
 
 
 func _ready() -> void:
@@ -246,6 +249,7 @@ func refresh() -> void:
 	_show_job(view)
 	_show_queue(view)
 	_show_stock(unit["inventory"])
+	_show_design_plans(unit)
 
 
 func _sync_tabs(found: Array[Dictionary]) -> void:
@@ -277,6 +281,7 @@ func _sync_recipes() -> void:
 	_recipe_key = key
 	_clear(_recipe_box)
 	_rows.clear()
+	_add_design_rows()
 	for recipe: Dictionary in IndustryLogic.recipes_for(facility["type"], _defs["recipes"]):
 		var row := VBoxContainer.new()
 		var title := HBoxContainer.new()
@@ -305,6 +310,69 @@ func _sync_recipes() -> void:
 		outputs.modulate = ClientTheme.MID_GREY.lightened(0.3)
 		_recipe_box.add_child(row)
 		_rows.append({ "recipe": recipe, "inputs": inputs, "start": button })
+
+
+# --- Build with components (D42) ---
+
+func _add_design_rows() -> void:
+	design_rows.clear()
+	for design: String in DesignLogic.designs(_defs):
+		var base_recipe := DesignLogic.template_recipe(_defs["templates"][design]["base"], _defs)
+		if base_recipe == "" or _defs["recipes"][base_recipe].get("facility", "") != facility["type"]:
+			continue
+		var template: Dictionary = _defs["templates"][design]
+		var row := VBoxContainer.new()
+		var title := HBoxContainer.new()
+		row.add_child(title)
+		var label := _add_label(title)
+		label.text = "%s, with all its parts" % template["name"]
+		label.tooltip_text = template.get("summary", "")
+		label.mouse_filter = Control.MOUSE_FILTER_PASS
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var button := _add_button(title, "Build with components")
+		button.pressed.connect(build_design.bind(design))
+		var preview := _add_label(row)
+		preview.modulate = ClientTheme.MID_GREY.lightened(0.3)
+		preview.mouse_filter = Control.MOUSE_FILTER_PASS
+		var short := _add_label(row)
+		short.modulate = ClientTheme.GOLD
+		_recipe_box.add_child(row)
+		design_rows.append({ "design": design, "button": button, "preview": preview, "short": short })
+
+
+## The plan on this unit's facilities and stock.
+func design_plan(design: String) -> Dictionary:
+	var unit: Dictionary = bridge.current_view["units"][unit_id]
+	var types: Array = IndustryLogic.facilities(unit, _defs["modules"]).map(func(entry: Dictionary) -> String: return entry["type"])
+	return DesignLogic.build_plan(design, unit["inventory"], _defs, types)
+
+
+func _show_design_plans(unit: Dictionary) -> void:
+	for row: Dictionary in design_rows:
+		var plan := design_plan(row["design"])
+		var preview: Label = row["preview"]
+		preview.text = "Queues %d jobs, from refining ore to the hull, producers first" % plan["jobs"].size()
+		preview.tooltip_text = DesignLogic.plan_text(plan, _defs)
+		var short: Label = row["short"]
+		short.text = DesignLogic.short_text(plan, _defs)
+		short.visible = not short.text.is_empty()
+
+
+## Queues every job a design needs, producers first, after checking them all: one
+## refused, and none is sent, with the reason.
+func build_design(design: String) -> void:
+	var unit: Dictionary = bridge.current_view["units"][unit_id]
+	var commands := DesignLogic.queue_commands(design_plan(design), unit_id,
+		IndustryLogic.facilities(unit, _defs["modules"]), _defs)
+	for command: Dictionary in commands:
+		var result: Dictionary = bridge.check(command)
+		if not result["ok"]:
+			_message.text = "%s: %s" % [IndustryLogic.name_of(command["args"]["recipe"], _defs),
+				OrderText.reason(result["reason"], result["detail"])]
+			return
+	for command: Dictionary in commands:
+		bridge.submit(command)
+	_message.text = "Queued %d jobs for %s" % [commands.size(), _defs["templates"][design]["name"]]
 
 
 func _show_job(view: Dictionary) -> void:
