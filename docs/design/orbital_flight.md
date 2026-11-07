@@ -1141,3 +1141,36 @@ Nothing changes what a tick computes.
 | Whole tick | 6.1 ms | 3.65 ms |
 
 A coast jump, run alone, fell from 9.0 ms to 6.6 ms. After the CPU has been busy, the same jump is about 14 ms, against 19 ms before A40, so it is still well over the 8 ms budget at the sustained clock. What is left is spread thinly: power's three passes, rails' positions and heat. No single part dominates.
+
+### 11.30 A41b: the plane change at the high end
+
+A41a changes plane on the unit's own circle, which is simple but dear when that circle is the low one, since the burn grows with the speed there. A41b plans the cheaper way too, and the quote takes whichever costs less propellant, ties to A41a.
+
+**The trip,** as legs on rails, all burns paid at departure:
+1. **Ride to the node.** As in A41a.
+2. **Leave on the node.** The unit flies a Hohmann half-ellipse whose far end is the other node, a half period later, rounded to a tick.
+3. **Change plane at the high end.**
+   - Going up, the departure burn is prograde in the unit's own plane. At the far node one burn takes the ellipse's velocity to the circular velocity on the target's ring, in the target's plane: the exact vector difference, which is the law of cosines.
+   - Going down, the plane change joins the departure burn. The ellipse leaves in the target's plane, from the point moved into it, and the arrival burn is coplanar.
+4. **Phase.** The unit is now on the target's ring at the node at whatever phase, so a phasing orbit on that ring (`_phasing`) brings it to the target.
+
+**Jumps.** As A41a's, of up to a tick's motion out of the plane, each a few metres: at departure going down, and at the far node going up, where the ring is built through the arrival point moved into the target's plane. Both sit beside the arrival snap (11.12).
+
+**The quote.** `plane_change_dv_um_s` is the Δv beyond the same trip in one plane. For A41a that is the whole plane-change burn, as before. For A41b it is the combined burn less the coplanar one. `plane_change_at` says where the change is burned: `start`, `arrival`, `departure`, or empty in one plane.
+
+**Measured** (`test_plane_change.gd`):
+- On test_transfers' fast planet, from 700 to 900 km, A41b wins from 10 degrees: 6.11 km/s against 6.56 at 10 degrees.
+- At 3 degrees its extra phasing burns lose.
+- Going down, from 900 to 700 km, it wins from 10 degrees too.
+- On one ring the two cost the same, so the tie keeps A41a.
+- A 10 degree A41b trip flies, arrives in the tilted frame and pays exactly its quote. A save mid-trip is byte-exact, and coasting it is byte-equal.
+
+**Frost.** The land check's way back to the cluster from a cell at 40 degrees latitude:
+
+| Plan | Back to the cluster | From the 30 km orbit, after the 643 kg climb |
+| --- | --- | --- |
+| A41a, change at the start | 1,045 kg | 401 kg, 2.5 hours |
+| A41b, combined at the ring | 879 kg | 235 kg, 27.0 hours |
+
+The cheaper plan is taken, so the land check now prices 879 kg. The 27 hours are mostly phasing on the cluster's slow ring, which is why the quote's `arrive_tick` matters. A player who would rather be quick can still fly the change by hand.
+
