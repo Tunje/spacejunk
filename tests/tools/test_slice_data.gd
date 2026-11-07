@@ -20,7 +20,7 @@ const MODULES := [
 ]
 const DEPOSIT_ITEMS := ["chalcopyrite", "hematite", "olivine", "water_ice"]
 const TEMPLATES := [
-	"large_station", "medium_craft", "probe", "small_craft", "small_station", "starter_ship",
+	"large_station", "medium_craft", "mining_drone", "probe", "small_craft", "small_station", "starter_ship",
 	"starter_station",
 ]
 ## Everything a working drone adds to a small craft.
