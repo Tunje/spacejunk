@@ -1,6 +1,6 @@
 # New Start Chain
 
-Status: **draft**, task B23. Sections 1 and 2 are measured on the real `Sim`, from [data/scenarios/new_start.json](../../data/scenarios/new_start.json) on `main` at d85aac6. Section 3, Parts A to D, is measured by C's new-start bot (C14 at adf431a for Parts A to C, and C18b at a6de5ca through research, seed 12345; the optional Frost landing is from C16 at dce5c55 and B23's runs). Parts E and F, the drone and expansion, come with C's next bot task. This page is to the new start what [reference_scenario.md](reference_scenario.md) is to today's station game. When `reference.json` becomes the new start, the two pages swap names. Until then `reference_scenario.md` stays as the station fixture's worked chain, which many tests cite.
+Status: **draft**, task B23. Sections 1 and 2 are measured on the real `Sim`, from [data/scenarios/new_start.json](../../data/scenarios/new_start.json) on `main` at d85aac6. Section 3, Parts A to D, is measured by C's new-start bot (C14 at adf431a for Parts A to C, and C18b at a6de5ca through research, seed 12345; the optional Frost landing is from C16 at dce5c55 and B23's runs). Parts E and F, the drone and expansion, are measured by C22 at 3265798 on `gameplay/C22`, the bot's stage 6. This page is to the new start what [reference_scenario.md](reference_scenario.md) is to today's station game. When `reference.json` becomes the new start, the two pages swap names. Until then `reference_scenario.md` stays as the station fixture's worked chain, which many tests cite.
 
 The chain follows [start_and_build.md](start_and_build.md) section 4 and the research route of [research.md](research.md) section 5.
 
@@ -215,30 +215,110 @@ Landing and take-off are off the research route until a theory that needs a surf
   - From the start, with a full tank and nothing built, the trip is also safe, at about 266 m/s spare.
 - **History.** Under A36, `return_propellant_g` priced the climb to `LowFlight.ENTER_MM` (20 km), from which `move_to` home was refused for `unsupported_orbit` and once crashed the script. In case C it said `cannot_return: false`, and the probe stranded. A39 refuses `take_off` below 30 km, cancels a move that loses its orbit, and prices the take-off plus the leg up to the cluster (`return_target`, ID 12).
 
-### Part E: the drone and the handover (goals 10 and 11), planned
+### Part E: the drone and the handover (goals 10 and 11), measured
 
-1. Build `small_craft` at the station.
-2. Fit its six parts, plus `small_battery_bank_mk1` and an Assisted Core.
-3. `set_cycle` from Red Rock to the station's ore storage, which is fabricated in place. Stop at the third lap.
+C22's stage 6 runs on from the end of Part D at tick 429,491. It is one stage, and all ticks are absolute. At the start:
+- The station (60) is docked to the probe's only port (22), and station port 63 is free.
+- The probe holds 28 kg of copper, 74 kg of iron, 29 kg of silicon and 1,701 kg of propellant.
+- The station holds 150 kg of hematite.
+- The Assisted Core is qualified.
+
+**Materials, to tick 433,655.** The probe, with the station in tow as in prep:
+- Loads the station's 150 kg of hematite (31 ticks).
+- Red Rock: moves there (1,468 ticks) and mines hematite (376 ticks, 900 kg held).
+- Brass Rock: moves (876) and mines chalcopyrite (201, 400 kg).
+- Green Rock: moves (1,111) and mines olivine (101, 200 kg).
+- It ends with 1,300 kg of ore and 1,362 kg of propellant. The three moves burned 339 kg, since the probe tows the station.
+
+**Refining and fabricating, to tick 481,175,** all on the probe's compact facilities:
+
+| Job | Runs | Ticks |
+| --- | --- | --- |
+| `refine_hematite` | 9 | 10,800 |
+| `refine_chalcopyrite` | 4 | 4,800 |
+| `refine_olivine` | 2 | 3,600 |
+| `structural_frame` | 11 | 7,311 |
+| `wiring` | 11 | 6,000 |
+| `processor` | 14 | 16,800, the long pole |
+| `basic_core` | 1 | 2,400 |
+| `assisted_core` | 1 | 6,000 |
+| Small parts: solar 800, radiator 800, tank 600, thruster 800, ore container 600, laser 1,200, battery 1,200 | 7 | 6,000 |
+| `small_craft` | 1 | 1,200 |
+| `propellant_tank_mk1`, the depot | 1 | 1,800 |
+
+- **`small_craft` appears at station port 63.** C15's "a free port of the facility's unit, or the unit it is docked to" now works in either direction of the dock, since here the station is docked to the probe and not the other way round (C22).
+- **The depot is built in place on the station's `stack_bottom`.** It needs a stack connector, not a side.
+- **The drone is fitted through the docked group (C21)** with eight parts: solar panel, radiator, small tank, thruster, small ore container, mining laser, `small_battery_bank_mk1` and `assisted_core`. Its core is assigned at tick 481,175, which is goal 10.
+
+**The fuel depot, to tick 481,276.** The drone's small tank holds 100 kg, and it can only transfer with a unit it's directly docked to, which is the station, not the probe. So the probe unloads 500 kg of propellant into the depot (101 ticks) and keeps 862 kg. Refining ice on the station instead would need a refinery there, and the only one is the probe's compact refinery.
+
+**The cycle.** `set_cycle` on the drone, with seven steps:
+1. `load_cargo` propellant from the station.
+2. `undock`.
+3. `move_to` Red Rock.
+4. `start_mining` hematite, 500 kg, a full small container.
+5. `move_to` the station.
+6. `dock` at port 63.
+7. `unload` hematite to the station's `ore_container_mk1`.
+
+| Lap | Ticks | Ends at tick | Station hematite | Depot after |
+| --- | --- | --- | --- | --- |
+| 1 | 7,276 | 488,552 | 500 kg | 395.0 kg |
+| 2 | 7,261 | 495,813 | 1,000 kg | 366.2 kg |
+| 3 | 7,261 | 503,074 | 1,500 kg | 337.4 kg |
+
+- **Goal 11, the handover, is at tick 488,552,** the first lap done, 13.6 game hours in.
+- **The steady-state lap** is 7,261 ticks, about 12.1 game minutes. It burns 28.8 kg of propellant and delivers 500 kg of hematite.
+  - Lap 1 starts with an empty tank, so its first load is about 105 kg.
+  - Each later lap loads back the 28.8 kg it burned, and the drone ends each lap with 76.2 kg aboard.
+- **The depot runs about 11 more laps** from its 337 kg after lap 3, about 2.2 game hours. After that a person tops it up from the probe, with propellant refined from ice. Propellant, not ore, is what stops the drone first, and that is the next thing for a person to automate.
+- **The station's 2,000 kg ore store is 1,500 kg full after lap 3,** and would fill on lap 4. That's Part F's reason.
 
 **Fabricating in place needs a free connector.** All 12 of the probe's sides are used, so "Build into…" offers nothing on the probe itself until a station is docked. That's the intended flow: build the small station first, then build big parts into it. A second compact refinery (4.5 m³) or ore container (6 m³) for another craft is also built into a docked station or craft, since neither fits the probe's goods hold.
 
-### Part F: expand (goal 12), planned
+### Part F: expand (goal 12), measured
 
-Fit a second ore storage to the station.
+The tail of C22's stage 6.
+- The drone's cycle is stopped at tick 503,075.
+- The probe loads 500 kg of hematite back from the station (101 ticks). Then it refines it (`refine_hematite` ×5, 6,000 ticks) and makes frames (×6, 4,200 ticks).
+- It builds a second `ore_container_mk1` in place on the station's next free side (2,400 ticks).
+- **The second ore store is in at tick 510,976, 14.2 game hours.** That's goal 12, and the end of the chain.
 
 ## 4. End state
 
-Pending the full run through Part F. What's measured to the haul is in section 3.
+At tick 510,976, which is 14.2 game hours:
+
+| | |
+| --- | --- |
+| **Station** | Two `ore_container_mk1` holding about 1,000 kg of hematite. The depot, a `propellant_tank_mk1` with 337 kg. The research lab, the goods container, two solar panels and its Basic Core. Docked to the probe. |
+| **Drone** | A `small_craft` docked at station port 63. Eight parts plus its docking port, with the Assisted Core assigned and its cycle stopped. |
+| **Probe** | 862 kg of propellant. 60 science points unspent. The Assisted Core qualified. |
+| **Goals** | 1 to 12 done. 9 is at tick 429,491, 10 at 481,175, 11 at 488,552 and 12 at 510,976. |
+
+**Where the time goes.**
+
+| Stretch | Ticks | Game hours |
+| --- | --- | --- |
+| Parts A to C, to the first station and haul | 71,546 | 2.0 |
+| Part D: prep and lab | 94,196 | 2.6 |
+| Part D: the gravity lap, warped | 245,693 | 6.8 |
+| Part D: proving and qualifying | 18,056 | 0.5 |
+| Part E: materials and the drone | 51,785 | 1.4 |
+| Part E: three laps | 21,798 | 0.6 |
+| Part F | 7,902 | 0.2 |
+| **Total** | **510,976** | **14.2** |
+
+The gravity lap is almost half the chain. It's played at warp, and the facilities work through it, so a person spends it prospecting and fabricating. Without the lap, the chain is about 7.4 game hours of active play. The compact facilities' long poles are the processors: 64 in Part D and 14 in Part E.
 
 ## 5. Propellant for a person playing
 
-Measured to the haul:
-- **Trips in the cluster:** the four trips cost about 480 kg.
+Measured through the whole chain:
+- **Trips in the cluster:** the four trips of Parts A to C cost about 480 kg.
 - **Ice:** one 100 kg ice run gave back 90 kg.
 - **Margin:** the probe ended Part C with 2,110 kg, and its tank has room for 390 kg more.
 - **Making it back:** ice is cheap to make. 100 kg of ice is 51 ticks of mining and 1,200 of refining for 90 kg of propellant. So a person who wastes propellant in the cluster can always make it back once the compact refinery runs.
+- **Research (Part D):** the probe never burns after Part C, and reaches goal 9 with 1,701 kg.
+- **The drone (Part E):** the material trips, towing the station, cost 339 kg. The depot takes 500 kg, and the probe ends with 862 kg.
+- **The drone's laps:** 28.8 kg each. Its 100 kg tank covers three laps without a refuel. It refuels every lap from the depot.
 
-**Through research (Part D):** the probe never burns after Part C, and reaches goal 9 with 1,701 kg. Landing on Frost is optional, and the optional part of Part D prices it: following the hint, about 227 m/s spare; without the ice top-up, stranded.
-
-**Still to measure:** the drone's laps, from Parts E and F.
+**Landing on Frost** is optional, and the optional part of Part D prices it. Following the hint, it leaves about 227 m/s spare; without the ice top-up, the probe strands. At the end state the probe has 862 kg. A landing for Photovoltaic Arrays (research.md 5.1) needs the tank filled from ice first: about 1,640 kg, roughly three ore holds of ice.
