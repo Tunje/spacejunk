@@ -58,21 +58,34 @@ static func _is_dock_order(order: Dictionary) -> bool:
 	return order["command"]["type"] == "dock"
 
 
-## Unload everything aboard except propellant, and refill from the host what
-## this unit has room for. Amounts are left out, which moves all that fits.
+## Unload anything aboard, and Load anything the host holds that this unit has a hold
+## for (D39b: the drone stage loads ore from the station and leaves propellant in its
+## depot). Propellant comes last to unload, so the fuel is never the first button, and
+## first to load, for refuelling. Amounts come from the panel's box.
 static func _add_transfer_orders(orders: Array[Dictionary], view: Dictionary, items: Dictionary, commanded: int,
 		host_id: int) -> void:
 	var unit: Dictionary = view["units"][commanded]
-	var held: Array = unit["inventory"].keys()
-	held.sort()
-	for item: String in held:
-		if unit["inventory"][item] > 0 and items[item]["cargo_class"] != PROPELLANT_CLASS:
-			_add(orders, "Unload %s" % items[item]["name"], commanded, "unload_cargo", { "to": host_id, "item": item })
-	var stock: Array = view["units"][host_id]["inventory"].keys()
-	stock.sort()
-	for item: String in stock:
-		if items.has(item) and items[item]["cargo_class"] == PROPELLANT_CLASS:
+	for item: String in OrderList._by_propellant(unit["inventory"], items, false):
+		_add(orders, "Unload %s" % items[item]["name"], commanded, "unload_cargo", { "to": host_id, "item": item })
+	for item: String in OrderList._by_propellant(view["units"][host_id]["inventory"], items, true):
+		if int(unit.get("cargo", {}).get(items[item]["cargo_class"], {}).get("cap_g", 0)) > 0:
 			_add(orders, "Load %s" % items[item]["name"], commanded, "load_cargo", { "from": host_id, "item": item })
+
+
+## Items held, known and above zero, by ID, with propellant first or last.
+static func _by_propellant(inventory: Dictionary, items: Dictionary, first_wanted: bool) -> Array[String]:
+	var first: Array[String] = []
+	var rest: Array[String] = []
+	var ids: Array = inventory.keys()
+	ids.sort()
+	for item: String in ids:
+		if int(inventory[item]) <= 0 or not items.has(item):
+			continue
+		if items[item]["cargo_class"] == PROPELLANT_CLASS:
+			first.append(item)
+		else:
+			rest.append(item)
+	return first + rest if first_wanted else rest + first
 
 
 static func _add_asteroid_orders(orders: Array[Dictionary], view: Dictionary, modules: Dictionary,

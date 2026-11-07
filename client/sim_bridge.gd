@@ -108,7 +108,7 @@ func advance(delta: float) -> void:
 	_note_speed(advanced, delta, cap)
 	previous_view = current_view
 	current_view = sim.view()
-	if speed > WarpLogic.STEP_MAX and WarpLogic.needs_attention(events, warp_through_jobs, current_view.get("jobs", {})):
+	if speed > WarpLogic.STEP_MAX and WarpLogic.needs_attention(events, warp_through_jobs, current_view.get("jobs", {}), previous_view):
 		set_speed(SPEEDS[0])
 		_ticks_owed = 0.0
 	view_updated.emit()
@@ -149,7 +149,7 @@ func _warp(due: int, events: Array[Dictionary]) -> Dictionary:
 		var got: Array[Dictionary] = sim.take_events()
 		events.append_array(got)
 		# A finished run is judged against the view after the frame, so not here.
-		if WarpLogic.needs_attention(got, true):
+		if WarpLogic.needs_attention(got, true, {}, current_view):
 			break
 	return { "ticks": advanced, "capped_by": cap }
 
