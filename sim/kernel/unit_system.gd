@@ -5,10 +5,13 @@ extends SimSystem
 
 ## Shadow casters for the view being filled, worked out once per view rather than per unit.
 var _casters: Array = []
+## Casters on coming ticks for this view's sun_tick walks, by tick, shared across units (A51).
+var _casters_ahead := {}
 
 
 func fill_view(ctx: SimContext, view: Dictionary) -> void:
 	_casters = RailSystem.shadow_casters(ctx.state)
+	_casters_ahead = {}
 	var units: Dictionary = ctx.state["units"]
 	for id: int in _sorted(units):
 		view["units"][id] = _unit_view(ctx, id)
@@ -110,7 +113,7 @@ func _sun_tick(ctx: SimContext, id: int) -> int:
 	var memo: Dictionary = ctx.sun_memo.get(id, {})
 	if not memo.is_empty() and memo["key"] == key and int(memo["tick"]) > int(ctx.state["tick"]):
 		return memo["tick"]
-	var tick := PowerSystem.sun_tick(ctx.state, id)
+	var tick := PowerSystem.sun_tick(ctx.state, id, _casters_ahead)
 	if tick > 0:
 		ctx.sun_memo[id] = { "key": key, "tick": tick }
 	else:
