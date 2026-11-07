@@ -19,6 +19,8 @@ const ATTENTION: Array[String] = [
 const JOB_EVENTS: Array[String] = ["job_finished"]
 ## A queued job waiting on another job's output is the plan working, not news.
 const QUIET_PAUSES: Array[String] = ["missing_inputs"]
+## A craft running a cycle comes and goes every lap: news only when it blocks (D39b).
+const CYCLE_ROUTINE: Array[String] = ["burn_started", "departed", "arrived", "mining_stopped"]
 
 ## Why the Sim (A33) or the bridge capped a warp, in plain words.
 const CAP_TEXT: Dictionary = {
@@ -55,10 +57,14 @@ static func mode(speed: int) -> String:
 
 ## `live_jobs`, the view's jobs after these events: a finished run counts only when it
 ## was its job's last (the job has left the view), not every run of a 24-run job.
-static func needs_attention(events: Array, through_jobs := false, live_jobs: Dictionary = {}) -> bool:
+## `view`, the view the events came from, says which craft run a cycle.
+static func needs_attention(events: Array, through_jobs := false, live_jobs: Dictionary = {},
+		view: Dictionary = {}) -> bool:
 	for event: Dictionary in events:
 		var data: Dictionary = event.get("data", {})
 		if event["type"] == "job_paused" and QUIET_PAUSES.has(data.get("reason", "")):
+			continue
+		if CYCLE_ROUTINE.has(event["type"]) and WarpLogic.in_cycle(int(event.get("unit", 0)), view):
 			continue
 		if ATTENTION.has(event["type"]):
 			return true
@@ -94,3 +100,13 @@ static func clock_text(seconds: int) -> String:
 	var days := seconds / SECONDS_PER_DAY
 	var rest := seconds % SECONDS_PER_DAY
 	return "T+%d d %02d:%02d" % [days, rest / 3600, rest / 60 % 60]
+
+
+## Whether a unit is running a cycle, even while an order overrides it.
+static func in_cycle(unit_id: int, view: Dictionary) -> bool:
+	var unit: Dictionary = view.get("units", {}).get(unit_id, {})
+	if unit.is_empty():
+		return false
+	if int(unit.get("cycle_task", 0)) != 0:
+		return true
+	return view.get("tasks", {}).get(int(unit.get("task", 0)), {}).get("kind", "") == "cycle"
