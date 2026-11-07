@@ -39,8 +39,15 @@ func _tree(fitted: Array[String], root: String = "hull") -> Dictionary:
 	return hull
 
 
+## The station sandbox's game, which these tests are about (D38 made the new start the default).
+func _reference_main() -> Node:
+	var main: Node = load("res://client/main.tscn").instantiate()
+	main.scenario = Main.REFERENCE
+	return add_child_autofree(main)
+
+
 func _real_modules() -> Dictionary:
-	var main: Node = add_child_autofree(load("res://client/main.tscn").instantiate())
+	var main: Node = _reference_main()
 	main.get_node("Bridge").set_paused(true)
 	return main.get_node("Bridge").defs()["modules"]
 
@@ -150,7 +157,7 @@ func test_the_drone_hint_names_the_parts_in_the_order_they_fit() -> void:
 func test_the_core_hint_holds_on_the_real_sim() -> void:
 	assert_string_contains(GoalTracker.GOALS[7]["hint"], "solar panel and radiator")
 	for fitted: int in [0, 2]:
-		var main: Node = add_child_autofree(load("res://client/main.tscn").instantiate())
+		var main: Node = _reference_main()
 		var bridge: SimBridge = main.get_node("Bridge")
 		bridge.set_paused(true)
 		var drone := ScreenshotDriver.build_drone(bridge, fitted)
@@ -182,7 +189,7 @@ func test_fix_ignores_a_different_part() -> void:
 
 
 func test_the_real_game_starts_on_goal_one_with_a_hint() -> void:
-	var main: Node = add_child_autofree(load("res://client/main.tscn").instantiate())
+	var main: Node = _reference_main()
 	main.get_node("Bridge").set_paused(true)
 	var panel: GoalPanel = main.goal_panel
 	assert_eq(panel._title.text, "Goal 1 of 10: Scan an asteroid")
@@ -190,7 +197,7 @@ func test_the_real_game_starts_on_goal_one_with_a_hint() -> void:
 
 
 func test_the_list_opens_and_marks_done_goals() -> void:
-	var main: Node = add_child_autofree(load("res://client/main.tscn").instantiate())
+	var main: Node = _reference_main()
 	main.get_node("Bridge").set_paused(true)
 	var panel: GoalPanel = main.goal_panel
 	panel.toggle_list()
@@ -203,7 +210,7 @@ func test_the_list_opens_and_marks_done_goals() -> void:
 
 
 func test_finishing_everything_says_so() -> void:
-	var main: Node = add_child_autofree(load("res://client/main.tscn").instantiate())
+	var main: Node = _reference_main()
 	main.get_node("Bridge").set_paused(true)
 	var panel: GoalPanel = main.goal_panel
 	for goal: Dictionary in GoalTracker.GOALS:
@@ -213,7 +220,7 @@ func test_finishing_everything_says_so() -> void:
 
 
 func test_h_hides_the_goals() -> void:
-	var main: Node = add_child_autofree(load("res://client/main.tscn").instantiate())
+	var main: Node = _reference_main()
 	main.get_node("Bridge").set_paused(true)
 	var key := InputEventKey.new()
 	key.pressed = true
@@ -223,7 +230,7 @@ func test_h_hides_the_goals() -> void:
 
 
 func test_goals_finish_and_announce_on_the_real_sim() -> void:
-	var main: Node = add_child_autofree(load("res://client/main.tscn").instantiate())
+	var main: Node = _reference_main()
 	var bridge: SimBridge = main.get_node("Bridge")
 	bridge.set_paused(true)
 	bridge.set_speed(8)
