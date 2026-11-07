@@ -487,13 +487,16 @@ func _claim_port(ctx: SimContext, job: Dictionary) -> void:
 	_pause(ctx, job, REASON_NO_FREE_PORT)
 
 
-## Ports a built unit may dock at: the builder's own, then those of the unit it is docked to, so a
-## probe docked at its station builds onto the station's spare port (start_and_build.md section 5).
+## Ports a built unit may dock at: the builder's own, then those of the units docked with it, either
+## way, by ID, so a probe and its station build onto the station's spare port whichever of them
+## holds the dock record (start_and_build.md section 5; C22: the new start's station is docked to
+## the probe).
 func _build_ports(ctx: SimContext, unit_id: int) -> Array[int]:
 	var ports := Units.ports(ctx.state, ctx.defs, unit_id)
-	var dock: Dictionary = ctx.state["units"][unit_id]["dock"]
-	if not dock.is_empty():
-		ports.append_array(Units.ports(ctx.state, ctx.defs, dock["target_unit"]))
+	var units: Dictionary = ctx.state["units"]
+	for other: int in _sorted(units):
+		if other != unit_id and Units.are_docked(ctx.state, unit_id, other):
+			ports.append_array(Units.ports(ctx.state, ctx.defs, other))
 	return ports
 
 

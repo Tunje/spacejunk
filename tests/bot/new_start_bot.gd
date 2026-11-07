@@ -43,9 +43,33 @@ const STAGE_PREP := 2
 const STAGE_LAB := 3
 const STAGE_LAP := 4
 const STAGE_RESEARCH := 5
+const STAGE_DRONE := 6
 const FROST := 3
 ## A lap of the cluster round Frost is 245,692 ticks.
 const LAP_LIMIT_TICKS := 300_000
+## Stage 6 (C22): ore held for the drone's parts, with the station's 150 kg of hematite loaded
+## first, and the runs that refine it. 9 hematite runs give 695 kg of iron with what is left, for
+## 11 frames and the depot's 100 kg; 4 chalcopyrite runs, copper for 11 wiring, 14 processors and
+## the battery; 2 olivine runs, silicon for the processors.
+const DRONE_ORE := [[RED_ROCK, "hematite", 900_000, "refine_hematite", 9],
+	[BRASS_ROCK, "chalcopyrite", 400_000, "refine_chalcopyrite", 4],
+	[GREEN_ROCK, "olivine", 200_000, "refine_olivine", 2]]
+## The drone's fit on small_hull, each as [part, connector, parent], as tests/sim/autonomy/
+## test_cycles.gd fits it, with a battery for the shadow and an Assisted Core for tier 2.
+const DRONE_FIT := [["small_solar_panel_mk1", "side_a_px", "hull"], ["small_heat_radiator_mk1", "side_a_nx", "hull"],
+	["small_propellant_tank_mk1", "stack_bottom", "hull"],
+	["small_chemical_thruster_mk1", "stack_bottom", "small_propellant_tank_mk1"],
+	["small_ore_container_mk1", "side_a_pz", "hull"], ["small_mining_laser_mk1", "side_a_nz", "hull"],
+	["small_battery_bank_mk1", "side_b_nx", "hull"], ["assisted_core", "core", "hull"]]
+## Propellant the probe leaves in the station's depot for the drone to load each lap.
+const DEPOT_PROPELLANT_G := 500_000
+## Ore a lap mines: the small ore container's 500 kg, full by mass (B, new_start_chain.md Part E).
+const DRONE_LAP_G := 500_000
+const DRONE_LAPS := 3
+## Hematite taken back from the station's storage after the laps, refined for a second ore store's
+## six frames (Part F).
+const STORE_ORE_G := 500_000
+const DRONE_LIMIT_TICKS := 200_000
 ## Waiting on jobs steps this many ticks between looks, as a player at speed would.
 const WAIT_BATCH_TICKS := 10
 
@@ -74,6 +98,7 @@ var station := 0
 var station_hub := 0
 var station_core := 0
 var lab := 0
+var drone := 0
 ## The last stage run.
 var stage := 0
 ## Queued jobs by command ID until job_queued names them, then by job ID until their last run.
@@ -122,6 +147,8 @@ func play_through(last: int) -> void:
 				_cluster_lap()
 			STAGE_RESEARCH:
 				_research()
+			STAGE_DRONE:
+				_drone_stage()
 
 
 ## "" if the game is where the committed snapshot after `after_stage` says, otherwise why not.
@@ -335,6 +362,119 @@ func _cluster_lap() -> void:
 	mark("gravity_mapped")
 
 
+## Stage 6 (C22, new_start_chain.md Parts E and F): the first drone and its handover. The probe,
+## with the station in tow, mines and refines for the drone's parts; builds the hull, which appears
+## at the station's spare port, and a propellant depot in place on the station; fits the drone
+## from its own hold through the docked group (C21) and assigns its Assisted Core; fills the depot,
+## and sets the drone's cycle from Red Rock to the station's ore storage, 500 kg a lap. After three
+## laps the drone is stopped, and a second ore store is built on the station from the ore it
+## brought. Waits are warped from here on.
+func _drone_stage() -> void:
+	_order("load_cargo", PROBE, { "from": station, "item": "hematite" })
+	for entry: Array in DRONE_ORE:
+		_order("move_to", PROBE, { "target": entry[0] })
+		_mine(entry[1], entry[2])
+		_queue([[refinery, entry[3], entry[4]]])
+	mark("drone_ore")
+	_queue([
+		[fabricator, "structural_frame", 11], [fabricator, "wiring", 11], [fabricator, "processor", 14],
+		[fabricator, "basic_core", 1], [fabricator, "assisted_core", 1],
+	])
+	for fit: Array in DRONE_FIT:
+		if fit[0] != "assisted_core":
+			_queue([[fabricator, fit[0], 1]])
+	_queue([[fabricator, "small_craft", 1],
+		[fabricator, "propellant_tank_mk1", 1, _on_station(_free_station_mount("propellant_tank_mk1"))]])
+	_wait_for([], true)
+	_fit_drone()
+	if not problems.is_empty():
+		return
+	_order("unload_cargo", PROBE, { "to": station, "item": "propellant", "grams": DEPOT_PROPELLANT_G })
+	mark("drone_ready")
+	_run_drone()
+	_command("stop", drone, {})
+	_coast(1)
+	mark("drone_stopped")
+	_order("load_cargo", PROBE, { "from": station, "item": "hematite", "grams": STORE_ORE_G })
+	_queue([[refinery, "refine_hematite", STORE_ORE_G / 100_000], [fabricator, "structural_frame", 6],
+		[fabricator, "ore_container_mk1", 1, _on_station(_free_station_mount("ore_container_mk1"))]])
+	_wait_for([], true)
+	mark("store_added")
+
+
+## Finds the hull the probe built, fits it from the probe's hold, and assigns its core.
+func _fit_drone() -> void:
+	for id: int in _sorted_ids(sim._state["units"]):
+		if sim._state["units"][id]["kind"] == "drone":
+			drone = id
+	if drone == 0:
+		problems.append("no drone was built")
+		return
+	var made := { "hull": sim._state["units"][drone]["root"] }
+	for fit: Array in DRONE_FIT:
+		made[fit[0]] = _attach(drone, fit[0], made[fit[2]], fit[1])
+		if not problems.is_empty():
+			return
+	_command("assign_core", drone, { "core": made["assisted_core"] })
+	_coast(1)
+	mark("drone_fitted")
+
+
+## Sets the drone's cycle and warps until its third lap is done, a problem if it blocks or ends.
+func _run_drone() -> void:
+	var dock: Dictionary = sim._state["units"][drone]["dock"]
+	var laser_part := 0
+	for part: int in Units.sorted_part_ids(sim._state, drone):
+		if Units.module_of(sim._state, sim.defs(), part)["capabilities"].has("mine"):
+			laser_part = part
+	_command("set_cycle", drone, { "steps": [
+		{ "type": "load_cargo", "args": { "from": station, "item": "propellant" } },
+		{ "type": "undock", "args": {} },
+		{ "type": "move_to", "args": { "target": RED_ROCK } },
+		{ "type": "start_mining", "args": { "deposit": deposits["hematite"], "module": laser_part,
+			"grams": DRONE_LAP_G } },
+		{ "type": "move_to", "args": { "target": station } },
+		{ "type": "dock", "args": { "port": dock["port"], "target_port": dock["target_port"] } },
+		{ "type": "unload_cargo", "args": { "to": station, "item": "hematite" } },
+	] })
+	var start := sim.current_tick() + 1
+	var lap_start := start
+	var deadline := sim.current_tick() + DRONE_LIMIT_TICKS
+	while sim.current_tick() < deadline and problems.is_empty():
+		for event in _coast(deadline - sim.current_tick()):
+			if event["unit"] != drone:
+				continue
+			match event["type"]:
+				"command_rejected":
+					problems.append("the drone's cycle refused: %s" % event["data"]["reason"])
+				"task_blocked", "task_cancelled":
+					problems.append("the drone's cycle %s: %s" % [event["type"], event["data"]["reason"]])
+				"task_cycle_done":
+					var lap: int = event["data"]["cycle"]
+					steps.append({ "label": "drone lap %d" % lap, "start_tick": lap_start,
+						"ticks": event["tick"] - lap_start + 1 })
+					lap_start = event["tick"] + 1
+					mark("lap_%d" % lap)
+					if lap == DRONE_LAPS:
+						_record("drone laps", start)
+						return
+	if problems.is_empty():
+		problems.append("the drone did not finish %d laps" % DRONE_LAPS)
+
+
+## The first connector of the station's hub with nothing on it that `item`'s mount fits: a side for
+## an ore store, a stack for a propellant tank.
+func _free_station_mount(item: String) -> String:
+	var hub: Dictionary = Units.module_of(sim._state, sim.defs(), station_hub)
+	var mount := Units.connector_of(sim.defs()["modules"][item], "mount")
+	for connector: Dictionary in hub["connectors"]:
+		var id: String = connector["id"]
+		if connector["type"] == mount["type"] and connector["size"] == mount["size"] 				and Units.child_at(sim._state, station_hub, id) == 0:
+			return id
+	problems.append("no free connector on the station for %s" % item)
+	return ""
+
+
 ## Moves whole items from the probe's hold into the station's, by count.
 func _unload_to_station(counts: Dictionary) -> void:
 	var items: Array = counts.keys()
@@ -503,12 +643,17 @@ func _queue_on(unit: int, jobs: Array) -> void:
 		_pending_commands[id] = { "recipe": entry[1], "left": entry[2] }
 
 
-## Steps until every queued job of these recipes has finished, or every queued job if [].
-func _wait_for(recipes: Array) -> void:
-	for i in WAIT_LIMIT_TICKS / WAIT_BATCH_TICKS:
+## Steps until every queued job of these recipes has finished, or every queued job if [], in
+## batches, or warped from stage 6 on (`warp`), which returns at each tick with events.
+func _wait_for(recipes: Array, warp: bool = false) -> void:
+	var deadline := sim.current_tick() + WAIT_LIMIT_TICKS
+	while sim.current_tick() < deadline:
 		if not problems.is_empty() or not _is_waiting_for(recipes):
 			return
-		_step(WAIT_BATCH_TICKS)
+		if warp:
+			_coast(deadline - sim.current_tick())
+		else:
+			_step(WAIT_BATCH_TICKS)
 	var open := PackedStringArray()
 	for job: Dictionary in sim._state["jobs"].values():
 		open.append("%s %s %s" % [job["recipe"], job["status"], job["reason"]])
