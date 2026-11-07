@@ -1,6 +1,6 @@
 # Balance Report
 
-Status: task B6, report stage. The owner chooses a pacing option, then B6 applies it. All figures are from the slice's first-pass data with the drone built from parts ([drone_from_parts.md](drone_from_parts.md)), measured on `main` at d5ad250.
+Status: task B6, report stage. The owner chooses a pacing option, then B6 applies it. All figures are from the slice's first-pass data with the drone built from parts ([drone_from_parts.md](drone_from_parts.md)), measured on `main` at d5ad250. Section 9 measures the new start, task B23.
 
 ## 1. Summary
 
@@ -188,3 +188,97 @@ These are for the owner and the Lead. None of them is a data change.
 
 - **The drone arrives after the hauling is over.** The ship's last unload is at 20 to 32 minutes of a run of 87 to 105, and from then on nothing flies. At handover the station already holds spare ore, up to 1900 kg of hematite, 1000 kg of chalcopyrite and 1400 kg of olivine. So the drone takes over a job the player stopped doing an hour earlier, and its ore is not yet needed. Option A shortens that gap but does not close it. This bears on M4's question of whether the handover is satisfying.
 - **Giving orders is the main cost at 8x.** Each trip needs six orders, and each drone at least 12 for its jobs and fits, with no way to repeat them. Data cannot change that, but pausing to think would, as would an order queue or letting a Basic Core repeat a route. Those are design changes for after M4.
+
+## 9. The new start
+
+Sections 1 to 8 measure `reference.json`, the station fixture. This section measures `new_start.json`, where the player starts with only the probe ([new_start_chain.md](new_start_chain.md)). Measured on `design/B23` with C22 on `main`, at seed 12345 (task B23).
+
+### 9.1 How this was measured
+
+`tools/new_start_pace.gd` plays C's `NewStartBot` route through all six stages on the real `Sim`.
+- It records the tick of each of the route's 114 commands.
+- It records each goal's tick, scored by the client's `GoalTracker` with the new-start goal list.
+- `NewStartPace.pace()` then prices that record for a person.
+- `tools/new_start_balance.gd` prints every figure below in about 90 seconds.
+- `tests/tools/test_new_start_pace.gd` tests the pricing.
+
+The pricing has three parts:
+- **Think time.** Each command takes `think_s` real seconds, and the game keeps running meanwhile. When the bot gave its next order sooner than a person could, the chain slips by the difference. The bot runs one step at a time, so its game time is a floor, and the slips are added on top.
+- **Speed.** The game runs at the chosen speed between orders.
+- **Warp.** A wait that has lasted `warp_after_s` real seconds past the think time is warped at 1000× for the rest, as C17's coast lets a person do. "No warp" never does.
+
+**Treat these as lower bounds,** as in section 2. The person follows the bot's route exactly, never makes a mistake and never explores. The client also drops out of warp on events that need attention, and that isn't modelled.
+
+### 9.2 Time to each goal
+
+Minutes of real time from a fresh start.
+
+| # | Goal | Practised 8x, warps | First-time 8x, warps | First-time 1x, warps | Practised 8x, no warp | Bot, 1x |
+| - | ---- | ------------------- | -------------------- | -------------------- | --------------------- | ------- |
+| 1 | Scan a rock | 0.3 | 0.6 | 1.5 | 0.3 | 2.1 |
+| 2 | First science points | 0.3 | 0.6 | 1.5 | 0.3 | 2.1 |
+| 3 | Mine ore | 0.3 | 0.8 | 1.5 | 0.3 | 2.1 |
+| 4 | Refine ore | 0.8 | 1.5 | 3.3 | 0.9 | 5.8 |
+| 5 | Fabricate a component | 0.8 | 1.6 | 3.3 | 1.0 | 6.8 |
+| 6 | Build a station | 3.2 | 8.6 | 12.9 | 13.1 | 96.2 |
+| 7 | Install a part on something built | 3.3 | 8.8 | 13.2 | 15.2 | 112.2 |
+| 8 | Hit a fitting limit and fix it | 3.7 | 10.0 | 14.7 | 15.8 | 115.2 |
+| 9 | Haul ore to the station | 4.0 | 10.7 | 15.7 | 16.3 | 119.2 |
+| 10 | Prove a new tech | 9.4 | 23.9 | 33.8 | 92.0 | 715.8 |
+| 11 | Build a mining drone | 12.2 | 32.5 | 44.4 | 104.5 | 802.0 |
+| 12 | Hand the job to an AI core | 12.8 | 34.5 | 46.4 | 106.4 | 814.3 |
+| 13 | Expand the station | **13.3** | **36.3** | **48.2** | **111.3** | **851.6** |
+
+| | Practised 8x, warps | First-time 8x, warps | First-time 1x, warps | Practised 8x, no warp |
+| - | ------------------- | -------------------- | -------------------- | --------------------- |
+| Think time per order | 4 s | 15 s | 15 s | 4 s |
+| Warp after | 10 s | 30 s | 30 s | never |
+| Game time, with slips | 14.8 h | 17.0 h | 14.5 h | 14.8 h |
+| Real time warped | 0.8 min | 0.7 min | 0.8 min | 0 |
+| Giving orders: 114 × think time | 7.6 min | 28.5 min | 28.5 min | 7.6 min |
+
+### 9.3 What it shows
+
+- **With warp, a first full run takes about 13 to 36 minutes at 8x, and 48 at 1x.** That's from a fresh start to all 13 goals, for a person who makes no mistakes. It's about as long as the station fixture at 8x (section 1: 14 to 28 minutes for ten checks), with three more goals and a whole station to build.
+- **Warp is what makes the new start playable.**
+  - The gravity lap is 6.8 of the chain's 14.2 game hours. At 8x without warp it's 51 real minutes, and goal 10 comes at 92 minutes, not 9 to 34.
+  - With warp the whole lap costs about 25 real seconds.
+  - Every long facility wait is warped the same way: the processors' 2.1 hours, and the drone's materials.
+- **At 8x with warp, the limit is the person.** 114 orders take 7.6 to 28.5 minutes of think time, most of each run. A first-timer's slower orders also cost 2.8 game hours of slips, because the facilities sit idle while they decide. As section 1 found for the fixture, no data change helps much there. Fewer, bigger orders would: queued jobs, and the Assisted Core's cycles, which already take the drone's 7-step lap off the player.
+- **The first station takes 3 to 13 minutes.** That's the seed factory's first big build, 12,000 ticks at compact speed. It's the first real wait, and the first point a person warps.
+- **The bot's 14.2 game hours is not a person's time.** At 1x with no warp it's 14 real hours, but nobody plays that way.
+
+### 9.4 Propellant runway
+
+From new_start_chain.md sections 3 to 5:
+- **The probe never runs short on the route.** It ends Part C with 2,110 kg, reaches goal 9 with 1,701 kg (C18 measures the gravity field from the cluster, with no landing), and ends with 862 kg after filling the depot. Ice makes any shortfall back: 100 kg of ice is 51 ticks of mining and 1,200 of refining for 90 kg.
+- **Landing on Frost is the one propellant risk.** It's optional on this route, and the reason for it is Photovoltaic Arrays (research.md 5.1). Following the hint (ice top-up, goods unloaded, leave from the station) the probe gets back with about 227 m/s spare. Without the top-up it strands. The land check's `cannot_return` warning (A39) catches that case.
+- **The drone.** A lap burns 28.8 kg for 500 kg of hematite. At the end of Part F the 337 kg depot would last about 11 laps, about 2.2 game hours.
+
+### 9.5 Does the loop sustain itself?
+
+The owner's premise is that cores automate. Part F2 (new_start_chain.md, planned as C24 then C23) adds:
+- a compact refinery on the station, in place of the idle LIDAR;
+- two standing jobs on it, ice to propellant and hematite to iron, which C24's starved-queue skip lets one refinery run together;
+- an ice leg in the drone's cycle.
+
+Estimated per cycle, to be replaced by C23's measurements:
+
+| | Per cycle |
+| - | --------- |
+| Cycle length | about 14,500 ticks, 24 game minutes |
+| Propellant burned | 28.8 kg hematite leg + about 22 kg ice leg |
+| Propellant made | about 166 kg from 184 kg of ice |
+| Depot | **about +115 kg**: it fills, and never runs the drone dry |
+| Hematite in, iron out | 500 kg in, 345 kg of iron to the goods container |
+| Refinery busy | about 2,200 ticks on ice, 6,000 on hematite, before shadow pauses |
+
+**Propellant: sustained.** The ice leg more than pays for both legs.
+
+**Ore: delayed, not steady.** This is the honest limit.
+- The iron job drains the ore stores into the 2,000 kg goods container. That fills in about 5.8 cycles.
+- Then the hematite job waits on `output_full`, and the 4,000 kg of ore stores fill in about 8 more cycles.
+- At **about 14 cycles, 5.6 game hours** after F2 starts, the drone can't unload, and its cycle stops.
+- Without the iron job it would stop after about 8 cycles, 3.2 hours. So the iron job buys about 2.4 hours, but it doesn't hold the loop steady.
+- At 8x with warp, 5.6 game hours is about 20 real seconds of warp. So a person meets the full store soon after F2, unless they act.
+- **A steady loop needs something to use the iron:** the player hauling it away, or a fabricator on the station. The station has no free side for one, so that's another station or hub module. Running out of room is the push to expand, and it's the player's next decision, not a bug.
