@@ -102,6 +102,11 @@ func end_test(ctx: SimContext, unit_id: int) -> bool:
 	return false
 
 
+## Coast (C20): CargoSystem sums the transfer in closed form, short of every bound it meets.
+func coast_ticks(ctx: SimContext, unit_id: int) -> int:
+	return CargoSystem.transfer_horizon(ctx, unit_id)
+
+
 ## The port on this unit that the transfer runs through.
 func _own_port(ctx: SimContext, unit_id: int, other: int) -> int:
 	var dock: Dictionary = ctx.state["units"][unit_id]["dock"]

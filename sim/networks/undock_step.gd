@@ -37,3 +37,9 @@ func leaves(_ctx: SimContext, _args: Dictionary, place: Dictionary) -> Dictionar
 
 func end_test(ctx: SimContext, unit_id: int) -> bool:
 	return ctx.state["units"][unit_id]["dock"].is_empty()
+
+
+## Coast (C20): nothing changes until CargoSystem finishes the undock on its end tick, which is
+## stepped.
+func coast_ticks(ctx: SimContext, unit_id: int) -> int:
+	return CargoSystem.dock_horizon(ctx, unit_id)
