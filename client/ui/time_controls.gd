@@ -25,6 +25,12 @@ var _clock: Label
 ## Above 8×: the speed reached and why it's held back. Below the toolbar row.
 var warp_label: Label
 var _through_jobs: CheckBox
+## Toolbar buttons greyed until useful, by ToolbarGates gate name (D39).
+var gate_buttons: Dictionary = {}
+## "Warp past jobs" shows once a job exists, and stays (D39). A clock that goes
+## back (a new game, a load) starts over.
+var _jobs_seen := false
+var _last_tick := 0
 
 
 func _ready() -> void:
@@ -70,16 +76,19 @@ func _ready() -> void:
 	research_button.focus_mode = Control.FOCUS_NONE
 	research_button.pressed.connect(func() -> void: research_pressed.emit())
 	row.add_child(research_button)
+	gate_buttons["research"] = research_button
 	var auto_button := Button.new()
 	auto_button.text = "Auto"
 	auto_button.focus_mode = Control.FOCUS_NONE
 	auto_button.pressed.connect(func() -> void: auto_pressed.emit())
 	row.add_child(auto_button)
+	gate_buttons["auto"] = auto_button
 	var policy_button := Button.new()
 	policy_button.text = "Policy"
 	policy_button.focus_mode = Control.FOCUS_NONE
 	policy_button.pressed.connect(func() -> void: policy_pressed.emit())
 	row.add_child(policy_button)
+	gate_buttons["policy"] = policy_button
 	var save_button := Button.new()
 	save_button.text = "Save"
 	save_button.focus_mode = Control.FOCUS_NONE
@@ -119,6 +128,13 @@ func _ready() -> void:
 	row.add_child(_through_jobs)
 
 
+## Greys a gated button, with a tooltip saying when it helps, or opens it.
+func set_gate(gate: String, open: bool) -> void:
+	var button: Button = gate_buttons[gate]
+	button.disabled = not open
+	button.tooltip_text = "" if open else ToolbarGates.GATES[gate]["tip"]
+
+
 func bind(new_bridge: SimBridge) -> void:
 	bridge = new_bridge
 	bridge.time_changed.connect(_refresh)
@@ -145,6 +161,12 @@ func _refresh() -> void:
 	for value: int in _speed_buttons:
 		_speed_buttons[value].set_pressed_no_signal(value == bridge.speed)
 	_clock.text = WarpLogic.clock_text(floori(bridge.game_seconds()))
+	var tick := int(bridge.current_view.get("tick", 0))
+	if tick < _last_tick:
+		_jobs_seen = false
+	_last_tick = tick
+	_jobs_seen = _jobs_seen or not bridge.current_view.get("jobs", {}).is_empty()
+	_through_jobs.visible = _jobs_seen or _through_jobs.button_pressed
 	warp_label.visible = bridge.speed > WarpLogic.STEP_MAX and not bridge.paused
 	if warp_label.visible:
 		warp_label.global_position = global_position + Vector2(WARP_LABEL_LEFT_PX, size.y + 6)

@@ -39,6 +39,8 @@ var research_screen: ResearchScreen
 ## False until a game is running, so a failed start never autosaves.
 var _started := false
 var _autosave_left := AUTOSAVE_SECONDS
+## Module defs for the toolbar gates, re-read when defs change.
+var _gate_modules: Dictionary = {}
 
 
 func _ready() -> void:
@@ -65,6 +67,10 @@ func _ready() -> void:
 	system_map.bind(bridge, local_view)
 	flight_screen.bind(bridge, local_view, system_map)
 	_add_research_screen()
+	_gate_modules = bridge.defs()["modules"]
+	bridge.defs_changed.connect(func() -> void: _gate_modules = bridge.defs()["modules"])
+	bridge.view_updated.connect(refresh_gates)
+	refresh_gates()
 	time_controls.map_pressed.connect(toggle_map)
 	time_controls.fly_pressed.connect(toggle_flight)
 	time_controls.policy_pressed.connect(standing_orders.toggle)
@@ -100,6 +106,12 @@ func _new_backend(id: String) -> RefCounted:
 	if [StubSim.SCENARIO_ID, StubSim.SCENARIO_LOAD, StubSim.SCENARIO_ORBIT].has(id):
 		return StubSim.new_game(id, SEED_VALUE)
 	return Sim.new_game(id, SEED_VALUE)
+
+
+## Greys the toolbar buttons not useful yet (D39), from the goals and the view.
+func refresh_gates() -> void:
+	for gate: String in ToolbarGates.GATES:
+		time_controls.set_gate(gate, ToolbarGates.is_open(gate, goal_panel.tracker, bridge.current_view, _gate_modules))
 
 
 ## Planet builds run on their own threads; none may outlive the game.
@@ -283,6 +295,7 @@ func new_game(id: String) -> void:
 	goal_panel.set_scenario(id, true)
 	automation_screen.restore_state({})
 	goal_panel.refresh()
+	refresh_gates()
 	event_log.add_line("Started: %s" % START_NAMES.get(id, id))
 
 
@@ -298,6 +311,7 @@ func _apply_load(loaded: RefCounted, client_state: Dictionary) -> void:
 	goal_panel.tracker.restore_state(client_state.get("goals", {}))
 	automation_screen.restore_state(client_state.get("automation", {}))
 	goal_panel.refresh()
+	refresh_gates()
 
 
 func _close_screens() -> void:

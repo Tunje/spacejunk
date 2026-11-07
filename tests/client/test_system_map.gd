@@ -69,7 +69,19 @@ func test_star_and_asteroids_share_one_frame() -> void:
 
 func test_ring_labels_read_cleanly() -> void:
 	assert_eq(SystemMap.ring_label(10.0), "10 km")
-	assert_eq(SystemMap.ring_label(100000000.0), "100 million km")
+	assert_eq(SystemMap.ring_label(300000.0), "300,000 km")
+	assert_eq(SystemMap.ring_label(3000000.0), "3 million km")
+	assert_eq(SystemMap.ring_label(0.1 * SystemMap.AU_KM), "0.1 AU")
+	assert_eq(SystemMap.ring_label(SystemMap.AU_KM), "1 AU")
+
+
+## D39: no ring is more than about ten times the one inside it, so the gap from the
+## cluster to the planets reads in steps.
+func test_rings_step_across_the_gap() -> void:
+	for index in range(3, SystemMap.RINGS_KM.size()):
+		var ratio := SystemMap.RINGS_KM[index] / SystemMap.RINGS_KM[index - 1]
+		assert_between(ratio, 1.5, 5.1, "ring %d" % index)
+	assert_eq(SystemMap.RINGS_KM[SystemMap.RINGS_KM.size() - 1], 3.0 * SystemMap.AU_KM, "past the home planet")
 
 
 func test_map_starts_closed() -> void:

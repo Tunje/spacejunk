@@ -26,6 +26,9 @@ var _battery_label: Label
 var _heat_bar: ProgressBar
 var _heat_label: Label
 var _parts_box: VBoxContainer
+## Shows or hides the parts list, which starts folded (D39).
+var parts_toggle: Button
+var _parts_scroll: ScrollContainer
 
 
 func _ready() -> void:
@@ -52,13 +55,20 @@ func _ready() -> void:
 	_heat_label = _add_label(column)
 	_heat_bar = _add_bar(column)
 	column.add_child(HSeparator.new())
-	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(0, PARTS_HEIGHT_PX)
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	column.add_child(scroll)
+	parts_toggle = Button.new()
+	parts_toggle.flat = true
+	parts_toggle.focus_mode = Control.FOCUS_NONE
+	parts_toggle.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	parts_toggle.pressed.connect(func() -> void: set_parts_open(not _parts_scroll.visible))
+	column.add_child(parts_toggle)
+	_parts_scroll = ScrollContainer.new()
+	_parts_scroll.custom_minimum_size = Vector2(0, PARTS_HEIGHT_PX)
+	_parts_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_parts_scroll.visible = false
+	column.add_child(_parts_scroll)
 	_parts_box = VBoxContainer.new()
 	_parts_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(_parts_box)
+	_parts_scroll.add_child(_parts_box)
 
 
 func _reread_defs() -> void:
@@ -153,6 +163,20 @@ func _refresh_parts(unit: Dictionary) -> void:
 		var label: Label = _parts_box.get_child(index)
 		label.text = InspectText.part_line(part, _modules[part["def"]])
 		label.modulate = InspectText.part_colour(part)
+	_show_parts_toggle()
+
+
+func set_parts_open(open: bool) -> void:
+	_parts_scroll.visible = open
+	_show_parts_toggle()
+
+
+func parts_open() -> bool:
+	return _parts_scroll.visible
+
+
+func _show_parts_toggle() -> void:
+	parts_toggle.text = "%s Parts (%d)" % ["v" if _parts_scroll.visible else ">", _parts_box.get_child_count()]
 
 
 func part_line_count() -> int:
