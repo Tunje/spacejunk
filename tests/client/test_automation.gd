@@ -186,7 +186,7 @@ func test_a_tier_1_core_is_refused_with_the_reason() -> void:
 	main.toggle_automation()
 	screen.repeat_route()
 	assert_eq(screen._message.text, "AI core tier is too low")
-	assert_string_contains(screen._core_label.text, "tier 1")
+	assert_string_contains(screen._core_label.text, "Core: Basic")
 
 
 func test_repeat_this_route_runs_a_real_cycle_unaided() -> void:
