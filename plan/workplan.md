@@ -26,6 +26,8 @@ The core idea of the game is as follows:
 
 **Orbits:** option 3 of [orbital_flight.md](../docs/design/orbital_flight.md) is approved. It covers integer orbits on rails, an autopilot for core-flown ships, and manual burns. Because the player flies their own ship, manual burns are not to be pushed to the end.
 
+**Owner's rule, 2026-11-07: "Shortcuts are not welcome in my game if it loses out on what I have asked for."** The straight-line, gravity-free co-moving frame (orbital_flight.md 11.2) is to be removed entirely. Every ship and rock moves on real orbits, including travel between asteroids, rendezvous and docking approaches. No simplification may be approved that drops anything the owner asked for; if in doubt, ask the owner first.
+
 **Planets:** hexes are a fixed size of about 7 km ([planets.md](../docs/design/planets.md)).
 
 **Pacing:** leave the figures as they are for now ([balance.md](../docs/design/balance.md)).
