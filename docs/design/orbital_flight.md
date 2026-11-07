@@ -1208,3 +1208,38 @@ At 20 times the slice a coast call now covers 383 ticks instead of 81, for about
 
 
 **Follow-up (logged by the Lead after A48):** in the 20 times slice world, the view's 99th percentile can pass the 100 ms spike line on ticks where many shadowed units need a fresh sun_tick at once, as they enter shadow or set off. Sharing `casters_at` per tick across the units of one view would cut that without changing any answer. Accepted for now.
+
+### 11.33 A47: leaving at once, on a Lambert arc (stage one)
+
+Until A47 every trip between places waited for its window. Stage one adds a trip that leaves at once, for near-circular orbits in one plane round one parent. The quote weighs it against the window's plan by `prefer`: cheap takes the lower cost, ties to the window, and fast the earlier arrival, ties to the lower cost.
+
+**The solver** (`Lambert.solve`) shoots with the rails' own integer propagation:
+- Guess the departure velocity in the unit's plane.
+- Make the orbit with `OrbitMath.from_state`, carry it to the arrival tick with `position_at`, and measure the miss from the target's place then.
+- Correct the guess's radial and along-track components by Newton's method, with finite differences and an integer 2 by 2 solve. Each step is capped at a quarter of the speed, and there are at most 24 iterations.
+- A miss of 100 m or less is a hit. The arrival snaps the unit to its stop point in the target's place, as every transfer's does, so that is the second jump of up to 100 m beside the snap (11.12).
+
+Being integer it is deterministic, and the arc found is exactly the orbit the unit rides.
+
+**The timed plan** (`Transfer._timed_plan`) tries flight times of 4 to 16 eighths of the Hohmann transfer's and keeps the cheapest arc that:
+- is elliptic;
+- stays at or above `LowFlight.LEAVE_MM`;
+- stays inside the parent's sphere.
+
+Both burns are the exact differences of velocity, by the rocket equation, paid at departure. The arc is one leg from the departure tick. The plan carries `timed: true`.
+
+**Measured** on test_transfers' fast planet:
+
+| Trip | The window's plan | Leaving at once |
+| --- | --- | --- |
+| To a pebble 20 degrees ahead in the same ring | 26.6 t, arriving at tick 1,848, on a phasing orbit | 28.2 t, arriving at tick 1,713 |
+| To Far's rock, 900 km | Hohmann, window at tick 34, cheaper and sooner | not taken |
+
+A quote takes about 14 ms. `test_lambert.gd` checks:
+- the solver hits within 100 m;
+- each preference's choice, and the other plan it shows;
+- a timed trip flown for its quote, with the ledger strict;
+- a save mid-trip byte-exact, and coasting it byte-equal.
+
+**Later stages:** trips across spheres, between planes, and from eccentric orbits; then the belt.
+
