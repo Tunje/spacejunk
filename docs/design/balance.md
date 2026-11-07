@@ -191,7 +191,7 @@ These are for the owner and the Lead. None of them is a data change.
 
 ## 9. The new start
 
-Sections 1 to 8 measure `reference.json`, the station fixture. This section measures `new_start.json`, where the player starts with only the probe ([new_start_chain.md](new_start_chain.md)). Measured on `design/B23` with C22 on `main`, at seed 12345 (task B23).
+Sections 1 to 8 measure `reference.json`, the station fixture. This section measures `new_start.json`, where the player starts with only the probe ([new_start_chain.md](new_start_chain.md)). Measured at seed 12345 (task B23), and rerun on `main` with C24's queue skip (task B26). C24 shortens the route by 9,511 ticks but barely moves a person's time, since the time it saves is warped.
 
 ### 9.1 How this was measured
 
@@ -224,16 +224,16 @@ Minutes of real time from a fresh start.
 | 7 | Install a part on something built | 3.3 | 8.8 | 13.2 | 15.2 | 112.2 |
 | 8 | Hit a fitting limit and fix it | 3.7 | 10.0 | 14.7 | 15.8 | 115.2 |
 | 9 | Haul ore to the station | 4.0 | 10.7 | 15.7 | 16.3 | 119.2 |
-| 10 | Prove a new tech | 9.4 | 23.9 | 33.8 | 92.0 | 715.8 |
-| 11 | Build a mining drone | 12.2 | 32.5 | 44.4 | 104.5 | 802.0 |
-| 12 | Hand the job to an AI core | 12.8 | 34.5 | 46.4 | 106.4 | 814.3 |
-| 13 | Expand the station | **13.3** | **36.3** | **48.2** | **111.3** | **851.6** |
+| 10 | Prove a new tech | 9.4 | 23.9 | 33.8 | 90.5 | 703.8 |
+| 11 | Build a mining drone | 12.2 | 32.5 | 44.3 | 102.5 | 786.1 |
+| 12 | Hand the job to an AI core | 12.8 | 34.5 | 46.4 | 104.4 | 798.4 |
+| 13 | Expand the station | **13.3** | **36.3** | **48.1** | **109.3** | **835.8** |
 
 | | Practised 8x, warps | First-time 8x, warps | First-time 1x, warps | Practised 8x, no warp |
 | - | ------------------- | -------------------- | -------------------- | --------------------- |
 | Think time per order | 4 s | 15 s | 15 s | 4 s |
 | Warp after | 10 s | 30 s | 30 s | never |
-| Game time, with slips | 14.8 h | 17.0 h | 14.5 h | 14.8 h |
+| Game time, with slips | 14.6 h | 16.7 h | 14.2 h | 14.6 h |
 | Real time warped | 0.8 min | 0.7 min | 0.8 min | 0 |
 | Giving orders: 114 × think time | 7.6 min | 28.5 min | 28.5 min | 7.6 min |
 
@@ -241,12 +241,12 @@ Minutes of real time from a fresh start.
 
 - **With warp, a first full run takes about 13 to 36 minutes at 8x, and 48 at 1x.** That's from a fresh start to all 13 goals, for a person who makes no mistakes. It's about as long as the station fixture at 8x (section 1: 14 to 28 minutes for ten checks), with three more goals and a whole station to build.
 - **Warp is what makes the new start playable.**
-  - The gravity lap is 6.8 of the chain's 14.2 game hours. At 8x without warp it's 51 real minutes, and goal 10 comes at 92 minutes, not 9 to 34.
+  - The gravity lap is 6.8 of the chain's 13.9 game hours. At 8x without warp it's 51 real minutes, and goal 10 comes at 90 minutes, not 9 to 34.
   - With warp the whole lap costs about 25 real seconds.
   - Every long facility wait is warped the same way: the processors' 2.1 hours, and the drone's materials.
 - **At 8x with warp, the limit is the person.** 114 orders take 7.6 to 28.5 minutes of think time, most of each run. A first-timer's slower orders also cost 2.8 game hours of slips, because the facilities sit idle while they decide. As section 1 found for the fixture, no data change helps much there. Fewer, bigger orders would: queued jobs, and the Assisted Core's cycles, which already take the drone's 7-step lap off the player.
 - **The first station takes 3 to 13 minutes.** That's the seed factory's first big build, 12,000 ticks at compact speed. It's the first real wait, and the first point a person warps.
-- **The bot's 14.2 game hours is not a person's time.** At 1x with no warp it's 14 real hours, but nobody plays that way.
+- **The bot's 13.9 game hours is not a person's time.** At 1x with no warp it's 14 real hours, but nobody plays that way.
 
 ### 9.4 Propellant runway
 
@@ -257,31 +257,32 @@ From new_start_chain.md sections 3 to 5:
 
 ### 9.5 Does the loop sustain itself?
 
-The owner's premise is that cores automate. Part F2 (new_start_chain.md, planned as C24 then C23) adds:
-- a compact refinery on the station, in place of the idle LIDAR;
+The owner's premise is that cores automate. Part F2 (new_start_chain.md, measured by C23) adds three things after goal 12:
+- a compact refinery on the station, in place of the idle LIDAR, with two more solar panels on the depot's sides for its power budget;
 - two standing jobs on it, ice to propellant and hematite to iron, which C24's starved-queue skip lets one refinery run together;
 - an ice leg in the drone's cycle.
 
-Estimated per cycle, to be replaced by C23's measurements:
+The build-up takes 59,883 ticks, 1.7 game hours. Then the loop runs on its own.
 
-| | Per cycle |
-| - | --------- |
-| Cycle length | about 14,500 ticks, 24 game minutes |
-| Propellant burned | 28.8 kg hematite leg + about 22 kg ice leg |
-| Propellant made | about 166 kg from 184 kg of ice |
-| Depot | **about +115 kg**: it fills, and never runs the drone dry |
-| Hematite in, iron out | 500 kg in, 345 kg of iron to the goods container |
-| Refinery busy | about 2,200 ticks on ice, 6,000 on hematite, before shadow pauses |
+| Per cycle | Estimated | Measured (C23) |
+| --------- | --------- | -------------- |
+| Cycle length | about 14,500 ticks | **12,552 ticks, 20.9 game minutes** |
+| Propellant burned | about 51 kg | **42.1 kg** |
+| Propellant made | about 166 kg from 184 kg of ice | 184 kg of ice a cycle, refined in 90 kg runs |
+| Depot | about +115 kg | **+117.9 kg on average**, lumpy as the ice runs land |
+| Hematite in, iron out | 500 kg in, 345 kg out | 500 kg in. 27 runs made 1,863 kg of iron before the goods container filled |
+| Refinery | ice and hematite runs, with pauses in Frost's shadow | 27 hematite runs went ahead of the waiting ice job. 33,853 ticks of shadow pauses, and it still kept up |
 
-**Propellant: sustained.** The ice leg more than pays for both legs.
+**Propellant: sustained.** The depot rises from 308 kg after lap 1 to 1,723 kg after lap 13. It would reach its 2,000 kg cap in 2 or 3 more laps. The drone never runs dry.
 
 **Ore: delayed, not steady.** This is the honest limit.
-- The iron job drains the ore stores into the 2,000 kg goods container. That fills in about 5.8 cycles.
-- Then the hematite job waits on `output_full`, and the 4,000 kg of ore stores fill in about 8 more cycles.
-- At **about 14 cycles, 5.6 game hours** after F2 starts, the drone can't unload, and its cycle stops.
-- Without the iron job it would stop after about 8 cycles, 3.2 hours. So the iron job buys about 2.4 hours, but it doesn't hold the loop steady.
-- At 8x with warp, 5.6 game hours is about 20 real seconds of warp. So a person meets the full store soon after F2, unless they act.
-- **A steady loop needs something to use the iron:** the player hauling it away, or a fabricator on the station. The station has no free side for one, so that's another station or hub module. Running out of room is the push to expand, and it's the player's next decision, not a bug.
+- The iron job drains the ore stores into the 2,000 kg goods container, which fills about 6.5 laps after the refinery is built.
+- After that, hematite piles up in the 4,000 kg of ore stores: 3.8 t after lap 13.
+- At lap 14's unload the cycle is `task_blocked` with `cargo_full`, **4.7 game hours** after the refinery was built, at tick 731,708. That's 20.3 game hours from the start.
+- It's a clean block. The cycle resumes as soon as there's room.
+- Without the iron job the stores would fill after about 7.5 laps, 2.6 hours. So the iron job buys about 2.1 hours, but it doesn't hold the loop steady.
+- At 8x with warp, 4.7 game hours is about 17 real seconds of warp. So a person meets the full store soon after F2, unless they act.
+- **A steady loop needs something to use the iron:** the player hauling it away, or a fabricator on another station module, since this station has no free side. Running out of room is the push to expand. It's the player's next decision, not a bug.
 
 ### 9.6 Where the orders go (B24)
 
