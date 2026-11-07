@@ -19,6 +19,10 @@ var index := {}
 var ground_memo := {}
 ## Why the last coast horizon was 0, set by the system that capped it (A33).
 var coast_cap := ""
+## During a coast's horizon pass, the most ticks it can skip whatever the system being asked says:
+## the call's own limit and every horizon before it (A46). A system may stop work on a horizon once
+## it reaches this, since more can't lengthen the skip. Derived, never saved.
+var coast_limit := 0
 
 var _events: Array[Dictionary] = []
 var _deltas: Array[Dictionary] = []

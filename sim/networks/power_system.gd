@@ -86,6 +86,8 @@ func horizon(ctx: SimContext) -> int:
 		return 0
 	var now: int = ctx.state["tick"]
 	var skip := NO_LIMIT
+	# Shadow walks stop at what the coast can skip anyway (A46); outside a coast there is no limit.
+	var walk_limit: int = ctx.coast_limit if ctx.coast_limit > 0 else NO_LIMIT
 	var parts: Dictionary = ctx.state["parts"]
 	var casters := _coast_casters(ctx.state)
 	# Speeds between bodies are worked out once per pass, not once per unit (A38).
@@ -106,7 +108,7 @@ func horizon(ctx: SimContext) -> int:
 			if place != 0:
 				waiting.get_or_add(place, []).append(id)
 			else:
-				skip = mini(skip, _shadow_horizon(ctx, id, casters, chains))
+				skip = mini(skip, _shadow_horizon(ctx, id, casters, chains, mini(skip, walk_limit)))
 		var batteries: Dictionary = flows[id]["batteries"]
 		for part_id: int in _sorted(batteries):
 			skip = mini(skip, _battery_horizon(ctx, part_id, batteries[part_id], shed))
@@ -121,7 +123,7 @@ func horizon(ctx: SimContext) -> int:
 		if _frame_shadow_bound(ctx, frame_id, waiting[frame_id], casters, chains) >= skip:
 			continue
 		for id: int in waiting[frame_id]:
-			skip = mini(skip, _shadow_horizon(ctx, id, casters, chains))
+			skip = mini(skip, _shadow_horizon(ctx, id, casters, chains, mini(skip, walk_limit)))
 	if skip <= 0:
 		ctx.coast_cap = "power"
 	return maxi(skip, 0)
@@ -169,10 +171,156 @@ static func _coast_casters(state: Dictionary) -> Array:
 	return result
 
 
-## The ticks before a unit's generators could pass into or out of any caster's shadow.
-static func _shadow_horizon(ctx: SimContext, unit_id: int, casters: Array, chains: Dictionary = {}) -> int:
-	return _shadow_horizon_at(ctx.state, RailSystem.world_mm(ctx.state, "units", unit_id),
-		CoastBounds.unit_base(ctx.state, unit_id), 0, casters, chains)
+## Near an edge the bound shrinks as the gap does, so it is walked forward within the pass, at
+## most this many steps, and only from a bound below WALK_BELOW_TICKS (A46).
+const MAX_WALK_STEPS := 32
+const WALK_BELOW_TICKS := 600
+## The shadow bound's own allowance for rounding, before the share that grows with distance (A46).
+const SHADOW_SLACK_MM := 16
+
+
+## The ticks before a unit's generators could pass into or out of any caster's shadow, walked
+## forward near an edge within one horizon pass (A46). The unit and the casters are on rails, or on
+## a route whose progress is a closed form, so their places on any coming tick are known exactly.
+## - A bound is good from wherever it is worked out, so it is worked out again from where they will
+##   be at its end.
+## - Within a tick's motion of an edge the bound is 0, and a unit moving along the edge can stay
+##   there for many ticks. The next tick's shadow is then worked out exactly, with the same
+##   arithmetic the power phase will use on it: unchanged, that tick is safe too; changed, the walk
+##   stops just before it.
+## The walk stops once it passes `limit`, the horizon found so far, since more can't lower it, at
+## MAX_WALK_STEPS, and at a unit or body whose place it can't foresee.
+static func _shadow_horizon(ctx: SimContext, unit_id: int, casters: Array, chains: Dictionary = {},
+		limit: int = NO_LIMIT) -> int:
+	var state := ctx.state
+	var base := CoastBounds.unit_base(state, unit_id)
+	var here := RailSystem.world_mm(state, "units", unit_id)
+	var total := _shadow_horizon_at(state, here, base, 0, casters, chains)
+	if total >= WALK_BELOW_TICKS or base[1] >= CoastBounds.UNBOUNDED_UM_S:
+		return total
+	var now: int = state["tick"]
+	# In the dark is what last tick's flows say: no supply from generators that have some.
+	var index := UnitIndex.of(ctx, unit_id)
+	if UnitIndex.healthy_total(ctx, index["generators"]) <= 0:
+		return total
+	var dark: bool = ctx.flows[FLOW_KEY][unit_id]["generated_w"] == 0
+	for step in MAX_WALK_STEPS:
+		if total >= limit:
+			break
+		var tick := now + total
+		# From now, the bound is the one just worked out; a routed unit's place on this tick's power
+		# phase is behind it, where world_at can't see.
+		if total > 0:
+			var place := world_at(state, "units", unit_id, tick)
+			if place.is_empty():
+				break
+			var more := _shadow_horizon_at(state, place, base, 0, casters_at(state, tick), chains)
+			if more > 0:
+				total += more
+				continue
+		var next := world_at(state, "units", unit_id, tick + 1)
+		if next.is_empty() or shadowed_at(next, casters_at(state, tick + 1)) != dark:
+			break
+		total += 1
+	return total
+
+
+## Whether a point is in any caster's shadow, by RailSystem.in_shadow's cylinder test and its very
+## arithmetic, given the casters as _coast_casters or casters_at lists them (A46).
+static func shadowed_at(point: Array, casters: Array) -> bool:
+	for caster: Array in casters:
+		var body_mm: Array = caster[0]
+		var direction: Array = caster[1]
+		var offset: Array[int] = []
+		for axis in 3:
+			offset.append(int(point[axis]) - int(body_mm[axis]))
+		var along := OrbitMath.dot(offset, direction)
+		if along <= 0:
+			continue
+		var across: Array[int] = []
+		for axis in 3:
+			across.append(offset[axis] - OrbitMath.smul_div(direction[axis], along, OrbitMath.ONE))
+		if IntMath.dist_below(across, caster[2]):
+			return true
+	return false
+
+
+## Where something on rails will be in world millimetres at a tick, or [] if its place then can't
+## be foreseen from the state now: a unit in low flight, on a route or drifting (A46). Units still in
+## a frame, landed, docked or on an orbit, and every body and frame, are functions of the tick.
+static func world_at(state: Dictionary, table: String, id: int, tick: int) -> Array:
+	var entry: Dictionary = state[table][id]
+	var pos: Array = entry["pos_mm"]
+	var base: Array = [0, 0, 0]
+	if table == "units":
+		if not entry["dock"].is_empty():
+			return world_at(state, "units", entry["dock"]["target_unit"], tick)
+		if entry.get("low_flight", 0) != 0:
+			return []
+		if not entry["transfer"].is_empty():
+			# A transfer rides its present orbit until its next leg or its arrival, which RailSystem
+			# and CargoSystem step, and which the walk's limit already stops short of.
+			var transfer: Dictionary = entry["transfer"]
+			var legs: Array = transfer.get("legs", [])
+			if tick >= int(transfer["arrive_tick"]) or (not legs.is_empty() and tick >= int(legs[0]["from_tick"])):
+				return []
+		if not entry["route"].is_empty():
+			# A route's progress is CargoSystem's closed form, short of its arrival (A37). Routes move
+			# in phase 5, after the power phase, so on a tick the unit is where the tick before left
+			# it: one advance fewer than ticks have passed. Orbits are placed in phase 2, before it.
+			var route: Dictionary = entry["route"]
+			var ticks: int = tick - int(state["tick"]) - 1
+			if ticks < 0 or ticks > CargoSystem.route_horizon(route) or entry["frame"] == 0:
+				return []
+			var total: int = int(route["speed_mm_s"]) * ticks + int(route["speed_remainder"])
+			var progress: int = int(route["progress_mm"]) + total / Sim.TICKS_PER_SECOND
+			pos = []
+			for axis in 3:
+				pos.append(Travel.along(route["from_mm"][axis], route["to_mm"][axis], progress, route["length_mm"]))
+			base = world_at(state, "frames", entry["frame"], tick)
+			return [int(base[0]) + int(pos[0]), int(base[1]) + int(pos[1]), int(base[2]) + int(pos[2])]
+		if not entry["orbit"].is_empty():
+			pos = OrbitMath.position_at(entry["orbit"], tick)
+			base = world_at(state, "bodies", entry["orbit"]["parent"], tick)
+		elif not entry.get("landed", {}).is_empty():
+			base = world_at(state, "bodies", entry["landed"]["body"], tick)
+		elif entry["frame"] != 0:
+			if entry["vel_um_s"] != [0, 0, 0]:
+				return []
+			base = world_at(state, "frames", entry["frame"], tick)
+	elif not entry["orbit"].is_empty():
+		pos = OrbitMath.position_at(entry["orbit"], tick)
+		base = world_at(state, "bodies", entry["orbit"]["parent"], tick)
+	elif table == "bodies" and entry["frame"] != 0:
+		base = world_at(state, "frames", entry["frame"], tick)
+	if base.is_empty():
+		return []
+	return [int(base[0]) + int(pos[0]), int(base[1]) + int(pos[1]), int(base[2]) + int(pos[2])]
+
+
+## The casters as _coast_casters gives them, where the rails will have put them at a tick (A46).
+static func casters_at(state: Dictionary, tick: int) -> Array:
+	var bodies: Dictionary = state["bodies"]
+	var star := 0
+	for id: int in _sorted_static(bodies):
+		if bodies[id]["kind"] == RailSystem.STAR_KIND:
+			star = id
+			break
+	var result := []
+	if star == 0:
+		return result
+	var star_mm := world_at(state, "bodies", star, tick)
+	for id: int in _sorted_static(bodies):
+		var body: Dictionary = bodies[id]
+		if id == star or body["gm"] <= 0 or body["orbit"].is_empty():
+			continue
+		var body_mm := world_at(state, "bodies", id, tick)
+		var away: Array[int] = []
+		for axis in 3:
+			away.append(int(body_mm[axis]) - int(star_mm[axis]))
+		result.append([body_mm, OrbitMath.unit(away), body["radius_mm"], id,
+			maxi(1, IntMath.dist(away, [0, 0, 0])), CoastBounds.body_speed_um_s(state, id)])
+	return result
 
 
 ## The ticks before anything within `slack_mm` of a point, moving at most as `base` allows, could
@@ -210,7 +358,12 @@ static func _shadow_horizon_at(state: Dictionary, point_mm: Array, base: Array, 
 				chains[key] = CoastBounds.chain_um_s(state, base[0], caster[3])
 			closing = mini(int(base[1]) + int(chains[key]), CoastBounds.UNBOUNDED_UM_S)
 		var swing := IntMath.mul_div(IntMath.dist(offset, [0, 0, 0]) + slack_mm, caster[5], caster[4])
-		skip = mini(skip, CoastBounds.ticks_to_close(gap - slack_mm, closing + swing))
+		# The bound is worked out at the very positions the shadow test will see on its ticks, with the
+		# same arithmetic, so the gap only gives away what that arithmetic can be out by: a few
+		# millimetres, and a part in about 2^28 of the distances involved from Q30 directions (A46).
+		# GAP_SLACK_MM's metre held it at 0 for tens of ticks at a slowly crossed edge.
+		var rounding := SHADOW_SLACK_MM + ((absi(along) + side) >> 28)
+		skip = mini(skip, CoastBounds.ticks_to_close(gap - slack_mm, closing + swing, rounding))
 	return skip
 
 

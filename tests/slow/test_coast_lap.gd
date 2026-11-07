@@ -10,10 +10,12 @@ func test_a_lap_through_the_shadow_coasts_exactly_as_it_steps() -> void:
 	# the shorter cases.
 	var calls := _same_both_ways(stepped, coasted, LAP_TICKS, false)
 	print("COAST a %d-tick lap with batteries and a shadow: %d coast calls" % [LAP_TICKS, calls])
-	print("PERF coast: %.2f ms a call over the lap, %.0f ms in all (budget 2 ms a jump at slice size)" % [
-		_last_coast_ms / calls, _last_coast_ms])
+	print("PERF coast: %.2f ms a call over the lap, %.0f ms in all, against %.0f ms to step it" % [
+		_last_coast_ms / calls, _last_coast_ms, _last_step_ms])
 	assert_lt(calls, LAP_TICKS / 20, "most of the lap was skipped")
-	assert_lt(_last_coast_ms / calls, 20.0, "ten times the budget fails; the PERF line is the measure")
+	# Since A46 a call can take most of a lap, so a cost per call means little. Coasting the lap
+	# must cost a small part of stepping it, on the same machine at the same moment (A46).
+	assert_lt(_last_coast_ms, _last_step_ms / 4.0, "coasting a lap is far cheaper than stepping it")
 
 
 func test_a_landing_coasts_to_its_touchdown() -> void:
