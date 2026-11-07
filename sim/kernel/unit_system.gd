@@ -130,9 +130,8 @@ static func _motion_key(state: Dictionary, id: int) -> Array:
 		return ["route", unit["frame"], route["from_mm"], route["to_mm"], route["length_mm"], route["speed_mm_s"],
 			route["eta_tick"]]
 	if not unit["orbit"].is_empty():
-		var orbit: Dictionary = unit["orbit"]
-		return ["orbit", orbit["parent"], orbit["a_mm"], orbit["e_q30"], orbit["m0_angle"], orbit["epoch_tick"],
-			orbit["p_q30"], orbit["q_q30"], unit["transfer"].get("legs", []).size(), unit["low_flight"]]
+		# The whole record, copied: a hyperbola keeps different fields from an ellipse.
+		return ["orbit", unit["orbit"].duplicate(true), unit["transfer"].get("legs", []).size(), unit["low_flight"]]
 	if not unit.get("landed", {}).is_empty():
 		return ["landed", unit["landed"]["body"], unit["landed"]["cell"]]
 	return ["frame", unit["frame"], unit["pos_mm"], unit["vel_um_s"], unit["low_flight"]]
