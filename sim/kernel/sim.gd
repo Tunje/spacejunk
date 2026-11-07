@@ -173,13 +173,16 @@ func predict(unit_id: int, from_tick: int, ticks: int, step: int) -> Dictionary:
 
 
 ## The trip a move_to would take from the next chance at or after from_tick (contracts section 3).
-## `prefer` is "cheap" or "fast" (A43), as the move_to's own.
-func quote(unit_id: int, target: int, from_tick: int, prefer: String = Transfer.PREFER_CHEAP) -> Dictionary:
+## `prefer` is "cheap" or "fast" (A43), as the move_to's own. `compare` (A47) also plans the arc that
+## leaves at once for a cheap trip, to show it as `other`; it costs about a hundred times a cheap
+## quote, so a client asks for it when the target changes, or at most every 250 ms.
+func quote(unit_id: int, target: int, from_tick: int, prefer: String = Transfer.PREFER_CHEAP,
+		compare: bool = false) -> Dictionary:
 	if not _state["units"].has(unit_id):
 		return { "reason": REASON_UNKNOWN_UNIT }
 	if not Transfer.PREFERENCES.has(prefer):
 		return { "reason": REASON_MALFORMED }
-	return Travel.quote_trip(_ctx, unit_id, target, from_tick, prefer)
+	return Travel.quote_trip(_ctx, unit_id, target, from_tick, prefer, compare)
 
 
 ## As quote, or { reason: no_window } if it costs more than cap_g.
