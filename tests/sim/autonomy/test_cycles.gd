@@ -208,9 +208,10 @@ func test_bad_cycles_are_refused_with_the_failing_step() -> void:
 	assert_eq(sim.check(_set_cycle(one))["detail"], { "step": 0 })
 	var no_move := [_steps()[0], _steps()[6]]
 	assert_eq(sim.check(_set_cycle(no_move))["reason"], "bad_cycle")
-	var scanning := _steps()
-	scanning[3] = { "type": "scan", "args": { "target": ROCK } }
-	assert_eq(sim.check(_set_cycle(scanning))["detail"], { "step": 3 })
+	# scan joined the whitelist with C28; land is still not a cycle step.
+	var landing := _steps()
+	landing[3] = { "type": "land", "args": { "body": ROCK, "cell": 0 } }
+	assert_eq(sim.check(_set_cycle(landing))["detail"], { "step": 3 })
 	var hidden := _steps()
 	hidden[3]["args"]["deposit"] = 5
 	assert_eq(sim.check(_set_cycle(hidden))["detail"], { "step": 3 })
