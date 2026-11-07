@@ -88,7 +88,7 @@ func test_load_moves_only_the_amount_asked() -> void:
 
 
 ## D39b: Load offers whatever the host holds that the craft has a hold for, and Unload
-## anything aboard, propellant first in each, so a drone depot can be filled and ore
+## anything aboard, propellant last to unload and first to load, so a drone depot can be filled and ore
 ## fetched back from a station.
 func test_load_and_unload_offer_every_held_item() -> void:
 	var items := {
@@ -106,7 +106,7 @@ func test_load_and_unload_offer_every_held_item() -> void:
 	var orders: Array[Dictionary] = []
 	OrderList._add_transfer_orders(orders, shown, items, 1, 2)
 	var labels: Array = orders.map(func(order: Dictionary) -> String: return order["label"])
-	assert_eq(labels, ["Unload Propellant", "Unload Hematite", "Load Propellant"],
+	assert_eq(labels, ["Unload Hematite", "Unload Propellant", "Load Propellant"],
 		"no hold for wiring here, and none of the host's hematite left")
 
 
