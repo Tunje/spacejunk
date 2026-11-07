@@ -1204,3 +1204,5 @@ The calls left at an edge are mostly the battery filling to its last joule. A ch
 
 At 20 times the slice a coast call now covers 383 ticks instead of 81, for about the same time a call. A round costs more, 8.4 ms against 6.75 at turbo, but warp is about five times cheaper per tick. Every case still matches stepping byte for byte, and the soak passes.
 
+**A48, `power.sun_tick`.** The view carries, while a unit is in shadow, the first tick it is lit again, found by the same walk: the bound while it stays dark, then each tick near the edge exactly. It is 0 while lit, and -1 if the way out can't be foreseen. `test_sun_tick.gd` checks the answer against the tick the probe really comes out on: dark the tick before, lit on it.
+

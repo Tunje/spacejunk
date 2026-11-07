@@ -19,6 +19,10 @@ var index := {}
 var ground_memo := {}
 ## Why the last coast horizon was 0, set by the system that capped it (A33).
 var coast_cap := ""
+## The view's power.sun_tick by unit (A48), as { key, tick }: the tick holds while the unit's motion
+## record, the key, is unchanged and the tick is still ahead, since everything else it depends on
+## rides fixed rails. Derived, never saved, and never read by the simulation.
+var sun_memo := {}
 ## During a coast's horizon pass, the most ticks it can skip whatever the system being asked says:
 ## the call's own limit and every horizon before it (A46). A system may stop work on a horizon once
 ## it reaches this, since more can't lengthen the skip. Derived, never saved.
