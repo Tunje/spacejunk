@@ -212,7 +212,9 @@ func test_a_coast_jump_at_twenty_times_the_slice() -> void:
 			window[0], figures["per_round"], figures["per_call"], figures["ticks_per_call"], str(figures["caps"]),
 			figures["per_step"]])
 	assert_gt(first["ticks_per_call"], 1, "the world coasts rather than stepping")
-	assert_lt(later["per_call"], 80.0, "ten times the budget fails; the PERF line is the measure")
+	# On a jump, the budget's own measure: since A46 and A50 a call can cover hundreds of ticks, so
+	# its cost grows as the warp gets better and means little.
+	assert_lt(later["per_round"], 80.0, "ten times the budget fails; the PERF line is the measure")
 
 
 ## Some ticks stepped, then 40 coast calls, timed: { per_step, per_call, per_round, ticks_per_call,
