@@ -1,6 +1,6 @@
 # Simulation Contracts
 
-Contract version: 7. Signed off by the Lead (task L7) after review by Agents A, C and D. Version 2 added the job queue (C9). Version 3 adds orbits and frames ([orbital_flight.md](orbital_flight.md) section 11, task A10). Version 4 makes jobs take work points, not time (C11). Version 5 adds research: science, theories, prototypes and variants (C12). Version 6 adds fabricating in place, `install_to` on jobs (C15). Version 7 adds an optional `grams` to `start_mining` (C19), and lets `attach_part` and `copy_fit` take parts from any unit in the docked group (C21). Changes go through the Lead.
+Contract version: 8. Signed off by the Lead (task L7) after review by Agents A, C and D. Version 2 added the job queue (C9). Version 3 adds orbits and frames ([orbital_flight.md](orbital_flight.md) section 11, task A10). Version 4 makes jobs take work points, not time (C11). Version 5 adds research: science, theories, prototypes and variants (C12). Version 6 adds fabricating in place, `install_to` on jobs (C15). Version 7 adds an optional `grams` to `start_mining` (C19), and lets `attach_part` and `copy_fit` take parts from any unit in the docked group (C21). Version 8 lets a queued job go ahead of a starved active job (C24). Changes go through the Lead.
 
 These contracts expand section 5 of `plan/workplan.md`. If the two disagree, raise it with the Lead.
 
@@ -265,6 +265,7 @@ Running shortfalls are still handled by shedding and faults.
 **Job queue.**
 - A facility holds up to 16 jobs in order, by `queue_pos`. The job at 0 is active and has the statuses of [autonomy.md](autonomy.md) section 9. The rest are `queued` at 1 to n, hold no matter and reserve nothing. Positions stay contiguous.
 - When the active job ends, by finishing or by cancelling, the next job becomes active at once and can start its first run in the next phase 4. So the next job starts on the tick after the last one finishes, the same gap as between two runs of one job, and on the same tick when the active job is cancelled in phase 1.
+- **A starved queue skips (C24).** In phase 4, after the active jobs, each facility in part ID order whose active job is `waiting` on `missing_inputs` or `output_full`, with no run in progress at the facility, lets one queued job go ahead: the lowest `queue_pos` whose run can start now, by the same checks. It starts that run with `job_went_ahead`, and keeps its `queue_pos` while it is `running` or `paused`. When the run ends it is `queued` again, and the next phase 4 looks from `queue_pos` 0 again, so the active job takes the facility back on the tick after the run ends if it can start. A run in progress is never broken, and nothing goes ahead of an active job held for any other reason.
 - `queue_job` makes the same checks as `start_job`, except that a busy facility is not refused. It is refused with `queue_full` when the facility holds 16 jobs. `start_job` still gives `facility_busy` on a facility with any job.
 - `move_job` is refused with `job_busy` for a job with a run in progress (`running`, `paused` or `cancelling`), because it holds matter. A run in progress is never overtaken, so the lowest position then is 1. An active job that is `waiting` can be moved back, and becomes `queued`. Positions outside the queue are clamped to it.
 - `detach_part` counts queued jobs as jobs in the subtree.
@@ -319,6 +320,7 @@ Events are ordered by phase, then the event's `unit`, then emission order. Unit 
 | `job_finished`, `job_cancelled` | `job`, `recipe`, `facility`, and on `job_cancelled` an optional `reason`, set only when the sim removes a lab job already done (C12) |
 | `job_paused`, `job_resumed` | `job`, `reason`, and on `job_paused` with `install_blocked` a `detail` naming the refused fit's reason (C15) |
 | `job_queued` | `job`, `command`, `position` |
+| `job_went_ahead` | `job`, `ahead_of` (the active job), `reason` (why it waits): a queued job starts a run ahead of a starved active job (C24) |
 | `job_moved` | `job`, `position` |
 | `unit_created` | `unit`, `def`, `job` |
 | `science_gained` | `kind`, `target`, `key`, `points` |
