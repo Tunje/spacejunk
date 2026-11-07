@@ -1206,3 +1206,48 @@ At 20 times the slice a coast call now covers 383 ticks instead of 81, for about
 
 **A48, `power.sun_tick`.** The view carries, while a unit is in shadow, the first tick it is lit again, found by the same walk: the bound while it stays dark, then each tick near the edge exactly. It is 0 while lit, and -1 if the way out can't be foreseen. `test_sun_tick.gd` checks the answer against the tick the probe really comes out on: dark the tick before, lit on it.
 
+
+**Follow-up (logged by the Lead after A48):** in the 20 times slice world, the view's 99th percentile can pass the 100 ms spike line on ticks where many shadowed units need a fresh sun_tick at once, as they enter shadow or set off. Sharing `casters_at` per tick across the units of one view would cut that without changing any answer. Accepted for now.
+
+### 11.33 A47: leaving at once, on a Lambert arc (stage one)
+
+Until A47 every trip between places waited for its window. Stage one adds a trip that leaves at once, for near-circular orbits in one plane round one parent. `prefer` "fast" plans it beside the window's plan and takes the earlier arrival, ties to the lower cost. "Cheap" stays the window's plan and never searches an arc. A caller can ask for the comparison with `compare`, and the arc then shows as `other`, with `timed: true`.
+
+**The solver** (`Lambert.solve`) shoots with the rails' own integer propagation:
+- Guess the departure velocity in the unit's plane.
+- Make the orbit with `OrbitMath.from_state`, carry it to the arrival tick with `position_at`, and measure the miss from the target's place then.
+- Correct the guess's radial and along-track components by Newton's method, with finite differences and an integer 2 by 2 solve. Each step is capped at a quarter of the speed, and there are at most 24 iterations.
+- A miss of 100 m or less is a hit. The arrival snaps the unit to its stop point in the target's place, as every transfer's does, so that is the second jump of up to 100 m beside the snap (11.12).
+
+Being integer it is deterministic, and the arc found is exactly the orbit the unit rides.
+
+**The timed plan** (`Transfer._timed_plan`) tries flight times of 4 to 16 eighths of the Hohmann transfer's and keeps the cheapest arc that:
+- is elliptic;
+- stays at or above `LowFlight.LEAVE_MM`;
+- stays inside the parent's sphere.
+
+Both burns are the exact differences of velocity, by the rocket equation, paid at departure. The arc is one leg from the departure tick. The plan carries `timed: true`.
+
+**Measured** on test_transfers' fast planet:
+
+| Trip | The window's plan | Leaving at once |
+| --- | --- | --- |
+| To a pebble 20 degrees ahead in the same ring | 26.6 t, arriving at tick 1,848, on a phasing orbit | 28.2 t, arriving at tick 1,713 |
+| To Far's rock, 900 km | Hohmann, window at tick 34, cheaper and sooner | not taken |
+
+**Cost.** In the 20 times slice world a cheap quote takes about 280 µs and a fast one about 17 ms. The gate's first run found a quote at 55 ms when every quote searched the arc. Four changes cut that:
+- a chord Newton, keeping the Jacobian while the miss at least halves;
+- each flight time starting from the last one's answer;
+- only arcs that arrive before the window's plan;
+- no search when the window is under an eighth of a Hohmann time away.
+
+Fewer flight times would cost the arc's quality (28.2 t became 38.7 t), and an answer memo used as a starting guess would make the quote depend on history, which a load would not repeat. So the search is opt-in instead: cores and cycles quote cheap.
+
+`test_lambert.gd` checks:
+- the solver hits within 100 m;
+- each preference's choice, and the other plan it shows;
+- a timed trip flown for its quote, with the ledger strict;
+- a save mid-trip byte-exact, and coasting it byte-equal.
+
+**Later stages:** trips across spheres, between planes, and from eccentric orbits; then the belt.
+
