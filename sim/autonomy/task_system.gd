@@ -174,17 +174,27 @@ func _apply_assign(ctx: SimContext, unit: Dictionary, core: int) -> void:
 	unit["core"] = core
 	if core == 0:
 		_cancel_all(ctx, unit, REASON_NO_CORE)
-	elif tier_of(ctx, unit) < CYCLE_TIER:
+	elif tier_of(ctx, unit) < CYCLE_TIER and _repeats(ctx, unit):
 		_cancel_cycle(ctx, unit, REASON_TIER_TOO_LOW)
+
+
+## True when the unit's cycle, running or suspended, repeats: no laps, or more than one. A one-shot
+## plan (laps 1) runs on a tier 1 core (C27).
+func _repeats(ctx: SimContext, unit: Dictionary) -> bool:
+	var id: int = unit["cycle_task"]
+	if id == 0 and unit["task"] != 0 and ctx.state["tasks"][unit["task"]]["kind"] == KIND_CYCLE:
+		id = unit["task"]
+	return id == 0 or ctx.state["tasks"][id].get("laps", 0) != 1
 
 
 func _validate_cycle(ctx: SimContext, command: Dictionary) -> Dictionary:
 	var unit_id: int = command["unit"]
-	if tier_of(ctx, ctx.state["units"][unit_id]) < CYCLE_TIER:
-		return SimSystem.reject(REASON_TIER_TOO_LOW)
 	var laps: Variant = command["args"].get("laps", 0)
 	if typeof(laps) != TYPE_INT or (command["args"].has("laps") and laps <= 0):
 		return SimSystem.reject(REASON_MALFORMED)
+	# A one-shot plan, laps 1, is a list of orders, which tier 1 does (C27). Repeating is tier 2.
+	if laps != 1 and tier_of(ctx, ctx.state["units"][unit_id]) < CYCLE_TIER:
+		return SimSystem.reject(REASON_TIER_TOO_LOW)
 	var steps: Variant = command["args"].get("steps")
 	if typeof(steps) != TYPE_ARRAY or steps.size() < MIN_CYCLE_STEPS or steps.size() > MAX_CYCLE_STEPS:
 		return _bad_cycle(0)
