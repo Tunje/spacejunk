@@ -494,8 +494,26 @@ func stage_drone() -> void:
 		_problem("the drone's Assisted Core was not assigned: %s" % main.automation_screen._message.text)
 	main.toggle_automation()
 	unload(names["propellant"]["name"], DEPOT_KG)
+	_wait_for_core(drone)
 	_fly_drone_lap_by_hand(names)
 	_repeat_with_auto()
+
+
+## A new drone's battery starts empty, so in the station's shadow its core is shed and
+## every order is refused "AI core is offline"; a player waits for the sun.
+func _wait_for_core(id: int) -> void:
+	if _core_online(id):
+		return
+	note("A drone finished in the shadow can't take orders until the sun is back: the panel says only \"AI core is offline\", not why or for how long.")
+	warp_until(_core_online.bind(id), "the drone's core back online")
+
+
+func _core_online(id: int) -> bool:
+	var core := int(unit(id).get("core", 0))
+	for part: Dictionary in InspectText.flatten(unit(id).get("parts", {})):
+		if part["id"] == core:
+			return not ["shed", "fault"].has(part.get("state", ""))
+	return false
 
 
 ## The lap a player flies once so Auto can repeat it: fuel, out to Red Rock, mine a
