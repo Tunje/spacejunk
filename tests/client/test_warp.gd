@@ -88,6 +88,21 @@ func test_attention_events_and_the_jobs_option() -> void:
 	assert_eq(line, "Probe departed for White Rock, arriving in 2 min 0 s")
 
 
+## D39b: a drone on its cycle comes and goes every lap without stopping the warp;
+## a block still stops it, and so does a craft flown by hand.
+func test_a_cycle_lap_keeps_the_warp() -> void:
+	var view := {
+		"units": { 5: { "task": 9, "cycle_task": 0 }, 6: { "task": 10, "cycle_task": 0 }, 7: { "task": 11, "cycle_task": 9 } },
+		"tasks": { 9: { "kind": "cycle" }, 10: { "kind": "order" }, 11: { "kind": "order" } },
+	}
+	for type: String in WarpLogic.CYCLE_ROUTINE:
+		assert_false(WarpLogic.needs_attention([{ "type": type, "unit": 5 }], false, {}, view), type)
+		assert_false(WarpLogic.needs_attention([{ "type": type, "unit": 7 }], false, {}, view), "%s, an order over a cycle" % type)
+		assert_true(WarpLogic.needs_attention([{ "type": type, "unit": 6 }], false, {}, view), "%s by hand" % type)
+	assert_true(WarpLogic.needs_attention([{ "type": "task_blocked", "unit": 5 }], false, {}, view))
+	assert_false(WarpLogic.in_cycle(99, view), "an unknown unit")
+
+
 func test_a_coast_jumps_a_frame_with_one_view() -> void:
 	var sim := CoastingSim.new()
 	bridge.start(sim)
@@ -158,7 +173,10 @@ func test_slow_steps_cap_the_batch_to_the_frame_budget() -> void:
 	var started := Time.get_ticks_msec()
 	bridge.advance(1.0)
 	assert_lt(sim.tick, 500, "a busy world can't do 50× in one frame")
-	assert_lt(Time.get_ticks_msec() - started, 40, "the frame stays near its budget")
+	# Each step sleeps step_usec and the bridge checks the budget before each one, so the frame
+	# stops within one step of its budget. Ticks, not wall time, so a loaded machine can't fail it (A45).
+	assert_lte(sim.tick, int(bridge.frame_budget_ms * 1000.0 / sim.step_usec) + 1, "the frame stops at its budget")
+	print("WARP busy frame: %d ms for %d ticks" % [Time.get_ticks_msec() - started, sim.tick])
 	assert_eq(bridge.capped_by, "busy_world")
 	assert_lt(bridge.achieved_speed, 50.0)
 
@@ -184,3 +202,27 @@ func test_the_screens_follow_the_warp() -> void:
 	main.flight_screen.refresh()
 	assert_false(main.flight_screen._now_button.disabled)
 	assert_false(main.time_controls.warp_label.visible)
+
+
+## D40: an order of the craft being ordered stops the warp when it finishes, so the
+## next can be given; another craft's, or a step of its own cycle, does not.
+func test_the_commanded_crafts_finished_order_stops_the_warp() -> void:
+	var view := {
+		"units": { 5: { "task": 9, "cycle_task": 0 }, 6: { "task": 0, "cycle_task": 0 } },
+		"tasks": { 9: { "kind": "cycle" } },
+	}
+	var done := [{ "type": "task_finished", "unit": 6, "data": { "task": 3 } }]
+	assert_true(WarpLogic.needs_attention(done, false, {}, view, 6))
+	assert_false(WarpLogic.needs_attention(done, false, {}, view, 5), "another craft's order")
+	assert_false(WarpLogic.needs_attention(done, false, {}, view), "no craft commanded")
+	var lap := [{ "type": "task_finished", "unit": 5, "data": { "task": 9 } }]
+	assert_false(WarpLogic.needs_attention(lap, false, {}, view, 5), "a step of its own cycle")
+
+
+func test_the_view_tells_the_bridge_which_craft_is_commanded() -> void:
+	var main: Node = add_child_autofree(StubScene.build())
+	var local: LocalView = main.get_node("LocalView")
+	var shown: SimBridge = main.get_node("Bridge")
+	assert_eq(shown.commanded_unit, local.commanded_unit)
+	local.commanded_unit = 77
+	assert_eq(shown.commanded_unit, 77)

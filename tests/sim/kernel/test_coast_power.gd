@@ -57,13 +57,15 @@ func _copy(sim: Sim) -> Sim:
 func test_the_new_start_passes_its_shadow_edge_in_a_few_calls() -> void:
 	var game := Sim.new_game("new_start", 1)
 	# Up to just short of the edge D found near tick 130,800, by coasting, which the rest checks.
-	while game.current_tick() < 110_000:
-		game.coast(110_000 - game.current_tick())
+	while game.current_tick() < 125_000:
+		game.coast(125_000 - game.current_tick())
 	game.take_events()
 	var coasted := _copy(game)
-	var calls := _same_both_ways(game, coasted, 30_000, false)
-	assert_lt(longest_power_run, 20, "an edge is coasted up to, not stepped through")
-	assert_lt(calls, 40)
+	var calls := _same_both_ways(game, coasted, 10_000, false)
+	# Since A46 the edge itself is walked to within the horizon pass; what is left is the battery
+	# filling to its last joule.
+	assert_lt(longest_power_run, 10, "an edge is coasted up to, not stepped through")
+	assert_lt(calls, 12)
 
 
 ## C's mining repro: the ship parked at the reference rock mines to a full hold, its battery full and
@@ -229,11 +231,13 @@ func test_the_grouped_power_horizon_is_the_unit_by_unit_one() -> void:
 		if system is PowerSystem:
 			power = system
 	var zero := 0
-	for n in 40:
+	# Spaced to pass shadow edges. Since A46 the unit-by-unit reference walks every unit near an edge
+	# with no limit, so each comparison is dear; ten are enough.
+	for n in 10:
 		var grouped := power.horizon(sim._ctx)
 		assert_eq(grouped, _horizon_unit_by_unit(sim), "at tick %d" % sim.current_tick())
 		zero += int(grouped == 0)
-		sim.step(37)
+		sim.step(150)
 	perf.free()
-	gut.p("40 horizons compared, %d of them 0" % zero)
-	assert_lt(zero, 30, "most of them bound something")
+	gut.p("10 horizons compared, %d of them 0" % zero)
+	assert_lt(zero, 8, "most of them bound something")

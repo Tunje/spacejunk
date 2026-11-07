@@ -73,12 +73,28 @@ static func status(unit: Dictionary, view: Dictionary, ticks_per_second := 10) -
 		text += ", docked"
 	var task: Dictionary = view["tasks"].get(unit["task"], {})
 	if task.get("state", "") == "blocked":
-		text += ". Blocked: %s" % OrderText.reason(task["reason"])
+		var offline := InspectText.core_offline(unit, view["tick"], ticks_per_second) if task["reason"] == "core_offline" else ""
+		text += ". Blocked: %s" % (OrderText.reason(task["reason"]) if offline.is_empty() else offline)
 		if task["reason"] == "core_offline":
 			var fault := CyclePlan.first_fault(unit)
 			if not fault.is_empty():
 				text += " (%s)" % OrderText.reason(fault["fault"])
 	return text
+
+
+## Why a core with no fault is offline (D40): no power in the shadow, or a flat
+## battery in the sun. "" when a part has a fault, which names itself instead. The
+## time to sunlight shows when the view gives `power.sun_tick` and `tick` is known.
+static func core_offline(unit: Dictionary, tick := -1, ticks_per_second := 10) -> String:
+	if not CyclePlan.first_fault(unit).is_empty():
+		return ""
+	var power: Dictionary = unit.get("power", {})
+	if power.get("in_shadow", false):
+		var sun := int(power.get("sun_tick", 0))
+		if tick >= 0 and sun > tick:
+			return "AI core offline: no power. In shadow, sunlight in %s" % OrderText.duration(float(sun - tick) / ticks_per_second)
+		return "AI core offline: no power. In shadow, waiting for sunlight"
+	return "AI core offline: battery empty, solar %s" % InspectText.watts(int(power.get("supply_w", 0)))
 
 
 ## The assigned core in plain words (D39), by tier.

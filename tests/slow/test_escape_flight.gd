@@ -113,7 +113,10 @@ func test_crossing_out_of_the_planets_sphere_reparents_the_screen() -> void:
 			crossed = true
 			break
 	assert_true(crossed, "left the planet's sphere")
-	assert_lt(Time.get_ticks_msec() - started, 30_000, "the screen keeps up with the ticks")
+	# Reported, with a limit three times the usual so other gates on the machine can't fail it (A45).
+	var took := Time.get_ticks_msec() - started
+	print("ESCAPE screen: %d ms for the climb" % took)
+	assert_lt(took, 90_000, "the screen keeps up with the ticks")
 	screen.force_paths()
 	screen.refresh()
 	assert_has(main.event_log.lines, "Orbiter: now orbiting Star")

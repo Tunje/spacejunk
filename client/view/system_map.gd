@@ -331,7 +331,9 @@ static func trip_under_way(view: Dictionary, unit_id: int, target: int, ticks_pe
 	return ""
 
 
-## "12 min", or for a transfer "Departs in 40 min, 31 min trip". "" if refused.
+## "12 min", or for a transfer "Departs in 40 min, 31 min trip, 235 kg", with where a
+## plane change is burned and, when there is one, the faster plan on a second line
+## (D40). "" if refused.
 static func trip_text(quote: Dictionary, tick: int, ticks_per_second: int) -> String:
 	if quote.is_empty() or quote.has("reason"):
 		return ""
@@ -339,12 +341,12 @@ static func trip_text(quote: Dictionary, tick: int, ticks_per_second: int) -> St
 	if quote.get("kind", "") != "transfer":
 		return trip
 	var wait: int = quote["depart_tick"] - tick
-	# A41a: a trip between planes burns into the target's plane first, part of its delta-v.
-	var plane := int(quote.get("plane_change_dv_um_s", 0))
-	var plane_text := "" if plane <= 0 else ", including a %s plane change" % FlightLogic.speed(plane)
-	if wait <= 0:
-		return "%s trip%s" % [trip, plane_text]
-	return "Departs in %s, %s trip%s" % [OrderText.duration(float(wait) / ticks_per_second), trip, plane_text]
+	var cost := "" if not quote.has("cost_g") else ", %s" % OrderText.tonnes(int(quote["cost_g"]))
+	var text := "%s trip%s%s" % [trip, cost, TripChoice.plane_text(quote)]
+	if wait > 0:
+		text = "Departs in %s, %s" % [OrderText.duration(float(wait) / ticks_per_second), text]
+	var faster := TripChoice.faster_line(quote, tick, ticks_per_second)
+	return text if faster.is_empty() else "%s\n%s" % [text, faster]
 
 
 func _unhandled_input(event: InputEvent) -> void:

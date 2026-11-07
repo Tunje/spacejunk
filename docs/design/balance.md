@@ -282,3 +282,38 @@ Estimated per cycle, to be replaced by C23's measurements:
 - Without the iron job it would stop after about 8 cycles, 3.2 hours. So the iron job buys about 2.4 hours, but it doesn't hold the loop steady.
 - At 8x with warp, 5.6 game hours is about 20 real seconds of warp. So a person meets the full store soon after F2, unless they act.
 - **A steady loop needs something to use the iron:** the player hauling it away, or a fabricator on the station. The station has no free side for one, so that's another station or hub module. Running out of room is the push to expand, and it's the player's next decision, not a bug.
+
+### 9.6 Where the orders go (B24)
+
+NewStartPace's record lists each of the route's 114 orders with its type and stage. For a first-timer each order costs about 15 s, so 28.5 of their 36.3 minutes go on giving orders. The orders bunch into five kinds of stretch.
+
+| Stretch | Orders | First-timer think time | What the orders are |
+| ------- | ------ | ---------------------- | ------------------- |
+| Mining trips | 39 | 9.8 min | 10 `move_to`, 4 `scan`, 3 composition `measure`s, 12 `start_mining`, and 10 `stop` to take a set amount |
+| Fabrication queues | 37 | 9.3 min | One `queue_job` per component and part. The biggest burst is the drone's 15 orders at tick 433,655 |
+| Refining queues | 13 | 3.3 min | One `queue_job` per ore after each trip |
+| Fitting | 15 | 3.8 min | 13 `attach_part` (8 for the drone, 5 for goal 7's fail and fix), 2 `assign_core` |
+| Moving goods between docked units | 8 | 2.0 min | 4 `unload_cargo` so the station's lab has its inputs, 2 `load_cargo` of the station's hematite back to the probe's refinery, the depot fill, the first haul |
+| Other | 2 | 0.5 min | `set_cycle`, and the gravity-field `measure` |
+
+**Five ways to cut orders, ranked by first-timer saving.** Each saving is the orders removed at 15 s each, and the five overlap a little.
+
+1. **A one-shot trip plan, saving about 7 min.** One order does what a mining trip does now: move to a rock, survey it and take its composition where not yet paid, then mine a set amount. That takes the 39 trip orders down to about 10.
+   - **Sim (C):** a cycle that runs once, or a short plan the probe's Basic Core runs, from the same whitelist of steps as `set_cycle`.
+   - **Client (D):** a trip panel.
+   - **A quick win inside it:** a mine amount on `start_mining` in the client (D's C19 item) removes the 10 `stop` orders alone, saving 2.5 min.
+2. **Build a design, saving about 6 min.** One order queues a part, hull or station and every component it needs: frames, wiring, processors and cores, in dependency order, from the recipes. The drone's 15-order burst becomes 1 or 2, and the 37 fabrication orders become about 13.
+   - **Client (D):** a "Build with components" button that sends the expanded `queue_job` list, with no sim change.
+   - **Data (B):** a `mining_drone` design that lists the drone's eight parts and their connectors. Today `small_craft` is only the hull and port, so the client has nothing to expand.
+3. **Refine for the queue, saving about 2.5 min.** The same button also queues the refining its shortfall needs, from ore on hand. That takes the 13 refine orders to about 3.
+   - **Client (D)** first, in the same button.
+   - **Later, sim (C):** a standing "supply" refinery job, now that C24's queue skip exists.
+4. **Fit a design, saving about 2 min.** Each part goes in place on the new hull as it's made, so the drone's 8 `attach_part` orders and its `assign_core` go. The station's fail-and-fix fits stay, since they are goal 7.
+   - **Sim (C):** let `install_to` name a hull still in the same queue, or have the build-a-design order carry install targets.
+   - **Or client (D):** a "Fit all from the design" button on a new hull, using the data design from item 2.
+5. **Jobs draw inputs from the docked group, saving about 1.5 min.** A lab or refinery job takes its inputs from any unit in the docked group, as C21 already lets fitting do. That removes the 4 unloads before the lab's runs and the 2 hematite loads, 6 orders.
+   - **Sim (C):** a contract change through the Lead.
+
+**Together, about 19 of the first-timer's 28.5 minutes of orders,** with the route down from 114 orders to about 35. A first-timer's run at 8x with warp would drop from about 36 minutes to about 17, close to a practised player's today. Items 1 and 2 are most of it.
+
+A smaller item: prove, prototype and qualify are three orders at two facilities. A "develop this design" order could make them one, saving 0.5 min. It isn't worth doing before the five above.

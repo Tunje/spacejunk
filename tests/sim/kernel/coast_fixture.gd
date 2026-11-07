@@ -17,6 +17,8 @@ const LAP_TICKS := 38_000
 
 var keys := {}
 var _last_coast_ms := 0.0
+## How long the stepped copy took over the same ticks, for comparing the two (A46).
+var _last_step_ms := 0.0
 
 
 func _game() -> Sim:
@@ -63,7 +65,9 @@ func _same_both_ways(stepped: Sim, coasted: Sim, ticks: int, strict: bool = true
 	stepped._strict = strict
 	var stepped_events: Array[Dictionary] = []
 	var coasted_events: Array[Dictionary] = []
+	var stepping := Time.get_ticks_usec()
 	stepped.step(ticks)
+	_last_step_ms = (Time.get_ticks_usec() - stepping) / 1000.0
 	stepped_events.append_array(stepped.take_events())
 	var calls := 0
 	var left := ticks

@@ -25,6 +25,9 @@ var sim: RefCounted
 var paused := false
 var speed: int = SPEEDS[0]
 var previous_view: Dictionary = {}
+## The craft the player is giving orders to (LocalView keeps it): when one of its
+## orders finishes, the warp stops, so the next can be given (D40).
+var commanded_unit := 0
 var current_view: Dictionary = {}
 ## Keep warping when a job finishes, rather than dropping to 1×.
 var warp_through_jobs := false
@@ -108,7 +111,8 @@ func advance(delta: float) -> void:
 	_note_speed(advanced, delta, cap)
 	previous_view = current_view
 	current_view = sim.view()
-	if speed > WarpLogic.STEP_MAX and WarpLogic.needs_attention(events, warp_through_jobs, current_view.get("jobs", {})):
+	if speed > WarpLogic.STEP_MAX and WarpLogic.needs_attention(events, warp_through_jobs, current_view.get("jobs", {}), previous_view,
+			commanded_unit):
 		set_speed(SPEEDS[0])
 		_ticks_owed = 0.0
 	view_updated.emit()
@@ -149,7 +153,7 @@ func _warp(due: int, events: Array[Dictionary]) -> Dictionary:
 		var got: Array[Dictionary] = sim.take_events()
 		events.append_array(got)
 		# A finished run is judged against the view after the frame, so not here.
-		if WarpLogic.needs_attention(got, true):
+		if WarpLogic.needs_attention(got, true, {}, current_view, commanded_unit):
 			break
 	return { "ticks": advanced, "capped_by": cap }
 
