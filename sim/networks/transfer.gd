@@ -32,23 +32,29 @@ const PHASING_STEP := 10
 ## The trip from unit to target leaving at the first chance at or after from_tick, as
 ## { kind, target, depart_tick, arrive_tick, ticks, cost_g, dv_um_s, orbit_a_mm, speed_um_s } or
 ## { reason }. `ticks` counts from departure to arrival inclusive, as a route's does.
-static func plan(ctx: SimContext, unit_id: int, target: int, from_tick: int, prefer: String = PREFER_CHEAP) -> Dictionary:
+static func plan(ctx: SimContext, unit_id: int, target: int, from_tick: int, prefer: String = PREFER_CHEAP,
+		compare: bool = false) -> Dictionary:
 	return plan_from(ctx, unit_id, unit_orbit(ctx, unit_id), target,
-		Units.unit_mass(ctx.state, ctx.defs, unit_id), from_tick, prefer)
+		Units.unit_mass(ctx.state, ctx.defs, unit_id), from_tick, prefer, compare)
 
 
 ## As plan, from any orbit at any mass, for pricing a leg the unit has not reached yet.
 static func plan_from(ctx: SimContext, unit_id: int, mine: Dictionary, target: int, mass_g: int,
-		from_tick: int, prefer: String = PREFER_CHEAP) -> Dictionary:
-	return plan_between(ctx, unit_id, mine, target_orbit(ctx, target), target, mass_g, from_tick, prefer)
+		from_tick: int, prefer: String = PREFER_CHEAP, compare: bool = false) -> Dictionary:
+	return plan_between(ctx, unit_id, mine, target_orbit(ctx, target), target, mass_g, from_tick, prefer, compare)
 
 
-## As plan_from, onto a given orbit, such as a frame's, which `target` only names (A39). Where there
-## are two ways to fly it (A41b), `prefer` picks, as _better says: PREFER_CHEAP the lower cost and
-## PREFER_FAST the earlier arrival (A43). The plan not taken is summarised in `other` as
-## { arrive_tick, cost_g }.
+## As plan_from, onto a given orbit, such as a frame's, which `target` only names (A39).
+## - Between planes there are two ways to fly it (A41b), and `prefer` picks, as _better says:
+##   PREFER_CHEAP the lower cost and PREFER_FAST the earlier arrival (A43).
+## - In one plane, PREFER_CHEAP is the window's plan and never searches a Lambert arc. PREFER_FAST
+##   also plans the arc that leaves at once, and takes the earlier arrival (A47).
+## - `compare` plans the arc for a cheap trip too, only to show it. It is opt-in, since the arc's
+##   search costs about a hundred times the window's; cores and cycles never set it.
+## The plan not taken is summarised in `other` as { arrive_tick, cost_g }, with `timed: true` when
+## it is the arc.
 static func plan_between(ctx: SimContext, unit_id: int, mine: Dictionary, theirs: Dictionary, target: int,
-		mass_g: int, from_tick: int, prefer: String = PREFER_CHEAP) -> Dictionary:
+		mass_g: int, from_tick: int, prefer: String = PREFER_CHEAP, compare: bool = false) -> Dictionary:
 	if mine.is_empty() or theirs.is_empty():
 		return { "reason": REASON_UNSUPPORTED }
 	var found := BurnSystem.thruster(ctx, unit_id)
@@ -79,14 +85,20 @@ static func plan_between(ctx: SimContext, unit_id: int, mine: Dictionary, theirs
 	var plan := _coplanar_plan(mine, theirs, target, gm, mass_g, from_tick, found)
 	plan["plane_change_dv_um_s"] = 0
 	plan["plane_change_at"] = ""
-	# The window's plan, or one that leaves at once on a Lambert arc, as `prefer` picks (A47).
-	var timed := _timed_plan(mine, theirs, target, gm, mass_g, from_tick, found, ctx.state["bodies"][mine["parent"]])
+	# The arc that leaves at once is only planned when it can be chosen or is asked for (A47).
+	if prefer != PREFER_FAST and not compare:
+		return plan
+	var timed := _timed_plan(mine, theirs, target, gm, mass_g, from_tick, found, ctx.state["bodies"][mine["parent"]],
+		int(plan["arrive_tick"]))
 	if timed.has("reason"):
 		return plan
-	var take_window := _better(plan, timed, prefer)
+	# Fast takes the earlier arrival, ties to the lower cost; cheap keeps the window's plan.
+	var take_window := prefer != PREFER_FAST or _better(plan, timed, PREFER_FAST)
 	var chosen := plan if take_window else timed
 	var other := timed if take_window else plan
 	chosen["other"] = { "arrive_tick": other["arrive_tick"], "cost_g": other["cost_g"] }
+	if other.get("timed", false):
+		chosen["other"]["timed"] = true
 	return chosen
 
 
@@ -98,8 +110,11 @@ const TIMED_EIGHTHS := [4, 5, 6, 7, 9, 10, 12, 14, 16]
 ## the unit is to where the target will be, for each flight time in TIMED_EIGHTHS of the Hohmann
 ## transfer's, keeping the cheapest. An arc must be elliptic, stay above the height where low flight
 ## starts and inside the parent's sphere. The burns are the exact velocity differences at each end.
+## Only arcs that arrive before `window_arrive`, the window plan's arrival, are tried, since leaving
+## at once is for arriving sooner; with the window under an eighth of a Hohmann time away there are
+## none worth the search. Each flight time starts from the last one's answer.
 static func _timed_plan(mine: Dictionary, theirs: Dictionary, target: int, gm: int, mass_g: int,
-		from_tick: int, found: Dictionary, parent: Dictionary) -> Dictionary:
+		from_tick: int, found: Dictionary, parent: Dictionary, window_arrive: int) -> Dictionary:
 	var now := OrbitMath.state_at(mine, gm, from_tick)
 	var r1: Array = now["r"]
 	var r1_mm := IntMath.dist(r1, [0, 0, 0])
@@ -112,16 +127,21 @@ static func _timed_plan(mine: Dictionary, theirs: Dictionary, target: int, gm: i
 	var floor_mm: int = int(parent["radius_mm"]) + LowFlight.LEAVE_MM
 	var soi: int = parent.get("soi_mm", 0)
 	var best := {}
+	if window_arrive - from_tick - hohmann_ticks < hohmann_ticks / 8:
+		return { "reason": REASON_UNSUPPORTED }
+	var speed := OrbitMath.speed_um_s(gm, r1_mm, a_hohmann)
+	var guess: Array[int] = []
+	for axis in 3:
+		guess.append(OrbitMath.smul_div(along[axis], speed, OrbitMath.ONE))
 	for eighths: int in TIMED_EIGHTHS:
 		var ticks: int = maxi(2, hohmann_ticks * eighths / 8)
 		var arrive := from_tick + ticks
-		var speed := OrbitMath.speed_um_s(gm, r1_mm, a_hohmann)
-		var guess: Array[int] = []
-		for axis in 3:
-			guess.append(OrbitMath.smul_div(along[axis], speed, OrbitMath.ONE))
+		if arrive >= window_arrive:
+			break
 		var hit := Lambert.solve(gm, r1, guess, theirs, from_tick, arrive, normal)
 		if hit.is_empty():
 			continue
+		guess = hit["v"]
 		var arc: Dictionary = hit["orbit"]
 		if arc.get("hyperbolic", false) or CoastBounds.periapsis_mm(arc) < floor_mm \
 				or (soi > 0 and BurnSystem.apoapsis_mm(arc) >= soi):

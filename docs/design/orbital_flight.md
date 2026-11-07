@@ -1211,7 +1211,7 @@ At 20 times the slice a coast call now covers 383 ticks instead of 81, for about
 
 ### 11.33 A47: leaving at once, on a Lambert arc (stage one)
 
-Until A47 every trip between places waited for its window. Stage one adds a trip that leaves at once, for near-circular orbits in one plane round one parent. The quote weighs it against the window's plan by `prefer`: cheap takes the lower cost, ties to the window, and fast the earlier arrival, ties to the lower cost.
+Until A47 every trip between places waited for its window. Stage one adds a trip that leaves at once, for near-circular orbits in one plane round one parent. `prefer` "fast" plans it beside the window's plan and takes the earlier arrival, ties to the lower cost. "Cheap" stays the window's plan and never searches an arc. A caller can ask for the comparison with `compare`, and the arc then shows as `other`, with `timed: true`.
 
 **The solver** (`Lambert.solve`) shoots with the rails' own integer propagation:
 - Guess the departure velocity in the unit's plane.
@@ -1235,7 +1235,15 @@ Both burns are the exact differences of velocity, by the rocket equation, paid a
 | To a pebble 20 degrees ahead in the same ring | 26.6 t, arriving at tick 1,848, on a phasing orbit | 28.2 t, arriving at tick 1,713 |
 | To Far's rock, 900 km | Hohmann, window at tick 34, cheaper and sooner | not taken |
 
-A quote takes about 14 ms. `test_lambert.gd` checks:
+**Cost.** In the 20 times slice world a cheap quote takes about 280 µs and a fast one about 17 ms. The gate's first run found a quote at 55 ms when every quote searched the arc. Four changes cut that:
+- a chord Newton, keeping the Jacobian while the miss at least halves;
+- each flight time starting from the last one's answer;
+- only arcs that arrive before the window's plan;
+- no search when the window is under an eighth of a Hohmann time away.
+
+Fewer flight times would cost the arc's quality (28.2 t became 38.7 t), and an answer memo used as a starting guess would make the quote depend on history, which a load would not repeat. So the search is opt-in instead: cores and cycles quote cheap.
+
+`test_lambert.gd` checks:
 - the solver hits within 100 m;
 - each preference's choice, and the other plan it shows;
 - a timed trip flown for its quote, with the ledger strict;

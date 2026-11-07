@@ -42,9 +42,13 @@ func test_the_solver_hits_the_target_where_it_will_be() -> void:
 
 
 ## The pebble is 20 degrees ahead in the ship's own ring. Waiting on a phasing orbit is cheaper; an
-## arc that leaves at once arrives sooner. Each quote shows the other.
+## arc that leaves at once arrives sooner. Cheap is the window's plan and searches no arc unless
+## asked to compare; fast plans both. Each shows the other, the arc marked timed.
 func test_cheap_waits_on_the_window_and_fast_leaves_at_once() -> void:
-	var cheap := sim.quote(keys["Ship"], keys["Pebble"], 0)
+	var plain := sim.quote(keys["Ship"], keys["Pebble"], 0)
+	assert_false(plain.has("other"), "a cheap quote searches no arc")
+	var cheap := sim.quote(keys["Ship"], keys["Pebble"], 0, "cheap", true)
+	assert_eq(cheap["arrive_tick"], plain["arrive_tick"], "comparing doesn't change the cheap plan")
 	var fast := sim.quote(keys["Ship"], keys["Pebble"], 0, "fast")
 	print("LAMBERT to the pebble: window %d kg arriving at %d; at once %d kg arriving at %d" % [
 		cheap["cost_g"] / 1000, cheap["arrive_tick"], fast["cost_g"] / 1000, fast["arrive_tick"]])
@@ -53,7 +57,7 @@ func test_cheap_waits_on_the_window_and_fast_leaves_at_once() -> void:
 	assert_eq(fast["depart_tick"], 0)
 	assert_lt(fast["arrive_tick"], cheap["arrive_tick"])
 	assert_gt(fast["cost_g"], cheap["cost_g"])
-	assert_eq(cheap["other"], { "arrive_tick": fast["arrive_tick"], "cost_g": fast["cost_g"] })
+	assert_eq(cheap["other"], { "arrive_tick": fast["arrive_tick"], "cost_g": fast["cost_g"], "timed": true })
 	assert_eq(fast["other"], { "arrive_tick": cheap["arrive_tick"], "cost_g": cheap["cost_g"] })
 
 

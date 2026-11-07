@@ -23,6 +23,10 @@ static func solve(gm: int, r1: Array, guess: Array, theirs: Dictionary, depart_t
 	var vr := OrbitMath.dot(guess, radial)
 	var vt := OrbitMath.dot(guess, along)
 	var best := {}
+	# The chord method (A47): the finite-difference Jacobian is worked out once and kept while each
+	# step at least halves the miss, so most steps cost one propagation, not three.
+	var jacobian := []
+	var last_miss := -1
 	for iteration in MAX_ITERATIONS:
 		var here := _miss(gm, r1, radial, along, vr, vt, target, depart_tick, arrive_tick)
 		if here.is_empty():
@@ -32,19 +36,19 @@ static func solve(gm: int, r1: Array, guess: Array, theirs: Dictionary, depart_t
 			best = { "v": here["v"], "orbit": here["orbit"], "miss_mm": miss }
 		if miss <= HIT_MM:
 			return best
-		# Finite differences: how the miss moves for a small change of each component.
-		var h := maxi(1_000, (absi(vr) + absi(vt)) / 2_000)
-		var by_r := _miss(gm, r1, radial, along, vr + h, vt, target, depart_tick, arrive_tick)
-		var by_t := _miss(gm, r1, radial, along, vr, vt + h, target, depart_tick, arrive_tick)
-		if by_r.is_empty() or by_t.is_empty():
-			return best
 		var e: Array = here["miss"]
+		if jacobian.is_empty() or (last_miss >= 0 and miss * 2 > last_miss):
+			jacobian = _jacobian(gm, r1, radial, along, vr, vt, target, depart_tick, arrive_tick, e)
+			if jacobian.is_empty():
+				return best
+		last_miss = miss
+		var h: int = jacobian[0]
+		var a: int = jacobian[1]
+		var b: int = jacobian[2]
+		var c: int = jacobian[3]
+		var d: int = jacobian[4]
 		var e_x := OrbitMath.dot(e, radial)
 		var e_y := OrbitMath.dot(e, along)
-		var a := OrbitMath.dot(_minus(by_r["miss"], e), radial)
-		var c := OrbitMath.dot(_minus(by_r["miss"], e), along)
-		var b := OrbitMath.dot(_minus(by_t["miss"], e), radial)
-		var d := OrbitMath.dot(_minus(by_t["miss"], e), along)
 		# Solve [a b; c d] [s t] = -[e_x e_y] for the steps s, t in units of h.
 		var det := a * d - b * c
 		if det == 0:
@@ -57,6 +61,21 @@ static func solve(gm: int, r1: Array, guess: Array, theirs: Dictionary, depart_t
 		vr += clampi(step_r, -cap, cap)
 		vt += clampi(step_t, -cap, cap)
 	return best if not best.is_empty() and int(best["miss_mm"]) <= HIT_MM else {}
+
+
+## [h, a, b, c, d]: how the miss `e` at (vr, vt) moves, in the radial and along-track directions,
+## for a step h in each component, or [] if a nudged guess makes no orbit.
+static func _jacobian(gm: int, r1: Array, radial: Array, along: Array, vr: int, vt: int, target: Array,
+		depart_tick: int, arrive_tick: int, e: Array) -> Array:
+	var h := maxi(1_000, (absi(vr) + absi(vt)) / 2_000)
+	var by_r := _miss(gm, r1, radial, along, vr + h, vt, target, depart_tick, arrive_tick)
+	var by_t := _miss(gm, r1, radial, along, vr, vt + h, target, depart_tick, arrive_tick)
+	if by_r.is_empty() or by_t.is_empty():
+		return []
+	var moved_r := _minus(by_r["miss"], e)
+	var moved_t := _minus(by_t["miss"], e)
+	return [h, OrbitMath.dot(moved_r, radial), OrbitMath.dot(moved_t, radial), OrbitMath.dot(moved_r, along),
+		OrbitMath.dot(moved_t, along)]
 
 
 ## { v, orbit, miss } for the velocity vr radially and vt along the motion, or {} if it makes no
