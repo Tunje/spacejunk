@@ -253,13 +253,16 @@ func _transfer(ctx: SimContext, id: int) -> void:
 	var item: String = op["item"]
 	var rate := _transfer_rate(ctx, from, to)
 	var remainder: int = task.get("transfer_remainder", 0)
-	var grams: int = task.get("credit_g", 0) + Rate.amount(rate, remainder)
+	var unit_mass_g: int = ctx.defs["items"][item].get("unit_mass_g", 0)
+	# The credit is what a whole-unit item has built up towards its next unit. Only such an item
+	# carries one (A42): a bulk item moves its grams as they come.
+	var credit: int = task.get("credit_g", 0) if unit_mass_g != 0 else 0
+	var grams: int = credit + Rate.amount(rate, remainder)
 	task["transfer_remainder"] = Rate.carry(rate, remainder)
 	var limit := mini(Reservations.free_stock(ctx, from, item), Reservations.free_space(ctx, to, item))
 	if op["limit_g"] != 0:
 		limit = mini(limit, op["limit_g"] - task.get("moved_g", 0))
 	var moved := mini(grams, limit)
-	var unit_mass_g: int = ctx.defs["items"][item].get("unit_mass_g", 0)
 	if unit_mass_g != 0:
 		moved -= moved % unit_mass_g
 		task["credit_g"] = mini(grams - moved, unit_mass_g)
