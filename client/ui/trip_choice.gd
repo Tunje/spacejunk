@@ -30,7 +30,14 @@ static func faster_line(quote: Dictionary, tick: int, ticks_per_second: int) -> 
 	if not TripChoice.has_faster(quote):
 		return ""
 	var other: Dictionary = quote["other"]
-	return "Faster: %s" % TripChoice.plan_text(int(other["cost_g"]), int(other["arrive_tick"]), tick, ticks_per_second)
+	var name := TripChoice.other_name(quote)
+	return "%s%s: %s" % [name.left(1).to_upper(), name.substr(1),
+		TripChoice.plan_text(int(other["cost_g"]), int(other["arrive_tick"]), tick, ticks_per_second)]
+
+
+## "leave now" when the other plan is A47's arc that leaves at once (`timed`), else "faster".
+static func other_name(quote: Dictionary) -> String:
+	return "leave now" if quote.get("other", {}).get("timed", false) else "faster"
 
 
 ## ", with a 1.2 km/s plane change joined to the arrival burn", or "" in one plane.
@@ -53,10 +60,12 @@ static func add_fast_option(orders: Array[Dictionary], quote: Dictionary, tick: 
 			continue
 		if not TripChoice.has_faster(quote):
 			return
-		order["label"] = "Move to: %s" % TripChoice.plan_text(int(quote["cost_g"]), int(quote["arrive_tick"]), tick, ticks_per_second)
+		var waits: bool = quote.get("other", {}).get("timed", false)
+		order["label"] = "Move to%s: %s" % [", wait for the window" if waits else "", TripChoice.plan_text(int(quote["cost_g"]), int(quote["arrive_tick"]), tick, ticks_per_second)]
 		var fast: Dictionary = order["command"].duplicate(true)
 		fast["args"]["prefer"] = "fast"
 		var other: Dictionary = quote["other"]
 		orders.insert(index + 1, { "key": FAST_KEY, "command": fast,
-			"label": "Move to, faster: %s" % TripChoice.plan_text(int(other["cost_g"]), int(other["arrive_tick"]), tick, ticks_per_second) })
+			"label": "Move to, %s: %s" % [TripChoice.other_name(quote),
+				TripChoice.plan_text(int(other["cost_g"]), int(other["arrive_tick"]), tick, ticks_per_second)] })
 		return

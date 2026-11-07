@@ -32,11 +32,11 @@ const GOALS: Array[Dictionary] = [
 ## Lists by scenario ID; any other start uses the reference list.
 const NEW_START_GOALS: Array[Dictionary] = [
 	{ "id": "scan", "title": "Scan a rock",
-		"hint": "Open the Map (M), click a rock in the Cluster and press Move to. The flight takes a couple of minutes: speed time up with 50x at the top. On arrival, press Scan in the Orders panel." },
+		"hint": "Open the Map (M), click a rock in the Cluster and press Fly there, scan and measure in the Orders panel. The flight takes a couple of minutes: speed time up with 50x at the top." },
 	{ "id": "science", "title": "Earn your first science points",
 		"hint": "A finished scan pays survey points. Stay at the rock and Measure its composition for more. New rocks and bodies are worth the most." },
 	{ "id": "mine", "title": "Mine ore",
-		"hint": "Click a scanned rock and choose Mine. Mine White Rock too: its water ice refines into propellant." },
+		"hint": "Click a scanned rock, set the Amount in kilograms (0 fills the hold) and press its Fly there… mine order. Mine White Rock too: its water ice refines into propellant." },
 	{ "id": "refine", "title": "Refine ore",
 		"hint": "Open Jobs (J), pick the probe's Compact Refinery and Start a recipe. Refine Water Ice whenever propellant runs low." },
 	{ "id": "fabricate", "title": "Fabricate a component",

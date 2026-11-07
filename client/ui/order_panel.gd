@@ -31,11 +31,6 @@ var _buttons: Dictionary = {}
 ## An atomic order just pressed, shown as started until the next tick runs it.
 var _clicked_key := ""
 var _clicked_tick := 0
-## The selection's trip quote for "Move to, faster" (D40): quote() may search for a
-## window, so it is asked at most every SystemMap.QUOTE_REFRESH_MS.
-var _quote: Dictionary = {}
-var _quote_key := ""
-var _quote_ms := 0
 
 var _commanded_label: Label
 var _status_label: Label
@@ -115,10 +110,16 @@ func refresh() -> void:
 	_detail_label.text = _selection_detail(view)
 	_detail_label.visible = not _detail_label.text.is_empty()
 	_orders = OrderList.build(view, _modules, _items, commanded, local_view.selected_kind, local_view.selected_id, _science)
-	TripChoice.add_fast_option(_orders, _trip_quote(view, commanded), view["tick"], bridge.ticks_per_second())
+	TripChoice.add_fast_option(_orders, _trip_quote(commanded), view["tick"], bridge.ticks_per_second())
+	# D41: the whole trip as one order, first, so a rock takes one press to visit.
+	var trips := []
+	if local_view.selected_kind == "body":
+		trips = TripPlan.orders(view, _science, _modules, _items, commanded, local_view.selected_id, int(amount.value))
+	for index in range(trips.size()):
+		_orders.insert(index, trips[index])
 	var moves := false
 	for order: Dictionary in _orders:
-		if ["unload_cargo", "load_cargo", "start_mining"].has(order["command"]["type"]):
+		if ["unload_cargo", "load_cargo", "start_mining"].has(order["command"]["type"]) or order["key"].begins_with("Trip mine "):
 			moves = true
 			OrderList.set_amount(order["command"], int(amount.value), _items)
 	_amount_row.visible = moves
@@ -131,17 +132,11 @@ func refresh() -> void:
 
 
 ## The quote for a trip to the selection, or {} when nothing to fly to is selected.
-func _trip_quote(view: Dictionary, commanded: int) -> Dictionary:
+func _trip_quote(commanded: int) -> Dictionary:
 	var target: int = local_view.selected_id
 	if local_view.selected_kind.is_empty() or target == commanded or not bridge.sim.has_method("quote"):
 		return {}
-	var key := "%d:%d" % [commanded, target]
-	var now := Time.get_ticks_msec()
-	if key != _quote_key or now - _quote_ms >= SystemMap.QUOTE_REFRESH_MS:
-		_quote_key = key
-		_quote_ms = now
-		_quote = bridge.sim.quote(commanded, target, view["tick"])
-	return _quote
+	return bridge.trip_quote(commanded, target)
 
 
 func press(key: String) -> bool:
