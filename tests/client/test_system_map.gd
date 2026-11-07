@@ -213,6 +213,38 @@ func test_trip_text_names_a_plane_change() -> void:
 	assert_eq(SystemMap.trip_text(quote, 0, 10), "Departs in 1 min 0 s, 2 min 0 s trip", "one plane: unchanged")
 
 
+## D40: the trip's propellant, where its plane change is burned, and A43's faster plan.
+func test_trip_text_offers_the_faster_plan() -> void:
+	var quote := { "kind": "transfer", "target": 4, "ticks": 972_000, "depart_tick": 0, "arrive_tick": 972_000,
+		"cost_g": 235_000, "plane_change_dv_um_s": 35_000_000, "plane_change_at": "arrival",
+		"other": { "arrive_tick": 90_000, "cost_g": 401_000 } }
+	assert_eq(SystemMap.trip_text(quote, 0, 10),
+		"27 h 0 min trip, 235.0 kg, including a %s plane change joined to the arrival burn\nFaster: 401.0 kg, arrives in 2 h 30 min"
+		% FlightLogic.speed(35_000_000))
+	quote.erase("other")
+	assert_false(SystemMap.trip_text(quote, 0, 10).contains("Faster"), "one plan, one line")
+
+
+func test_move_to_faster_is_offered_beside_move_to() -> void:
+	var quote := { "kind": "transfer", "target": 4, "arrive_tick": 972_000, "cost_g": 235_000,
+		"other": { "arrive_tick": 90_000, "cost_g": 401_000 } }
+	var orders: Array[Dictionary] = [
+		{ "key": "Move to", "label": "Move to", "command": { "type": "move_to", "unit": 1, "args": { "target": 4 } } },
+		{ "key": "Scan", "label": "Scan", "command": { "type": "start_scan", "unit": 1, "args": {} } },
+	]
+	TripChoice.add_fast_option(orders, quote, 0, 10)
+	assert_eq(orders.size(), 3)
+	assert_eq(orders[0]["label"], "Move to: 235.0 kg, arrives in 27 h 0 min")
+	assert_eq(orders[1]["key"], TripChoice.FAST_KEY)
+	assert_eq(orders[1]["label"], "Move to, faster: 401.0 kg, arrives in 2 h 30 min")
+	assert_eq(orders[1]["command"]["args"], { "target": 4, "prefer": "fast" })
+	assert_false(orders[0]["command"]["args"].has("prefer"), "Move to stays the cheap default")
+	var single: Array[Dictionary] = [orders[0].duplicate(true)]
+	quote.erase("other")
+	TripChoice.add_fast_option(single, quote, 0, 10)
+	assert_eq(single.size(), 1, "no faster plan, no second button")
+
+
 ## A trip already ordered is shown as such, not quoted again.
 func test_a_trip_under_way_is_reported_not_quoted_again() -> void:
 	var view := { "tick": 100, "units": { 1: { "op": { "type": "idle" }, "transfer": { "target": 9, "arrive_tick": 700 } } } }

@@ -1,6 +1,9 @@
 class_name MapOverlay extends Control
 ## Names, scale rings and travel time for the system map.
 
+## The trip text under a selected entry wraps at this width.
+const ETA_WIDTH_PX := 380
+
 var map: SystemMap
 var _shown: Array[Dictionary] = []
 var _frames: Array[Dictionary] = []
@@ -56,4 +59,5 @@ func _draw() -> void:
 	for entry: Dictionary in _shown:
 		if entry["selected"]:
 			var below: Vector2 = entry["at"] + Vector2(EntityMarkers.DIAMOND_PX + 5, 22)
-			draw_string(font, below, map.eta_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, ClientTheme.GOLD)
+			# Two lines when the trip has a faster plan (D40), each wrapped so it stays clear of the panels.
+			draw_multiline_string(font, below, map.eta_text, HORIZONTAL_ALIGNMENT_LEFT, ETA_WIDTH_PX, 13, -1, ClientTheme.GOLD)

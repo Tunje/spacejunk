@@ -181,3 +181,23 @@ func test_nearly_full_bars_are_flagged() -> void:
 	unit["heat"]["stored_j"] = 95
 	panel._refresh_heat(unit)
 	assert_eq(panel._heat_bar.modulate, ClientTheme.ORANGE)
+
+
+## D40: an offline core says why: no power in the shadow, a flat battery in the sun, or
+## nothing extra when a fault names itself.
+func test_an_offline_core_says_why() -> void:
+	var unit := { "parts": { "id": 1, "fault": "", "children": [] },
+		"power": { "in_shadow": true, "supply_w": 0 } }
+	assert_eq(InspectText.core_offline(unit), "AI core offline: no power. In shadow, waiting for sunlight")
+	unit["power"]["sun_tick"] = 1300
+	assert_eq(InspectText.core_offline(unit, 100, 10), "AI core offline: no power. In shadow, sunlight in 2 min 0 s")
+	unit["power"] = { "in_shadow": false, "supply_w": 2000 }
+	assert_eq(InspectText.core_offline(unit, 100, 10), "AI core offline: battery empty, solar %s" % InspectText.watts(2000))
+	unit["parts"]["fault"] = "overheated"
+	assert_eq(InspectText.core_offline(unit), "", "a fault names itself")
+
+
+func test_a_move_on_the_faster_plan_says_so() -> void:
+	var shown := { "bodies": { 4: { "name": "Red Rock" } }, "units": {} }
+	var step := { "type": "move_to", "args": { "target": 4, "prefer": "fast" } }
+	assert_eq(CyclePlan.step_text(step, shown, {}), "Fly to Red Rock (faster plan)")

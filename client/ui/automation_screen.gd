@@ -145,6 +145,9 @@ func _send(command: Dictionary, steps: Array[Dictionary]) -> void:
 
 func _refusal(result: Dictionary, steps: Array[Dictionary]) -> String:
 	var text := OrderText.reason(result["reason"])
+	if result["reason"] == "core_offline":
+		var offline := InspectText.core_offline(unit(), bridge.current_view["tick"], bridge.ticks_per_second())
+		text = text if offline.is_empty() else offline
 	var index: int = result["detail"].get("step", -1)
 	if result["reason"] == "bad_cycle" and index >= 0 and index < steps.size():
 		text += ": step %d, %s" % [index + 1, CyclePlan.step_text(steps[index], bridge.current_view, _defs)]
