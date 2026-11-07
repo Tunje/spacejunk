@@ -88,6 +88,21 @@ func test_attention_events_and_the_jobs_option() -> void:
 	assert_eq(line, "Probe departed for White Rock, arriving in 2 min 0 s")
 
 
+## D39b: a drone on its cycle comes and goes every lap without stopping the warp;
+## a block still stops it, and so does a craft flown by hand.
+func test_a_cycle_lap_keeps_the_warp() -> void:
+	var view := {
+		"units": { 5: { "task": 9, "cycle_task": 0 }, 6: { "task": 10, "cycle_task": 0 }, 7: { "task": 11, "cycle_task": 9 } },
+		"tasks": { 9: { "kind": "cycle" }, 10: { "kind": "order" }, 11: { "kind": "order" } },
+	}
+	for type: String in WarpLogic.CYCLE_ROUTINE:
+		assert_false(WarpLogic.needs_attention([{ "type": type, "unit": 5 }], false, {}, view), type)
+		assert_false(WarpLogic.needs_attention([{ "type": type, "unit": 7 }], false, {}, view), "%s, an order over a cycle" % type)
+		assert_true(WarpLogic.needs_attention([{ "type": type, "unit": 6 }], false, {}, view), "%s by hand" % type)
+	assert_true(WarpLogic.needs_attention([{ "type": "task_blocked", "unit": 5 }], false, {}, view))
+	assert_false(WarpLogic.in_cycle(99, view), "an unknown unit")
+
+
 func test_a_coast_jumps_a_frame_with_one_view() -> void:
 	var sim := CoastingSim.new()
 	bridge.start(sim)

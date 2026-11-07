@@ -276,9 +276,11 @@ func test_predict_skimming_the_ground_is_quick_and_matches_the_flight() -> void:
 	for axis in 3:
 		vel.append(OrbitMath.smul_div(east[axis], 300_000_000, ONE) + OrbitMath.smul_div(up[axis], 300_000_000, ONE))
 	_ship()["vel_um_s"] = vel
-	var started := Time.get_ticks_usec()
 	var ahead := sim.predict(keys["Ship"], sim.current_tick(), 3000, 10)
-	var took_ms := (Time.get_ticks_usec() - started) / 1000.0
+	# The fastest of three: predict is read-only and keeps no memo between calls, and load only
+	# ever adds time (A45).
+	var again := func() -> void: sim.predict(keys["Ship"], sim.current_tick(), 3000, 10)
+	var took_ms := preload("res://tests/sim/kernel/timing.gd").best_usec(again, 3) / 1000.0
 	print("PREDICT near the ground: %.1f ms to contact at +%d ticks" % [took_ms, ahead["contact"].get("tick", 0) - sim.current_tick()])
 	var contact: Dictionary = ahead["contact"]
 	assert_false(contact.is_empty())

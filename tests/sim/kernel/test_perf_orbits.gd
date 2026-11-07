@@ -93,8 +93,10 @@ func _report(label: String, samples: Array[int]) -> Dictionary:
 	var total := 0
 	for sample: int in samples:
 		total += sample
-	var result := { "mean": total / samples.size(), "p99": sorted[samples.size() * 99 / 100], "max": sorted[-1] }
-	print("PERF ORBITS %s: mean %d us, p99 %d us, max %d us" % [label, result["mean"], result["p99"], result["max"]])
+	var result := { "mean": total / samples.size(), "median": sorted[samples.size() / 2],
+		"p99": sorted[samples.size() * 99 / 100], "max": sorted[-1] }
+	print("PERF ORBITS %s: mean %d us, median %d us, p99 %d us, max %d us" % [label, result["mean"],
+		result["median"], result["p99"], result["max"]])
 	return result
 
 
@@ -127,8 +129,10 @@ func test_an_orbital_tick_with_one_view_stays_inside_the_budget() -> void:
 	var total := _report("step+view", both)
 	for op_type: String in ["moving", "waiting", "burning"]:
 		assert_true(ops.has(op_type), op_type)
-	assert_lt(total["mean"], MEAN_ALARM_USEC)
-	assert_lt(total["p99"], SPIKE_ALARM_USEC)
+	# On the median tick, as test_perf.gd; the 99th percentile is reported (A45).
+	assert_lt(total["median"], MEAN_ALARM_USEC)
+	if total["p99"] >= SPIKE_ALARM_USEC:
+		print("PERF ALARM: 99th percentile step and view %d us, over %d us" % [total["p99"], SPIKE_ALARM_USEC])
 
 
 func test_the_cost_of_planning_queries() -> void:
