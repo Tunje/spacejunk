@@ -4,10 +4,21 @@ class_name MapOverlay extends Control
 var map: SystemMap
 var _shown: Array[Dictionary] = []
 var _frames: Array[Dictionary] = []
+## Switches between the craft-centred map and the System view (D37); Y does too.
+var system_button: Button
 
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	system_button = Button.new()
+	system_button.theme = ClientTheme.build()
+	system_button.focus_mode = Control.FOCUS_NONE
+	system_button.text = "System view (Y)"
+	system_button.position = Vector2(360, 76)
+	system_button.pressed.connect(func() -> void:
+		map.toggle_system()
+		system_button.text = "Around the craft (Y)" if map.system_view else "System view (Y)")
+	add_child(system_button)
 
 
 func update_entries() -> void:
@@ -31,7 +42,8 @@ func pick(screen: Vector2) -> Dictionary:
 
 func _draw() -> void:
 	var font := ThemeDB.fallback_font
-	for km: float in SystemMap.RINGS_KM:
+	system_button.text = "Around the craft (Y)" if map.system_view else "System view (Y)"
+	for km: float in SystemMap.RINGS_KM if not map.system_view else []:
 		var edge := Vector3(0, 0, SystemMap.map_radius(km * SystemMap.KM_IN_M))
 		if not map.camera.is_position_behind(edge):
 			var at := map.camera.unproject_position(edge)
