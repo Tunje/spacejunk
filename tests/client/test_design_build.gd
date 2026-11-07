@@ -172,3 +172,19 @@ func test_jobs_rows_offer_start_with_components_where_inputs_are_missing() -> vo
 	bridge.set_paused(false)
 	bridge.advance(0.2)
 	assert_gt(bridge.current_view["jobs"].size(), jobs_before + 1, "the part and its components")
+
+
+## A plan made while jobs are queued counts what they will still take and make.
+func test_available_stock_counts_queued_jobs() -> void:
+	var jobs := {
+		1: { "unit": 13, "recipe": "refine_hematite", "count_left": 3, "status": "running", "install_to": {} },
+		2: { "unit": 13, "recipe": "structural_frame", "count_left": 2, "status": "queued", "install_to": {} },
+		3: { "unit": 99, "recipe": "structural_frame", "count_left": 9, "status": "queued", "install_to": {} },
+	}
+	var stock := DesignLogic.available_stock(13, { "hematite": 250_000, "iron": 10_000 }, jobs, defs)
+	assert_eq(stock["hematite"], 50_000, "the running refine has its current 100 kg; two runs still to take")
+	assert_eq(stock["iron"], 10_000 + 3 * 69_000 - 2 * 50_000, "three runs of iron in, two frames' worth out")
+	assert_eq(stock["structural_frame"], 2 * defs["items"]["structural_frame"]["unit_mass_g"], "another unit's jobs don't count")
+	jobs[2]["install_to"] = { "unit": 5 }
+	assert_false(DesignLogic.available_stock(13, {}, jobs, defs).get("structural_frame", 0) > 0, "built in place, never in the hold")
+

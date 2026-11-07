@@ -271,3 +271,30 @@ static func core_to_assign(design: String, unit: Dictionary, defs: Dictionary) -
 			if not part.is_empty() and int(unit.get("core", 0)) != int(part["id"]):
 				return part["id"]
 	return 0
+
+
+## The stock a new plan can count on (D43): the hold, plus what this unit's queued jobs
+## will still make, less what they will still take. A running job has taken its current
+## run's inputs already; a part built straight onto a unit never reaches the hold.
+static func available_stock(unit_id: int, inventory: Dictionary, jobs: Dictionary, defs: Dictionary) -> Dictionary:
+	var stock := inventory.duplicate()
+	var ids: Array = jobs.keys()
+	ids.sort()
+	for id: int in ids:
+		var job: Dictionary = jobs[id]
+		if int(job.get("unit", 0)) != unit_id or not defs["recipes"].has(job.get("recipe", "")):
+			continue
+		var recipe: Dictionary = defs["recipes"][job["recipe"]]
+		var left := int(job.get("count_left", 0))
+		var untaken := left - (1 if job.get("status", "") == "running" else 0)
+		for input: Dictionary in recipe.get("inputs", []):
+			stock[input["item"]] = int(stock.get(input["item"], 0)) - int(input["grams"]) * untaken
+		if not (job.get("install_to", {}) as Dictionary).is_empty():
+			continue
+		for output: Dictionary in recipe.get("outputs", []):
+			if output.has("item") and not output.has("sink"):
+				stock[output["item"]] = int(stock.get(output["item"], 0)) + DesignLogic.output_grams(recipe, output["item"], defs) * left
+	for item: String in stock.keys():
+		if int(stock[item]) < 0:
+			stock[item] = 0
+	return stock

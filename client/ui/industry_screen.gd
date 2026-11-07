@@ -44,6 +44,8 @@ var _slot_buttons: Array[Dictionary] = []
 var design_rows: Array[Dictionary] = []
 ## The stock the rows' "Start with components" plans were made for (D43).
 var _with_key := ""
+## In the Build into picker: also queue the part's missing components first (D43).
+var picker_with: CheckBox
 
 
 func _ready() -> void:
@@ -158,6 +160,14 @@ func open_picker(recipe: Dictionary) -> void:
 	var heading := _add_label(_picker)
 	heading.text = "Build %s into:" % IndustryLogic.name_of(IndustryLogic.module_output(recipe, _defs), _defs)
 	heading.modulate = ClientTheme.ORANGE.lightened(0.2)
+	picker_with = CheckBox.new()
+	picker_with.text = "Make its components too"
+	picker_with.focus_mode = Control.FOCUS_NONE
+	var plan := recipe_plan(recipe, 1)
+	picker_with.visible = plan["jobs"].size() > 1
+	picker_with.button_pressed = picker_with.visible
+	picker_with.tooltip_text = "Queues %s first" % DesignLogic.plan_text(plan, _defs)
+	_picker.add_child(picker_with)
 	for target: int in IndustryLogic.install_units(view, unit_id):
 		var unit: Dictionary = view["units"][target]
 		var names: Dictionary = {}
@@ -174,7 +184,7 @@ func open_picker(recipe: Dictionary) -> void:
 			var button := _add_button(_picker, "%s: %s (%s, %s)" % [names[slot["part"]], slot["connector"], slot["type"], slot["size"]])
 			button.disabled = not check["ok"]
 			button.tooltip_text = "" if check["ok"] else OrderText.reason(check["reason"], check.get("detail", {}))
-			button.pressed.connect(_send_and_close.bind(command))
+			button.pressed.connect(_pick_slot.bind(recipe, command))
 			_slot_buttons.append({ "slot": slot, "unit": target, "button": button, "command": command })
 	var close_button := _add_button(_picker, "Cancel")
 	close_button.pressed.connect(close_picker)
@@ -189,6 +199,15 @@ func close_picker() -> void:
 	_picker.visible = false
 	_picker_scroll.visible = false
 	_recipe_scroll.visible = true
+
+
+## A spot picked: the part alone, or after its components when the box is ticked.
+func _pick_slot(recipe: Dictionary, command: Dictionary) -> void:
+	if picker_with != null and picker_with.visible and picker_with.button_pressed:
+		_queue_plan(recipe_plan(recipe, 1), IndustryLogic.name_of(recipe["id"], _defs), command)
+		close_picker()
+	else:
+		_send_and_close(command)
 
 
 func _send_and_close(command: Dictionary) -> void:
@@ -357,7 +376,7 @@ func _add_design_rows() -> void:
 func design_plan(design: String) -> Dictionary:
 	var unit: Dictionary = bridge.current_view["units"][unit_id]
 	var types: Array = IndustryLogic.facilities(unit, _defs["modules"]).map(func(entry: Dictionary) -> String: return entry["type"])
-	return DesignLogic.build_plan(design, unit["inventory"], _defs, types)
+	return DesignLogic.build_plan(design, DesignLogic.available_stock(unit_id, unit["inventory"], bridge.current_view.get("jobs", {}), _defs), _defs, types)
 
 
 func _show_design_plans(unit: Dictionary) -> void:
@@ -378,10 +397,10 @@ func build_design(design: String) -> void:
 
 
 ## The plan for the Runs count of a recipe on this unit, its components included (D43).
-func recipe_plan(recipe: Dictionary) -> Dictionary:
+func recipe_plan(recipe: Dictionary, runs := -1) -> Dictionary:
 	var unit: Dictionary = bridge.current_view["units"][unit_id]
 	var types: Array = IndustryLogic.facilities(unit, _defs["modules"]).map(func(entry: Dictionary) -> String: return entry["type"])
-	return DesignLogic.recipe_plan(recipe["id"], int(_count.value), unit["inventory"], _defs, types)
+	return DesignLogic.recipe_plan(recipe["id"], int(_count.value) if runs < 0 else runs, DesignLogic.available_stock(unit_id, unit["inventory"], bridge.current_view.get("jobs", {}), _defs), _defs, types)
 
 
 func start_with_components(recipe: Dictionary) -> void:
@@ -391,7 +410,7 @@ func start_with_components(recipe: Dictionary) -> void:
 ## "Start with components" only where an input still has to be made: replanned when
 ## the hold or the Runs count changes, not every tick.
 func _show_with_components(unit: Dictionary) -> void:
-	var key := "%d:%d:%s" % [unit_id, int(_count.value), str(unit["inventory"])]
+	var key := "%d:%d:%s:%s" % [unit_id, int(_count.value), str(unit["inventory"]), str(bridge.current_view.get("jobs", {}).keys())]
 	if key == _with_key:
 		return
 	_with_key = key
@@ -403,9 +422,15 @@ func _show_with_components(unit: Dictionary) -> void:
 		button.tooltip_text = "Queues %s%s" % [DesignLogic.plan_text(plan, _defs), "" if short.is_empty() else ". " + short]
 
 
-func _queue_plan(plan: Dictionary, name: String) -> void:
+## Checks every job of a plan, then queues them all, or none with the reason. `final`,
+## when given, is sent in place of the job of the same recipe, such as a Build into.
+func _queue_plan(plan: Dictionary, name: String, final: Dictionary = {}) -> void:
 	var unit: Dictionary = bridge.current_view["units"][unit_id]
 	var commands := DesignLogic.queue_commands(plan, unit_id, IndustryLogic.facilities(unit, _defs["modules"]), _defs)
+	if not final.is_empty():
+		for index in range(commands.size()):
+			if commands[index]["args"]["recipe"] == final["args"]["recipe"]:
+				commands[index] = final
 	for command: Dictionary in commands:
 		var result: Dictionary = bridge.check(command)
 		if not result["ok"]:
