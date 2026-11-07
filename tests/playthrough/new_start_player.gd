@@ -260,7 +260,7 @@ func queue(on: int, facility_type: String, recipe: String, runs: int, into: Arra
 					pressed = true
 		if not pressed and problems.is_empty():
 			_problem("no Build into spot %s for %s" % [into[1], recipe])
-	if not industry._message.text.is_empty():
+	if not industry._message.text.is_empty() and not industry._message.text.begins_with("Queued"):
 		_problem("%s: %s" % [recipe, industry._message.text])
 	main.toggle_industry()
 	bridge.set_paused(false)
