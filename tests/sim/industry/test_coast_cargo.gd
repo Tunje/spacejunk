@@ -53,14 +53,16 @@ func test_whole_units_still_step_and_match() -> void:
 	assert_gt(caps.get("tasks", 0), 30, "a whole-unit transfer steps, from the task side first")
 
 
-## A job held for inputs at the station starts on the tick the unloaded ore lets it, coasted or not.
-func test_a_job_waiting_on_an_unload_starts_on_the_same_tick() -> void:
-	var stepped := _reference()
-	_give(stepped, SHIP, "hematite", 400_000)
+## A job held for inputs at the station starts on the tick the arriving ore lets it, coasted or not.
+## The ore comes from outside the station's group: the cycle's drone mines it at the rock and
+## brings it back, and the job may draw it from the drone once it docks (C26) or from the station
+## once it is unloaded, whichever comes first.
+func test_a_job_waiting_on_arriving_ore_starts_on_the_same_tick() -> void:
+	var stepped := _mining_cycle({})
 	stepped.submit(_job(REFINERY, "refine_hematite", 2))
 	stepped.step()
+	stepped.take_events()
 	assert_eq(stepped._state["jobs"].values()[0]["reason"], "missing_inputs")
-	stepped.submit({ "type": "unload_cargo", "unit": SHIP, "args": { "to": STATION, "item": "hematite" } })
-	_then_same(stepped, 3_000)
-	assert_true(stepped._state["jobs"].is_empty(), "both runs went")
+	_same_both_ways(stepped, _copy(stepped), 6_000)
+	assert_gt(stepped._state["units"][STATION]["inventory"].get("iron", 0), 0, "the job ran on the drone's ore")
 	assert_gt(caps.get("jobs", 0), 0, "the held job stepped while its inputs came")

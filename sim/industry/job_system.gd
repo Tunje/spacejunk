@@ -22,6 +22,10 @@ extends SimSystem
 ## above. The rest are queued at 1..n, hold nothing, and wait their turn. When the active job ends,
 ## the next one becomes active straight away and can start its first run in the next phase 4.
 ##
+## A run draws its inputs from the docked group (C26): its own unit first, then the other units
+## joined to it by dock records, by ID, as attach_part takes parts (C21). Outputs, held inputs and
+## anything handed back stay with the job's own unit.
+##
 ## A starved queue skips (C24): while the active job waits on missing_inputs or output_full and the
 ## facility has no run in progress, the queued job with the lowest queue_pos that can start a run
 ## goes ahead for one run, with job_went_ahead. It keeps its place, goes back to queued when the run
@@ -437,12 +441,15 @@ func _blocker(ctx: SimContext, job: Dictionary) -> String:
 	var research := ResearchRules.run_blocker(ctx, job["unit"], recipe)
 	if research != "":
 		return research
+	var sources := _sources(ctx, job)
 	var inventory: Dictionary = ctx.state["units"][job["unit"]]["inventory"]
 	var change := {}
 	for input: Dictionary in recipe["inputs"]:
-		if inventory.get(input["item"], 0) < input["grams"]:
+		var item: String = input["item"]
+		if _group_stock(ctx, sources, item) < input["grams"]:
 			return REASON_MISSING_INPUTS
-		change[input["item"]] = change.get(input["item"], 0) - input["grams"]
+		# Only what comes out of the job's own unit frees room there for the outputs.
+		change[item] = change.get(item, 0) - mini(input["grams"], inventory.get(item, 0))
 	for output: Dictionary in recipe["outputs"]:
 		if _takes_space(job, output):
 			change[output["item"]] = change.get(output["item"], 0) + output["grams"]
@@ -454,10 +461,17 @@ func _start_run(ctx: SimContext, job: Dictionary) -> void:
 	if job["reason"] != "":
 		ctx.emit_event("job_resumed", job["unit"], { "job": job["id"], "reason": job["reason"] })
 	var recipe := _recipe(ctx, job)
-	var inventory: Dictionary = ctx.state["units"][job["unit"]]["inventory"]
+	var sources := _sources(ctx, job)
 	for input: Dictionary in recipe["inputs"]:
-		Units.remove_stock(inventory, input["item"], input["grams"])
-		job["held"][input["item"]] = job["held"].get(input["item"], 0) + input["grams"]
+		var item: String = input["item"]
+		var left: int = input["grams"]
+		for source: int in sources:
+			var stock: Dictionary = ctx.state["units"][source]["inventory"]
+			var taken := mini(left, stock.get(item, 0))
+			if taken > 0:
+				Units.remove_stock(stock, item, taken)
+				left -= taken
+		job["held"][item] = job["held"].get(item, 0) + input["grams"]
 	_reserve_outputs(ctx, job, recipe)
 	job["points_held"] = recipe.get("points", 0)
 	ctx.state["science"]["points"] -= job["points_held"]
@@ -673,8 +687,7 @@ func horizon(ctx: SimContext) -> int:
 					checked = true
 				if busy.is_empty():
 					busy = _busy_facilities(ctx)
-				if not busy.has(job["facility"]) \
-						and (moving.has(job["unit"]) or moving.has(job["install_to"].get("unit", 0))):
+				if not busy.has(job["facility"]) and _stores_wait_on(ctx, job, moving):
 					skip = 0
 			_:
 				# A held job waits on its unit's stores, or an install target's (C15). If they are
@@ -685,12 +698,41 @@ func horizon(ctx: SimContext) -> int:
 					if not checked:
 						moving = _stores_moving(ctx)
 						checked = true
-					if moving.has(job["unit"]) or moving.has(job["install_to"].get("unit", 0)):
+					if _stores_wait_on(ctx, job, moving):
 						skip = 0
 		if skip <= 0:
 			ctx.coast_cap = "jobs"
 			return 0
 	return skip
+
+
+## The units a run draws its inputs from, in order: the job's own, then the rest of its docked
+## group by ID (C26).
+func _sources(ctx: SimContext, job: Dictionary) -> Array[int]:
+	var unit: int = job["unit"]
+	var sources: Array[int] = [unit]
+	for id: int in Units.docked_group(ctx.state, unit):
+		if id != unit:
+			sources.append(id)
+	return sources
+
+
+func _group_stock(ctx: SimContext, sources: Array[int], item: String) -> int:
+	var grams := 0
+	for source: int in sources:
+		grams += ctx.state["units"][source]["inventory"].get(item, 0)
+	return grams
+
+
+## True when the stores a held or queued job waits on are moving in closed form: its group's, from
+## which it draws (C26), or its install target's.
+func _stores_wait_on(ctx: SimContext, job: Dictionary, moving: Dictionary) -> bool:
+	if moving.has(job["install_to"].get("unit", 0)):
+		return true
+	for id: int in _sources(ctx, job):
+		if moving.has(id):
+			return true
+	return false
 
 
 ## True when any job of the facility has a run in progress.

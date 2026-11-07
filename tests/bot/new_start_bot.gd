@@ -48,11 +48,12 @@ const STAGE_DEPOT := 7
 const FROST := 3
 ## A lap of the cluster round Frost is 245,692 ticks.
 const LAP_LIMIT_TICKS := 300_000
-## Stage 6 (C22): ore held for the drone's parts, with the station's 150 kg of hematite loaded
-## first, and the runs that refine it. 9 hematite runs give 695 kg of iron with what is left, for
-## 11 frames and the depot's 100 kg; 4 chalcopyrite runs, copper for 11 wiring, 14 processors and
-## the battery; 2 olivine runs, silicon for the processors.
-const DRONE_ORE := [[RED_ROCK, "hematite", 900_000, "refine_hematite", 9],
+## Stage 6 (C22): ore mined for the drone's parts, and the runs that refine it. The probe's
+## refinery also takes the station's 150 kg of hematite through the docked group (C26), so 750 kg
+## is mined. 9 hematite runs give 695 kg of iron with what is left, for 11 frames and the depot's
+## 100 kg; 4 chalcopyrite runs, copper for 11 wiring, 14 processors and the battery; 2 olivine
+## runs, silicon for the processors.
+const DRONE_ORE := [[RED_ROCK, "hematite", 750_000, "refine_hematite", 9],
 	[BRASS_ROCK, "chalcopyrite", 400_000, "refine_chalcopyrite", 4],
 	[GREEN_ROCK, "olivine", 200_000, "refine_olivine", 2]]
 ## The drone's fit on small_hull, each as [part, connector, parent], as tests/sim/autonomy/
@@ -71,11 +72,11 @@ const DRONE_LAPS := 3
 ## six frames (Part F).
 const STORE_ORE_G := 500_000
 const DRONE_LIMIT_TICKS := 200_000
-## Stage 7 (C23): ore held for compact_refinery_mk1's 15 frames, 10 wiring and 10 processors, and
-## two solar_panel_mk1's 4 frames, 4 wiring and 60 kg of silicon, with the station's hematite loaded
-## first, and the runs that refine it. The hold cannot take it all at once, so the hematite is
-## refined before the olivine trip.
-const REFINERY_ORE := [[RED_ROCK, "hematite", 1_400_000, "refine_hematite", 14],
+## Stage 7 (C23): ore mined for compact_refinery_mk1's 15 frames, 10 wiring and 10 processors, and
+## two solar_panel_mk1's 4 frames, 4 wiring and 60 kg of silicon, and the runs that refine it. The
+## probe's refinery takes the station's 1,000 kg of hematite through the docked group (C26), so
+## 400 kg is mined.
+const REFINERY_ORE := [[RED_ROCK, "hematite", 400_000, "refine_hematite", 14],
 	[BRASS_ROCK, "chalcopyrite", 500_000, "refine_chalcopyrite", 5],
 	[GREEN_ROCK, "olivine", 600_000, "refine_olivine", 6]]
 ## The depot's sides that carry the refinery's extra power: the station's two panels give 120 kW
@@ -362,20 +363,19 @@ func _build_lab() -> void:
 
 
 ## Stage 5: the theory proven at the station's lab, then the Assisted Core prototyped on the probe
-## and bench-tested at the lab, as research.md section 5 lays out.
+## and bench-tested at the lab, as research.md section 5 lays out. The lab takes the probe's
+## processors, wiring and prototype through the docked group (C26), so nothing is unloaded.
 func _research() -> void:
 	for part: int in Units.sorted_part_ids(sim._state, station):
 		if sim._state["parts"][part]["def"] == "research_lab_mk1":
 			lab = part
 	_wait_for([])
-	_unload_to_station({ "processor": 10, "wiring": 10 })
 	_queue_on(station, [[lab, "prove_autonomous_navigation", 1]])
 	_wait_for([])
 	mark("proven")
 	_queue([[fabricator, "prototype:assisted_core", 1]])
 	_wait_for([])
 	mark("prototyped")
-	_unload_to_station({ "prototype:assisted_core": 1, "processor": 10 })
 	_queue_on(station, [[lab, "qualify:assisted_core", 1]])
 	_wait_for([])
 	mark("qualified")
@@ -397,7 +397,6 @@ func _cluster_lap() -> void:
 ## laps the drone is stopped, and a second ore store is built on the station from the ore it
 ## brought. Waits are warped from here on.
 func _drone_stage() -> void:
-	_order("load_cargo", PROBE, { "from": station, "item": "hematite" })
 	for entry: Array in DRONE_ORE:
 		_order("move_to", PROBE, { "target": entry[0] })
 		_mine(entry[1], entry[2])
@@ -422,7 +421,7 @@ func _drone_stage() -> void:
 	_command("stop", drone, {})
 	_coast(1)
 	mark("drone_stopped")
-	_order("load_cargo", PROBE, { "from": station, "item": "hematite", "grams": STORE_ORE_G })
+	# The probe's refinery takes the drone's ore from the station's store (C26).
 	_queue([[refinery, "refine_hematite", STORE_ORE_G / 100_000], [fabricator, "structural_frame", 6],
 		[fabricator, "ore_container_mk1", 1, _on_station(_free_station_mount("ore_container_mk1"))]])
 	_wait_for([], true)
@@ -442,10 +441,7 @@ func _depot_stage() -> void:
 			lidar = part
 	_command("detach_part", station, { "part": lidar, "to": station })
 	_coast(1)
-	_order("load_cargo", PROBE, { "from": station, "item": "hematite" })
 	for entry: Array in REFINERY_ORE:
-		if entry[1] == "olivine":
-			_wait_for(["refine_hematite"], true)
 		_order("move_to", PROBE, { "target": entry[0] })
 		_mine(entry[1], entry[2])
 		_queue([[refinery, entry[3], entry[4]]])
@@ -632,15 +628,6 @@ func _free_station_mount(item: String) -> String:
 			return id
 	problems.append("no free connector on the station for %s" % item)
 	return ""
-
-
-## Moves whole items from the probe's hold into the station's, by count.
-func _unload_to_station(counts: Dictionary) -> void:
-	var items: Array = counts.keys()
-	items.sort()
-	for item: String in items:
-		var grams: int = counts[item] * sim.defs()["items"][item]["unit_mass_g"]
-		_order("unload_cargo", PROBE, { "to": station, "item": item, "grams": grams })
 
 
 ## Steps until `type` happens to `unit`, or the limit. A crash is a problem. The route no longer

@@ -50,7 +50,7 @@ Rules for these movements:
 
 **Burning.** A trip's full propellant cost moves to `propellant_exhaust` in one tick at departure, all or nothing ([autonomy.md](autonomy.md) section 4). A trip that cannot pay in full does not start. There is no per-tick burn or clamp.
 
-**Job start is all or nothing.** All inputs of a run move together in phase 4, or none do and the job blocks with a reason. Output cargo space is reserved at the same moment, so a finishing run always has room. A sink output needs no space. A unit output needs a port, which it claims on the tick the run ends ([autonomy.md](autonomy.md) section 8). If none is free, the run waits with its inputs held.
+**Job start is all or nothing.** All inputs of a run move together in phase 4, or none do and the job blocks with a reason. They may come from any unit in the job's docked group, its own unit first (C26), and each leaves its unit's inventory for the job's `held`, so matter is conserved however it is split. Output cargo space is reserved at the same moment, so a finishing run always has room. A sink output needs no space. A unit output needs a port, which it claims on the tick the run ends ([autonomy.md](autonomy.md) section 8). If none is free, the run waits with its inputs held.
 
 **Job finish is all or nothing.** All outputs of a run are delivered in one tick. A run never delivers part of its output, and the job's held grams reach zero on that tick.
 
