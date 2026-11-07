@@ -22,6 +22,11 @@ var entries: Array[Dictionary] = []
 ## the frame's centre, not something to click.
 var frame_labels: Array[Dictionary] = []
 var eta_text := ""
+## The System view (D37): the star at the centre and every orbit drawn, instead of
+## distances round the commanded craft. Y or the map's button toggles it.
+var system_view := false
+## Orbit rings colour in the System view.
+const ORBIT_COLOUR := Color(0.32, 0.36, 0.44)
 var _press_position := Vector2.ZERO
 var _pressed := false
 var _orbiting := false
@@ -91,7 +96,16 @@ func _process(delta: float) -> void:
 		refresh(delta)
 
 
+func toggle_system() -> void:
+	system_view = not system_view
+	rings.mesh = _build_rings() if not system_view else ImmediateMesh.new()
+	refresh(0.0)
+
+
 func refresh(delta: float) -> void:
+	if system_view:
+		_refresh_system(delta)
+		return
 	var after: Dictionary = bridge.current_view
 	var before: Dictionary = bridge.previous_view
 	var alpha := bridge.interpolation_alpha()
@@ -117,6 +131,43 @@ func refresh(delta: float) -> void:
 		frame_labels.append({ "label": frame["name"], "map_pos": SystemMap.project(relative) })
 	_draw_routes(after, centre_after)
 	eta_text = _eta_for_selection(after)
+	camera.update_view(delta)
+	overlay.update_entries()
+
+
+## The System view: positions and orbit rings from SystemLayout, no routes.
+func _refresh_system(delta: float) -> void:
+	var view: Dictionary = bridge.current_view
+	var placed := SystemLayout.positions(view)
+	entries.clear()
+	# At this scale the rocks of a frame and other craft crowd their moon's name, so
+	# the view lists the star, planets and moons and the craft in command; a frame
+	# shows by its name.
+	for kind: String in ["body", "unit"]:
+		var table: Dictionary = view["bodies"] if kind == "body" else view["units"]
+		for id: int in table:
+			if kind == "body" and table[id]["kind"] == "asteroid":
+				continue
+			if kind == "unit" and id != local_view.commanded_unit:
+				continue
+			entries.append({
+				"kind": kind, "id": id, "label": table[id]["name"], "map_pos": placed["%s:%d" % [kind, id]]["pos"],
+				"selected": local_view.selected_kind == kind and local_view.selected_id == id,
+			})
+	frame_labels.clear()
+	for id: int in view.get("frames", {}):
+		frame_labels.append({ "label": view["frames"][id]["name"], "map_pos": placed["frame:%d" % id]["pos"] })
+	var mesh: ImmediateMesh = rings.mesh
+	mesh.clear_surfaces()
+	for ring: Dictionary in SystemLayout.orbit_rings(view, placed):
+		mesh.surface_begin(Mesh.PRIMITIVE_LINE_STRIP)
+		for index in range(RING_SEGMENTS + 1):
+			var angle := TAU * index / RING_SEGMENTS
+			mesh.surface_set_color(ORBIT_COLOUR)
+			mesh.surface_add_vertex(ring["centre"] + (ring["p"] * cos(angle) + ring["q"] * sin(angle)) * ring["radius"])
+		mesh.surface_end()
+	(routes.mesh as ImmediateMesh).clear_surfaces()
+	eta_text = _eta_for_selection(view)
 	camera.update_view(delta)
 	overlay.update_entries()
 
@@ -280,6 +331,11 @@ static func trip_text(quote: Dictionary, tick: int, ticks_per_second: int) -> St
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not visible:
+		return
+	var key := event as InputEventKey
+	if key != null and key.pressed and not key.echo and key.physical_keycode == KEY_Y:
+		toggle_system()
+		get_viewport().set_input_as_handled()
 		return
 	var button := event as InputEventMouseButton
 	if button != null:

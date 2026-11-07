@@ -5,6 +5,7 @@ class_name ScreenshotDriver extends Node
 ##   --order=<order key>             pressed after --delay frames
 ##   --scenario=<id>  (read by main)  --speed=1|2|4|8  --zoom=<metres>  --yaw=<radians>  --pitch=<radians>
 ##   --map=1                         opens the system map
+##   --system=1                      and switches it to the System view (D37)
 ##   --policy=1                      opens the standing-orders mock
 ##   --then=<order key>              pressed --then-delay frames after --order
 ##   --last=<order key>              pressed --last-delay frames after --then
@@ -128,6 +129,8 @@ func _run() -> void:
 		camera.distance_m = camera.target_distance_m
 	if parsed.has("map"):
 		main.toggle_map()
+		if parsed.has("system"):
+			main.system_map.toggle_system()
 		camera = main.system_map.camera
 		if parsed.has("yaw"):
 			camera.yaw = float(parsed["yaw"])
