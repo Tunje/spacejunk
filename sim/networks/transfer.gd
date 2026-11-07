@@ -79,7 +79,65 @@ static func plan_between(ctx: SimContext, unit_id: int, mine: Dictionary, theirs
 	var plan := _coplanar_plan(mine, theirs, target, gm, mass_g, from_tick, found)
 	plan["plane_change_dv_um_s"] = 0
 	plan["plane_change_at"] = ""
-	return plan
+	# The window's plan, or one that leaves at once on a Lambert arc, as `prefer` picks (A47).
+	var timed := _timed_plan(mine, theirs, target, gm, mass_g, from_tick, found, ctx.state["bodies"][mine["parent"]])
+	if timed.has("reason"):
+		return plan
+	var take_window := _better(plan, timed, prefer)
+	var chosen := plan if take_window else timed
+	var other := timed if take_window else plan
+	chosen["other"] = { "arrive_tick": other["arrive_tick"], "cost_g": other["cost_g"] }
+	return chosen
+
+
+## Flight times the timed plan tries, in eighths of the Hohmann transfer's (A47).
+const TIMED_EIGHTHS := [4, 5, 6, 7, 9, 10, 12, 14, 16]
+
+
+## A trip that leaves at from_tick instead of waiting for a window (A47): a Lambert arc from where
+## the unit is to where the target will be, for each flight time in TIMED_EIGHTHS of the Hohmann
+## transfer's, keeping the cheapest. An arc must be elliptic, stay above the height where low flight
+## starts and inside the parent's sphere. The burns are the exact velocity differences at each end.
+static func _timed_plan(mine: Dictionary, theirs: Dictionary, target: int, gm: int, mass_g: int,
+		from_tick: int, found: Dictionary, parent: Dictionary) -> Dictionary:
+	var now := OrbitMath.state_at(mine, gm, from_tick)
+	var r1: Array = now["r"]
+	var r1_mm := IntMath.dist(r1, [0, 0, 0])
+	var r2_mm: int = theirs["a_mm"]
+	var a_hohmann := (r1_mm + r2_mm) / 2
+	var hohmann_ticks := maxi(1, OrbitMath.period_sub(gm, a_hohmann) / (2 * OrbitMath.SUB_TICKS))
+	var normal := OrbitMath.unit(OrbitMath.cross(mine["p_q30"], mine["q_q30"]))
+	var radial := OrbitMath.unit(r1)
+	var along := OrbitMath.unit(OrbitMath.cross(normal, radial))
+	var floor_mm: int = int(parent["radius_mm"]) + LowFlight.LEAVE_MM
+	var soi: int = parent.get("soi_mm", 0)
+	var best := {}
+	for eighths: int in TIMED_EIGHTHS:
+		var ticks: int = maxi(2, hohmann_ticks * eighths / 8)
+		var arrive := from_tick + ticks
+		var speed := OrbitMath.speed_um_s(gm, r1_mm, a_hohmann)
+		var guess: Array[int] = []
+		for axis in 3:
+			guess.append(OrbitMath.smul_div(along[axis], speed, OrbitMath.ONE))
+		var hit := Lambert.solve(gm, r1, guess, theirs, from_tick, arrive, normal)
+		if hit.is_empty():
+			continue
+		var arc: Dictionary = hit["orbit"]
+		if arc.get("hyperbolic", false) or CoastBounds.periapsis_mm(arc) < floor_mm \
+				or (soi > 0 and BurnSystem.apoapsis_mm(arc) >= soi):
+			continue
+		var dv1 := IntMath.dist(hit["v"], now["v"])
+		var dv2 := IntMath.dist(OrbitMath.state_at(theirs, gm, arrive)["v"], OrbitMath.state_at(arc, gm, arrive)["v"])
+		var first_g := OrbitMath.burn_g(mass_g, dv1, found["exhaust_mm_s"])
+		var cost := first_g + OrbitMath.burn_g(mass_g - first_g, dv2, found["exhaust_mm_s"])
+		if best.is_empty() or cost < int(best["cost_g"]):
+			arc["parent"] = mine["parent"]
+			best = {
+				"kind": KIND, "target": target, "depart_tick": from_tick, "arrive_tick": arrive, "ticks": ticks + 1,
+				"cost_g": cost, "dv_um_s": dv1 + dv2, "orbit_a_mm": arc["a_mm"], "plane_change_dv_um_s": 0,
+				"plane_change_at": "", "timed": true, "legs": [{ "orbit": arc, "from_tick": from_tick }],
+			}
+	return best if not best.is_empty() else { "reason": REASON_UNSUPPORTED }
 
 
 ## A trip between near-circular orbits in one plane round one parent: a Hohmann transfer, or a
