@@ -237,10 +237,45 @@ func _orbit_horizon(ctx: SimContext, unit: Dictionary, neighbours: Dictionary = 
 			skip = mini(skip, bound)
 	if skip <= 0 or close.is_empty():
 		return skip
-	# Within a frame's join reach the bound is 0, but whether the unit joins on a coming tick is
-	# _try_join's own test on the rails' places then, so the ticks near the edge are tried (A50).
+	# Within a frame's join reach the bound is 0. A unit moving well faster than JOIN_SPEED_UM_S
+	# relative to the frame can't join until gravity's difference across them slows it, which is
+	# slow and has a bound (A50). Otherwise each coming tick is tried by _try_join's own test.
+	var walk := []
+	for near: Array in close:
+		var by_speed := _join_speed_bound(orbit, parent["gm"], near, ctx.state["tick"])
+		if by_speed > 0:
+			skip = mini(skip, by_speed)
+		else:
+			walk.append(near)
+	if skip <= 0 or walk.is_empty():
+		return skip
 	var limit := mini(skip, ctx.coast_limit if ctx.coast_limit > 0 else NO_LIMIT)
-	return mini(skip, _join_walk(orbit, parent["gm"], close, periapsis, apoapsis, speed, ctx.state["tick"], limit))
+	return mini(skip, _join_walk(orbit, parent["gm"], walk, periapsis, apoapsis, speed, ctx.state["tick"], limit))
+
+
+## The ticks a unit within a frame's reach can't join it because it moves too fast relative to it,
+## or 0 if that can't be bounded (A50). Relative speed changes only by the difference of gravity
+## across the two, at most 2 GM d / r^3 for a separation d at distance r from the parent: three
+## times that is taken, with d up to twice the reach and r the nearer of the two less that. The
+## bound holds only while they are that close, so it is also capped by the time the separation
+## could take to grow that far, and by the time the speed could take to double.
+static func _join_speed_bound(orbit: Dictionary, gm: int, near: Array, now: int) -> int:
+	var mine := OrbitMath.state_at(orbit, gm, now)
+	var theirs := OrbitMath.state_at(near[7], gm, now)
+	var rel := IntMath.dist(mine["v"], theirs["v"])
+	if rel < 2 * JOIN_SPEED_UM_S:
+		return 0
+	var apart := 2 * int(near[1])
+	var separation := IntMath.dist(mine["r"], theirs["r"])
+	var low := mini(IntMath.dist(mine["r"], [0, 0, 0]), IntMath.dist(theirs["r"], [0, 0, 0])) - apart
+	if separation >= apart or low <= 0:
+		return 0
+	var gravity := IntMath.mul_div(gm, LowFlight.UM_PER_S2_FACTOR / low, low)
+	var per_tick := IntMath.mul_div(3 * gravity, apart, low) / Sim.TICKS_PER_SECOND + 1
+	var slowing := (rel - JOIN_SPEED_UM_S) / per_tick - 1
+	var doubling := rel / per_tick
+	var spreading := CoastBounds.ticks_to_close(apart - separation, 2 * rel + 1)
+	return maxi(0, mini(slowing, mini(doubling, spreading)))
 
 
 ## The most ticks MAX_JOIN_STEPS ahead.
