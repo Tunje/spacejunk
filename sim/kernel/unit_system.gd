@@ -98,7 +98,43 @@ func _power_view(ctx: SimContext, id: int) -> Dictionary:
 		"supply_w": 0 if shadow else UnitIndex.healthy_total(ctx, index["generators"]), "in_shadow": shadow,
 		"demand_w": ctx.state["units"][id]["demand_w"], "stored_j": stored_j,
 		"capacity_j": index["capacity_j"], "max_discharge_w": index["max_discharge_w"],
+		# While in shadow, the first tick it is lit again, or -1 if that can't be foreseen; 0 if lit (A48).
+		"sun_tick": _sun_tick(ctx, id) if shadow else 0,
 	}
+
+
+## PowerSystem.sun_tick, kept between views while the unit's motion is unchanged (A48): a view a
+## frame would otherwise walk every unit in shadow every frame.
+func _sun_tick(ctx: SimContext, id: int) -> int:
+	var key := _motion_key(ctx.state, id)
+	var memo: Dictionary = ctx.sun_memo.get(id, {})
+	if not memo.is_empty() and memo["key"] == key and int(memo["tick"]) > int(ctx.state["tick"]):
+		return memo["tick"]
+	var tick := PowerSystem.sun_tick(ctx.state, id)
+	if tick > 0:
+		ctx.sun_memo[id] = { "key": key, "tick": tick }
+	else:
+		ctx.sun_memo.erase(id)
+	return tick
+
+
+## What a unit's place on coming ticks follows from: its host's if docked, its orbit's elements and
+## any transfer legs, its landed cell, its spot in a frame, or its route as it stands.
+static func _motion_key(state: Dictionary, id: int) -> Array:
+	var unit: Dictionary = state["units"][id]
+	if not unit["dock"].is_empty():
+		return ["docked", _motion_key(state, unit["dock"]["target_unit"])]
+	if not unit["route"].is_empty():
+		var route: Dictionary = unit["route"]
+		# A route's progress moves every tick, but by a closed form fixed when it set out.
+		return ["route", unit["frame"], route["from_mm"], route["to_mm"], route["length_mm"], route["speed_mm_s"],
+			route["eta_tick"]]
+	if not unit["orbit"].is_empty():
+		# The whole record, copied: a hyperbola keeps different fields from an ellipse.
+		return ["orbit", unit["orbit"].duplicate(true), unit["transfer"].get("legs", []).size(), unit["low_flight"]]
+	if not unit.get("landed", {}).is_empty():
+		return ["landed", unit["landed"]["body"], unit["landed"]["cell"]]
+	return ["frame", unit["frame"], unit["pos_mm"], unit["vel_um_s"], unit["low_flight"]]
 
 
 ## The part tree. A unit with no parts shows an empty Dictionary.

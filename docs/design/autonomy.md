@@ -8,7 +8,7 @@ This spec defines tasks, reservations, failure reporting, resumption and the six
 
 - A unit runs at most one active task. The active task is `unit.task`.
 - Single orders end when interrupted. Cycles block, then resume by themselves.
-- Tier does not need its own interruption rules: tier 1 can only run orders, and tier 2 can also run a cycle.
+- Tier does not need its own interruption rules: tier 1 can only run orders and one-shot plans, and tier 2 can also run a repeating cycle.
 - The player always wins. An order overrides a cycle, and the cycle resumes when the order ends. `stop` ends everything.
 - Tasks react to state in phase 2, and read what last tick committed. They never read events.
 - Autonomy uses no RNG.
@@ -18,7 +18,7 @@ This spec defines tasks, reservations, failure reporting, resumption and the six
 | `core_tier` | Unit orders | `set_cycle` |
 | ----------- | ----------- | ----------- |
 | 0 (no core) | Rejected with `no_core` | Rejected with `no_core` |
-| 1 Basic | Accepted | Rejected with `tier_too_low` |
+| 1 Basic | Accepted | Accepted with `laps` 1, a one-shot plan (C27). Otherwise rejected with `tier_too_low` |
 | 2 Assisted | Accepted | Accepted |
 
 Unit orders are `scan`, `move_to`, `dock`, `undock`, `load_cargo`, `unload_cargo` and `start_mining`.
@@ -36,7 +36,7 @@ The order of check 8 is: fit `assisted_core`, `assign_core`, then `set_cycle`. T
 **Core changes.**
 - `assign_core` with `core` 0 clears the core.
 - Clearing or detaching the assigned core cancels all the unit's tasks with `no_core`.
-- Assigning a tier 1 core cancels a cycle with `tier_too_low`. A running order continues.
+- Assigning a tier 1 core cancels a repeating cycle with `tier_too_low`. A one-shot plan (`laps` 1) and a running order continue.
 - An assigned core with part state `shed` or `fault` is offline. `core_tier` still shows its tier.
 
 ## 3. Tasks
