@@ -30,7 +30,7 @@ The core idea of the game is as follows:
 
 **Owner's rulings, 2026-11-07, applying that rule.** Simplified options are never offered as choices; the realistic version is the default.
 - **Factories:** a job's speed is the lowest of the power supplied, the heat the radiators can reject, and the machine's material throughput. Work points as a bare number go.
-- **Fitting:** no hard power checks. Fitting warns ("this can draw 202 kW, you make 120 kW") and allows; running out of power is handled in play.
+- **Fitting:** no hard power checks. Fitting warns ("this can draw 202 kW, you make 120 kW") and allows; running out of power is handled in play. Mass and connector load also warn and allow (Lead, 2026-11-08). The physical consequence comes from the structure and damage item of the audits: an overloaded connector or structure fails under load ([schemas.md](../docs/design/schemas.md) section 5).
 - **Landing:** land anywhere, at an exact position, with slope and height from the terrain under the legs. One site per hex goes.
 - **Research tests:** prototypes are proven by field trials judged on performance (the design must actually do the job), plus a chance of manufacturing defects. Tests that always pass go.
 - **Production:** deep, real chains: reductants for refining, water electrolysis to hydrogen and oxygen, real propellants per engine, slag kept, steel, wafers to chips, and so on.

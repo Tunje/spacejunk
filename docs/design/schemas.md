@@ -61,7 +61,7 @@ A whole number converts by integer multiplication, so a value such as the star's
 | `id` | string | Item ID |
 | `name` | string | Display name |
 | `stage` | whole, 2 to 5 | Economy stage (spec section 2) |
-| `cargo_class` | `ore`, `goods` or `propellant` | |
+| `cargo_class` | `ore`, `goods`, `propellant`, `water`, `fuel`, `oxidiser`, `acid` or `gas` | The fluid classes (B29) each need their own tanks, since none may share one: hydrogen with oxygen, or acid with water. `propellant` goes with the switch to hydrolox (B30) |
 | `density_kg_m3` | whole | Sets stack volume |
 | `unit_mass_kg` | number, optional | Present only on discrete items |
 
@@ -140,8 +140,9 @@ A whole number converts by integer multiplication, so a value such as the star's
 | `port` | `transfer_kg_per_s`, `dock_seconds` (whole), `undock_seconds` (whole), `capture_range_mm` (whole), `capture_speed_m_s` | Docking ports |
 | `thruster` | `speed_m_s`, `propellant_kg_per_s`, `rated_mass_kg`, `exhaust_m_s`, `thrust_kn`, optional `min_throttle_ppm` (whole) | Thrusters |
 | `landing_gear` | `max_touchdown_m_s` | Landing legs |
-| `facility` | `type`: `refinery`, `fabricator` or `lab`; `throughput_kg_per_s`; `work_per_tick` (whole, optional until C30 is on main) | Facilities. `throughput_kg_per_s`, above 0, is the most input mass a run takes in a second, and loads as `throughput_g_per_s` (C30, B29). The module's `power_kw` is the rating, the most a running job draws; `heat_kw` is only its fitting figure. `work_per_tick` goes with C30 |
+| `facility` | `type`: `refinery`, `fabricator`, `lab`, `electrolyser`, `arc_furnace` or `semiconductor_fab`; `throughput_kg_per_s`; `work_per_tick` (whole, optional until C30 is on main) | Facilities. `throughput_kg_per_s`, above 0, is the most input mass a run takes in a second, and loads as `throughput_g_per_s` (C30, B29). The module's `power_kw` is the rating, the most a running job draws; `heat_kw` is only its fitting figure. `work_per_tick` goes with C30 |
 | `always_on` | `true` | A load that runs whenever healthy, such as a command hub |
+| `cryo` | `boil_off_ppm_per_day` per cargo class (whole, at most 1,000,000), `cooler_kw` | Cryogenic tanks (B29). A class boils off at its daily rate into the `boil_off` sink unless the tank's cooler is powered. The cooler's draw is also in the module's `power_kw` and `heat_kw`. `hydrolox_tank_mk1` loses 1% of its LH₂ and 0.1% of its LOX a day unpowered, and its cooler draws 1 kW |
 
 ```json
 {
@@ -352,7 +353,7 @@ B4 enforces these on top of section 3 of the accounting spec.
 - Every deposit's `hardness` is within at least one `mine.hardness_max`.
 
 **Templates**
-- Each template passes the fitting rules in contracts section 5, including mass, power, heat and connectors.
+- Each shipped template passes the fitting rules in contracts section 5, including mass, power, heat and connectors, as a check on the content. **In play, fitting warns and allows** (owner, 2026-11-07): mass, connector load, power and heat are all reported, never refused. The physical consequence comes from the structure and damage item of the simplification audit: an overloaded connector or an over-mass structure fails under load. Designs are no longer checked for a fit order that keeps within budgets (`design_fit_order` is gone).
 - A unit with any `heat_kw` above 0 has `heat_capacity`, since its limit is otherwise 0.
 - A unit with `thruster` has `propellant` storage.
 

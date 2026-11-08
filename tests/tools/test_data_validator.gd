@@ -416,9 +416,62 @@ func test_repeated_item() -> void:
 	_assert_error("repeated_item")
 
 
-func test_recipe_not_abstract() -> void:
-	_entry("recipes", "frame")["abstract"] = false
-	_assert_error("recipe_not_abstract")
+## Real chain recipes (B29): not abstract, balanced to the gram, slag kept rather than sunk.
+func test_a_real_recipe_keeps_its_slag() -> void:
+	var refine := _entry("recipes", "refine")
+	refine["abstract"] = false
+	refine["outputs"][1].erase("sink")
+	assert_eq(DataValidator.validate(data), [] as Array[String])
+
+
+func test_a_real_recipe_must_balance() -> void:
+	var refine := _entry("recipes", "refine")
+	refine["abstract"] = false
+	refine["outputs"][1].erase("sink")
+	refine["outputs"][1]["kg"] = 30
+	_assert_error("recipe_unbalanced")
+
+
+func test_a_real_recipe_is_held_to_chemistry_not_the_slice_ceilings() -> void:
+	var refine := _entry("recipes", "refine")
+	refine["abstract"] = false
+	refine["outputs"] = [{ "item": "iron", "kg": 100 }]
+	assert_eq(DataValidator.validate(data), [] as Array[String])
+
+
+func test_the_new_cargo_classes_and_machines_are_known() -> void:
+	_add_sorted("items", { "id": "water", "name": "Water", "stage": 3, "cargo_class": "water",
+		"density_kg_m3": 1000 })
+	_entry("modules", "refinery")["capabilities"]["facility"]["type"] = "electrolyser"
+	_entry("recipes", "refine")["facility"] = "electrolyser"
+	assert_eq(DataValidator.validate(data), [] as Array[String])
+
+
+## A cryogenic tank (B29): boil-off per class a day, and its cooler's draw.
+func _cryo(value: Variant) -> void:
+	_entry("modules", "hull")["capabilities"]["cryo"] = value
+
+
+func test_a_cryo_tank_passes() -> void:
+	_cryo({ "boil_off_ppm_per_day": { "propellant": 10000 }, "cooler_kw": 1 })
+	assert_eq(DataValidator.validate(data), [] as Array[String])
+
+
+func test_a_cryo_tank_needs_its_cooler() -> void:
+	_cryo({ "boil_off_ppm_per_day": { "propellant": 10000 } })
+	_assert_error("missing_field")
+
+
+func test_a_cryo_rate_is_a_known_class_and_at_most_all_of_it() -> void:
+	_cryo({ "boil_off_ppm_per_day": { "plasma": 10 }, "cooler_kw": 1 })
+	_assert_error("bad_enum")
+	_cryo({ "boil_off_ppm_per_day": { "propellant": 1000001 }, "cooler_kw": 1 })
+	_assert_error("out_of_range")
+
+
+func test_a_cryo_tank_is_an_object() -> void:
+	_cryo(5)
+	_assert_error("bad_capability")
 
 
 func test_unknown_item() -> void:
@@ -1345,8 +1398,8 @@ func test_a_design_kind_matches_its_base() -> void:
 	_assert_error("design_kind_mismatch")
 
 
-func test_a_design_is_fitted_in_an_order_the_budgets_allow() -> void:
-	# The lamp needs the panel's power, so the panel must come first.
+func test_a_design_over_its_budgets_is_allowed() -> void:
+	# Fitting warns and allows (owner, 2026-11-07): the lamp may go on before the panel that powers it.
 	_add_sorted("modules", _module("lamp", 10, {}, [_connector("mount", "side", "medium")]))
 	_entry("modules", "lamp")["power_kw"] = 150
 	_add_sorted("modules", _module("panel", 10, { "generate": { "power_kw": 200 } },
@@ -1360,7 +1413,7 @@ func test_a_design_is_fitted_in_an_order_the_budgets_allow() -> void:
 	]
 	assert_eq(DataValidator.validate(data), [] as Array[String], "panel first fits")
 	design["root"]["children"].reverse()
-	_assert_error("design_fit_order")
+	assert_eq(DataValidator.validate(data), [] as Array[String], "lamp first is allowed too")
 
 
 func test_the_mining_drone_design_holds_the_drone_the_bot_flies() -> void:

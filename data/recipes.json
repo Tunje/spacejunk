@@ -2,6 +2,68 @@
   "schema_version": 1,
   "entries": [
     {
+      "id": "acid_tank_mk1",
+      "facility": "fabricator",
+      "energy_kj": 400000,
+      "heat_kj": 400000,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 3
+        },
+        {
+          "item": "glass_fibre",
+          "kg": 50
+        }
+      ],
+      "outputs": [
+        {
+          "item": "acid_tank_mk1",
+          "count": 1
+        }
+      ],
+      "abstract": false
+    },
+    {
+      "id": "arc_furnace_mk1",
+      "facility": "fabricator",
+      "energy_kj": 6000000,
+      "heat_kj": 6000000,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 30
+        },
+        {
+          "item": "wiring",
+          "count": 20
+        },
+        {
+          "item": "processor",
+          "count": 10
+        },
+        {
+          "item": "copper",
+          "kg": 400
+        },
+        {
+          "item": "magnesia",
+          "kg": 600
+        },
+        {
+          "item": "carbon",
+          "kg": 250
+        }
+      ],
+      "outputs": [
+        {
+          "item": "arc_furnace_mk1",
+          "count": 1
+        }
+      ],
+      "abstract": false
+    },
+    {
       "id": "assisted_core",
       "facility": "fabricator",
       "energy_kj": 120000,
@@ -164,6 +226,56 @@
       "abstract": true
     },
     {
+      "id": "concentrate_spent_acid",
+      "facility": "refinery",
+      "energy_kj": 50000,
+      "heat_kj": 50000,
+      "inputs": [
+        {
+          "item": "spent_acid",
+          "kg": 100
+        }
+      ],
+      "outputs": [
+        {
+          "item": "water",
+          "kg": 10
+        },
+        {
+          "item": "sulfuric_acid",
+          "kg": 90
+        }
+      ],
+      "abstract": false
+    },
+    {
+      "id": "convert_matte",
+      "facility": "refinery",
+      "energy_kj": 20000,
+      "heat_kj": 154799,
+      "inputs": [
+        {
+          "item": "copper_matte",
+          "kg": 100
+        },
+        {
+          "item": "oxygen",
+          "kg": 19.85
+        }
+      ],
+      "outputs": [
+        {
+          "item": "sulfur_dioxide",
+          "kg": 39.738
+        },
+        {
+          "item": "blister_copper",
+          "kg": 80.112
+        }
+      ],
+      "abstract": false
+    },
+    {
       "id": "docking_port_mk1",
       "facility": "fabricator",
       "energy_kj": 300000,
@@ -187,6 +299,145 @@
         }
       ],
       "abstract": true
+    },
+    {
+      "id": "draw_glass_fibre",
+      "facility": "arc_furnace",
+      "energy_kj": 540000,
+      "heat_kj": 540000,
+      "inputs": [
+        {
+          "item": "slag",
+          "kg": 95
+        }
+      ],
+      "outputs": [
+        {
+          "item": "glass_fibre",
+          "kg": 95
+        }
+      ],
+      "abstract": false
+    },
+    {
+      "id": "electrolyse_water",
+      "facility": "electrolyser",
+      "energy_kj": 2786790,
+      "heat_kj": 1198833,
+      "inputs": [
+        {
+          "item": "water",
+          "kg": 100
+        }
+      ],
+      "outputs": [
+        {
+          "item": "hydrogen",
+          "kg": 11.191
+        },
+        {
+          "item": "oxygen",
+          "kg": 88.809
+        }
+      ],
+      "abstract": false
+    },
+    {
+      "id": "electrolyser_mk1",
+      "facility": "fabricator",
+      "energy_kj": 2400000,
+      "heat_kj": 2400000,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 16
+        },
+        {
+          "item": "wiring",
+          "count": 20
+        },
+        {
+          "item": "processor",
+          "count": 10
+        },
+        {
+          "item": "copper",
+          "kg": 150
+        }
+      ],
+      "outputs": [
+        {
+          "item": "electrolyser_mk1",
+          "count": 1
+        }
+      ],
+      "abstract": false
+    },
+    {
+      "id": "electrorefine_copper",
+      "facility": "electrolyser",
+      "energy_kj": 106285,
+      "heat_kj": 106285,
+      "inputs": [
+        {
+          "item": "blister_copper",
+          "kg": 100
+        },
+        {
+          "item": "sulfuric_acid",
+          "kg": 0.5
+        }
+      ],
+      "outputs": [
+        {
+          "item": "anode_slime",
+          "kg": 2.088
+        },
+        {
+          "item": "copper",
+          "kg": 98.412
+        }
+      ],
+      "abstract": false
+    },
+    {
+      "id": "fab_chips",
+      "facility": "semiconductor_fab",
+      "energy_kj": 5400000,
+      "heat_kj": 5400000,
+      "inputs": [
+        {
+          "item": "wafer",
+          "count": 10
+        },
+        {
+          "item": "copper",
+          "kg": 0.1
+        },
+        {
+          "item": "phosphorus",
+          "kg": 0.01
+        },
+        {
+          "item": "sulfuric_acid",
+          "kg": 5
+        }
+      ],
+      "outputs": [
+        {
+          "item": "silicon_scrap",
+          "kg": 0.41
+        },
+        {
+          "item": "spent_acid",
+          "kg": 5
+        },
+        {
+          "item": "chip",
+          "count": 100
+        }
+      ],
+      "abstract": false
     },
     {
       "id": "fabricator_mk1",
@@ -216,6 +467,44 @@
         }
       ],
       "abstract": true
+    },
+    {
+      "id": "fuse_silica",
+      "facility": "arc_furnace",
+      "energy_kj": 250000,
+      "heat_kj": 250000,
+      "inputs": [
+        {
+          "item": "silica",
+          "kg": 100
+        }
+      ],
+      "outputs": [
+        {
+          "item": "glass",
+          "kg": 100
+        }
+      ],
+      "abstract": false
+    },
+    {
+      "id": "gas_tank_mk1",
+      "facility": "fabricator",
+      "energy_kj": 1200000,
+      "heat_kj": 1200000,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 12
+        }
+      ],
+      "outputs": [
+        {
+          "item": "gas_tank_mk1",
+          "count": 1
+        }
+      ],
+      "abstract": false
     },
     {
       "id": "goods_container_mk1",
@@ -260,6 +549,29 @@
       "abstract": true
     },
     {
+      "id": "grow_wafers",
+      "facility": "semiconductor_fab",
+      "energy_kj": 12600000,
+      "heat_kj": 12600000,
+      "inputs": [
+        {
+          "item": "pure_silicon",
+          "kg": 100
+        }
+      ],
+      "outputs": [
+        {
+          "item": "silicon_scrap",
+          "kg": 50
+        },
+        {
+          "item": "wafer",
+          "count": 1000
+        }
+      ],
+      "abstract": false
+    },
+    {
       "id": "heat_radiator_mk1",
       "facility": "fabricator",
       "energy_kj": 400000,
@@ -283,6 +595,37 @@
         }
       ],
       "abstract": true
+    },
+    {
+      "id": "hydrolox_tank_mk1",
+      "facility": "fabricator",
+      "energy_kj": 900000,
+      "heat_kj": 900000,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 6
+        },
+        {
+          "item": "glass_fibre",
+          "kg": 100
+        },
+        {
+          "item": "wiring",
+          "count": 4
+        },
+        {
+          "item": "processor",
+          "count": 2
+        }
+      ],
+      "outputs": [
+        {
+          "item": "hydrolox_tank_mk1",
+          "count": 1
+        }
+      ],
+      "abstract": false
     },
     {
       "id": "landing_legs_mk1",
@@ -330,6 +673,37 @@
       "abstract": true
     },
     {
+      "id": "leach_olivine",
+      "facility": "refinery",
+      "energy_kj": 40000,
+      "heat_kj": 212292,
+      "inputs": [
+        {
+          "item": "olivine",
+          "kg": 100
+        },
+        {
+          "item": "sulfuric_acid",
+          "kg": 139.415
+        }
+      ],
+      "outputs": [
+        {
+          "item": "magnesium_sulfate",
+          "kg": 171.1
+        },
+        {
+          "item": "water",
+          "kg": 25.609
+        },
+        {
+          "item": "silica",
+          "kg": 42.706
+        }
+      ],
+      "abstract": false
+    },
+    {
       "id": "lidar_mk1",
       "facility": "fabricator",
       "energy_kj": 200000,
@@ -359,6 +733,60 @@
       "abstract": true
     },
     {
+      "id": "make_steel",
+      "facility": "arc_furnace",
+      "energy_kj": 190222,
+      "heat_kj": 190222,
+      "inputs": [
+        {
+          "item": "sponge_iron",
+          "kg": 100
+        },
+        {
+          "item": "carbon",
+          "kg": 0.173
+        }
+      ],
+      "outputs": [
+        {
+          "item": "slag",
+          "kg": 13.708
+        },
+        {
+          "item": "steel",
+          "kg": 86.465
+        }
+      ],
+      "abstract": false
+    },
+    {
+      "id": "make_sulfuric_acid",
+      "facility": "refinery",
+      "energy_kj": 15000,
+      "heat_kj": 376235,
+      "inputs": [
+        {
+          "item": "sulfur_dioxide",
+          "kg": 100
+        },
+        {
+          "item": "oxygen",
+          "kg": 24.976
+        },
+        {
+          "item": "water",
+          "kg": 28.123
+        }
+      ],
+      "outputs": [
+        {
+          "item": "sulfuric_acid",
+          "kg": 153.099
+        }
+      ],
+      "abstract": false
+    },
+    {
       "id": "medium_craft",
       "facility": "fabricator",
       "energy_kj": 4300000,
@@ -381,6 +809,29 @@
         }
       ],
       "abstract": true
+    },
+    {
+      "id": "melt_ice",
+      "facility": "refinery",
+      "energy_kj": 68000,
+      "heat_kj": 6800,
+      "inputs": [
+        {
+          "item": "water_ice",
+          "kg": 100
+        }
+      ],
+      "outputs": [
+        {
+          "item": "slag",
+          "kg": 5
+        },
+        {
+          "item": "water",
+          "kg": 95
+        }
+      ],
+      "abstract": false
     },
     {
       "id": "mining_laser_mk1",
@@ -663,6 +1114,137 @@
       "abstract": true
     },
     {
+      "id": "pyrolyse_carbonaceous_ore",
+      "facility": "refinery",
+      "energy_kj": 180000,
+      "heat_kj": 150000,
+      "inputs": [
+        {
+          "item": "carbonaceous_ore",
+          "kg": 100
+        }
+      ],
+      "outputs": [
+        {
+          "item": "water",
+          "kg": 12
+        },
+        {
+          "item": "carbon",
+          "kg": 4
+        },
+        {
+          "item": "phosphorus",
+          "kg": 0.1
+        },
+        {
+          "item": "slag",
+          "kg": 83.9
+        }
+      ],
+      "abstract": false
+    },
+    {
+      "id": "recast_silicon_scrap",
+      "facility": "arc_furnace",
+      "energy_kj": 60000,
+      "heat_kj": 60000,
+      "inputs": [
+        {
+          "item": "silicon_scrap",
+          "kg": 100
+        }
+      ],
+      "outputs": [
+        {
+          "item": "silicon",
+          "kg": 100
+        }
+      ],
+      "abstract": false
+    },
+    {
+      "id": "recover_carbon",
+      "facility": "refinery",
+      "energy_kj": 50000,
+      "heat_kj": 675848,
+      "inputs": [
+        {
+          "item": "carbon_monoxide",
+          "kg": 100
+        },
+        {
+          "item": "hydrogen",
+          "kg": 7.197
+        }
+      ],
+      "outputs": [
+        {
+          "item": "water",
+          "kg": 64.316
+        },
+        {
+          "item": "carbon",
+          "kg": 42.881
+        }
+      ],
+      "abstract": false
+    },
+    {
+      "id": "reduce_hematite",
+      "facility": "refinery",
+      "energy_kj": 200000,
+      "heat_kj": 144316,
+      "inputs": [
+        {
+          "item": "hematite",
+          "kg": 100
+        },
+        {
+          "item": "hydrogen",
+          "kg": 3.409
+        }
+      ],
+      "outputs": [
+        {
+          "item": "water",
+          "kg": 30.46
+        },
+        {
+          "item": "sponge_iron",
+          "kg": 72.949
+        }
+      ],
+      "abstract": false
+    },
+    {
+      "id": "reduce_silica",
+      "facility": "arc_furnace",
+      "energy_kj": 1851049,
+      "heat_kj": 715953,
+      "inputs": [
+        {
+          "item": "silica",
+          "kg": 100
+        },
+        {
+          "item": "carbon",
+          "kg": 39.981
+        }
+      ],
+      "outputs": [
+        {
+          "item": "carbon_monoxide",
+          "kg": 93.238
+        },
+        {
+          "item": "silicon",
+          "kg": 46.743
+        }
+      ],
+      "abstract": false
+    },
+    {
       "id": "refine_chalcopyrite",
       "facility": "refinery",
       "energy_kj": 75000,
@@ -741,6 +1323,29 @@
       "abstract": true
     },
     {
+      "id": "refine_silicon",
+      "facility": "semiconductor_fab",
+      "energy_kj": 7200000,
+      "heat_kj": 7200000,
+      "inputs": [
+        {
+          "item": "silicon",
+          "kg": 100
+        }
+      ],
+      "outputs": [
+        {
+          "item": "silicon_scrap",
+          "kg": 10
+        },
+        {
+          "item": "pure_silicon",
+          "kg": 90
+        }
+      ],
+      "abstract": false
+    },
+    {
       "id": "refine_water_ice",
       "facility": "refinery",
       "energy_kj": 2576000,
@@ -765,6 +1370,52 @@
         }
       ],
       "abstract": true
+    },
+    {
+      "id": "regenerate_acid",
+      "facility": "refinery",
+      "energy_kj": 300000,
+      "heat_kj": 171138,
+      "inputs": [
+        {
+          "item": "magnesium_sulfate",
+          "kg": 100
+        },
+        {
+          "item": "water",
+          "kg": 14.967
+        }
+      ],
+      "outputs": [
+        {
+          "item": "magnesia",
+          "kg": 33.486
+        },
+        {
+          "item": "sulfuric_acid",
+          "kg": 81.481
+        }
+      ],
+      "abstract": false
+    },
+    {
+      "id": "remelt_steel_scrap",
+      "facility": "arc_furnace",
+      "energy_kj": 220000,
+      "heat_kj": 220000,
+      "inputs": [
+        {
+          "item": "steel_scrap",
+          "kg": 100
+        }
+      ],
+      "outputs": [
+        {
+          "item": "steel",
+          "kg": 100
+        }
+      ],
+      "abstract": false
     },
     {
       "id": "research_lab_mk1",
@@ -794,6 +1445,41 @@
         }
       ],
       "abstract": true
+    },
+    {
+      "id": "semiconductor_fab_mk1",
+      "facility": "fabricator",
+      "energy_kj": 10000000,
+      "heat_kj": 10000000,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 60
+        },
+        {
+          "item": "wiring",
+          "count": 60
+        },
+        {
+          "item": "processor",
+          "count": 100
+        },
+        {
+          "item": "glass",
+          "kg": 400
+        },
+        {
+          "item": "copper",
+          "kg": 500
+        }
+      ],
+      "outputs": [
+        {
+          "item": "semiconductor_fab_mk1",
+          "count": 1
+        }
+      ],
+      "abstract": false
     },
     {
       "id": "small_battery_bank_mk1",
@@ -1057,6 +1743,37 @@
       "abstract": true
     },
     {
+      "id": "smelt_chalcopyrite",
+      "facility": "refinery",
+      "energy_kj": 30000,
+      "heat_kj": 306043,
+      "inputs": [
+        {
+          "item": "chalcopyrite",
+          "kg": 100
+        },
+        {
+          "item": "oxygen",
+          "kg": 31.211
+        }
+      ],
+      "outputs": [
+        {
+          "item": "slag",
+          "kg": 45.039
+        },
+        {
+          "item": "sulfur_dioxide",
+          "kg": 46.863
+        },
+        {
+          "item": "copper_matte",
+          "kg": 39.309
+        }
+      ],
+      "abstract": false
+    },
+    {
       "id": "solar_farm_mk1",
       "facility": "fabricator",
       "energy_kj": 3000000,
@@ -1134,6 +1851,25 @@
         }
       ],
       "abstract": true
+    },
+    {
+      "id": "water_tank_mk1",
+      "facility": "fabricator",
+      "energy_kj": 500000,
+      "heat_kj": 500000,
+      "inputs": [
+        {
+          "item": "structural_frame",
+          "count": 5
+        }
+      ],
+      "outputs": [
+        {
+          "item": "water_tank_mk1",
+          "count": 1
+        }
+      ],
+      "abstract": false
     },
     {
       "id": "wiring",

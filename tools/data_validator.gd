@@ -24,13 +24,14 @@ const OPTIONAL_FILES := {
 
 const ID_PATTERN := "^[a-z][a-z0-9_]*$"
 const TINT_PATTERN := "^#[0-9a-f]{6}$"
-const CARGO_CLASSES := ["ore", "goods", "propellant"]
+## Fluids have their own classes (B29): none may share a tank with another.
+const CARGO_CLASSES := ["ore", "goods", "propellant", "water", "fuel", "oxidiser", "acid", "gas"]
 const REALISM := ["established", "extrapolation", "speculative", "fictional"]
 const CONNECTOR_TYPES := ["stack", "side", "dock"]
 const CONNECTOR_SIZES := ["core", "small", "medium", "large"]
 const AXES := ["+x", "-x", "+y", "-y", "+z", "-z"]
 const SHAPES := ["box", "cylinder"]
-const FACILITIES := ["refinery", "fabricator", "lab"]
+const FACILITIES := ["refinery", "fabricator", "lab", "electrolyser", "arc_furnace", "semiconductor_fab"]
 const UNIT_KINDS := ["ship", "station", "drone"]
 
 const ITEM_FIELDS := ["id", "name", "stage", "cargo_class", "density_kg_m3"]
@@ -141,7 +142,7 @@ const CAPABILITIES := {
 		"rated_mass_kg": [1000, false], "exhaust_m_s": [1000, false], "thrust_kn": [1000, false],
 	},
 }
-const OTHER_CAPABILITIES := ["storage", "max_mass_kg", "facility", "always_on"]
+const OTHER_CAPABILITIES := ["storage", "max_mass_kg", "facility", "always_on", "cryo"]
 ## Capability fields that may be left out, as capability -> fields (A55: an engine without a
 ## minimum throttle fires only at full thrust).
 const CAPABILITY_OPTIONAL := { "thruster": ["min_throttle_ppm"] }
@@ -472,6 +473,8 @@ func _shape_capabilities(where: String, capabilities: Variant) -> void:
 		elif key == "always_on":
 			if value != true:
 				_err("bad_capability", at, "must be true")
+		elif key == "cryo":
+			_shape_cryo(at, value)
 		else:
 			_err("unknown_capability", where, key)
 
@@ -500,6 +503,23 @@ func _shape_capability_fields(where: String, value: Variant, fields: Dictionary,
 		_check_whole(where, "tier", value["tier"], 1, 6)
 	if value.has("limit_kj"):
 		_check_number(where, "limit_kj", value["limit_kj"], 1000, MAX_STORE_J)
+
+
+## A cryogenic tank (B29): what share of each class boils off a day unless its cooler runs, and the
+## cooler's draw, which is also in the module's power_kw and heat_kw.
+func _shape_cryo(where: String, cryo: Variant) -> void:
+	if not cryo is Dictionary or not _has_fields(where, cryo, ["boil_off_ppm_per_day", "cooler_kw"]):
+		if not cryo is Dictionary:
+			_err("bad_capability", where, "not an object")
+		return
+	var rates: Variant = cryo["boil_off_ppm_per_day"]
+	if not rates is Dictionary or rates.is_empty():
+		_err("bad_capability", where, "boil_off_ppm_per_day needs at least one cargo class")
+	else:
+		for cargo_class: String in rates:
+			_check_enum(where, "cargo class", cargo_class, CARGO_CLASSES)
+			_check_whole(where, "boil_off_ppm_per_day", rates[cargo_class], 0, PPM)
+	_check_positive(where, "cooler_kw", cryo["cooler_kw"], 1000, MAX_RATE)
 
 
 func _shape_storage(where: String, storage: Variant) -> void:
@@ -750,8 +770,6 @@ func _cross_connectors(where: String, module: Dictionary, is_root: bool) -> void
 
 func _cross_recipe(recipe: Dictionary) -> void:
 	var where := "recipes.json:%s" % recipe["id"]
-	if recipe["abstract"] != true:
-		_err("recipe_not_abstract", where, "every slice recipe is abstract")
 	_check_recipe_facility(where, recipe)
 
 	var input_g := 0
@@ -781,9 +799,12 @@ func _cross_recipe(recipe: Dictionary) -> void:
 
 	if input_g != output_g:
 		_err("recipe_unbalanced", where, "%d g in, %d g out" % [input_g, output_g])
-	if recipe["facility"] == "refinery" and not has_sink_output:
-		_err("slag_missing", where, "a refining recipe routes slag to a sink")
-	_check_yields(where, recipe)
+	# A real chain recipe (B29) keeps its slag and states real chemistry. The ceilings and the slag
+	# sink hold the abstract slice recipes to the same truth until they go (B30).
+	if recipe["abstract"] == true:
+		if recipe["facility"] == "refinery" and not has_sink_output:
+			_err("slag_missing", where, "a refining recipe routes slag to a sink")
+		_check_yields(where, recipe)
 
 
 func _check_recipe_facility(where: String, recipe: Dictionary) -> void:
@@ -945,19 +966,6 @@ func _cross_design(design: Dictionary) -> void:
 		if design_paths.get(path, "") != base_paths[path]:
 			_err("design_drops_base_part", where, "%s at %s" % [base_paths[path], path if path != "" else "root"])
 			return
-	var fitted: Array[Dictionary] = []
-	var mass_g := 0
-	for step: Dictionary in design_order:
-		if not _modules.has(step["part"]):
-			return
-		fitted.append(_modules[step["part"]])
-		mass_g += _to_sim(_modules[step["part"]]["mass_kg"], 1000)
-		if base_paths.has(step["path"]):
-			continue
-		var problem := _fit_problem(fitted, mass_g)
-		if problem != "":
-			_err("design_fit_order", where, "%s at %s fails %s" % [step["part"], step["path"], problem])
-			return
 
 
 ## Each node's part by its path, the parent_connector chain from the root joined with "/".
@@ -972,31 +980,6 @@ func _node_order(node: Dictionary, path: Array, out: Array[Dictionary]) -> void:
 	out.append({ "path": "/".join(PackedStringArray(path)), "part": node["part"] })
 	for child: Dictionary in node["children"]:
 		_node_order(child, path + [child["parent_connector"]], out)
-
-
-## The first fitting limit these parts break, root first, or "".
-func _fit_problem(parts: Array[Dictionary], mass_g: int) -> String:
-	var power_w := 0
-	var heat_w := 0
-	var budget_w := 0
-	var reject_w := 0
-	for module: Dictionary in parts:
-		var capabilities: Dictionary = module["capabilities"]
-		power_w += _to_sim(module["power_kw"], 1000)
-		heat_w += _to_sim(module["heat_kw"], 1000)
-		if capabilities.has("generate"):
-			budget_w += _to_sim(capabilities["generate"]["power_kw"], 1000)
-		if capabilities.has("battery"):
-			budget_w += _to_sim(capabilities["battery"]["max_discharge_kw"], 1000)
-		if capabilities.has("radiator"):
-			reject_w += _to_sim(capabilities["radiator"]["reject_kw"], 1000)
-	if mass_g > _to_sim(parts[0]["capabilities"].get("max_mass_kg", 0), 1000):
-		return "over_mass_limit"
-	if power_w > budget_w:
-		return "over_power_budget"
-	if heat_w > reject_w:
-		return "over_heat_budget"
-	return ""
 
 
 ## Checks a node's joins, collects its modules and returns the subtree's mass.

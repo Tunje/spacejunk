@@ -3,20 +3,24 @@ extends GutTest
 ## Checks the authored slice in data/ against spec section 7.
 
 const ITEMS := [
-	"chalcopyrite", "copper", "hematite", "iron", "olivine", "processor", "propellant",
-	"silicon", "slag", "structural_frame", "water_ice", "wiring",
+	"anode_slime", "blister_copper", "carbon", "carbon_monoxide", "carbonaceous_ore", "chalcopyrite",
+	"chip", "copper", "copper_matte", "glass", "glass_fibre", "hematite", "hydrogen", "iron",
+	"magnesia", "magnesium_sulfate", "olivine", "oxygen", "phosphorus", "processor", "propellant",
+	"pure_silicon", "silica", "silicon", "silicon_scrap", "slag", "spent_acid", "sponge_iron",
+	"steel", "steel_scrap", "structural_frame", "sulfur_dioxide", "sulfuric_acid", "wafer", "water",
+	"water_ice", "wiring",
 ]
 const MODULES := [
-	"assisted_core", "basic_core", "battery_bank_mk1", "chemical_thruster_mk1", "command_hub",
-	"compact_fabricator_mk1", "compact_refinery_mk1",
-	"docking_port_mk1", "fabricator_mk1", "goods_container_mk1", "goods_storage_mk1",
-	"heat_radiator_mk1", "landing_legs_mk1", "lidar_mk1", "mining_laser_mk1", "ore_container_mk1",
-	"ore_refinery_mk1", "ore_storage_mk1", "propellant_tank_mk1", "propellant_tank_mk2", "research_lab_mk1",
-	"small_battery_bank_mk1",
-	"small_chemical_thruster_mk1", "small_docking_port_mk1", "small_heat_radiator_mk1", "small_hub",
-	"small_hull", "small_landing_legs_mk1", "small_mining_laser_mk1", "small_ore_container_mk1",
-	"small_propellant_tank_mk1", "small_solar_panel_mk1", "solar_farm_mk1", "solar_panel_mk1",
-	"starter_hull",
+	"acid_tank_mk1", "arc_furnace_mk1", "assisted_core", "basic_core", "battery_bank_mk1",
+	"chemical_thruster_mk1", "command_hub", "compact_fabricator_mk1", "compact_refinery_mk1",
+	"docking_port_mk1", "electrolyser_mk1", "fabricator_mk1", "gas_tank_mk1", "goods_container_mk1",
+	"goods_storage_mk1", "heat_radiator_mk1", "hydrolox_tank_mk1", "landing_legs_mk1", "lidar_mk1",
+	"mining_laser_mk1", "ore_container_mk1", "ore_refinery_mk1", "ore_storage_mk1",
+	"propellant_tank_mk1", "propellant_tank_mk2", "research_lab_mk1", "semiconductor_fab_mk1",
+	"small_battery_bank_mk1", "small_chemical_thruster_mk1", "small_docking_port_mk1",
+	"small_heat_radiator_mk1", "small_hub", "small_hull", "small_landing_legs_mk1",
+	"small_mining_laser_mk1", "small_ore_container_mk1", "small_propellant_tank_mk1",
+	"small_solar_panel_mk1", "solar_farm_mk1", "solar_panel_mk1", "starter_hull", "water_tank_mk1",
 ]
 const DEPOSIT_ITEMS := ["chalcopyrite", "hematite", "olivine", "water_ice"]
 const TEMPLATES := [
@@ -218,8 +222,35 @@ func test_every_tint_is_from_the_slice_palette() -> void:
 		assert_has(PALETTE, entry["visual"]["tint"], entry["id"])
 
 
+## The abstract slice recipes vent their slag; the real chain recipes (B29) keep it.
 func test_refining_fills_no_storage() -> void:
 	for entry: Dictionary in data["recipes"]["entries"]:
+		if not entry["abstract"]:
+			continue
 		for output: Dictionary in entry["outputs"]:
 			if output.get("item") == "slag":
 				assert_eq(output.get("sink"), "slag_vent")
+
+
+## The chains (B29) carry real figures: electrolysis and liquefaction at 66.4 kWh per kg of hydrogen,
+## and the three loops close.
+func test_the_chains_carry_real_energy_and_close_their_loops() -> void:
+	var recipes := {}
+	for entry: Dictionary in data["recipes"]["entries"]:
+		recipes[entry["id"]] = entry
+	var electrolysis: Dictionary = recipes["electrolyse_water"]
+	var hydrogen_kg: float = electrolysis["outputs"].filter(
+		func(o: Dictionary) -> bool: return o["item"] == "hydrogen")[0]["kg"]
+	assert_almost_eq(electrolysis["energy_kj"] / 3600.0 / hydrogen_kg, 66.4, 0.5, "kWh per kg of hydrogen")
+	# Hydrogen reduces iron and comes back as water; carbon reduces silica and comes back from CO;
+	# acid leaches olivine and comes back from the salt.
+	for loop: Array in [["reduce_hematite", "hydrogen", "water"], ["reduce_silica", "carbon", "carbon_monoxide"],
+			["leach_olivine", "sulfuric_acid", "magnesium_sulfate"]]:
+		var made: Array = recipes[loop[0]]["outputs"].map(func(o: Dictionary) -> String: return o["item"])
+		assert_has(made, loop[2], loop[0])
+		var back := false
+		for entry: Dictionary in data["recipes"]["entries"]:
+			var ins: Array = entry["inputs"].map(func(o: Dictionary) -> String: return o["item"])
+			var outs: Array = entry["outputs"].map(func(o: Dictionary) -> String: return o.get("item", ""))
+			back = back or (ins.has(loop[2]) and outs.has(loop[1]))
+		assert_true(back, "%s comes back from %s" % [loop[1], loop[2]])

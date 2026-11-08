@@ -318,3 +318,70 @@ NewStartPace's record lists each of the route's 114 orders with its type and sta
 **Together, about 19 of the first-timer's 28.5 minutes of orders,** with the route down from 114 orders to about 35. A first-timer's run at 8x with warp would drop from about 36 minutes to about 17, close to a practised player's today. Items 1 and 2 are most of it.
 
 A smaller item: prove, prototype and qualify are three orders at two facilities. A "develop this design" order could make them one, saving 0.5 min. It isn't worth doing before the five above.
+
+### 9.7 Presses, measured by the client (D44)
+
+D's client playthrough on `client/D44` counts every press a person makes on NewStartPace's route.
+
+**What counts as a press:**
+- a select;
+- an order button;
+- typing an amount;
+- each step of the Jobs, Fit and Auto panels;
+- each warp start, including every time the player picks the speed up again after a warp drop.
+
+Runs are deterministic. The game times include the test's 10,000× warp overshoot, so they are upper bounds, not a pace.
+
+| Stage | Plain orders | With the new tools | Where the plain presses go |
+| --- | --- | --- | --- |
+| 1 chain | 221 | 98 | 76 warp, 57 jobs, 38 select, 23 fit |
+| 2 prep | 228 | 45 | 141 warp, 43 jobs, 23 select |
+| 3 lab | 29 | 14 | |
+| 4 lap | 47 | about 5, with "Warp past jobs" | 44 warp |
+| 5 research | 44 | about 41 | 13 warp |
+| 6 drone | 312 | 98, by design | 101 warp, 82 jobs, 54 select, 40 fit |
+| **Total** | **881** | **about 301** | |
+
+**The new tools cut presses to about a third (34%).** The tools are:
+- the trip panel;
+- Start or Build into with components;
+- Build with components;
+- Fit all;
+- "Warp past jobs".
+
+That matches 9.6's forecast: orders from 114 to about 35, about 31%.
+
+**Presses per game hour**, over the stages run both ways (1, 2, 3 and 6):
+
+| Run | Presses | Game hours | Per game hour | By stage |
+| --- | --- | --- | --- | --- |
+| Plain | 790 | 16.4 | 48 | 40, 58, 10.5, 75 |
+| With the tools | 255 | 9.4 | 27 | 22, 41, 8, 45 |
+
+Plain stages 4 and 5, where no tool applies, run at 7 and 28 presses a game hour.
+
+There are two caveats:
+- The hours include the test's warp overshoot, so they're upper bounds and the rates lower bounds. The tools run warps longer between presses, so its hours are inflated a little more.
+- The warp settings differ, as each player would play. The plain run has "Warp past jobs" off and the tools run has it on.
+
+The tools cut both the presses and the game time a person sits through. Stage 6 is still the busiest stretch, at 45 a game hour.
+
+**What's left: about 110 selects, and the warp starts.**
+- A trip plan's own arrivals and mining stops are already quiet (D39b, D41). The 1t to 3t runs logged no warp drops at all.
+- The remaining drops come from stage 6b's first drone lap, flown by hand before "Repeat this route", and from the probe's plain Move to orders.
+
+**The next cuts, ranked:**
+1. **A drone's first lap from a template cycle,** instead of flown by hand. That removes most of stage 6's orders, selects and warp drops.
+2. **Fewer selects:** default the target to the last selected unit, and keep the selected rock between a trip and its mining.
+
+Both are client work (D), waiting for the Lead to assign them.
+
+## 11. Growth past the ore limit
+
+B28's Part G, a second station module with a frame job and then a copper-and-silicon drone, was measured with straight-line trips in the cluster frame, work-point run times and the abstract propellant. Under the owner's rulings of 2026-11-07, none of those figures stand. It will be rewritten after A53 and C30, when its trips and rates can be measured on real orbits.
+
+Rulings that stand, from the Lead:
+1. **A running cycle's dock port counts as claimed,** so a unit build never takes a drone's home port while the drone is out. This is C30.
+2. **Build in place and build ports reach the whole docked group,** as fitting's `from` (C21) and job inputs (C26) do. Also C30.
+3. **A mining step can carry `skip_if_full`:** while the unit it unloads to can't take the product, the step and the steps up to its unload are skipped. This is C31, after Part G is botted.
+4. **Client conveniences** go to D after D44: "Build into" across the group, and "Copy cycle from…".

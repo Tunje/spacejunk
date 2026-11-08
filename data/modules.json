@@ -2,6 +2,135 @@
   "schema_version": 1,
   "entries": [
     {
+      "id": "acid_tank_mk1",
+      "name": "Acid Tank",
+      "mass_kg": 200,
+      "volume_m3": 2.5,
+      "power_kw": 0,
+      "heat_kw": 0,
+      "priority": 0,
+      "durability": 1000,
+      "min_ai_tier": 1,
+      "realism": "established",
+      "capabilities": {
+        "storage": {
+          "acid": {
+            "mass_kg": 3660,
+            "volume_m3": 2
+          }
+        }
+      },
+      "fabrication": {
+        "recipe": "acid_tank_mk1"
+      },
+      "connectors": [
+        {
+          "id": "mount",
+          "type": "stack",
+          "size": "medium",
+          "pos_mm": [0, 0, 0],
+          "facing": "+y",
+          "up": "+z",
+          "load_limit_kg": 1000
+        },
+        {
+          "id": "stack_bottom",
+          "type": "stack",
+          "size": "medium",
+          "pos_mm": [0, -3000, 0],
+          "facing": "-y",
+          "up": "+z",
+          "load_limit_kg": 1000
+        },
+        {
+          "id": "side_px",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [1000, -2600, 0],
+          "facing": "+x",
+          "up": "+y",
+          "load_limit_kg": 500
+        },
+        {
+          "id": "side_nx",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [-1000, -2600, 0],
+          "facing": "-x",
+          "up": "+y",
+          "load_limit_kg": 500
+        },
+        {
+          "id": "side_pz",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [0, -2600, 1000],
+          "facing": "+z",
+          "up": "+y",
+          "load_limit_kg": 500
+        },
+        {
+          "id": "side_nz",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [0, -2600, -1000],
+          "facing": "-z",
+          "up": "+y",
+          "load_limit_kg": 500
+        }
+      ],
+      "collision": {
+        "shape": "cylinder",
+        "center_mm": [0, -1500, 0],
+        "size_mm": [2000, 3000, 2000]
+      },
+      "visual": {
+        "model": null,
+        "tint": "#c9a227"
+      }
+    },
+    {
+      "id": "arc_furnace_mk1",
+      "name": "Arc Furnace",
+      "mass_kg": 3000,
+      "volume_m3": 8,
+      "power_kw": 500,
+      "heat_kw": 450,
+      "priority": 2,
+      "durability": 1000,
+      "min_ai_tier": 1,
+      "realism": "established",
+      "capabilities": {
+        "facility": {
+          "type": "arc_furnace",
+          "throughput_kg_per_s": 0.1
+        }
+      },
+      "fabrication": {
+        "recipe": "arc_furnace_mk1"
+      },
+      "connectors": [
+        {
+          "id": "mount",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [0, 0, 0],
+          "facing": "-z",
+          "up": "+y",
+          "load_limit_kg": 1000
+        }
+      ],
+      "collision": {
+        "shape": "box",
+        "center_mm": [0, 0, 1000],
+        "size_mm": [2000, 2000, 2000]
+      },
+      "visual": {
+        "model": null,
+        "tint": "#e8641b"
+      }
+    },
+    {
       "id": "assisted_core",
       "name": "Assisted Core",
       "mass_kg": 60,
@@ -560,6 +689,47 @@
       }
     },
     {
+      "id": "electrolyser_mk1",
+      "name": "Electrolyser",
+      "mass_kg": 1200,
+      "volume_m3": 4,
+      "power_kw": 200,
+      "heat_kw": 90,
+      "priority": 2,
+      "durability": 1000,
+      "min_ai_tier": 1,
+      "realism": "established",
+      "capabilities": {
+        "facility": {
+          "type": "electrolyser",
+          "throughput_kg_per_s": 0.01
+        }
+      },
+      "fabrication": {
+        "recipe": "electrolyser_mk1"
+      },
+      "connectors": [
+        {
+          "id": "mount",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [0, 0, 0],
+          "facing": "-z",
+          "up": "+y",
+          "load_limit_kg": 1000
+        }
+      ],
+      "collision": {
+        "shape": "box",
+        "center_mm": [0, 0, 800],
+        "size_mm": [1600, 1600, 1600]
+      },
+      "visual": {
+        "model": null,
+        "tint": "#8a8d91"
+      }
+    },
+    {
       "id": "fabricator_mk1",
       "name": "Fabricator",
       "mass_kg": 2000,
@@ -599,6 +769,94 @@
       "visual": {
         "model": "fabricator_mk1",
         "tint": "#e8641b"
+      }
+    },
+    {
+      "id": "gas_tank_mk1",
+      "name": "Gas Tank",
+      "mass_kg": 600,
+      "volume_m3": 2.5,
+      "power_kw": 0,
+      "heat_kw": 0,
+      "priority": 0,
+      "durability": 1000,
+      "min_ai_tier": 1,
+      "realism": "established",
+      "capabilities": {
+        "storage": {
+          "gas": {
+            "mass_kg": 1000,
+            "volume_m3": 2
+          }
+        }
+      },
+      "fabrication": {
+        "recipe": "gas_tank_mk1"
+      },
+      "connectors": [
+        {
+          "id": "mount",
+          "type": "stack",
+          "size": "medium",
+          "pos_mm": [0, 0, 0],
+          "facing": "+y",
+          "up": "+z",
+          "load_limit_kg": 1000
+        },
+        {
+          "id": "stack_bottom",
+          "type": "stack",
+          "size": "medium",
+          "pos_mm": [0, -3000, 0],
+          "facing": "-y",
+          "up": "+z",
+          "load_limit_kg": 1000
+        },
+        {
+          "id": "side_px",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [1000, -2600, 0],
+          "facing": "+x",
+          "up": "+y",
+          "load_limit_kg": 500
+        },
+        {
+          "id": "side_nx",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [-1000, -2600, 0],
+          "facing": "-x",
+          "up": "+y",
+          "load_limit_kg": 500
+        },
+        {
+          "id": "side_pz",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [0, -2600, 1000],
+          "facing": "+z",
+          "up": "+y",
+          "load_limit_kg": 500
+        },
+        {
+          "id": "side_nz",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [0, -2600, -1000],
+          "facing": "-z",
+          "up": "+y",
+          "load_limit_kg": 500
+        }
+      ],
+      "collision": {
+        "shape": "cylinder",
+        "center_mm": [0, -1500, 0],
+        "size_mm": [2000, 3000, 2000]
+      },
+      "visual": {
+        "model": null,
+        "tint": "#8a8d91"
       }
     },
     {
@@ -724,6 +982,105 @@
       },
       "visual": {
         "model": "heat_radiator_mk1",
+        "tint": "#e8e4d8"
+      }
+    },
+    {
+      "id": "hydrolox_tank_mk1",
+      "name": "Hydrolox Tank",
+      "mass_kg": 450,
+      "volume_m3": 5.5,
+      "power_kw": 1,
+      "heat_kw": 1,
+      "priority": 1,
+      "durability": 1000,
+      "min_ai_tier": 1,
+      "realism": "established",
+      "capabilities": {
+        "storage": {
+          "fuel": {
+            "mass_kg": 258,
+            "volume_m3": 3.643
+          },
+          "oxidiser": {
+            "mass_kg": 1548,
+            "volume_m3": 1.357
+          }
+        },
+        "cryo": {
+          "boil_off_ppm_per_day": {
+            "fuel": 10000,
+            "oxidiser": 1000
+          },
+          "cooler_kw": 1
+        }
+      },
+      "fabrication": {
+        "recipe": "hydrolox_tank_mk1"
+      },
+      "connectors": [
+        {
+          "id": "mount",
+          "type": "stack",
+          "size": "medium",
+          "pos_mm": [0, 0, 0],
+          "facing": "+y",
+          "up": "+z",
+          "load_limit_kg": 1000
+        },
+        {
+          "id": "stack_bottom",
+          "type": "stack",
+          "size": "medium",
+          "pos_mm": [0, -3000, 0],
+          "facing": "-y",
+          "up": "+z",
+          "load_limit_kg": 1000
+        },
+        {
+          "id": "side_px",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [1000, -2600, 0],
+          "facing": "+x",
+          "up": "+y",
+          "load_limit_kg": 500
+        },
+        {
+          "id": "side_nx",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [-1000, -2600, 0],
+          "facing": "-x",
+          "up": "+y",
+          "load_limit_kg": 500
+        },
+        {
+          "id": "side_pz",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [0, -2600, 1000],
+          "facing": "+z",
+          "up": "+y",
+          "load_limit_kg": 500
+        },
+        {
+          "id": "side_nz",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [0, -2600, -1000],
+          "facing": "-z",
+          "up": "+y",
+          "load_limit_kg": 500
+        }
+      ],
+      "collision": {
+        "shape": "cylinder",
+        "center_mm": [0, -1500, 0],
+        "size_mm": [2000, 3000, 2000]
+      },
+      "visual": {
+        "model": null,
         "tint": "#e8e4d8"
       }
     },
@@ -1235,6 +1592,47 @@
         "shape": "box",
         "center_mm": [0, 0, 1000],
         "size_mm": [2000, 2000, 2000]
+      },
+      "visual": {
+        "model": null,
+        "tint": "#e8e4d8"
+      }
+    },
+    {
+      "id": "semiconductor_fab_mk1",
+      "name": "Semiconductor Fab",
+      "mass_kg": 5000,
+      "volume_m3": 20,
+      "power_kw": 300,
+      "heat_kw": 300,
+      "priority": 2,
+      "durability": 1000,
+      "min_ai_tier": 1,
+      "realism": "established",
+      "capabilities": {
+        "facility": {
+          "type": "semiconductor_fab",
+          "throughput_kg_per_s": 0.002
+        }
+      },
+      "fabrication": {
+        "recipe": "semiconductor_fab_mk1"
+      },
+      "connectors": [
+        {
+          "id": "mount",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [0, 0, 0],
+          "facing": "-z",
+          "up": "+y",
+          "load_limit_kg": 1000
+        }
+      ],
+      "collision": {
+        "shape": "box",
+        "center_mm": [0, 0, 1350],
+        "size_mm": [3000, 2500, 2700]
       },
       "visual": {
         "model": null,
@@ -2181,6 +2579,94 @@
       },
       "visual": {
         "model": "starter_hull",
+        "tint": "#e8e4d8"
+      }
+    },
+    {
+      "id": "water_tank_mk1",
+      "name": "Water Tank",
+      "mass_kg": 250,
+      "volume_m3": 4.5,
+      "power_kw": 0,
+      "heat_kw": 0,
+      "priority": 0,
+      "durability": 1000,
+      "min_ai_tier": 1,
+      "realism": "established",
+      "capabilities": {
+        "storage": {
+          "water": {
+            "mass_kg": 4000,
+            "volume_m3": 4
+          }
+        }
+      },
+      "fabrication": {
+        "recipe": "water_tank_mk1"
+      },
+      "connectors": [
+        {
+          "id": "mount",
+          "type": "stack",
+          "size": "medium",
+          "pos_mm": [0, 0, 0],
+          "facing": "+y",
+          "up": "+z",
+          "load_limit_kg": 1000
+        },
+        {
+          "id": "stack_bottom",
+          "type": "stack",
+          "size": "medium",
+          "pos_mm": [0, -3000, 0],
+          "facing": "-y",
+          "up": "+z",
+          "load_limit_kg": 1000
+        },
+        {
+          "id": "side_px",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [1000, -2600, 0],
+          "facing": "+x",
+          "up": "+y",
+          "load_limit_kg": 500
+        },
+        {
+          "id": "side_nx",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [-1000, -2600, 0],
+          "facing": "-x",
+          "up": "+y",
+          "load_limit_kg": 500
+        },
+        {
+          "id": "side_pz",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [0, -2600, 1000],
+          "facing": "+z",
+          "up": "+y",
+          "load_limit_kg": 500
+        },
+        {
+          "id": "side_nz",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [0, -2600, -1000],
+          "facing": "-z",
+          "up": "+y",
+          "load_limit_kg": 500
+        }
+      ],
+      "collision": {
+        "shape": "cylinder",
+        "center_mm": [0, -1500, 0],
+        "size_mm": [2000, 3000, 2000]
+      },
+      "visual": {
+        "model": null,
         "tint": "#e8e4d8"
       }
     }

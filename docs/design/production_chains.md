@@ -1,12 +1,22 @@
 # Production Chains
 
-Status: **proposal**, task B29. It applies the owner's rulings of 2026-11-07 (workplan, "Owner's rulings"):
+Status: **approved** by the Lead on 2026-11-08, task B29. It applies the owner's rulings of 2026-11-07 (workplan, "Owner's rulings"):
 - deep, real production chains;
 - research tests as field trials, with a chance of manufacturing defects;
 - factory speed set by power, heat and throughput;
 - fitting that warns and allows.
 
-The data follows this page once the Lead approves it. Contract changes go through the Lead as usual.
+The data comes in two steps:
+- **B29, additive:** the chain items, recipes and machines, the fluid tanks, the cryo capability and the validator. Nothing in the new start changes.
+- **B30, the switch-over,** together with A53 stage 4 and C's route rewrite:
+  - the parts made from chain materials;
+  - the abstract `refine_*` recipes removed;
+  - Black Rock in the scenario;
+  - the probe's seed chips;
+  - the fuel-cell battery;
+  - hydrolox in the probe's tank, settled in the stage 4 rebalance.
+
+Contract changes go through the Lead as usual.
 
 ## 1. Principles
 
@@ -228,7 +238,7 @@ The owner's ruling: no hard power checks.
 - Fitting reports the rated draw against the power made, and the heat rated against the rejection. Then it lets the part on.
 - Running short is handled in play, by C30's rates and PowerSystem's load shedding.
 - **Data side:** B25's validator check, which refused a design whose fit order broke a budget (`design_fit_order`), becomes a check on mass, load and connectors only. Power and heat are no longer refused.
-- **Proposed: mass and connector load stay hard.** A craft over its structure's limit, or a connector over its load, breaks physically. The ruling names power only, so please confirm.
+- **Mass and connector load warn and allow too** (Lead, 2026-11-08). The physical consequence comes from the structure and damage item: an overloaded connector or structure fails under load.
 
 ## 9. The cluster: a mixed layout
 
@@ -291,19 +301,16 @@ So, my proposal:
 | The rocks' orbits, and Black Rock | B | After A53 |
 | A recipe-yield draw for chip dies | C | `fab_chips` passes each die at a `yield_ppm`, drawn per run |
 
-## 12. Questions for the Lead and the owner
+## 12. Answers (Lead, 2026-11-08)
 
-1. **Black Rock in the cluster, for carbon?** It's needed for steel and to start the silicon loop.
-2. **Chips at the start.** Processors are needed from Part B on, but a semiconductor fab is 5 t and 300 kW, which the probe can't carry. Options:
-   - (a) the probe starts with a seed stock of chips as cargo, as it starts with propellant;
-   - (b) a smaller seed fab on the probe, of lower yield;
-   - (c) early processors wait for the first station's fab.
+1. **Black Rock goes in the cluster,** out in the swirl, for carbon. It's added in B30, and its exact elements come with A53 stage 4.
+2. **The probe carries about 200 seed chips** as cargo in its own hold. That isn't pre-built in space, and the fab path still stands. Added in B30.
+3. **`battery_bank_mk1` becomes a regenerative H₂/O₂ fuel cell.** Its round trip is about 45%, against today's 90%. Changed in B30, since it alters the start's shadow behaviour.
+4. **Part masses: real masses throughout.** The part-mass audit comes next, after the chain data.
+5. **Fitting has no hard checks** (section 8).
+6. **Boil-off with cryocoolers is approved.** It's in the data as `cryo` on `hydrolox_tank_mk1`: a power and heat load. A does the sim side.
+7. **The thruster `mixture` goes to A.**
+8. **Hydrolox's Δv drop stays real.** It's settled in the stage 4 rebalance, with a bigger tank or a different start. The start's propellant doesn't change before then.
+9. **B28 isn't merged.** Its 9.7 and its gap rulings are now in balance.md, and Part G is rewritten after A53 and C30.
 
-   I'd take (a), a stated stock of about 200 chips, since it's cargo, not a pre-built structure. It's the owner's call.
-3. **Batteries.** No cluster ore gives a battery chemistry: there's no lithium, nickel or sodium. Real options with what's there:
-   - a regenerative fuel cell on stored hydrogen and oxygen;
-   - a steel flywheel.
-
-   I'd make `battery_bank_mk1` a regenerative fuel cell and keep chemical batteries for the belt.
-4. **Part masses.** Some real figures are far from today's. A 60 kW solar array is nearer 400 to 600 kg than 150. That's the next audit item, and it changes the fits.
-5. **Mass and load as hard limits** in fitting (section 8).
+**Still open, for B30 or later:** the electrolyser's catalyst and electrolyte. Real electrolysers use nickel or platinum electrodes and a potassium hydroxide or membrane electrolyte, and the cluster has none of those. The B29 electrolyser is built from steel, copper and electronics. A real answer is either a seed of catalyst carried like the chips, or the belt's metals. That's a question for the owner.
