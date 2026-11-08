@@ -38,6 +38,8 @@ const REASONS: Dictionary = {
 	"job_busy": "That job has already started",
 	"float_in_command": "Invalid order",
 	"invalid_target": "Not a valid target",
+	"too_far": "Too far to dock",
+	"too_fast": "Closing too fast to dock",
 	"missing_inputs": "Missing inputs",
 	"module_fault": "A required module has a fault",
 	"module_missing": "A required module is missing",

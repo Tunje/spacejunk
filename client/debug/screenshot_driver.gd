@@ -13,6 +13,9 @@ class_name ScreenshotDriver extends Node
 ##   --jobs=<recipe id>[,<id>...]    opens the jobs screen and starts or queues each recipe
 ##   --jobs-run=<seconds>            then runs about that many game seconds, to show a run part done
 ##   --fly=<m/s>[,<normal>,<radial>]  opens flight on the commanded craft with that burn typed in
+##   --target=<body name>            opens flight and targets that body (D46)
+##   --rendezvous-sample=1           with --target, a sample relative state stands in for Sim.relative
+##                                   until A54, to show the readout's layout
 ##   --fly-at=peri|apo|<seconds>     places it at an apsis or so many seconds ahead
 ##   --fly-delay=<frames>            waits first, such as for an undock to finish
 ##   --fly-plan=<frames>             plans the burn, then runs that many frames
@@ -61,6 +64,18 @@ const DRONE_FITS: Array[Dictionary] = [
 const RUN_STEP_S := 0.1
 const SHOT_SAVE_PATH := "user://screenshot.save"
 const SHOT_AUTOSAVE_PATH := "user://screenshot_autosave.save"
+
+
+## A relative state in Sim.relative's shape (A54), for --rendezvous-sample: layout only.
+const RENDEZVOUS_SAMPLE: Dictionary = {
+	"range_mm": 1_234_000, "rel_vel_um_s": [0, 0, 3_000_000], "closing_um_s": 3_200_000, "lateral_um_s": 400_000,
+	"closest": { "tick": 25_800, "range_mm": 1_200_000, "speed_um_s": 3_100_000 },
+	"closest_planned": { "tick": 24_600, "range_mm": 120_000, "speed_um_s": 800_000 },
+	"plane": { "inclination_mdeg": 2_300, "ascending_tick": 7_200, "descending_tick": 34_800 },
+	"phase_mdeg": 345_800, "window": { "depart_tick": 111_000, "ticks": 78_000 },
+	"stop": { "burn_ticks": 700, "lead_ticks": 350, "propellant_g": 12_000 },
+	"dock": { "range_mm": 1_234_000, "speed_um_s": 3_225_000, "capture_range_mm": 2_000, "capture_speed_um_s": 200_000, "reason": "too_far" },
+}
 
 var main: Node3D
 var parsed: Dictionary = {}
@@ -192,6 +207,8 @@ func _run() -> void:
 		await _start_demo_cycle()
 	if parsed.has("copy"):
 		_open_copy_fit()
+	if parsed.has("target"):
+		_show_target()
 	if parsed.has("fly"):
 		await _open_flight()
 	if parsed.has("drone"):
@@ -206,6 +223,20 @@ func _run() -> void:
 		main.save_game()
 		main.autosave()
 		main.load_game()
+
+
+## Flight open with a body as the rendezvous target, optionally on a sample state.
+func _show_target() -> void:
+	var view: Dictionary = main.bridge.current_view
+	for id: int in view["bodies"]:
+		if view["bodies"][id]["name"] == parsed["target"]:
+			main.local_view.select("body", id, 0)
+	if not main.flight_screen.visible:
+		main.toggle_flight()
+	main.flight_screen.target_selection()
+	if parsed.has("rendezvous-sample"):
+		main.flight_screen.sample_relative = RENDEZVOUS_SAMPLE
+	main.flight_screen.refresh()
 
 
 func _show_demo_drone() -> void:

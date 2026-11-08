@@ -35,6 +35,9 @@ const AUTOSAVE_SECONDS := 300.0
 @onready var flight_screen: FlightScreen = %FlightScreen
 ## Built here rather than in main.tscn: it sits where the industry screen does.
 var research_screen: ResearchScreen
+## The rendezvous target's markers in the local view (D46).
+var rendezvous_markers: RendezvousMarkers
+var rendezvous_panel: RendezvousPanel
 
 ## False until a game is running, so a failed start never autosaves.
 var _started := false
@@ -67,6 +70,16 @@ func _ready() -> void:
 	system_map.bind(bridge, local_view)
 	flight_screen.bind(bridge, local_view, system_map)
 	_add_research_screen()
+	rendezvous_markers = RendezvousMarkers.new()
+	rendezvous_markers.name = "RendezvousMarkers"
+	rendezvous_markers.local_view = local_view
+	rendezvous_markers.flight = flight_screen
+	markers.get_parent().add_child(rendezvous_markers)
+	markers.get_parent().move_child(rendezvous_markers, markers.get_index() + 1)
+	rendezvous_panel = RendezvousPanel.new()
+	rendezvous_panel.name = "RendezvousPanel"
+	rendezvous_panel.flight = flight_screen
+	flight_screen.get_parent().add_child(rendezvous_panel)
 	_gate_modules = bridge.defs()["modules"]
 	bridge.defs_changed.connect(func() -> void: _gate_modules = bridge.defs()["modules"])
 	bridge.view_updated.connect(refresh_gates)
