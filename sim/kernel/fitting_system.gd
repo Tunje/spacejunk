@@ -1,7 +1,8 @@
 class_name FittingSystem
 extends SimSystem
 ## attach_part and detach_part: the attachment contract of contracts section 5, with the matter
-## rules of accounting.md section 2. Both apply instantly in phase 1.
+## rules of accounting.md section 2. Both apply instantly in phase 1. Power and heat budgets only
+## warn (C30): an attach that goes over them is allowed, and part_attached carries the warnings.
 
 const ATTACH := "attach_part"
 const DETACH := "detach_part"
@@ -18,6 +19,8 @@ const REASON_PORT_BUSY := "port_busy"
 const REASON_ROOT := "root_part"
 const REASON_BUSY := "part_busy"
 const REASON_CARGO_FULL := "cargo_full"
+const WARN_POWER := "over_power_budget"
+const WARN_HEAT := "over_heat_budget"
 
 
 func commands() -> PackedStringArray:
@@ -70,6 +73,7 @@ func _validate_attach(ctx: SimContext, command: Dictionary) -> Dictionary:
 	if failure.is_empty():
 		var result := SimSystem.ok()
 		result["detail"] = fit
+		fit["warnings"] = fit_warnings(fit)
 		return result
 	var detail: Dictionary = fit.duplicate()
 	detail.merge(failure["detail"])
@@ -91,13 +95,19 @@ func _fit_failure(
 		return load_failure
 	if fit["mass_g"] > fit["mass_limit_g"]:
 		return { "reason": "over_mass_limit", "detail": { "need_g": fit["mass_g"], "have_g": fit["mass_limit_g"] } }
-	if fit["power_rated_w"] > fit["power_budget_w"]:
-		return { "reason": "over_power_budget",
-			"detail": { "need_w": fit["power_rated_w"], "have_w": fit["power_budget_w"] } }
-	if fit["heat_rated_w"] > fit["heat_budget_w"]:
-		return { "reason": "over_heat_budget",
-			"detail": { "need_w": fit["heat_rated_w"], "have_w": fit["heat_budget_w"] } }
 	return {}
+
+
+## Owner's ruling, 2026-11-07 (C30): power and heat are never hard fitting checks. A fit that could
+## draw more than the unit makes, or give off more heat than its radiators reject, goes through with
+## these warnings, and running short is handled in play: factories slow and loads shed.
+static func fit_warnings(fit: Dictionary) -> Array[Dictionary]:
+	var warnings: Array[Dictionary] = []
+	if fit["power_rated_w"] > fit["power_budget_w"]:
+		warnings.append({ "code": WARN_POWER, "need_w": fit["power_rated_w"], "have_w": fit["power_budget_w"] })
+	if fit["heat_rated_w"] > fit["heat_budget_w"]:
+		warnings.append({ "code": WARN_HEAT, "need_w": fit["heat_rated_w"], "have_w": fit["heat_budget_w"] })
+	return warnings
 
 
 ## Tests the new mass against the connector it joins and every connector above it.
@@ -126,7 +136,11 @@ func _apply_attach(ctx: SimContext, command: Dictionary) -> void:
 	Units.remove_stock(ctx.state["units"][args["from"]]["inventory"], item, mass_g)
 	var id := Units.add_part(ctx, unit, item, args["parent_part"], args["parent_connector"], args["part_connector"])
 	ctx.state["parts"][args["parent_part"]]["children"].append(id)
-	ctx.emit_event("part_attached", unit, { "part": id })
+	var data := { "part": id }
+	var warnings := fit_warnings(Units.fit(ctx.state, ctx.defs, unit))
+	if not warnings.is_empty():
+		data["warnings"] = warnings
+	ctx.emit_event("part_attached", unit, data)
 
 
 func _validate_detach(ctx: SimContext, command: Dictionary) -> Dictionary:
@@ -154,7 +168,22 @@ func _validate_detach(ctx: SimContext, command: Dictionary) -> Dictionary:
 		return SimSystem.reject(REASON_CARGO_FULL, over)
 	var result := SimSystem.ok()
 	result["detail"] = Units.fit(state, ctx.defs, unit)
+	result["detail"]["warnings"] = fit_warnings(_fit_without(ctx, unit, removed))
 	return result
+
+
+## The unit's fit figures once `removed` is gone, for the warnings a detach would leave (C30).
+func _fit_without(ctx: SimContext, unit: int, removed: Array[int]) -> Dictionary:
+	var after := Units.fit(ctx.state, ctx.defs, unit)
+	for id in removed:
+		var module: Dictionary = Units.module_of(ctx.state, ctx.defs, id)
+		var capabilities: Dictionary = module["capabilities"]
+		after["power_rated_w"] -= module["power_w"]
+		after["heat_rated_w"] -= module["heat_w"]
+		after["power_budget_w"] -= capabilities.get("generate", {}).get("power_w", 0) \
+			+ capabilities.get("battery", {}).get("max_discharge_w", 0)
+		after["heat_budget_w"] -= capabilities.get("radiator", {}).get("reject_w", 0)
+	return after
 
 
 func _subtree_busy(state: Dictionary, unit: int, removed: Array[int]) -> bool:
