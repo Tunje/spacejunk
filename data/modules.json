@@ -516,6 +516,8 @@
       "realism": "established",
       "capabilities": {
         "port": {
+          "capture_range_mm": 100,
+          "capture_speed_m_s": 0.1,
           "transfer_kg_per_s": 50,
           "dock_seconds": 20,
           "undock_seconds": 10
@@ -1333,6 +1335,8 @@
       "realism": "established",
       "capabilities": {
         "port": {
+          "capture_range_mm": 50,
+          "capture_speed_m_s": 0.05,
           "transfer_kg_per_s": 50,
           "dock_seconds": 20,
           "undock_seconds": 10

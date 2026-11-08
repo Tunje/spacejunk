@@ -116,7 +116,8 @@ func before_each() -> void:
 	var hull := _entry("modules", "hull")
 	hull["capabilities"]["storage"]["propellant"] = { "mass_kg": 500, "volume_m3": 1 }
 	hull["capabilities"]["port"] = {
-		"transfer_kg_per_s": 1, "dock_seconds": 1, "undock_seconds": 1,
+		"transfer_kg_per_s": 1, "dock_seconds": 1, "undock_seconds": 1, "capture_range_mm": 100,
+		"capture_speed_m_s": 0.1,
 	}
 	hull["connectors"].append(_connector("dock", "dock", "medium", [0, 9, 0]))
 	data["templates"]["entries"].append({ "id": "tanker", "name": "Tanker", "kind": "ship",
@@ -883,6 +884,37 @@ func test_landing_gear_must_convert_to_whole_mm_s() -> void:
 func test_landing_gear_needs_its_limit() -> void:
 	_entry("modules", "laser")["capabilities"]["landing_gear"] = {}
 	_assert_error("missing_field")
+
+
+## Docking capture limits (B29, for A54): how close and how slowly a port must be met to latch.
+func test_port_needs_its_capture_limits() -> void:
+	_entry("modules", "hull")["capabilities"]["port"].erase("capture_range_mm")
+	_assert_error("missing_field")
+
+
+func test_port_capture_range_is_whole_mm() -> void:
+	_entry("modules", "hull")["capabilities"]["port"]["capture_range_mm"] = 100.5
+	_assert_error("not_whole")
+
+
+func test_port_capture_speed_must_be_above_zero() -> void:
+	_entry("modules", "hull")["capabilities"]["port"]["capture_speed_m_s"] = 0
+	_assert_error("bad_number")
+
+
+func test_port_capture_speed_converts_to_whole_mm_s() -> void:
+	_entry("modules", "hull")["capabilities"]["port"]["capture_speed_m_s"] = 0.0505
+	_assert_error("inexact_value")
+
+
+func test_slice_port_capture_limits() -> void:
+	var modules := {}
+	for entry: Dictionary in DataValidator.load_dir()["modules"]["entries"]:
+		modules[entry["id"]] = entry
+	var medium: Dictionary = modules["docking_port_mk1"]["capabilities"]["port"]
+	var small: Dictionary = modules["small_docking_port_mk1"]["capabilities"]["port"]
+	assert_eq([medium["capture_range_mm"], medium["capture_speed_m_s"]], [100.0, 0.1])
+	assert_eq([small["capture_range_mm"], small["capture_speed_m_s"]], [50.0, 0.05])
 
 
 func test_landing_gear_is_an_object() -> void:
