@@ -81,7 +81,7 @@ func test_the_picker_lists_checked_slots_and_builds_onto_the_ship() -> void:
 	var job := IndustryLogic.job_on(bridge.current_view, screen.facility["part"])
 	assert_eq(job["install_to"]["unit"], ship)
 	assert_string_starts_with(screen._job_label.text, "Goods Container into %s: " % bridge.current_view["units"][ship]["name"])
-	_run(job["work"] / job["work_per_tick"] + 2)
+	_run(ceili(float(job["energy_left_j"]) * bridge.ticks_per_second() / job["rate_w"]) + 2)
 	var parts := InspectText.flatten(bridge.current_view["units"][ship]["parts"])
 	assert_eq(parts.size(), parts_before + 1, "fitted to the ship")
 	assert_true(parts.any(func(part: Dictionary) -> bool: return part["def"] == "goods_container_mk1"))
