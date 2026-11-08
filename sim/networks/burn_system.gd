@@ -86,12 +86,39 @@ func validate(ctx: SimContext, command: Dictionary) -> Dictionary:
 	var found := thruster(ctx, unit_id)
 	if found.is_empty():
 		return SimSystem.reject(REASON_NO_THRUSTER)
+	var target: Variant = args.get("target")
+	if target != null and (typeof(target) != TYPE_INT or target == unit_id
+			or not (ctx.state["units"].has(target) or ctx.state["bodies"].has(target))):
+		return SimSystem.reject(REASON_INVALID)
 	var result := SimSystem.ok()
 	# Only check needs the flown preview. Phase 1 validation skips it: a long burn's preview costs
 	# a fifth of a millisecond per burn tick, which would land inside the tick (A17).
 	if ctx.phase != 1:
 		result["detail"] = _preview(ctx, unit_id, args, found)
+		result["detail"]["lead_ticks"] = int(result["detail"]["burn_ticks"]) / 2
+		if target != null:
+			result["detail"]["closest"] = _closest_after(ctx, unit_id, args, target)
 	return result
+
+
+## The closest approach to a target on the path after a planned burn (A54): flown from the burn's
+## tick, over one turn of the orbit it gives, or of the unit's own when that escapes. {} off an
+## orbit.
+static func _closest_after(ctx: SimContext, unit_id: int, args: Dictionary, target: int) -> Dictionary:
+	var burn := { "id": 0, "tick": args["tick"], "prograde_um_s": args["prograde_um_s"],
+		"normal_um_s": args["normal_um_s"], "radial_um_s": args["radial_um_s"] }
+	var flown := Relative.planned_track(ctx, unit_id, [burn])
+	if flown.is_empty():
+		return {}
+	var segments: Array = flown["track"]["segments"]
+	var after: Dictionary = segments[segments.size() - 1][1]
+	if after.get("hyperbolic", false):
+		after = ctx.state["units"][unit_id]["orbit"]
+	var end_tick := int(args["tick"])
+	for entry: Dictionary in flown["burns"]:
+		end_tick = maxi(end_tick, int(entry["end_tick"]))
+	var horizon := end_tick - int(args["tick"]) + maxi(1, int(after["period_subticks"]) / OrbitMath.SUB_TICKS)
+	return Relative.closest(ctx, flown["track"], Relative.thing_track(ctx, target), args["tick"], horizon)
 
 
 func apply(ctx: SimContext, command: Dictionary) -> void:
@@ -405,15 +432,28 @@ static func thruster(ctx: SimContext, unit_id: int) -> Dictionary:
 
 ## Positions along a unit's current path, ignoring planned burns, as { place, points }: relative to
 ## the orbit's parent body, or local to the unit's frame. {} if the request is out of range.
-static func predict(ctx: SimContext, unit_id: int, from_tick: int, ticks: int, step: int) -> Dictionary:
+static func predict(ctx: SimContext, unit_id: int, from_tick: int, ticks: int, step: int,
+		with_burns: bool = false) -> Dictionary:
 	if not ctx.state["units"].has(unit_id) or step < 1 or ticks < 0 or ticks / step >= MAX_PREDICT_POINTS:
 		return {}
 	var unit: Dictionary = ctx.state["units"][unit_id]
 	if not unit["dock"].is_empty():
-		return predict(ctx, unit["dock"]["target_unit"], from_tick, ticks, step)
+		return predict(ctx, unit["dock"]["target_unit"], from_tick, ticks, step, with_burns)
+	if with_burns:
+		var flown := Relative.planned_track(ctx, unit_id, [])
+		if not flown.is_empty():
+			var segments: Array = flown["track"]["segments"]
+			var flown_points: Array = []
+			for t in range(from_tick, from_tick + ticks + 1, step):
+				flown_points.append(OrbitMath.position_at(Relative._segment(segments, t), t))
+			return { "place": { "orbit_parent": unit["orbit"]["parent"] }, "points": flown_points,
+				"burns": flown["burns"] }
 	if unit["low_flight"] != 0:
 		var ahead := LowFlight.path(ctx, unit, ticks, step)
-		return { "place": { "low_flight": unit["low_flight"] }, "points": ahead["points"], "contact": ahead["contact"] }
+		var low := { "place": { "low_flight": unit["low_flight"] }, "points": ahead["points"], "contact": ahead["contact"] }
+		if with_burns:
+			low["burns"] = []
+		return low
 	var points: Array = []
 	var orbit: Dictionary = unit["orbit"]
 	for t in range(from_tick, from_tick + ticks + 1, step):
@@ -429,7 +469,10 @@ static func predict(ctx: SimContext, unit_id: int, from_tick: int, ticks: int, s
 	var place := { "orbit_parent": orbit["parent"] } if not orbit.is_empty() else { "frame": unit["frame"] }
 	if not unit["landed"].is_empty():
 		place = { "landed": unit["landed"]["body"] }
-	return { "place": place, "points": points }
+	var result := { "place": place, "points": points }
+	if with_burns:
+		result["burns"] = []
+	return result
 
 
 # ------------------------------------------------------------------------------ burns
@@ -612,6 +655,11 @@ static func _basis(ctx: SimContext, unit_id: int, tick: int) -> Array:
 		orbit = ctx.state["frames"][unit["frame"]]["orbit"]
 	if orbit.is_empty():
 		return OLD_WORLD_BASIS
+	return orbit_basis(ctx, orbit, tick)
+
+
+## [prograde, normal, radial out] on an orbit at a tick, in Q30.
+static func orbit_basis(ctx: SimContext, orbit: Dictionary, tick: int) -> Array:
 	var now := OrbitMath.state_at(orbit, ctx.state["bodies"][orbit["parent"]]["gm"], tick)
 	var prograde := OrbitMath.unit(now["v"])
 	var normal := OrbitMath.unit(OrbitMath.cross(OrbitMath.unit(now["r"]), prograde))

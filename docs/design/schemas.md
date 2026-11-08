@@ -137,7 +137,7 @@ A whole number converts by integer multiplication, so a value such as the star's
 | `battery` | `capacity_kj`, `max_charge_kw`, `max_discharge_kw`, `charge_efficiency_ppm` (whole, up to 1000000) | Batteries |
 | `radiator` | `reject_kw` | Radiators |
 | `heat_capacity` | `limit_kj` | Summed to give the unit's heat limit |
-| `port` | `transfer_kg_per_s`, `dock_seconds` (whole), `undock_seconds` (whole) | Docking ports |
+| `port` | `transfer_kg_per_s`, `dock_seconds` (whole), `undock_seconds` (whole), `capture_range_mm` (whole), `capture_speed_m_s` | Docking ports |
 | `thruster` | `speed_m_s`, `propellant_kg_per_s`, `rated_mass_kg`, `exhaust_m_s`, `thrust_kn` | Thrusters |
 | `landing_gear` | `max_touchdown_m_s` | Landing legs |
 | `facility` | `type`: `refinery` or `fabricator`; `work_per_tick` (whole, optional) | Facilities. `work_per_tick` (required) is the work points removed from a running recipe each tick (C11): 100 for full-size facilities, which gives 1% steps for research ideas, and 50 for the probe's compact refinery and fabricator (B11b). A recipe draws its `power_kw` at 100 and in proportion at other rates, so the validator compares `power_kw` × `work_per_tick` / 100 with the facility's rating |
@@ -146,7 +146,8 @@ A whole number converts by integer multiplication, so a value such as the star's
 ```json
 {
   "storage": { "ore": { "mass_kg": 2000, "volume_m3": 2 }, "propellant": { "mass_kg": 500, "volume_m3": 1 } },
-  "port": { "transfer_kg_per_s": 50, "dock_seconds": 20, "undock_seconds": 10 },
+  "port": { "transfer_kg_per_s": 50, "dock_seconds": 20, "undock_seconds": 10, "capture_range_mm": 100,
+    "capture_speed_m_s": 0.1 },
   "ai_core": { "tier": 2 }
 }
 ```
@@ -156,6 +157,12 @@ A multi-role part has one `power_kw` and one `heat_kw`, which apply whenever it 
 A trip's cost is its travel time at `propellant_kg_per_s`, scaled by the unit's mass at departure over `rated_mass_kg`, and paid in one lump at departure ([autonomy.md](autonomy.md) section 4). The network spec holds the exact formula.
 
 **Two kinds of thruster figure.** Trips inside a frame read `speed_m_s`, `propellant_kg_per_s` and `rated_mass_kg`, exactly as above. Burns outside a frame read only `exhaust_m_s` (loaded as `exhaust_mm_s`) and `thrust_kn` (loaded as `thrust_n`), through the rocket equation of [orbital_flight.md](orbital_flight.md) section 7. The two kinds are independent. `chemical_thruster_mk1` has `thrust_kn` 15 (tasks B11 and B11b), so a fully fuelled probe lifts off from Frost at about three times its gravity, and a hand-flown landing loses less to gravity. Its in-frame figures stay 1 kg/s at 500 m/s. A burn's propellant flow is `thrust_kn` over `exhaust_m_s`, 5 kg/s at 3000 m/s. `small_chemical_thruster_mk1` stays at 0.15 kN, where both kinds still agree. All five fields are required, and the validator checks them (task B13). A thruster is not a power or heat load during a trip, so in the slice its `power_kw` and `heat_kw` count only toward fitting budgets.
+
+**Docking capture (task B29, for A54).** `capture_range_mm` is the distance between the two ports at which the capture latches engage, a whole number of millimetres above 0. `capture_speed_m_s` is the fastest closing speed at which they latch, above 0, and it loads as `capture_speed_mm_s`. A dock needs both: ports within range, closing no faster than the limit. The range is in mm because no loader rule turns metres into millimetres. The values follow real soft-capture systems, which latch at about 0.03 to 0.1 m/s within a few to tens of centimetres:
+- `docking_port_mk1`: 100 mm at 0.1 m/s, like a medium androgynous port's guide petals;
+- `small_docking_port_mk1`: 50 mm at 0.05 m/s, since a small craft has less mass to absorb the contact.
+
+Proposed: a pair is limited by the stricter of its two ports. A54 shows these figures, and stage 4 enforces them.
 
 **Landing gear.** `max_touchdown_m_s` is the fastest touchdown the part survives, above 0, and it loads as `max_touchdown_mm_s` (task B15). A unit's touchdown limit is the highest figure among its healthy parts with landing gear, and 0 when it has none. A touchdown at or under the limit lands, and one over it crashes. Hand-flown landings and the core autopilot's `land` both obey this, so a unit with no gear cannot land. `max_slope_mdeg` is reserved on this object for a later slope limit. It is not part of the schema yet, and the validator rejects nothing for its absence. Today's parts are `landing_legs_mk1` (6 m/s, 150 kg, three structural frames) and `small_landing_legs_mk1` (4 m/s, 50 kg, one frame), both side-mounted. The long legs mount on the four low side connectors of the probe's `propellant_tank_mk2`, 0.4 m above its bottom, and reach 2.8 m below their mount, which is 0.4 m below the thruster's nozzle (task B11). The client stands a landed craft on its lowest collision point, so the legs' collision box sets where it stands. It is provisional until the long-leg model arrives, and is then fitted to it.
 
