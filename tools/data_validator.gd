@@ -70,6 +70,7 @@ const IDEA_DIRECTIONS := {
 	"capabilities.radiator.reject_kw": 1, "capabilities.heat_capacity.limit_kj": 1,
 	"capabilities.port.transfer_kg_per_s": 1, "capabilities.port.dock_seconds": -1,
 	"capabilities.port.undock_seconds": -1,
+	"capabilities.port.capture_range_mm": 1, "capabilities.port.capture_speed_m_s": 1,
 	"capabilities.thruster.speed_m_s": 1, "capabilities.thruster.propellant_kg_per_s": -1,
 	"capabilities.thruster.rated_mass_kg": 1, "capabilities.thruster.exhaust_m_s": 1,
 	"capabilities.thruster.thrust_kn": 1,
@@ -128,7 +129,7 @@ const CAPABILITIES := {
 	"heat_capacity": { "limit_kj": [1000, false] },
 	"port": {
 		"transfer_kg_per_s": [1000, false], "dock_seconds": [1, true],
-		"undock_seconds": [1, true],
+		"undock_seconds": [1, true], "capture_range_mm": [1, true], "capture_speed_m_s": [1000, false],
 	},
 	"thruster": {
 		"speed_m_s": [1000, false], "propellant_kg_per_s": [1000, false],
