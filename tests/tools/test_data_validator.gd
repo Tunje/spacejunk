@@ -59,28 +59,28 @@ func before_each() -> void:
 		]),
 		"modules": _envelope([
 			_module("core", 10, { "ai_core": { "tier": 1 } }, [_connector("mount", "side", "core")]),
-			_module("fabricator", 10, { "facility": { "type": "fabricator", "work_per_tick": 100 } },
+			_module("fabricator", 10, { "facility": { "type": "fabricator", "throughput_kg_per_s": 1, "work_per_tick": 100 } },
 				[_connector("mount", "side", "medium")]),
 			_hull(),
 			_module("laser", 20, { "mine": { "rate_kg_per_s": 1, "hardness_max": 6 } },
 				[_connector("mount", "side", "medium")]),
-			_module("refinery", 10, { "facility": { "type": "refinery", "work_per_tick": 100 } },
+			_module("refinery", 10, { "facility": { "type": "refinery", "throughput_kg_per_s": 1, "work_per_tick": 100 } },
 				[_connector("mount", "side", "medium")]),
 		]),
 		"recipes": _envelope([
 			_fabrication("core", 1, "core"),
 			_fabrication("fabricator", 1, "fabricator"),
-			{ "id": "frame", "facility": "fabricator", "work": 5000, "power_kw": 1,
+			{ "id": "frame", "facility": "fabricator", "energy_kj": 5000, "heat_kj": 5000, "work": 5000, "power_kw": 1,
 				"inputs": [{ "item": "iron", "kg": 10 }],
 				"outputs": [{ "item": "frame", "count": 1 }], "abstract": true },
 			_fabrication("laser", 2, "laser"),
-			{ "id": "refine", "facility": "refinery", "work": 5000, "power_kw": 1,
+			{ "id": "refine", "facility": "refinery", "energy_kj": 5000, "heat_kj": 5000, "work": 5000, "power_kw": 1,
 				"inputs": [{ "item": "hematite", "kg": 100 }],
 				"outputs": [{ "item": "iron", "kg": 60 },
 					{ "item": "slag", "kg": 40, "sink": "slag_vent" }],
 				"abstract": true },
 			_fabrication("refinery", 1, "refinery"),
-			{ "id": "tanker", "facility": "fabricator", "work": 5000, "power_kw": 1,
+			{ "id": "tanker", "facility": "fabricator", "energy_kj": 5000, "heat_kj": 5000, "work": 5000, "power_kw": 1,
 				"inputs": [{ "item": "frame", "count": 10 }],
 				"outputs": [{ "unit_template": "tanker" }], "abstract": true },
 		]),
@@ -126,7 +126,7 @@ func before_each() -> void:
 
 func _fabrication(id: String, frames: int, output: String) -> Dictionary:
 	return {
-		"id": id, "facility": "fabricator", "work": 5000, "power_kw": 1,
+		"id": id, "facility": "fabricator", "energy_kj": 5000, "heat_kj": 5000, "work": 5000, "power_kw": 1,
 		"inputs": [{ "item": "frame", "count": frames }],
 		"outputs": [{ "item": output, "count": 1 }], "abstract": true,
 	}
@@ -416,9 +416,65 @@ func test_repeated_item() -> void:
 	_assert_error("repeated_item")
 
 
-func test_recipe_not_abstract() -> void:
-	_entry("recipes", "frame")["abstract"] = false
-	_assert_error("recipe_not_abstract")
+## Real chain recipes (B29): not abstract, balanced to the gram, slag kept rather than sunk.
+func test_a_real_recipe_keeps_its_slag() -> void:
+	var refine := _entry("recipes", "refine")
+	refine["abstract"] = false
+	refine["outputs"][1].erase("sink")
+	var errors := DataValidator.validate(data)
+	for code: String in ["sink_route_missing", "slag_missing"]:
+		assert_false(errors.any(func(e: String) -> bool: return e.begins_with(code)), code)
+
+
+func test_a_real_recipe_must_balance() -> void:
+	var refine := _entry("recipes", "refine")
+	refine["abstract"] = false
+	refine["outputs"][1].erase("sink")
+	refine["outputs"][1]["kg"] = 30
+	_assert_error("recipe_unbalanced")
+
+
+func test_a_real_recipe_is_held_to_chemistry_not_the_slice_ceilings() -> void:
+	var refine := _entry("recipes", "refine")
+	refine["abstract"] = false
+	refine["outputs"] = [{ "item": "iron", "kg": 100 }]
+	var errors := DataValidator.validate(data)
+	assert_false(errors.any(func(e: String) -> bool: return e.begins_with("yield_over_ceiling")))
+
+
+func test_the_new_cargo_classes_and_machines_are_known() -> void:
+	for cargo_class: String in ["water", "fuel", "oxidiser", "acid", "gas"]:
+		assert_has(DataValidator.CARGO_CLASSES, cargo_class)
+	_entry("modules", "refinery")["capabilities"]["facility"]["type"] = "electrolyser"
+	_entry("recipes", "refine")["facility"] = "electrolyser"
+	assert_eq(DataValidator.validate(data), [] as Array[String])
+
+
+## A cryogenic tank (B29): boil-off per class a day, and its cooler's draw.
+func _cryo(value: Variant) -> void:
+	_entry("modules", "hull")["capabilities"]["cryo"] = value
+
+
+func test_a_cryo_tank_passes() -> void:
+	_cryo({ "boil_off_ppm_per_day": { "propellant": 10000 }, "cooler_kw": 1 })
+	assert_eq(DataValidator.validate(data), [] as Array[String])
+
+
+func test_a_cryo_tank_needs_its_cooler() -> void:
+	_cryo({ "boil_off_ppm_per_day": { "propellant": 10000 } })
+	_assert_error("missing_field")
+
+
+func test_a_cryo_rate_is_a_known_class_and_at_most_all_of_it() -> void:
+	_cryo({ "boil_off_ppm_per_day": { "plasma": 10 }, "cooler_kw": 1 })
+	_assert_error("bad_enum")
+	_cryo({ "boil_off_ppm_per_day": { "propellant": 1000001 }, "cooler_kw": 1 })
+	_assert_error("out_of_range")
+
+
+func test_a_cryo_tank_is_an_object() -> void:
+	_cryo(5)
+	_assert_error("bad_capability")
 
 
 func test_unknown_item() -> void:
@@ -964,14 +1020,93 @@ func test_recipe_seconds_is_rejected() -> void:
 	_assert_error("unknown_field")
 
 
-func test_recipe_needs_work() -> void:
-	_entry("recipes", "refine").erase("work")
+## Factory rates (C30, B29): energy and heat per run, throughput per machine. Work points are optional
+## until C30 is on main.
+func test_recipe_needs_energy() -> void:
+	_entry("recipes", "refine").erase("energy_kj")
 	_assert_error("missing_field")
 
 
-func test_facility_needs_work_per_tick() -> void:
-	_entry("modules", "refinery")["capabilities"]["facility"].erase("work_per_tick")
+func test_recipe_needs_heat() -> void:
+	_entry("recipes", "refine").erase("heat_kj")
 	_assert_error("missing_field")
+
+
+func test_recipe_passes_without_work_points() -> void:
+	for id: String in ["frame", "refine", "tanker"]:
+		_entry("recipes", id).erase("work")
+		_entry("recipes", id).erase("power_kw")
+	for id: String in ["fabricator", "refinery"]:
+		_entry("modules", id)["capabilities"]["facility"].erase("work_per_tick")
+	assert_eq(DataValidator.validate(data), [] as Array[String])
+
+
+func test_energy_must_be_whole_and_positive() -> void:
+	_entry("recipes", "refine")["energy_kj"] = 0
+	_assert_error("out_of_range")
+	_entry("recipes", "refine")["energy_kj"] = 5000.5
+	_assert_error("not_whole")
+
+
+func test_heat_may_be_zero_or_above_energy() -> void:
+	_entry("recipes", "refine")["heat_kj"] = 0
+	assert_eq(DataValidator.validate(data), [] as Array[String])
+	_entry("recipes", "refine")["heat_kj"] = 50000
+	assert_eq(DataValidator.validate(data), [] as Array[String])
+	_entry("recipes", "refine")["heat_kj"] = -1
+	_assert_error("out_of_range")
+
+
+func test_facility_needs_throughput() -> void:
+	var facility: Dictionary = _entry("modules", "refinery")["capabilities"]["facility"]
+	facility.erase("throughput_kg_per_s")
+	facility.erase("work_per_tick")
+	_assert_error("missing_field")
+
+
+## Until B30 what was on main keeps its legacy figures (Lead, 2026-11-08): a recipe with work and
+## power and no energy, a facility with work_per_tick and no throughput.
+func test_legacy_runs_pass_until_b30() -> void:
+	for field: String in ["energy_kj", "heat_kj"]:
+		_entry("recipes", "refine").erase(field)
+	_entry("recipes", "refine")["legacy"] = "removed in B30"
+	_entry("modules", "refinery")["capabilities"]["facility"].erase("throughput_kg_per_s")
+	assert_eq(DataValidator.validate(data), [] as Array[String])
+
+
+func test_a_run_needs_energy_or_legacy_work() -> void:
+	for field: String in ["energy_kj", "heat_kj", "work"]:
+		_entry("recipes", "refine").erase(field)
+	_assert_error("missing_field")
+
+
+func test_legacy_note_must_be_text() -> void:
+	_entry("recipes", "refine")["legacy"] = 30
+	_assert_error("bad_recipe")
+
+
+## B29 is additive: only the abstract refine_* recipes are marked legacy, and every real chain recipe
+## carries its real energy.
+func test_only_the_abstract_slice_recipes_are_legacy() -> void:
+	for entry: Dictionary in DataValidator.load_dir()["recipes"]["entries"]:
+		if entry.has("legacy"):
+			assert_true(entry["abstract"], entry["id"])
+			assert_true(entry["id"].begins_with("refine_"), entry["id"])
+		if not entry["abstract"]:
+			assert_has(entry, "energy_kj", entry["id"])
+
+
+func test_throughput_must_be_above_zero_and_exact() -> void:
+	var facility: Dictionary = _entry("modules", "refinery")["capabilities"]["facility"]
+	facility["throughput_kg_per_s"] = 0
+	_assert_error("bad_number")
+	facility["throughput_kg_per_s"] = 0.0005
+	_assert_error("inexact_value")
+
+
+func test_recipe_may_set_a_slower_throughput() -> void:
+	_entry("recipes", "refine")["throughput_kg_per_s"] = 0.5
+	assert_eq(DataValidator.validate(data), [] as Array[String])
 
 
 func test_slower_facility_draws_power_in_proportion() -> void:
@@ -1046,10 +1181,10 @@ func test_slag_must_still_be_vented() -> void:
 
 ## Research data (task B19): theories, science kinds, the lab and ideas.
 func _research() -> void:
-	data["modules"]["entries"].append(_module("lab", 10, { "facility": { "type": "lab", "work_per_tick": 100 } },
+	data["modules"]["entries"].append(_module("lab", 10, { "facility": { "type": "lab", "throughput_kg_per_s": 1, "work_per_tick": 100 } },
 		[_connector("mount", "side", "medium")]))
 	data["recipes"]["entries"].append(_fabrication("lab", 1, "lab"))
-	data["recipes"]["entries"].append({ "id": "prove_x", "facility": "lab", "work": 5000,
+	data["recipes"]["entries"].append({ "id": "prove_x", "facility": "lab", "energy_kj": 5000, "heat_kj": 5000, "work": 5000,
 		"power_kw": 1, "points": 5, "inputs": [{ "item": "frame", "count": 1 }],
 		"outputs": [{ "item": "frame", "count": 1, "sink": "test_consumed" }, { "theory": "x" }],
 		"abstract": true })
@@ -1058,7 +1193,7 @@ func _research() -> void:
 	data["sinks"]["entries"].append({ "id": "test_consumed", "name": "Test", "items": ["frame"] })
 	data["theories"] = _envelope([{ "id": "x", "name": "X", "era": 2, "requires": [],
 		"evidence": [{ "kind": "survey", "count": 1 }], "test": "prove_x", "unlocks": ["laser"] }])
-	data["theories"]["bench_test"] = { "inputs": [{ "item": "frame", "count": 1 }], "work": 3000, "power_kw": 1 }
+	data["theories"]["bench_test"] = { "inputs": [{ "item": "frame", "count": 1 }], "energy_kj": 3000, "heat_kj": 3000, "work": 3000, "power_kw": 1 }
 	data["science"] = _envelope([{ "id": "survey", "name": "Survey", "place": "asteroid",
 		"capability": "scan", "points": { "asteroid": 10 } }])
 	_entry("modules", "laser")["ideas"] = [
@@ -1280,7 +1415,7 @@ func test_a_design_base_must_be_built_by_a_recipe() -> void:
 
 func test_a_design_is_never_built_in_one_go() -> void:
 	_add_design()
-	_add_sorted("recipes", { "id": "miner", "facility": "fabricator", "work": 5000,
+	_add_sorted("recipes", { "id": "miner", "facility": "fabricator", "energy_kj": 5000, "heat_kj": 5000, "work": 5000,
 		"power_kw": 1, "inputs": [{ "item": "frame", "count": 13 }],
 		"outputs": [{ "unit_template": "miner" }], "abstract": true })
 	_assert_error("design_built_whole")
@@ -1300,8 +1435,8 @@ func test_a_design_kind_matches_its_base() -> void:
 	_assert_error("design_kind_mismatch")
 
 
-func test_a_design_is_fitted_in_an_order_the_budgets_allow() -> void:
-	# The lamp needs the panel's power, so the panel must come first.
+func test_a_design_over_its_budgets_is_allowed() -> void:
+	# Fitting warns and allows (owner, 2026-11-07): the lamp may go on before the panel that powers it.
 	_add_sorted("modules", _module("lamp", 10, {}, [_connector("mount", "side", "medium")]))
 	_entry("modules", "lamp")["power_kw"] = 150
 	_add_sorted("modules", _module("panel", 10, { "generate": { "power_kw": 200 } },
@@ -1315,7 +1450,7 @@ func test_a_design_is_fitted_in_an_order_the_budgets_allow() -> void:
 	]
 	assert_eq(DataValidator.validate(data), [] as Array[String], "panel first fits")
 	design["root"]["children"].reverse()
-	_assert_error("design_fit_order")
+	assert_eq(DataValidator.validate(data), [] as Array[String], "lamp first is allowed too")
 
 
 func test_the_mining_drone_design_holds_the_drone_the_bot_flies() -> void:
