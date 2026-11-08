@@ -280,3 +280,56 @@ func test_relative_changes_nothing() -> void:
 	sim.relative(keys["Ship"], keys["Other"], 0)
 	sim.relative(keys["Drone"], keys["Ship"], 0)
 	assert_eq(sim.state_hash(), before)
+
+
+# ------------------------------------------------------------------------------ A59: for systems
+
+func test_now_between_is_what_relative_gives_now() -> void:
+	sim.step(3)
+	var now := Relative.now_between(sim._ctx, keys["Ship"], keys["Other"])
+	var seen := sim.relative(keys["Ship"], keys["Other"], sim.current_tick())
+	for key: String in ["parent", "rel_pos_mm", "rel_vel_um_s", "range_mm", "speed_um_s", "closing_um_s", "lateral_um_s"]:
+		assert_eq(now[key], seen[key], key)
+	assert_eq(Relative.range_now_mm(sim._ctx, keys["Ship"], keys["Other"]), seen["range_mm"])
+	assert_eq(Relative.range_now_mm(sim._ctx, keys["Drone"], keys["Rock"]), 29_000_000, "a body's centre, in the frame")
+
+
+func test_now_between_refuses_unknowns() -> void:
+	assert_eq(Relative.now_between(sim._ctx, 999_999, keys["Other"]), {})
+	assert_eq(Relative.now_between(sim._ctx, keys["Ship"], keys["Ship"]), {})
+	assert_eq(Relative.range_now_mm(sim._ctx, keys["Ship"], 999_999), -1)
+	assert_eq(Relative.range_horizon(sim._ctx, keys["Ship"], 999_999, 1000), 0)
+
+
+## The horizon never lets the range cross the limit unseen, either way: step every tick of it.
+func test_range_horizon_holds_tick_by_tick() -> void:
+	_orbit("Other", _circle(A_MM + 3_000_000, 0, OrbitMath.TURN / 3600))
+	var start := Relative.range_now_mm(sim._ctx, keys["Ship"], keys["Other"])
+	for limit: int in [start - 400_000, start + 400_000]:
+		var above := start > limit
+		var ticks := Relative.range_horizon(sim._ctx, keys["Ship"], keys["Other"], limit)
+		assert_gt(ticks, 0, "a 400 m gap takes a while to close")
+		var copy := Sim.from_save(sim.to_save())
+		for t in ticks:
+			copy.step()
+			var r := Relative.range_now_mm(copy._ctx, keys["Ship"], keys["Other"])
+			assert_eq(r > limit, above, "still on its side at tick %d of %d" % [t + 1, ticks])
+			if (r > limit) != above:
+				break
+
+
+func test_range_horizon_in_one_frame_counts_only_motion_in_it() -> void:
+	assert_gt(Relative.range_horizon(sim._ctx, keys["Drone"], keys["Rock"], 1_000_000), 1_000_000_000,
+		"a still drone beside a rock in one frame never closes")
+	sim._state["units"][keys["Drone"]]["vel_um_s"] = [1000, 0, 0]
+	assert_eq(Relative.range_horizon(sim._ctx, keys["Drone"], keys["Rock"], 1_000_000), 0, "a drift is stepped")
+
+
+func test_now_tick_is_the_tick_being_run_mid_tick() -> void:
+	var loaded := Sim.from_save(sim.to_save())
+	loaded.step(5)
+	var reloaded := Sim.from_save(loaded.to_save())
+	assert_eq(Relative.now_tick(reloaded._ctx), 5, "after a load, the last completed tick")
+	reloaded._ctx.phase = 5
+	reloaded._ctx.tick = 6
+	assert_eq(Relative.now_tick(reloaded._ctx), 6, "inside a tick, the tick being run")
