@@ -135,3 +135,12 @@ static func copy_summary(detail: Dictionary) -> String:
 	if other > 0:
 		text += ", %d won't fit" % other
 	return text
+
+
+## C30's fitting warnings in words, joined: "Over the power budget: needs 120 kW, has
+## 80 kW". Each warning carries its own figures.
+static func warnings_text(warnings: Array) -> String:
+	var lines: PackedStringArray = []
+	for warning: Dictionary in warnings:
+		lines.append(OrderText.reason(warning.get("code", ""), warning))
+	return "; ".join(lines)

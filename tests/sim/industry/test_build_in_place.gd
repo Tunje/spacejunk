@@ -97,13 +97,11 @@ func test_a_job_built_in_place_is_refused_where_attach_part_would_be() -> void:
 		return state["parts"][id]["parent"] == HUB and state["parts"][id]["parent_connector"].begins_with("side"))[0]
 	assert_eq(sim.check(_job(STORAGE, _target(STATION, HUB, state["parts"][occupied]["parent_connector"])))["reason"],
 		"connector_occupied")
-	assert_eq(sim.check(_job("mining_laser_mk1", _target(SHIP, HULL, "side_b_nz")))["reason"], "over_heat_budget",
-		"the ship's second laser, as in the reference chain")
-	sim.submit(_job("mining_laser_mk1", _target(SHIP, HULL, "side_b_nz")))
-	sim.step()
-	var events := sim.take_events()
-	assert_eq(_types(events), ["command_rejected"], "refused as this command, not as an attach")
-	assert_eq(events[0]["data"]["reason"], "over_heat_budget")
+	# C30: over a budget is only a warning, which the job's check passes on from the trial fit.
+	var second_laser := sim.check(_job("mining_laser_mk1", _target(SHIP, HULL, "side_b_nz")))
+	assert_true(second_laser["ok"], "the ship's second laser, as in the reference chain, is allowed")
+	assert_eq(second_laser["detail"]["warnings"].map(func(warning: Dictionary) -> String: return warning["code"]),
+		["over_heat_budget"])
 
 
 func test_two_jobs_never_aim_at_one_spot() -> void:

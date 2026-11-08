@@ -43,8 +43,7 @@ func _job_on(game: Sim, facility: int) -> Dictionary:
 
 
 func _run_ticks(recipe: String, facility: int) -> int:
-	var rate := JobSystem.work_per_tick(sim._ctx, facility)
-	return ceili(float(sim._ctx.defs["recipes"][recipe]["work"]) / rate)
+	return JobSystem.machine_ticks(sim._ctx, facility, recipe)
 
 
 func test_a_save_midway_through_real_jobs_with_slag_in_its_sink_loads_and_plays_the_same() -> void:
@@ -59,7 +58,7 @@ func test_a_save_midway_through_real_jobs_with_slag_in_its_sink_loads_and_plays_
 	var refinery_job := _job_on(sim, REFINERY)
 	assert_false(refinery_job.is_empty(), "the refinery job is still on")
 	assert_eq(refinery_job["status"], "running")
-	assert_between(refinery_job["work_left"], 1, sim._ctx.defs["recipes"]["refine_hematite"]["work"] - 1,
+	assert_between(refinery_job["energy_left_j"], 1, JobSystem.run_energy_j(sim._ctx, refinery_job) - 1,
 		"midway through a run")
 	var sinks: Dictionary = sim.ledger()["matter"]["sinks"]
 	assert_gt(sinks.values().reduce(func(total: int, grams: int) -> int: return total + grams, 0), 0,
@@ -69,7 +68,7 @@ func test_a_save_midway_through_real_jobs_with_slag_in_its_sink_loads_and_plays_
 	sim.step()
 	var fabricator_job := _job_on(sim, FABRICATOR)
 	assert_eq(fabricator_job.get("status", ""), "paused")
-	assert_gt(fabricator_job["work_left"], 0)
+	assert_gt(fabricator_job["energy_left_j"], 0)
 
 	var saved := sim.to_save()
 	var loaded := Sim.from_save(saved)

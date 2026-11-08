@@ -2,7 +2,7 @@ class_name NewStartBot
 extends RefCounted
 ## Plays new_start.json through the public API as far as the game goes before research (C14): the
 ## probe alone scans and mines the cluster's rocks, refines on board, builds a small station
-## docked at itself, fits it through a refused fit, and hauls ore into it. Each step starts when
+## docked at itself, fits it through a warned fit (C30), and hauls ore into it. Each step starts when
 ## the one before has ended. IDs come from the start state, events and the view. It records
 ## steps and marks, so tests assert on one shared run and B gets the chain's timings.
 
@@ -104,7 +104,8 @@ var problems := PackedStringArray()
 var ledger_problems := PackedStringArray()
 var range_problems := PackedStringArray()
 ## Refusals the bot meant to provoke, as { item, reason }.
-var refused_fits: Array[Dictionary] = []
+## The LIDAR's warnings at each check before its fixes are fitted (C30).
+var warned_fits: Array[Dictionary] = []
 var deposits := {}
 var refinery := 0
 var fabricator := 0
@@ -292,30 +293,42 @@ static func _sorted_ids(table: Dictionary) -> Array:
 	return ids
 
 
-## Fits the station from the probe's hold, as a player learns its limits: the bare station refuses
-## the LIDAR for power, then with a solar panel for heat, and takes it once a radiator is on. Each
-## fix is fitted as soon as it is made, since parts are bulky in the probe's goods hold. Then an ore
-## container, made once the hold has room.
+## Fits the station from the probe's hold, as a player learns its limits. Over a budget is a warning,
+## not a refusal (C30, the owner's ruling), so the player checks the LIDAR first: the bare station is
+## short of power, then with a solar panel short of radiators, and has both once a radiator is on.
+## Each fix is fitted as soon as it is made, since parts are bulky in the probe's goods hold. Then an
+## ore container, made once the hold has room.
 func _fit_station() -> void:
 	if not problems.is_empty():
 		return
+	var lidar := { "type": "attach_part", "unit": station, "args": _attach_args("lidar_mk1", station_hub, "side_a_px") }
 	for fix: Array in [["solar_panel_mk1", "side_a_nx"], ["heat_radiator_mk1", "side_a_nz"]]:
-		var refusal := _attach_refused(station, "lidar_mk1", station_hub, "side_a_px")
-		if refusal == "":
-			problems.append("the station took the LIDAR before %s" % fix[0])
+		var warnings := _warnings_of(sim.check(lidar))
+		if warnings.is_empty():
+			problems.append("the station had the budget for the LIDAR before %s" % fix[0])
 			return
-		refused_fits.append({ "item": "lidar_mk1", "reason": refusal })
+		warned_fits.append({ "item": "lidar_mk1", "warnings": warnings })
 		mark("fit_failed")
 		if sim._state["units"][PROBE]["inventory"].get(fix[0], 0) == 0:
 			_queue([[fabricator, fix[0], 1]])
 			_wait_for([])
 		_attach(station, fix[0], station_hub, fix[1])
+	if not _warnings_of(sim.check(lidar)).is_empty():
+		problems.append("the station is still short for the LIDAR")
+		return
 	_attach(station, "lidar_mk1", station_hub, "side_a_px")
 	mark("fit_fixed")
 	# Built in place (C15): at 6000 L, ore_container_mk1 could never pass through the probe's
 	# 4000 L goods hold.
 	_queue([[fabricator, "ore_container_mk1", 1, _on_station("side_a_pz")]])
 	_wait_for([])
+
+
+## The warning codes of an allowed check, or ["refused: reason"] for a refusal.
+func _warnings_of(checked: Dictionary) -> Array:
+	if not checked["ok"]:
+		return ["refused: %s" % checked["reason"]]
+	return checked["detail"].get("warnings", []).map(func(warning: Dictionary) -> String: return warning["code"])
 
 
 ## Stage 2: two more trips for the research route's goods, with composition measured at each rock,
@@ -841,15 +854,6 @@ func _attach(unit: int, item: String, parent: int, connector: String) -> int:
 		if _is_refusal(event, id):
 			problems.append("%s refused: %s" % [item, event["data"]["reason"]])
 	return 0
-
-
-## Attaches a part that should be refused, and returns the reason, or "" if it fitted.
-func _attach_refused(unit: int, item: String, parent: int, connector: String) -> String:
-	var id := _command("attach_part", unit, _attach_args(item, parent, connector))
-	for event in _step():
-		if _is_refusal(event, id):
-			return event["data"]["reason"]
-	return ""
 
 
 ## attach_part reports a refusal as attach_failed, with the command's ID like command_rejected.
