@@ -228,7 +228,7 @@ func test_rated_mass_must_be_above_zero() -> void:
 	_assert_error("bad_number")
 
 
-## A55's minimum throttle (B29): optional, whole, 1 to 1000000 parts per million of full thrust.
+## A55's minimum throttle (B31): optional, whole, 1 to 1000000 parts per million of full thrust.
 func _thruster(extra: Dictionary) -> void:
 	var thruster := { "speed_m_s": 1, "propellant_kg_per_s": 1, "rated_mass_kg": 1, "exhaust_m_s": 3000,
 		"thrust_kn": 3 }
