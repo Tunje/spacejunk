@@ -138,7 +138,7 @@ A whole number converts by integer multiplication, so a value such as the star's
 | `radiator` | `reject_kw` | Radiators |
 | `heat_capacity` | `limit_kj` | Summed to give the unit's heat limit |
 | `port` | `transfer_kg_per_s`, `dock_seconds` (whole), `undock_seconds` (whole), `capture_range_mm` (whole), `capture_speed_m_s` | Docking ports |
-| `thruster` | `speed_m_s`, `propellant_kg_per_s`, `rated_mass_kg`, `exhaust_m_s`, `thrust_kn` | Thrusters |
+| `thruster` | `speed_m_s`, `propellant_kg_per_s`, `rated_mass_kg`, `exhaust_m_s`, `thrust_kn`, optional `min_throttle_ppm` (whole) | Thrusters |
 | `landing_gear` | `max_touchdown_m_s` | Landing legs |
 | `facility` | `type`: `refinery`, `fabricator` or `lab`; `throughput_kg_per_s`; `work_per_tick` (whole, optional until C30 is on main) | Facilities. `throughput_kg_per_s`, above 0, is the most input mass a run takes in a second, and loads as `throughput_g_per_s` (C30, B29). The module's `power_kw` is the rating, the most a running job draws; `heat_kw` is only its fitting figure. `work_per_tick` goes with C30 |
 | `always_on` | `true` | A load that runs whenever healthy, such as a command hub |
@@ -157,6 +157,12 @@ A multi-role part has one `power_kw` and one `heat_kw`, which apply whenever it 
 A trip's cost is its travel time at `propellant_kg_per_s`, scaled by the unit's mass at departure over `rated_mass_kg`, and paid in one lump at departure ([autonomy.md](autonomy.md) section 4). The network spec holds the exact formula.
 
 **Two kinds of thruster figure.** Trips inside a frame read `speed_m_s`, `propellant_kg_per_s` and `rated_mass_kg`, exactly as above. Burns outside a frame read only `exhaust_m_s` (loaded as `exhaust_mm_s`) and `thrust_kn` (loaded as `thrust_n`), through the rocket equation of [orbital_flight.md](orbital_flight.md) section 7. The two kinds are independent. `chemical_thruster_mk1` has `thrust_kn` 15 (tasks B11 and B11b), so a fully fuelled probe lifts off from Frost at about three times its gravity, and a hand-flown landing loses less to gravity. Its in-frame figures stay 1 kg/s at 500 m/s. A burn's propellant flow is `thrust_kn` over `exhaust_m_s`, 5 kg/s at 3000 m/s. `small_chemical_thruster_mk1` stays at 0.15 kN, where both kinds still agree. All five fields are required, and the validator checks them (task B13). A thruster is not a power or heat load during a trip, so in the slice its `power_kw` and `heat_kw` count only toward fitting budgets.
+
+**Minimum throttle (task B29, for A55).** A `thruster` may set `min_throttle_ppm`: the lowest thrust it can hold, in parts per million of full, a whole number from 1 to 1,000,000. An engine without it fires only at full. Real engines set the values:
+- `chemical_thruster_mk1`: 200,000 (20%). It is the probe's main and landing engine, so it deep-throttles like a lander's descent engine, which manage about 10 to 20%.
+- `small_chemical_thruster_mk1`: 1,000,000 (full only). At 0.15 kN it is an RCS-sized thruster, on or off, and it holds lower thrust only by pulsing.
+
+Typical large chemical engines that aren't built to land throttle to about 40 to 70%, the range for later engines of that kind.
 
 **Docking capture (task B29, for A54).** `capture_range_mm` is the distance between the two ports at which the capture latches engage, a whole number of millimetres above 0. `capture_speed_m_s` is the fastest closing speed at which they latch, above 0, and it loads as `capture_speed_mm_s`. A dock needs both: ports within range, closing no faster than the limit. The range is in mm because no loader rule turns metres into millimetres. The values follow real soft-capture systems, which latch at about 0.03 to 0.1 m/s within a few to tens of centimetres:
 - `docking_port_mk1`: 100 mm at 0.1 m/s, like a medium androgynous port's guide petals;

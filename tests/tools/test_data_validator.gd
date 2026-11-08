@@ -228,6 +228,42 @@ func test_rated_mass_must_be_above_zero() -> void:
 	_assert_error("bad_number")
 
 
+## A55's minimum throttle (B29): optional, whole, 1 to 1000000 parts per million of full thrust.
+func _thruster(extra: Dictionary) -> void:
+	var thruster := { "speed_m_s": 1, "propellant_kg_per_s": 1, "rated_mass_kg": 1, "exhaust_m_s": 3000,
+		"thrust_kn": 3 }
+	thruster.merge(extra)
+	_entry("modules", "laser")["capabilities"]["thruster"] = thruster
+
+
+func test_thruster_passes_without_a_minimum_throttle() -> void:
+	_thruster({})
+	assert_eq(DataValidator.validate(data), [] as Array[String])
+
+
+func test_minimum_throttle_passes_from_deep_to_full_only() -> void:
+	for ppm: int in [1, 200000, 1000000]:
+		_thruster({ "min_throttle_ppm": ppm })
+		assert_eq(DataValidator.validate(data), [] as Array[String])
+
+
+func test_minimum_throttle_must_be_whole_and_in_range() -> void:
+	_thruster({ "min_throttle_ppm": 0 })
+	_assert_error("out_of_range")
+	_thruster({ "min_throttle_ppm": 1000001 })
+	_assert_error("out_of_range")
+	_thruster({ "min_throttle_ppm": 0.5 })
+	_assert_error("not_whole")
+
+
+func test_slice_engines_throttle_as_their_types_do() -> void:
+	var modules := {}
+	for entry: Dictionary in DataValidator.load_dir()["modules"]["entries"]:
+		modules[entry["id"]] = entry
+	assert_eq(modules["chemical_thruster_mk1"]["capabilities"]["thruster"]["min_throttle_ppm"], 200000.0)
+	assert_eq(modules["small_chemical_thruster_mk1"]["capabilities"]["thruster"]["min_throttle_ppm"], 1000000.0)
+
+
 func test_efficiency_above_one_million() -> void:
 	_entry("modules", "laser")["capabilities"]["battery"] = {
 		"capacity_kj": 1, "max_charge_kw": 1, "max_discharge_kw": 1,
