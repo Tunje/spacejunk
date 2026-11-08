@@ -62,7 +62,6 @@ func bind(new_bridge: SimBridge, log_panel: EventLog, fitting: FittingScreen, sc
 	bridge.defs_changed.connect(_reread_defs)
 	bridge.view_updated.connect(_on_view)
 	bridge.events_received.connect(_on_events)
-	fitting.fit_blocked.connect(_note_fit_blocked)
 	_on_view()
 
 
@@ -74,10 +73,6 @@ func set_scenario(scenario: String, fresh := false) -> void:
 	tracker = GoalTracker.new(scenario)
 	_build_list()
 	refresh()
-
-
-func _note_fit_blocked(item: String, reason: String) -> void:
-	tracker.note_fit_blocked(item, reason)
 
 
 func _reread_defs() -> void:

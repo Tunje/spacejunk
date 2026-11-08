@@ -266,12 +266,10 @@ func _fit_action() -> Dictionary:
 			"parent_connector": fit["at"], "part_connector": "mount",
 		} }
 		var result := sim.check(command)
+		# C30: a fit over a limit is allowed with a warning, which the tracker sees on
+		# part_attached; the radiator after it brings the ship back within (D48).
 		if result["ok"]:
 			return { "command": command, "done": func() -> void: _fit_done[index] = true }
-		if GoalTracker.LIMIT_REASONS.has(result["reason"]):
-			return { "done": func() -> void:
-				_fit_done[index] = true
-				tracker.note_fit_blocked(fit["item"], result["reason"]) }
 	return {}
 
 

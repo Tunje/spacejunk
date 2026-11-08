@@ -34,7 +34,8 @@ var rocks: Dictionary = {}
 var problems := PackedStringArray()
 ## Goal IDs in the order they finished.
 var goal_order: Array[String] = []
-var refusal := ""
+## Check 10's warning, as Fit said it before the over-limit laser went on (C30).
+var warning := ""
 var laps := 0
 
 
@@ -272,19 +273,18 @@ func _install_on(target: int, item: String, connector: String) -> void:
 	main.toggle_fitting()
 
 
-## Check 10: the second laser is refused on heat, and one radiator fixes it.
+## Check 10 (C30): the second laser fits over the heat budget with a warning, and one
+## radiator brings the ship back within.
 func _fail_then_fix_the_fit() -> void:
 	_open_fitting(ship)
 	_pick_part("mining_laser_mk1")
 	_pick_slot("side_b_nz")
-	refusal = fitting._verdict.text
-	if not fitting._attach_button.disabled:
-		_problem("the second laser was not refused")
+	warning = fitting._verdict.text
+	if fitting._attach_button.disabled:
+		_problem("the second laser was refused, not warned")
+	_attach()
 	_pick_part("heat_radiator_mk1")
 	_pick_slot("side_c_nx")
-	_attach()
-	_pick_part("mining_laser_mk1")
-	_pick_slot("side_b_nz")
 	_attach()
 	main.toggle_fitting()
 
