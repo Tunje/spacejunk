@@ -22,7 +22,7 @@ A load is a part that wants power this tick. A faulted part is never a load.
 
 | Part | Is a load when | Draws |
 | ---- | -------------- | ----- |
-| Facility | It has a run in progress, including a shed run | The recipe's `power_w` |
+| Facility | It has a run in progress that is not still feeding, including a shed run or one paused by heat or a fault | A variable draw, `rate_w`, from the power left after the fixed loads (C30, section 3) |
 | Part with an operation | Its operation is active or held | The module's `power_w` |
 | AI core | It is the unit's assigned core | The module's `power_w` |
 | `always_on` module | It is healthy | The module's `power_w` |
@@ -33,7 +33,7 @@ A fitted but unassigned core demands nothing. The module's `power_w` is also its
 
 Each load has the part's current `priority`, which `set_priority` may have changed from the data default.
 
-A part runs when it is a load and is not shed. Waste heat always comes from the module's `heat_w`, for every running part, including a facility on a recipe that draws less than the rating.
+A part runs when it is a load and is not shed. Waste heat comes from the module's `heat_w` for every running part except a facility, whose heat is its job's: `rate_w × heat_j / energy_j` (C30).
 
 ## 3. Power
 
@@ -49,6 +49,8 @@ One network per unit. Docking does not join networks.
 2. Mark as held any load with `shed_until_tick` above the current tick.
 3. Keep every load not held. Walk the keep order from the end, shedding until the kept total is at or below `budget_w`. Within a class, the highest part ID sheds first.
 4. Walk the keep order from the start and re-admit any shed load that now fits, as long as it is not held. This stops one large load from blacking out smaller ones that would have fitted.
+
+Steps 1 to 4 are for the fixed loads, which are everything but facilities. Then, **variable loads (C30):** each facility with a load-making job, by `priority` descending and then part ID, takes `rate_w`, the lowest of what is left of `budget_w`, its heat limit and its throughput limit (contracts section 5). Its heat limit comes from the heat headroom: the healthy radiators' `reject_w`, less the `heat_w` of the kept fixed loads and `TICKS_PER_SECOND` watts for rounding, floored at 0, and shared in the same order. A held facility is given nothing. One given nothing while power is its limit is shed like any load. One held at 0 by heat alone is kept, with no draw.
 
 A load that stops running through this process sets `shed_until_tick = tick + SHED_HOLD_SECONDS * TICKS_PER_SECOND` and emits `power_shed` with reason `no_power`. A load that was shed and runs again emits `power_restored`. Events fire on those transitions only, never once per tick. The hold is what stops flapping at the edge of a battery running out.
 
@@ -72,7 +74,7 @@ Batteries fill and empty in part order rather than sharing evenly. This is deter
 One loop per unit. Docking does not join loops.
 
 **Phase 6.** Faulted parts contribute nothing.
-- `input_w` is the sum of `heat_w` across parts that ran this tick.
+- `input_w` is the sum of `heat_w` across parts that ran this tick, with each facility's job heat in place of its module's (C30).
 - `reject_w` is the sum of `radiator.reject_w`.
 - `added_j = Rate.amount(input_w, heat_in_remainder)`, and heat rises by that first.
 - `rejected_j = min(stored_j, Rate.amount(reject_w, heat_out_remainder))`. A clamped amount is dropped, so radiators build no credit while the loop is cold.

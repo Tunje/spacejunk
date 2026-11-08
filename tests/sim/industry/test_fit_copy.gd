@@ -158,27 +158,40 @@ func test_missing_counts_every_unfitted_part_beyond_stock() -> void:
 	assert_eq(report["attached"], [])
 
 
-func test_a_source_fitted_out_of_order_is_retried_until_nothing_more_fits() -> void:
+## C30: a budget only warns, so the laser fits on the first pass, ahead of the solar panel and
+## radiator that bring the budget, and its part_attached carries the warnings.
+func test_a_part_over_a_budget_fits_in_order_with_its_warnings() -> void:
 	var source := _source([
 		[LASER, "side_a_nz", "hull"], [SOLAR, "side_a_px", "hull"], [RADIATOR, "side_a_nx", "hull"],
 	])
 	var target := _target()
 	_give_parts([LASER, SOLAR, RADIATOR])
-	var report := _run_copy(target, source)
+	sim.submit(_copy(target, source))
+	sim.step()
+	var events := sim.take_events()
+	var report: Dictionary = events[-1]["data"]
 	assert_eq(report["refused"], [])
 	assert_eq(_defs_of(target), _defs_of(source))
-	assert_lt(_part_of(target, SOLAR), _part_of(target, LASER), "the laser fitted on the second pass")
+	assert_lt(_part_of(target, LASER), _part_of(target, SOLAR), "fitted in the source's order")
+	var first: Dictionary = events.filter(func(event: Dictionary) -> bool: return event["type"] == "part_attached")[0]
+	assert_eq(first["data"]["part"], _part_of(target, LASER))
+	assert_true(first["data"]["warnings"].map(func(warning: Dictionary) -> String: return warning["code"]).has("over_power_budget"))
 
 
 func test_no_rule_is_bypassed_a_part_attach_part_refuses_is_refused() -> void:
 	var source := _source([[LASER, "side_a_nz", "hull"]])
 	var target := _target()
 	_give_parts([LASER])
+	var hull: int = state["units"][target]["root"]
+	# The target's own spot is taken, by a part attach_part would also refuse to fit over.
+	var taken := Units.add_part(sim._ctx, target, SOLAR, hull, "side_a_nz", "mount")
+	state["parts"][hull]["children"].append(taken)
+	state["matter_start_g"] = sim.ledger()["matter"]["total_g"]
 	var attach := { "type": "attach_part", "unit": target, "args": { "item": LASER, "from": STATION,
-		"parent_part": state["units"][target]["root"], "parent_connector": "side_a_nz", "part_connector": "mount" } }
-	assert_eq(sim.check(attach)["reason"], "over_power_budget")
+		"parent_part": hull, "parent_connector": "side_a_nz", "part_connector": "mount" } }
+	assert_eq(sim.check(attach)["reason"], "connector_occupied")
 	var report := _run_copy(target, source)
-	assert_eq(report["refused"], [{ "source_part": _part_of(source, LASER), "item": LASER, "reason": "over_power_budget" }])
+	assert_eq(report["refused"], [{ "source_part": _part_of(source, LASER), "item": LASER, "reason": "connector_occupied" }])
 	assert_eq(report["missing"], {}, "the laser is in stock, just refused")
 	assert_eq(_part_of(target, LASER), 0)
 

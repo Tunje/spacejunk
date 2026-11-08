@@ -164,6 +164,7 @@ func _ready() -> void:
 		var spin := _add_spin(row, -MAX_DV_M_S, MAX_DV_M_S, DV_STEP_M_S)
 		spin.value_changed.connect(func(_value: float) -> void: _edited())
 		_axes.append(spin)
+	_build_burn_options(column)
 	_cost = _add_label(column)
 	_after = _add_label(column)
 	var buttons := HBoxContainer.new()
@@ -282,7 +283,56 @@ func set_components(prograde_m_s: float, normal_m_s := 0.0, radial_m_s := 0.0) -
 func pending_command() -> Dictionary:
 	if components() == [0, 0, 0]:
 		return {}
-	return FlightLogic.burn_command(unit_id(), burn_tick, components())
+	var steer: String = FlightLogic.STEERS[maxi(0, throttle_steer.selected)][0]
+	var aimed: bool = steer.begins_with("target")
+	return FlightLogic.burn_command(unit_id(), burn_tick, components(), roundi(throttle.value * 10_000.0), steer,
+		target_id if aimed else 0)
+
+
+# --- Throttle and steering (A55) ---
+
+## The burn's throttle in percent, from the engines' lowest (B29) to full.
+var throttle: SpinBox
+## How the burn steers: FlightLogic.STEERS, by index. Named so tests can pick one.
+var throttle_steer: OptionButton
+## Module defs for the throttle floor, read once: thrusters don't change in play.
+var _burn_modules: Dictionary = {}
+
+
+func _build_burn_options(column: VBoxContainer) -> void:
+	var row := HBoxContainer.new()
+	column.add_child(row)
+	var label := _add_label(row)
+	label.text = "Throttle (%)"
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	throttle = _add_spin(row, 1.0, 100.0, 1.0)
+	throttle.value = 100.0
+	throttle.value_changed.connect(func(_value: float) -> void: _edited())
+	var steer_row := HBoxContainer.new()
+	column.add_child(steer_row)
+	var steer_label := _add_label(steer_row)
+	steer_label.text = "Steering"
+	steer_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	throttle_steer = OptionButton.new()
+	throttle_steer.focus_mode = Control.FOCUS_NONE
+	for index in FlightLogic.STEERS.size():
+		throttle_steer.add_item(FlightLogic.STEERS[index][1], index)
+	throttle_steer.item_selected.connect(func(_index: int) -> void: _edited())
+	steer_row.add_child(throttle_steer)
+
+
+## The engines' throttle floor, and steering at a target only with one.
+func _show_burn_options() -> void:
+	if _burn_modules.is_empty():
+		_burn_modules = bridge.defs()["modules"]
+	var floor_pct := FlightLogic.min_throttle_ppm(unit(), _burn_modules) / 10_000.0
+	throttle.min_value = floor_pct
+	throttle.editable = floor_pct < 100.0
+	throttle.tooltip_text = "The engines go down to %d%%" % roundi(floor_pct) if floor_pct < 100.0 else "These engines only run at full thrust"
+	for index in FlightLogic.STEERS.size():
+		throttle_steer.set_item_disabled(index, FlightLogic.STEERS[index][0].begins_with("target") and target_id == 0)
+	if throttle_steer.is_item_disabled(throttle_steer.selected):
+		throttle_steer.select(0)
 
 
 func burn_now() -> void:
@@ -349,6 +399,7 @@ func refresh() -> void:
 	_peri_button.disabled = FlightLogic.apsis_tick(orbit, false, tick) < 0
 	_apo_button.disabled = FlightLogic.apsis_tick(orbit, true, tick) < 0
 	_sync_burns(shown, tick)
+	_show_burn_options()
 	var command := pending_command()
 	_update_preview(shown, command, flying)
 	_show_preview(view, flying)
@@ -520,7 +571,7 @@ func _update_paths(view: Dictionary, command: Dictionary) -> void:
 	# Velocity changes every tick in low flight, so there it is left out: the time
 	# limit below keeps a falling craft's path fresh without asking every tick. A
 	# drift's velocity only changes with a burn, so a new drift is drawn at once.
-	var low := int(shown.get("low_flight", 0))
+	var low := int(shown.get("stepped", 0))
 	var drift := "" if low != 0 else str(shown.get("vel_um_s", []))
 	var motion := "%s:%s" % [str(shown.get("orbit", {})), drift]
 	# A running burn changes the orbit or drift every tick, so while it runs the
@@ -530,7 +581,7 @@ func _update_paths(view: Dictionary, command: Dictionary) -> void:
 	var key := "%d:%s:%d:%s:%s:%s:%s" % [unit_id(), motion, low,
 		str(shown.get("landed", {})), str(shown["dock"]), str(command), str(preview.get("ok", false))]
 	var now := Time.get_ticks_msec()
-	var every := DESCENT_REFRESH_MS if int(shown.get("low_flight", 0)) != 0 else PATH_REFRESH_MS
+	var every := DESCENT_REFRESH_MS if FlightLogic.near_surface(shown) else PATH_REFRESH_MS
 	if key != _path_key:
 		_contact_tick = 0
 	elif now - _path_ms < maxi(every, _path_cost_ms * COST_GAP):
@@ -586,7 +637,7 @@ func _current_path(view: Dictionary) -> Array[PackedFloat64Array]:
 	var orbit: Dictionary = shown.get("orbit", {})
 	contact = {}
 	touchdown = PackedFloat64Array()
-	if int(shown.get("low_flight", 0)) != 0:
+	if FlightLogic.near_surface(shown):
 		return _descent_path(view)
 	if not shown.get("landed", {}).is_empty():
 		return points
@@ -636,7 +687,7 @@ func lift_off() -> void:
 
 ## The descent block: shown in low flight and on the ground.
 func _show_descent(view: Dictionary, shown: Dictionary) -> void:
-	var low := int(shown.get("low_flight", 0)) != 0
+	var low := FlightLogic.near_surface(shown)
 	var on_ground: bool = not shown.get("landed", {}).is_empty()
 	_descent_box.visible = low or on_ground
 	if not _descent_box.visible:
@@ -666,8 +717,8 @@ func _position_at(view: Dictionary, tick: int) -> PackedFloat64Array:
 func _place_world(view: Dictionary, place: Dictionary) -> Array:
 	if place.has("orbit_parent"):
 		return WorldPosition.of(view["bodies"][place["orbit_parent"]])
-	if place.has("low_flight"):
-		return WorldPosition.of(view["bodies"][place["low_flight"]])
+	if place.has("stepped"):
+		return WorldPosition.of(view["bodies"][place["stepped"]])
 	var frame: Dictionary = view.get("frames", {}).get(place.get("frame", 0), {})
 	return frame.get("world_mm", [0, 0, 0]) if not frame.is_empty() else [0, 0, 0]
 

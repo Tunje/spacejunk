@@ -387,7 +387,10 @@ func test_a_finite_burn_flies_through_escape_speed() -> void:
 	assert_true(orbit.get("hyperbolic", false), "the burn escapes too")
 	print("BURN through escape: preview e %.4f, flown e %.4f" % [
 		float(preview["e_q30"]) / ONE, float(orbit["e_q30"]) / ONE])
-	assert_eq(orbit, preview, "the preview flew the same burn")
+	var bare := preview.duplicate()
+	for key: String in ["periapsis_mm", "apoapsis_mm", "next_periapsis_tick", "next_apoapsis_tick"]:
+		bare.erase(key)
+	assert_eq(orbit, bare, "the preview flew the same burn")
 	assert_eq(sim.ledger()["violations"], PackedStringArray())
 
 
@@ -431,5 +434,6 @@ func test_the_view_shows_burns() -> void:
 	assert_eq(shown["burns"][0]["tick"], 900)
 	assert_almost_eq(shown["burn"]["dv_um_s"], 50_000_000, 2)
 	assert_gt(shown["burn"]["done_um_s"], 0)
-	assert_eq(shown["vel_um_s"], [0, 0, 0])
+	assert_eq(shown["stepped"], keys["Planet"], "a burn on an orbit is stepped (A55)")
+	assert_ne(shown["vel_um_s"], [0, 0, 0], "and its velocity is shown")
 	assert_eq(shown["op"]["type"], BurnSystem.OP_BURNING)

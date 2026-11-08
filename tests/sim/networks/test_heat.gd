@@ -59,10 +59,12 @@ func test_waste_heat_comes_from_parts_that_ran() -> void:
 	assert_eq(sim.view()["units"][SHIP]["heat"]["input_w"], 122_000)
 
 
-func test_a_job_heats_with_the_module_figure_not_the_recipe() -> void:
+## C30: a facility's heat is its job's, at the rate it runs. Wiring runs at 50 kW, and until B29 its
+## heat is in the fabricator's own proportion, 80 kW of heat to 100 kW of power.
+func test_a_job_heats_in_proportion_to_the_power_it_runs_at() -> void:
 	state["jobs"][40] = JobFixture.record(state, 14, "wiring", "running")
 	sim.step()
-	assert_eq(sim.ledger()["heat"][STATION]["input_w"], 87_000, "80 kW fabricator, 5 hub, 2 core")
+	assert_eq(sim.ledger()["heat"][STATION]["input_w"], 47_000, "40 kW from the fabricator, 5 hub, 2 core")
 
 
 func test_a_shed_part_makes_no_heat() -> void:
@@ -148,7 +150,9 @@ func test_exactly_at_the_limit_is_not_a_fault() -> void:
 	assert_eq(state["parts"][LIDAR]["fault"], "over_heat_limit")
 
 
-func test_faults_take_lowest_priority_and_highest_id_first() -> void:
+## C30: a job only gets the radiators' headroom, so with none left it makes no heat and is never
+## the part that faults. The laser, a fixed load, is.
+func test_faults_take_the_fixed_load_a_job_held_by_heat_never_faults() -> void:
 	_set_reject(5000)
 	_set_heat(LIMIT_J)
 	_run_op(LASER)
@@ -158,7 +162,8 @@ func test_faults_take_lowest_priority_and_highest_id_first() -> void:
 	sim.step()
 	var faulted: Array = _events_of("fault").map(func(event: Dictionary) -> int:
 		return event["data"]["module"])
-	assert_eq(faulted, [LIDAR, LASER], "both priority 3, higher ID first, and input still above 5 kW")
+	assert_eq(faulted, [LASER], "the job made no heat, so only the laser faults")
+	assert_eq([state["jobs"][40]["status"], state["jobs"][40]["reason"]], ["paused", "no_heat_headroom"])
 	assert_eq(state["parts"][CORE]["fault"], "", "2 kW is within rejection")
 
 

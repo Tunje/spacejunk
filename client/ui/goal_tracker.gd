@@ -21,13 +21,13 @@ const GOALS: Array[Dictionary] = [
 	{ "id": "install", "title": "Install a part on your ship",
 		"hint": "Fabricate an Ore Container, dock your ship, open Fit (G), pick it and pick a free connector on the ship's hull." },
 	{ "id": "drone", "title": "Build a mining drone",
-		"hint": "Fabricate a Small Craft: it appears bare at a free station port. Fabricate a Small Solar Panel, Small Heat Radiator, Small Propellant Tank, Small Thruster, Small Ore Container and Small Mining Laser. Select the craft, open Fit (G) and fit them in that order. Solar and radiator go on first, because a bare craft refuses the laser and thruster. The thruster goes under the tank." },
+		"hint": "Fabricate a Small Craft: it appears bare at a free station port. Fabricate a Small Solar Panel, Small Heat Radiator, Small Propellant Tank, Small Thruster, Small Ore Container and Small Mining Laser. Select the craft, open Fit (G) and fit them in that order. Solar and radiator go on first: a bare craft has no power, so Fit warns the laser and thruster would be shed. The thruster goes under the tank." },
 	{ "id": "handover", "title": "Hand the job to an AI core",
-		"hint": "Fabricate an Assisted Core, which takes a Basic Core. Fit it to the Small Craft: it fits only once the solar panel and radiator are on. Then in Auto (K) use it and press Repeat this route." },
+		"hint": "Fabricate an Assisted Core, which takes a Basic Core. Fit it to the Small Craft once the solar panel and radiator are on, or Fit warns the core has no power and it is shed. Then in Auto (K) use it and press Repeat this route." },
 	{ "id": "expand", "title": "Expand the station",
 		"hint": "Fabricate Ore Storage, select the Station, open Fit (G) and attach it to a free connector." },
 	{ "id": "fix", "title": "Hit a fitting limit and fix it",
-		"hint": "Try a second Mining Laser on the ship: it fails on heat, 280 of 200 kW. Fit a Heat Radiator, then the laser." },
+		"hint": "Fit a second Mining Laser on the ship: Fit warns it is over the heat budget, 280 of 200 kW. Then fit a Heat Radiator to bring it back within." },
 ]
 ## Lists by scenario ID; any other start uses the reference list.
 const NEW_START_GOALS: Array[Dictionary] = [
@@ -46,7 +46,7 @@ const NEW_START_GOALS: Array[Dictionary] = [
 	{ "id": "install", "title": "Install a part on something you built", "built_only": true,
 		"hint": "Fabricate a Solar Panel, select your station, open Fit (G) and attach it to a free connector on its hub." },
 	{ "id": "fix", "title": "Hit a fitting limit and fix it",
-		"hint": "Try fitting a part the station can't power yet, such as a Research Lab. Fit more Solar Panels or a Battery Bank, then fit it again." },
+		"hint": "Fit a part the station can't power yet, such as a Research Lab: Fit warns it is over the power budget, and what it can't power is shed. Then fit more Solar Panels or a Battery Bank until it is back within." },
 	{ "id": "haul", "title": "Haul ore to the station",
 		"hint": "With the probe docked at your station, Unload ore into it. Fit an Ore Storage first if the station has no ore hold." },
 	{ "id": "research", "title": "Prove a new tech",
@@ -58,13 +58,17 @@ const NEW_START_GOALS: Array[Dictionary] = [
 	{ "id": "expand", "title": "Expand the station", "after": "handover",
 		"hint": "Fabricate Ore Storage or another module, select the station, open Fit (G) and attach it." },
 ]
+## Fitting limits a craft can go over and come back within (C30: these warn, not refuse).
+## A connector's load is left out: the view shows no load to see it fixed by.
 const LIMIT_REASONS: Array[String] = ["over_mass_limit", "over_power_budget", "over_heat_budget"]
 ## What makes a drone a working drone. By capability, so any part that gives one counts.
 const DRONE_NEEDS: Array[String] = ["mine", "thruster", "ore", "propellant"]
 
 var goals: Array[Dictionary] = GOALS
 var done: Dictionary = {}
-var _blocked_items: Dictionary = {}
+## Units that took a part over a fitting limit, for the "fix" goal: it is done once one
+## of them is back within its limits.
+var _warned: Dictionary = {}
 ## Units built in this game, from unit_created, for `built_only` goals.
 var _built: Dictionary = {}
 
@@ -81,12 +85,14 @@ static func goals_for(scenario: String) -> Array[Dictionary]:
 
 ## What a save must keep: event-based goals cannot be worked out from a view.
 func save_state() -> Dictionary:
-	return { "done": done.duplicate(), "blocked_items": _blocked_items.duplicate(), "built": _built.keys() }
+	return { "done": done.duplicate(), "warned": _warned.keys(), "built": _built.keys() }
 
 
 func restore_state(state: Dictionary) -> void:
 	done = state.get("done", {}).duplicate()
-	_blocked_items = state.get("blocked_items", {}).duplicate()
+	_warned.clear()
+	for id: Variant in state.get("warned", []):
+		_warned[int(id)] = true
 	_built.clear()
 	for id: Variant in state.get("built", []):
 		_built[int(id)] = true
@@ -131,6 +137,8 @@ func observe_view(view: Dictionary, items: Dictionary, modules: Dictionary) -> A
 			_finish(finished, "haul")
 		if unit["kind"] == "station":
 			_finish(finished, "station")
+		if _warned.has(id) and GoalTracker.within_limits(unit.get("fit", {})):
+			_finish(finished, "fix")
 	return finished
 
 
@@ -148,7 +156,7 @@ func observe_event(event: Dictionary, view: Dictionary, defs: Dictionary) -> Arr
 		"task_cycle_done":
 			_finish(finished, "handover")
 		"part_attached":
-			_on_part_attached(finished, event["unit"], data["part"], view)
+			_on_part_attached(finished, event["unit"], data, view)
 		"unit_created":
 			_built[int(data.get("unit", 0))] = true
 			if defs.get("templates", {}).get(data.get("def", ""), {}).get("kind", "") == "station":
@@ -163,13 +171,16 @@ func observe_event(event: Dictionary, view: Dictionary, defs: Dictionary) -> Arr
 	return finished
 
 
-## The fitting screen refuses a bad fit before it is sent, so no event says so.
-func note_fit_blocked(item: String, reason: String) -> void:
-	if LIMIT_REASONS.has(reason):
-		_blocked_items[item] = true
+## Mass, power and heat all within the fit's limits, as the view's fit gives them.
+static func within_limits(fit: Dictionary) -> bool:
+	if fit.is_empty():
+		return false
+	return int(fit.get("mass_g", 0)) <= int(fit.get("mass_limit_g", 0)) \
+		and int(fit.get("power_rated_w", 0)) <= int(fit.get("power_budget_w", 0)) \
+		and int(fit.get("heat_rated_w", 0)) <= int(fit.get("heat_budget_w", 0))
 
 
-func _on_part_attached(finished: Array[String], unit_id: int, part_id: int, view: Dictionary) -> void:
+func _on_part_attached(finished: Array[String], unit_id: int, data: Dictionary, view: Dictionary) -> void:
 	var unit: Dictionary = view["units"].get(unit_id, {})
 	if unit.is_empty():
 		return
@@ -178,9 +189,10 @@ func _on_part_attached(finished: Array[String], unit_id: int, part_id: int, view
 	# An install counts on a ship, or, for a `built_only` goal, on anything built here.
 	if unit["kind"] == "ship" or _built.has(unit_id):
 		_finish(finished, "install", unit_id, unit["kind"] == "ship")
-	for part: Dictionary in InspectText.flatten(unit["parts"]):
-		if part["id"] == part_id and _blocked_items.has(part["def"]):
-			_finish(finished, "fix")
+	# C30: a fit over a limit is allowed and warned; the goal is to bring it back within.
+	for warning: Dictionary in data.get("warnings", []):
+		if LIMIT_REASONS.has(warning.get("code", "")):
+			_warned[unit_id] = true
 
 
 ## Finishes every open goal in this list with that trigger, unless it waits on an

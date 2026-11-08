@@ -1,7 +1,9 @@
 class_name FittingSystem
 extends SimSystem
 ## attach_part and detach_part: the attachment contract of contracts section 5, with the matter
-## rules of accounting.md section 2. Both apply instantly in phase 1.
+## rules of accounting.md section 2. Both apply instantly in phase 1. Mass, connector load, power
+## and heat only warn (C30): an attach that goes over them is allowed, and check's detail and
+## part_attached carry the warnings. Only connectors that cannot mate, or are taken, refuse.
 
 const ATTACH := "attach_part"
 const DETACH := "detach_part"
@@ -18,6 +20,10 @@ const REASON_PORT_BUSY := "port_busy"
 const REASON_ROOT := "root_part"
 const REASON_BUSY := "part_busy"
 const REASON_CARGO_FULL := "cargo_full"
+const WARN_POWER := "over_power_budget"
+const WARN_HEAT := "over_heat_budget"
+const WARN_MASS := "over_mass_limit"
+const WARN_LOAD := "over_load_limit"
 
 
 func commands() -> PackedStringArray:
@@ -66,56 +72,62 @@ func _validate_attach(ctx: SimContext, command: Dictionary) -> Dictionary:
 		return SimSystem.reject(REASON_INVALID_TARGET)
 	var carried_g: int = 0 if args["from"] == unit else module["mass_g"]
 	var fit := Units.fit(state, ctx.defs, unit, [module] as Array[Dictionary], carried_g)
-	var failure := _fit_failure(ctx, fit, parent, parent_end, part_end, module["mass_g"])
+	var failure := _fit_failure(ctx, parent, parent_end, part_end)
 	if failure.is_empty():
 		var result := SimSystem.ok()
 		result["detail"] = fit
+		fit["warnings"] = _load_warnings(ctx, parent, parent_end, module["mass_g"]) + fit_warnings(fit)
 		return result
 	var detail: Dictionary = fit.duplicate()
 	detail.merge(failure["detail"])
 	return SimSystem.reject(failure["reason"], detail, FAILED_EVENT, { "item": item })
 
 
-## The first fitting rule broken, as { reason, detail }, or {}.
-func _fit_failure(
-	ctx: SimContext, fit: Dictionary, parent: int, parent_end: Dictionary, part_end: Dictionary, mass_g: int
-) -> Dictionary:
+## The first fitting rule broken, as { reason, detail }, or {}. Only what cannot be done refuses:
+## connectors that do not mate, or one already taken (C30).
+func _fit_failure(ctx: SimContext, parent: int, parent_end: Dictionary, part_end: Dictionary) -> Dictionary:
 	if parent_end["type"] != part_end["type"] or parent_end["type"] == "dock":
 		return { "reason": "connector_type_mismatch", "detail": {} }
 	if (parent_end["size"] == SIZE_CORE) != (part_end["size"] == SIZE_CORE):
 		return { "reason": "connector_size_mismatch", "detail": {} }
 	if Units.child_at(ctx.state, parent, parent_end["id"]) != 0:
 		return { "reason": "connector_occupied", "detail": {} }
-	var load_failure := _load_failure(ctx, parent, parent_end, mass_g)
-	if not load_failure.is_empty():
-		return load_failure
-	if fit["mass_g"] > fit["mass_limit_g"]:
-		return { "reason": "over_mass_limit", "detail": { "need_g": fit["mass_g"], "have_g": fit["mass_limit_g"] } }
-	if fit["power_rated_w"] > fit["power_budget_w"]:
-		return { "reason": "over_power_budget",
-			"detail": { "need_w": fit["power_rated_w"], "have_w": fit["power_budget_w"] } }
-	if fit["heat_rated_w"] > fit["heat_budget_w"]:
-		return { "reason": "over_heat_budget",
-			"detail": { "need_w": fit["heat_rated_w"], "have_w": fit["heat_budget_w"] } }
 	return {}
 
 
-## Tests the new mass against the connector it joins and every connector above it.
-func _load_failure(ctx: SimContext, parent: int, parent_end: Dictionary, mass_g: int) -> Dictionary:
+## Owner's rulings, 2026-11-07 (C30): no hard checks on what a fit can carry, draw or shed. A fit over
+## its hull's mass limit, or that could draw more than the unit makes, or give off more heat than
+## its radiators reject, goes through with these warnings. Running short of power or radiators is
+## handled in play, as factories slow and loads shed; what too much mass does comes with A's
+## structure work.
+static func fit_warnings(fit: Dictionary) -> Array[Dictionary]:
+	var warnings: Array[Dictionary] = []
+	if fit["mass_g"] > fit["mass_limit_g"]:
+		warnings.append({ "code": WARN_MASS, "need_g": fit["mass_g"], "have_g": fit["mass_limit_g"] })
+	if fit["power_rated_w"] > fit["power_budget_w"]:
+		warnings.append({ "code": WARN_POWER, "need_w": fit["power_rated_w"], "have_w": fit["power_budget_w"] })
+	if fit["heat_rated_w"] > fit["heat_budget_w"]:
+		warnings.append({ "code": WARN_HEAT, "need_w": fit["heat_rated_w"], "have_w": fit["heat_budget_w"] })
+	return warnings
+
+
+## Tests the new mass against the connector it joins and every connector above it, warning at the
+## first that it overloads (C30).
+func _load_warnings(ctx: SimContext, parent: int, parent_end: Dictionary, mass_g: int) -> Array[Dictionary]:
 	var state := ctx.state
 	var below_g := mass_g
 	var end := parent_end
 	var current := parent
 	while true:
 		if below_g > end["load_limit_g"]:
-			return { "reason": "over_load_limit", "detail": { "need_g": below_g, "have_g": end["load_limit_g"] } }
+			return [{ "code": WARN_LOAD, "need_g": below_g, "have_g": end["load_limit_g"] }] as Array[Dictionary]
 		var part: Dictionary = state["parts"][current]
 		if part["parent"] == 0:
-			return {}
+			break
 		below_g = Units.subtree_mass(state, ctx.defs, current) + mass_g
 		end = Units.connector_of(Units.module_of(state, ctx.defs, part["parent"]), part["parent_connector"])
 		current = part["parent"]
-	return {}
+	return [] as Array[Dictionary]
 
 
 func _apply_attach(ctx: SimContext, command: Dictionary) -> void:
@@ -123,10 +135,16 @@ func _apply_attach(ctx: SimContext, command: Dictionary) -> void:
 	var unit: int = command["unit"]
 	var item: String = args["item"]
 	var mass_g: int = ctx.defs["modules"][item]["mass_g"]
+	var parent_end := Units.connector_of(Units.module_of(ctx.state, ctx.defs, args["parent_part"]), args["parent_connector"])
+	var warnings := _load_warnings(ctx, args["parent_part"], parent_end, mass_g)
 	Units.remove_stock(ctx.state["units"][args["from"]]["inventory"], item, mass_g)
 	var id := Units.add_part(ctx, unit, item, args["parent_part"], args["parent_connector"], args["part_connector"])
 	ctx.state["parts"][args["parent_part"]]["children"].append(id)
-	ctx.emit_event("part_attached", unit, { "part": id })
+	var data := { "part": id }
+	warnings.append_array(fit_warnings(Units.fit(ctx.state, ctx.defs, unit)))
+	if not warnings.is_empty():
+		data["warnings"] = warnings
+	ctx.emit_event("part_attached", unit, data)
 
 
 func _validate_detach(ctx: SimContext, command: Dictionary) -> Dictionary:
@@ -154,7 +172,22 @@ func _validate_detach(ctx: SimContext, command: Dictionary) -> Dictionary:
 		return SimSystem.reject(REASON_CARGO_FULL, over)
 	var result := SimSystem.ok()
 	result["detail"] = Units.fit(state, ctx.defs, unit)
+	result["detail"]["warnings"] = fit_warnings(_fit_without(ctx, unit, removed))
 	return result
+
+
+## The unit's fit figures once `removed` is gone, for the warnings a detach would leave (C30).
+func _fit_without(ctx: SimContext, unit: int, removed: Array[int]) -> Dictionary:
+	var after := Units.fit(ctx.state, ctx.defs, unit)
+	for id in removed:
+		var module: Dictionary = Units.module_of(ctx.state, ctx.defs, id)
+		var capabilities: Dictionary = module["capabilities"]
+		after["power_rated_w"] -= module["power_w"]
+		after["heat_rated_w"] -= module["heat_w"]
+		after["power_budget_w"] -= capabilities.get("generate", {}).get("power_w", 0) \
+			+ capabilities.get("battery", {}).get("max_discharge_w", 0)
+		after["heat_budget_w"] -= capabilities.get("radiator", {}).get("reject_w", 0)
+	return after
 
 
 func _subtree_busy(state: Dictionary, unit: int, removed: Array[int]) -> bool:

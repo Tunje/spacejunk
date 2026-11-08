@@ -101,16 +101,16 @@ func test_check_5_a_component_is_fabricated() -> void:
 	assert_eq(_station_stock("fabricated", "structural_frame"), 35 * 50 * KG)
 
 
-func test_check_10_a_fitting_fails_on_heat() -> void:
-	var failed := bot.first_event("attach_failed")
-	assert_eq(failed["unit"], SHIP)
-	assert_eq(failed["data"]["reason"], "over_heat_budget")
-	assert_eq(failed["data"]["detail"]["need_w"], 280000)
-	assert_eq(failed["data"]["detail"]["have_w"], 200000)
-	assert_eq(_station_stock("fit_failed", "mining_laser_mk1"), 400 * KG, "the part stays in stock")
+## Check 10 under the owner's ruling of 2026-11-07 (C30): over the heat budget is a warning. The
+## laser goes on, and the warning says by how much.
+func test_check_10_a_fitting_is_warned_on_heat() -> void:
+	var attached := bot.first_event("part_attached", func(event: Dictionary) -> bool: return event["data"].has("warnings"))
+	assert_eq(attached["unit"], SHIP)
+	assert_eq(attached["data"]["warnings"], [{ "code": "over_heat_budget", "need_w": 280000, "have_w": 200000 }])
+	assert_eq(_station_stock("fit_warned", "mining_laser_mk1"), 0, "the part is fitted")
 
 
-func test_checks_6_and_10_a_radiator_fixes_the_fit_and_the_part_installs() -> void:
+func test_checks_6_and_10_a_radiator_brings_the_fit_within_its_budget() -> void:
 	var ship: Dictionary = _units("fit_fixed")[SHIP]
 	assert_eq(ship["heat"]["reject_w"], 400000)
 	assert_eq(ship["fit"]["heat_rated_w"], 280000)

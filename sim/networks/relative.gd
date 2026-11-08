@@ -50,7 +50,7 @@ static func query(ctx: SimContext, unit_id: int, target: int, from_tick: int, ho
 	result["closest_planned"] = {}
 	var unit: Dictionary = ctx.state["units"][unit_id]
 	if not unit["burns"].is_empty() or not unit["burn"].is_empty():
-		var planned := planned_track(ctx, unit_id, [])
+		var planned := planned_track(ctx, unit_id, [], tick + horizon)
 		if not planned.is_empty():
 			result["closest_planned"] = closest(ctx, planned["track"], theirs, tick, horizon)
 	var orbits := _orbits(ctx, unit_id, target)
@@ -70,9 +70,10 @@ static func unit_track(ctx: SimContext, unit_id: int) -> Dictionary:
 	var now: int = ctx.state["tick"]
 	if not unit["dock"].is_empty():
 		return unit_track(ctx, unit["dock"]["target_unit"])
-	if unit["low_flight"] != 0:
-		return { "kind": "low", "body": unit["low_flight"], "pos": unit["pos_mm"].duplicate(),
-			"vel": unit["vel_um_s"].duplicate(), "carry": unit["drift_carry"].duplicate(), "tick": now }
+	if unit["stepped"] != 0:
+		return { "kind": "low", "body": unit["stepped"], "pos": unit["pos_mm"].duplicate(),
+			"vel": unit["vel_um_s"].duplicate(), "carry": unit["drift_carry"].duplicate(),
+			"vcarry": unit.get("vel_carry_nm", [0, 0, 0]).duplicate(), "tick": now }
 	if not unit["landed"].is_empty():
 		return _line(unit["landed"]["body"], unit["pos_mm"], [0, 0, 0], now)
 	if not unit["orbit"].is_empty():
@@ -98,109 +99,18 @@ static func thing_track(ctx: SimContext, id: int) -> Dictionary:
 	return _line(body["frame"], body["pos_mm"], [0, 0, 0], ctx.state["tick"])
 
 
-## The unit's path with its planned burns (and the one running) flown tick by tick through the
-## burn's own steps, plus `extra` burns not yet placed, as { track, burns: [{ id, start_tick,
-## end_tick }] }. {} unless the unit is on an orbit with no transfer.
-static func planned_track(ctx: SimContext, unit_id: int, extra: Array) -> Dictionary:
+## The unit's path with its running and planned burns flown (FlightAhead, A55), plus `extra` burns
+## not yet placed, to until_tick (-1 for the default horizon from now), as { track, burns }. {}
+## unless the unit is on an orbit, in stepped flight or landed, with no transfer.
+static func planned_track(ctx: SimContext, unit_id: int, extra: Array, until_tick: int = -1) -> Dictionary:
 	var unit: Dictionary = ctx.state["units"][unit_id]
-	if not unit["dock"].is_empty() or unit["orbit"].is_empty() or not unit["transfer"].is_empty():
-		return {}
 	var burns: Array = unit["burns"].duplicate(true)
 	burns.append_array(extra)
-	burns.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		return a["tick"] < b["tick"] or (a["tick"] == b["tick"] and a.get("id", 0) < b.get("id", 0)))
-	return fly(ctx, unit_id, burns)
-
-
-## Flies a unit's running burn, then `burns` in order, from its orbit now, as the simulation would:
-## each starts at its tick or the tick after the one before ends, fixes its direction from the orbit
-## at its start, and thrusts thrust / mass each tick until done or out of propellant. Power is
-## assumed throughout, as check assumes. A burn longer than BurnSystem.MAX_PREVIEW_TICKS is flown
-## as one impulse, as check previews it.
-static func fly(ctx: SimContext, unit_id: int, burns: Array) -> Dictionary:
-	var unit: Dictionary = ctx.state["units"][unit_id]
-	var found := BurnSystem.thruster(ctx, unit_id)
-	var orbit: Dictionary = unit["orbit"]
-	var segments: Array = [[FAR_PAST, orbit]]
-	var flown: Array = []
-	var mass_g := Units.unit_mass(ctx.state, ctx.defs, unit_id)
-	var left_g := Reservations.free_stock(ctx, unit_id, Travel.PROPELLANT)
-	var tick: int = int(ctx.state["tick"]) + 1
-	var queue: Array = []
-	if not unit["burn"].is_empty():
-		var running: Dictionary = unit["burn"]
-		queue.append({ "id": running["id"], "start": tick, "dir": running["dir_q30"], "dv": running["dv_um_s"],
-			"done": running["done_um_s"], "dv_remainder": running["dv_remainder"],
-			"flow_remainder": running["flow_remainder"], "held": running["held_um_s"], "running": true })
-	for planned: Dictionary in burns:
-		queue.append(planned)
-	if found.is_empty():
-		return { "track": { "kind": "rails", "segments": segments }, "burns": flown }
-	var stats: Dictionary = Units.module_of(ctx.state, ctx.defs, found["part"])["capabilities"][BurnSystem.CAPABILITY]
-	for entry: Dictionary in queue:
-		var start: int = entry["start"] if entry.has("running") else maxi(int(entry["tick"]), tick)
-		var burn := { "dv_um_s": 0, "done_um_s": entry.get("done", 0), "dv_remainder": entry.get("dv_remainder", 0),
-			"flow_remainder": entry.get("flow_remainder", 0) }
-		var direction: Array = entry.get("dir", [])
-		if not entry.has("running"):
-			var vector := _vector_on(ctx, orbit, entry, start)
-			burn["dv_um_s"] = IntMath.dist(vector, [0, 0, 0])
-			direction = OrbitMath.unit(vector)
-		else:
-			burn["dv_um_s"] = entry["dv"]
-		var held: Array = entry.get("held", [0, 0, 0])
-		var ticks_needed := IntMath.mul_div_ceil(int(burn["dv_um_s"]) - int(burn["done_um_s"]),
-			mass_g * Sim.TICKS_PER_SECOND, int(found["thrust_n"]) * 1_000_000_000)
-		var t := start
-		if ticks_needed > BurnSystem.MAX_PREVIEW_TICKS:
-			var change: Array[int] = []
-			var rest: int = int(burn["dv_um_s"]) - int(burn["done_um_s"])
-			for axis in 3:
-				change.append(OrbitMath.smul_div(direction[axis], rest, OrbitMath.ONE))
-			var result := BurnSystem._apply(ctx, orbit, t, change, held)
-			if result.is_empty():
-				break
-			orbit = result["orbit"]
-			segments.append([t + 1, orbit])
-			var grams := OrbitMath.burn_g(mass_g, rest, found["exhaust_mm_s"])
-			mass_g -= grams
-			left_g -= grams
-			flown.append({ "id": entry.get("id", 0), "start_tick": t, "end_tick": t })
-			tick = t + 1
-			continue
-		while burn["done_um_s"] < burn["dv_um_s"]:
-			var step := BurnSystem._step(stats, mass_g, burn)
-			if int(step["grams"]) > left_g:
-				break
-			var change: Array[int] = []
-			for axis in 3:
-				change.append(OrbitMath.smul_div(direction[axis], step["dv_um_s"], OrbitMath.ONE))
-			var result := BurnSystem._apply(ctx, orbit, t, change, held)
-			if result.is_empty():
-				break
-			if result["orbit"] != orbit:
-				orbit = result["orbit"]
-				segments.append([t + 1, orbit])
-			held = result["held"]
-			burn["dv_remainder"] = step["dv_remainder"]
-			burn["flow_remainder"] = step["flow_remainder"]
-			burn["done_um_s"] += step["dv_um_s"]
-			mass_g -= int(step["grams"])
-			left_g -= int(step["grams"])
-			t += 1
-		flown.append({ "id": entry.get("id", 0), "start_tick": start, "end_tick": t - 1 })
-		tick = t
-	return { "track": { "kind": "rails", "segments": segments }, "burns": flown }
-
-
-static func _vector_on(ctx: SimContext, orbit: Dictionary, planned: Dictionary, tick: int) -> Array[int]:
-	var basis := BurnSystem.orbit_basis(ctx, orbit, tick)
-	var vector: Array[int] = []
-	for axis in 3:
-		vector.append(OrbitMath.smul_div(planned["prograde_um_s"], basis[0][axis], OrbitMath.ONE)
-			+ OrbitMath.smul_div(planned["normal_um_s"], basis[1][axis], OrbitMath.ONE)
-			+ OrbitMath.smul_div(planned["radial_um_s"], basis[2][axis], OrbitMath.ONE))
-	return vector
+	var until := until_tick if until_tick >= 0 else int(ctx.state["tick"]) + _default_horizon(ctx, unit_id)
+	var flown := FlightAhead.fly(ctx, unit_id, burns, until)
+	if flown.is_empty():
+		return {}
+	return { "track": { "kind": "flown", "segments": flown["segments"] }, "burns": flown["burns"] }
 
 
 static func _line(place: int, pos: Array, vel: Array, tick: int) -> Dictionary:
@@ -215,6 +125,8 @@ static func _is_low(track: Dictionary) -> bool:
 ## track is only known at its own tick.
 static func sample(ctx: SimContext, track: Dictionary, tick: int, with_v: bool) -> Array:
 	match track["kind"]:
+		"flown":
+			return FlightAhead.sample(ctx, track["segments"], tick, with_v)
 		"rails":
 			var orbit := _segment(track["segments"], tick)
 			if with_v:
@@ -434,10 +346,12 @@ static func _closest_stepped(ctx: SimContext, mine: Dictionary, theirs: Dictiona
 			for which in 2:
 				var track: Dictionary = a if which == 0 else b
 				if _is_low(track):
-					var next := LowFlight.advance(ctx, track["body"], track["pos"], track["vel"], track["carry"])
+					var next := LowFlight.advance(ctx, track["body"], track["pos"], track["vel"], track["carry"],
+						track["vcarry"])
 					track["pos"] = next["pos"]
 					track["vel"] = next["vel"]
 					track["carry"] = next["carry"]
+					track["vcarry"] = next["vcarry"]
 					grounded = grounded or LowFlight.ground_contact(ctx, track["body"], next["pos"], memos[which]) >= 0
 			if grounded:
 				break
@@ -460,12 +374,12 @@ static func _default_horizon(ctx: SimContext, unit_id: int) -> int:
 static func _orbits(ctx: SimContext, unit_id: int, target: int) -> Array:
 	var mine := Transfer.unit_orbit(ctx, unit_id)
 	var unit: Dictionary = ctx.state["units"][unit_id]
-	if unit["low_flight"] != 0 or not unit["landed"].is_empty():
+	if unit["stepped"] != 0 or not unit["landed"].is_empty():
 		mine = {}
 	var theirs := {}
 	if ctx.state["units"].has(target):
 		var other: Dictionary = ctx.state["units"][target]
-		if other["low_flight"] == 0 and other["landed"].is_empty():
+		if other["stepped"] == 0 and other["landed"].is_empty():
 			theirs = Transfer.unit_orbit(ctx, target)
 	else:
 		var body: Dictionary = ctx.state["bodies"][target]
@@ -574,3 +488,171 @@ static func _free_port(ctx: SimContext, unit_id: int) -> int:
 		if ctx.state["parts"][part]["fault"] == "" and not Units.port_in_use(ctx.state, part):
 			return part
 	return 0
+
+
+# ------------------------------------------------------------------------------ for systems (A59)
+
+## The tick "now" is for a system: the tick being run during phases 2 to 7, when rails have placed
+## everything at it, and the last completed tick otherwise (a view, a check, after a load).
+static func now_tick(ctx: SimContext) -> int:
+	return ctx.tick if ctx.phase >= 2 and ctx.phase <= 7 else int(ctx.state["tick"])
+
+
+## Tracks of a unit and a target as they are now: a straight line or a route is where its state
+## says, not moved on by a tick, since mid-tick its state may already be this tick's.
+static func _tracks_now(ctx: SimContext, unit_id: int, target: int, tick: int) -> Array:
+	var mine := unit_track(ctx, unit_id)
+	var theirs := thing_track(ctx, target)
+	for track: Dictionary in [mine, theirs]:
+		if track.has("tick"):
+			track["tick"] = tick
+	return [mine, theirs]
+
+
+static func _valid(ctx: SimContext, unit_id: int, target: int) -> bool:
+	return ctx.state["units"].has(unit_id) and target != unit_id \
+		and (ctx.state["units"].has(target) or ctx.state["bodies"].has(target))
+
+
+## The target, a unit or a body, as seen from the unit now, for systems to call as they call
+## RailSystem.world_mm (A59, for C's Reach): { parent, rel_pos_mm, rel_vel_um_s, range_mm, speed_um_s,
+## closing_um_s, lateral_um_s }, as Sim.relative gives them, from the same code. {} for an unknown
+## unit or target. A docked unit is measured as its host; a body's range is to its centre.
+static func now_between(ctx: SimContext, unit_id: int, target: int) -> Dictionary:
+	if not _valid(ctx, unit_id, target):
+		return {}
+	var tick := now_tick(ctx)
+	var tracks := _tracks_now(ctx, unit_id, target, tick)
+	return state_between(ctx, tracks[0], tracks[1], tick)
+
+
+## The range from the unit to the target now, in mm, from positions only, or -1 if either is unknown.
+static func range_now_mm(ctx: SimContext, unit_id: int, target: int) -> int:
+	if not _valid(ctx, unit_id, target):
+		return -1
+	var tick := now_tick(ctx)
+	var tracks := _tracks_now(ctx, unit_id, target, tick)
+	return range_at(ctx, tracks[0], tracks[1], tick)
+
+
+## The ticks before the range from the unit to the target could cross limit_mm, either way, for a
+## coast horizon (A59, for Reach.horizon): the gap to the limit over the most the two can close or
+## open per tick, by CoastBounds. 0 when either moves in a way no bound holds (stepped flight, a
+## drift in a frame, an open orbit), so the caller steps.
+static func range_horizon(ctx: SimContext, unit_id: int, target: int, limit_mm: int) -> int:
+	var range_mm := range_now_mm(ctx, unit_id, target)
+	if range_mm < 0:
+		return 0
+	var gap := absi(range_mm - limit_mm)
+	var place := RailSystem.unit_place(ctx.state, unit_id)
+	if place > 0 and place == RailSystem.target_place(ctx.state, target):
+		var local := _local_um_s(ctx.state, unit_id) + _local_um_s(ctx.state, target)
+		return 0 if local >= CoastBounds.UNBOUNDED_UM_S else CoastBounds.ticks_to_close(gap, local)
+	var mine := _pull_bound(ctx.state, unit_id)
+	var theirs := _pull_bound(ctx.state, target)
+	if mine[1] >= 0 and theirs[1] >= 0 and mine[0] == theirs[0]:
+		var seen := now_between(ctx, unit_id, target)
+		return _ticks_under_pull(gap, int(seen["speed_um_s"]), int(mine[1]) + int(theirs[1]))
+	var speed := _closing_bound_um_s(ctx, unit_id, target)
+	if speed >= CoastBounds.UNBOUNDED_UM_S:
+		return 0
+	return CoastBounds.ticks_to_close(gap, speed)
+
+
+## [the body a thing falls round, the most its acceleration can be in um/s^2], for things whose
+## only acceleration is that body's pull: an elliptic orbit (the pull at periapsis), a frame and
+## what sits still in it (the frame's orbit), or nothing for the landed. [0, -1] for anything else:
+## thrust, a drift, a route, an open orbit.
+static func _pull_bound(state: Dictionary, id: int) -> Array:
+	var orbit: Dictionary = {}
+	if state["units"].has(id):
+		var unit: Dictionary = state["units"][id]
+		if not unit["dock"].is_empty():
+			return _pull_bound(state, unit["dock"]["target_unit"])
+		if not unit.get("landed", {}).is_empty():
+			return [unit["landed"]["body"], 0]
+		if not unit["burn"].is_empty() or unit.get("low_flight", unit.get("stepped", 0)) != 0 				or not unit["route"].is_empty() or not unit["transfer"].is_empty():
+			return [0, -1]
+		if not unit["orbit"].is_empty():
+			orbit = unit["orbit"]
+		elif unit["frame"] != 0 and unit["vel_um_s"] == [0, 0, 0]:
+			orbit = state["frames"][unit["frame"]]["orbit"]
+	else:
+		var body: Dictionary = state["bodies"][id]
+		if not body["orbit"].is_empty():
+			orbit = body["orbit"]
+		elif body["frame"] != 0:
+			orbit = state["frames"][body["frame"]]["orbit"]
+	if orbit.is_empty() or orbit.get("hyperbolic", false):
+		return [0, -1]
+	var parent: int = orbit["parent"]
+	var periapsis := maxi(1, CoastBounds.periapsis_mm(orbit))
+	var gm: int = state["bodies"][parent]["gm"]
+	var pull_nm := OrbitMath.smul_div(OrbitMath.smul_div(gm, 1_000_000_000_000, periapsis), 1_000_000, periapsis)
+	return [parent, pull_nm / 1000 + 1]
+
+
+## The ticks before a gap can close or open, from a relative speed now and the most the relative
+## acceleration can be: v t + a t^2 / 2 <= gap, solved for t and rounded down, less a tick. Speeds and
+## the gap take CoastBounds' slack.
+static func _ticks_under_pull(gap_mm: int, speed_um_s: int, accel_um_s2: int) -> int:
+	var gap_um := (gap_mm - CoastBounds.GAP_SLACK_MM) * 1000
+	if gap_um <= 0:
+		return 0
+	var v := IntMath.mul_div(speed_um_s, CoastBounds.SPEED_SLACK_PERMILLE, 1000) + 1
+	var a := maxi(1, IntMath.mul_div(accel_um_s2, CoastBounds.SPEED_SLACK_PERMILLE, 1000))
+	# 100 (v^2 + 2 a gap), capped so it stays in range; a smaller gap only shortens the answer.
+	var limit := 90_000_000_000_000_000
+	var squared := mini(v, 3_000_000_000) * mini(v, 3_000_000_000)
+	var room := maxi(0, limit - squared) / (2 * a)
+	var disc := squared + 2 * a * mini(gap_um, room)
+	var ticks := (IntMath.isqrt(100 * disc) - 10 * v) / a
+	return clampi(ticks - 1, 0, SimSystem.NO_LIMIT)
+
+
+## The most the unit and the target can close or open per second: each one's own motion below the
+## first body both hang from, as CoastBounds bounds a unit against a body.
+static func _closing_bound_um_s(ctx: SimContext, unit_id: int, target: int) -> int:
+	var state := ctx.state
+	# Two things in one frame move with it alike: only their own motion in it counts.
+	var place := RailSystem.unit_place(state, unit_id)
+	if place > 0 and place == RailSystem.target_place(state, target):
+		return mini(_local_um_s(state, unit_id) + _local_um_s(state, target), CoastBounds.UNBOUNDED_UM_S)
+	var mine := CoastBounds.unit_base(state, unit_id)
+	if int(mine[1]) >= CoastBounds.UNBOUNDED_UM_S:
+		return CoastBounds.UNBOUNDED_UM_S
+	var base: int = mine[0]
+	var speed: int = mine[1]
+	if state["units"].has(target):
+		var theirs := CoastBounds.unit_base(state, target)
+		if int(theirs[1]) >= CoastBounds.UNBOUNDED_UM_S:
+			return CoastBounds.UNBOUNDED_UM_S
+		speed += int(theirs[1])
+		if base == 0 or int(theirs[0]) == 0:
+			return speed if base == int(theirs[0]) else CoastBounds.UNBOUNDED_UM_S
+		return mini(speed + CoastBounds.chain_um_s(state, base, theirs[0]), CoastBounds.UNBOUNDED_UM_S)
+	var body: Dictionary = state["bodies"][target]
+	if body["orbit"].is_empty() and body["frame"] != 0:
+		# A rock in a frame moves with the frame's orbit round the frame's parent.
+		var frame: Dictionary = state["frames"][body["frame"]]
+		var parent: int = frame["orbit"]["parent"]
+		var carried := CoastBounds.orbit_max_um_s(state["bodies"][parent]["gm"], frame["orbit"])
+		if base == 0:
+			return CoastBounds.UNBOUNDED_UM_S
+		return mini(speed + carried + CoastBounds.chain_um_s(state, base, parent), CoastBounds.UNBOUNDED_UM_S)
+	if base == 0:
+		return speed if body["orbit"].is_empty() else CoastBounds.UNBOUNDED_UM_S
+	return CoastBounds.relative_speed_um_s(state, unit_id, target)
+
+
+## The most a thing moves within its frame per second: a route's speed, nothing for something still
+## or a body, unbounded for a drift.
+static func _local_um_s(state: Dictionary, id: int) -> int:
+	if not state["units"].has(id):
+		return 0
+	var unit: Dictionary = state["units"][id]
+	if not unit["dock"].is_empty():
+		return _local_um_s(state, unit["dock"]["target_unit"])
+	if not unit["route"].is_empty():
+		return int(unit["route"]["speed_mm_s"]) * 1000 + 1
+	return 0 if unit["vel_um_s"] == [0, 0, 0] else CoastBounds.UNBOUNDED_UM_S

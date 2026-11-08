@@ -46,6 +46,7 @@ const REASONS: Dictionary = {
 	"no_core": "No AI core assigned",
 	"no_free_port": "No free docking port",
 	"no_power": "Not enough power",
+	"no_heat_headroom": "No radiator headroom left for its heat",
 	"no_propellant": "Out of propellant",
 	"no_safe_step": "Cannot resume safely",
 	"not_docked": "Not docked",
@@ -211,10 +212,10 @@ static func event(entry: Dictionary, unit_name: String, items: Dictionary, bodie
 			if data.has("speed_um_s"):
 				return "%s crashed on %s at %s" % [unit_name, place, FlightLogic.speed(data["speed_um_s"])]
 			return "%s crashed on %s" % [unit_name, place]
-		"low_flight_entered":
-			return "%s is flying low over %s" % [unit_name, bodies.get(data["body"], {}).get("name", "the surface")]
-		"low_flight_left":
-			return "%s is back in orbit round %s" % [unit_name, bodies.get(data["body"], {}).get("name", "its body")]
+		# A55: stepped flight comes and goes around every burn, so it isn't news itself;
+		# burn_started and the landing events say what happened.
+		"stepped_entered", "stepped_left":
+			return ""
 		"soi_changed":
 			var to_name: String = bodies.get(data["to"], {}).get("name", "another body")
 			return "%s: now orbiting %s" % [unit_name, to_name]
