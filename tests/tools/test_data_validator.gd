@@ -1058,8 +1058,42 @@ func test_heat_may_be_zero_or_above_energy() -> void:
 
 
 func test_facility_needs_throughput() -> void:
-	_entry("modules", "refinery")["capabilities"]["facility"].erase("throughput_kg_per_s")
+	var facility: Dictionary = _entry("modules", "refinery")["capabilities"]["facility"]
+	facility.erase("throughput_kg_per_s")
+	facility.erase("work_per_tick")
 	_assert_error("missing_field")
+
+
+## Until B30 what was on main keeps its legacy figures (Lead, 2026-11-08): a recipe with work and
+## power and no energy, a facility with work_per_tick and no throughput.
+func test_legacy_runs_pass_until_b30() -> void:
+	for field: String in ["energy_kj", "heat_kj"]:
+		_entry("recipes", "refine").erase(field)
+	_entry("recipes", "refine")["legacy"] = "removed in B30"
+	_entry("modules", "refinery")["capabilities"]["facility"].erase("throughput_kg_per_s")
+	assert_eq(DataValidator.validate(data), [] as Array[String])
+
+
+func test_a_run_needs_energy_or_legacy_work() -> void:
+	for field: String in ["energy_kj", "heat_kj", "work"]:
+		_entry("recipes", "refine").erase(field)
+	_assert_error("missing_field")
+
+
+func test_legacy_note_must_be_text() -> void:
+	_entry("recipes", "refine")["legacy"] = 30
+	_assert_error("bad_recipe")
+
+
+## B29 is additive: only the abstract refine_* recipes are marked legacy, and every real chain recipe
+## carries its real energy.
+func test_only_the_abstract_slice_recipes_are_legacy() -> void:
+	for entry: Dictionary in DataValidator.load_dir()["recipes"]["entries"]:
+		if entry.has("legacy"):
+			assert_true(entry["abstract"], entry["id"])
+			assert_true(entry["id"].begins_with("refine_"), entry["id"])
+		if not entry["abstract"]:
+			assert_has(entry, "energy_kj", entry["id"])
 
 
 func test_throughput_must_be_above_zero_and_exact() -> void:

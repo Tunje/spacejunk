@@ -70,8 +70,6 @@
     {
       "id": "assisted_core",
       "facility": "fabricator",
-      "energy_kj": 120000,
-      "heat_kj": 120000,
       "work": 300000,
       "power_kw": 100,
       "inputs": [
@@ -95,8 +93,6 @@
     {
       "id": "basic_core",
       "facility": "fabricator",
-      "energy_kj": 60000,
-      "heat_kj": 60000,
       "work": 120000,
       "power_kw": 50,
       "inputs": [
@@ -120,8 +116,6 @@
     {
       "id": "battery_bank_mk1",
       "facility": "fabricator",
-      "energy_kj": 600000,
-      "heat_kj": 600000,
       "work": 120000,
       "power_kw": 80,
       "inputs": [
@@ -149,8 +143,6 @@
     {
       "id": "chemical_thruster_mk1",
       "facility": "fabricator",
-      "energy_kj": 600000,
-      "heat_kj": 600000,
       "work": 120000,
       "power_kw": 80,
       "inputs": [
@@ -174,8 +166,6 @@
     {
       "id": "compact_fabricator_mk1",
       "facility": "fabricator",
-      "energy_kj": 1600000,
-      "heat_kj": 1600000,
       "work": 300000,
       "power_kw": 100,
       "inputs": [
@@ -203,8 +193,6 @@
     {
       "id": "compact_refinery_mk1",
       "facility": "fabricator",
-      "energy_kj": 1800000,
-      "heat_kj": 1800000,
       "work": 300000,
       "power_kw": 100,
       "inputs": [
@@ -286,8 +274,6 @@
     {
       "id": "docking_port_mk1",
       "facility": "fabricator",
-      "energy_kj": 300000,
-      "heat_kj": 300000,
       "work": 90000,
       "power_kw": 60,
       "inputs": [
@@ -460,8 +446,6 @@
     {
       "id": "fabricator_mk1",
       "facility": "fabricator",
-      "energy_kj": 4000000,
-      "heat_kj": 4000000,
       "work": 600000,
       "power_kw": 100,
       "inputs": [
@@ -531,8 +515,6 @@
     {
       "id": "goods_container_mk1",
       "facility": "fabricator",
-      "energy_kj": 600000,
-      "heat_kj": 600000,
       "work": 120000,
       "power_kw": 60,
       "inputs": [
@@ -552,8 +534,6 @@
     {
       "id": "goods_storage_mk1",
       "facility": "fabricator",
-      "energy_kj": 2000000,
-      "heat_kj": 2000000,
       "work": 300000,
       "power_kw": 60,
       "inputs": [
@@ -598,8 +578,6 @@
     {
       "id": "heat_radiator_mk1",
       "facility": "fabricator",
-      "energy_kj": 400000,
-      "heat_kj": 400000,
       "work": 90000,
       "power_kw": 60,
       "inputs": [
@@ -656,8 +634,6 @@
     {
       "id": "landing_legs_mk1",
       "facility": "fabricator",
-      "energy_kj": 300000,
-      "heat_kj": 300000,
       "work": 60000,
       "power_kw": 60,
       "inputs": [
@@ -677,8 +653,6 @@
     {
       "id": "large_station",
       "facility": "fabricator",
-      "energy_kj": 11000000,
-      "heat_kj": 11000000,
       "work": 1800000,
       "power_kw": 100,
       "inputs": [
@@ -734,8 +708,6 @@
     {
       "id": "lidar_mk1",
       "facility": "fabricator",
-      "energy_kj": 200000,
-      "heat_kj": 200000,
       "work": 120000,
       "power_kw": 80,
       "inputs": [
@@ -821,8 +793,6 @@
     {
       "id": "medium_craft",
       "facility": "fabricator",
-      "energy_kj": 4300000,
-      "heat_kj": 4300000,
       "work": 600000,
       "power_kw": 100,
       "inputs": [
@@ -870,8 +840,6 @@
     {
       "id": "mining_laser_mk1",
       "facility": "fabricator",
-      "energy_kj": 800000,
-      "heat_kj": 800000,
       "work": 180000,
       "power_kw": 100,
       "inputs": [
@@ -899,8 +867,6 @@
     {
       "id": "ore_container_mk1",
       "facility": "fabricator",
-      "energy_kj": 600000,
-      "heat_kj": 600000,
       "work": 120000,
       "power_kw": 60,
       "inputs": [
@@ -920,8 +886,6 @@
     {
       "id": "ore_refinery_mk1",
       "facility": "fabricator",
-      "energy_kj": 6000000,
-      "heat_kj": 6000000,
       "work": 900000,
       "power_kw": 100,
       "inputs": [
@@ -949,8 +913,6 @@
     {
       "id": "ore_storage_mk1",
       "facility": "fabricator",
-      "energy_kj": 2000000,
-      "heat_kj": 2000000,
       "work": 300000,
       "power_kw": 60,
       "inputs": [
@@ -970,8 +932,6 @@
     {
       "id": "processor",
       "facility": "fabricator",
-      "energy_kj": 130000,
-      "heat_kj": 130000,
       "work": 60000,
       "power_kw": 80,
       "inputs": [
@@ -995,8 +955,6 @@
     {
       "id": "propellant_tank_mk1",
       "facility": "fabricator",
-      "energy_kj": 400000,
-      "heat_kj": 400000,
       "work": 90000,
       "power_kw": 60,
       "inputs": [
@@ -1020,8 +978,6 @@
     {
       "id": "propellant_tank_mk2",
       "facility": "fabricator",
-      "energy_kj": 500000,
-      "heat_kj": 500000,
       "work": 90000,
       "power_kw": 60,
       "inputs": [
@@ -1045,8 +1001,6 @@
     {
       "id": "prove_autonomous_navigation",
       "facility": "lab",
-      "energy_kj": 30000,
-      "heat_kj": 30000,
       "work": 300000,
       "power_kw": 100,
       "points": 80,
@@ -1080,8 +1034,6 @@
     {
       "id": "prove_large_scale_refining",
       "facility": "lab",
-      "energy_kj": 60000,
-      "heat_kj": 60000,
       "work": 600000,
       "power_kw": 100,
       "points": 100,
@@ -1115,8 +1067,6 @@
     {
       "id": "prove_photovoltaic_arrays",
       "facility": "lab",
-      "energy_kj": 60000,
-      "heat_kj": 60000,
       "work": 600000,
       "power_kw": 100,
       "points": 120,
@@ -1290,9 +1240,8 @@
     },
     {
       "id": "refine_chalcopyrite",
+      "legacy": "removed in B30",
       "facility": "refinery",
-      "energy_kj": 75000,
-      "heat_kj": 400000,
       "work": 60000,
       "power_kw": 200,
       "inputs": [
@@ -1316,9 +1265,8 @@
     },
     {
       "id": "refine_hematite",
+      "legacy": "removed in B30",
       "facility": "refinery",
-      "energy_kj": 352000,
-      "heat_kj": 296000,
       "work": 60000,
       "power_kw": 200,
       "inputs": [
@@ -1342,9 +1290,8 @@
     },
     {
       "id": "refine_olivine",
+      "legacy": "removed in B30",
       "facility": "refinery",
-      "energy_kj": 830000,
-      "heat_kj": 518000,
       "work": 90000,
       "power_kw": 200,
       "inputs": [
@@ -1393,9 +1340,8 @@
     },
     {
       "id": "refine_water_ice",
+      "legacy": "removed in B30",
       "facility": "refinery",
-      "energy_kj": 2576000,
-      "heat_kj": 1086000,
       "work": 60000,
       "power_kw": 200,
       "inputs": [
@@ -1470,8 +1416,6 @@
     {
       "id": "research_lab_mk1",
       "facility": "fabricator",
-      "energy_kj": 2400000,
-      "heat_kj": 2400000,
       "work": 300000,
       "power_kw": 100,
       "inputs": [
@@ -1536,8 +1480,6 @@
     {
       "id": "small_battery_bank_mk1",
       "facility": "fabricator",
-      "energy_kj": 120000,
-      "heat_kj": 120000,
       "work": 60000,
       "power_kw": 60,
       "inputs": [
@@ -1561,8 +1503,6 @@
     {
       "id": "small_chemical_thruster_mk1",
       "facility": "fabricator",
-      "energy_kj": 100000,
-      "heat_kj": 100000,
       "work": 40000,
       "power_kw": 60,
       "inputs": [
@@ -1582,8 +1522,6 @@
     {
       "id": "small_craft",
       "facility": "fabricator",
-      "energy_kj": 240000,
-      "heat_kj": 240000,
       "work": 60000,
       "power_kw": 100,
       "inputs": [
@@ -1606,8 +1544,6 @@
     {
       "id": "small_docking_port_mk1",
       "facility": "fabricator",
-      "energy_kj": 120000,
-      "heat_kj": 120000,
       "work": 30000,
       "power_kw": 60,
       "inputs": [
@@ -1631,8 +1567,6 @@
     {
       "id": "small_heat_radiator_mk1",
       "facility": "fabricator",
-      "energy_kj": 100000,
-      "heat_kj": 100000,
       "work": 40000,
       "power_kw": 60,
       "inputs": [
@@ -1652,8 +1586,6 @@
     {
       "id": "small_landing_legs_mk1",
       "facility": "fabricator",
-      "energy_kj": 100000,
-      "heat_kj": 100000,
       "work": 30000,
       "power_kw": 40,
       "inputs": [
@@ -1673,8 +1605,6 @@
     {
       "id": "small_mining_laser_mk1",
       "facility": "fabricator",
-      "energy_kj": 180000,
-      "heat_kj": 180000,
       "work": 60000,
       "power_kw": 100,
       "inputs": [
@@ -1702,8 +1632,6 @@
     {
       "id": "small_ore_container_mk1",
       "facility": "fabricator",
-      "energy_kj": 160000,
-      "heat_kj": 160000,
       "work": 30000,
       "power_kw": 60,
       "inputs": [
@@ -1727,8 +1655,6 @@
     {
       "id": "small_propellant_tank_mk1",
       "facility": "fabricator",
-      "energy_kj": 100000,
-      "heat_kj": 100000,
       "work": 30000,
       "power_kw": 60,
       "inputs": [
@@ -1748,8 +1674,6 @@
     {
       "id": "small_solar_panel_mk1",
       "facility": "fabricator",
-      "energy_kj": 160000,
-      "heat_kj": 160000,
       "work": 40000,
       "power_kw": 60,
       "inputs": [
@@ -1773,8 +1697,6 @@
     {
       "id": "small_station",
       "facility": "fabricator",
-      "energy_kj": 2600000,
-      "heat_kj": 2600000,
       "work": 600000,
       "power_kw": 100,
       "inputs": [
@@ -1830,8 +1752,6 @@
     {
       "id": "solar_farm_mk1",
       "facility": "fabricator",
-      "energy_kj": 3000000,
-      "heat_kj": 3000000,
       "work": 600000,
       "power_kw": 80,
       "inputs": [
@@ -1859,8 +1779,6 @@
     {
       "id": "solar_panel_mk1",
       "facility": "fabricator",
-      "energy_kj": 300000,
-      "heat_kj": 300000,
       "work": 120000,
       "power_kw": 60,
       "inputs": [
@@ -1888,8 +1806,6 @@
     {
       "id": "structural_frame",
       "facility": "fabricator",
-      "energy_kj": 75000,
-      "heat_kj": 75000,
       "work": 30000,
       "power_kw": 50,
       "inputs": [
@@ -1930,8 +1846,6 @@
     {
       "id": "wiring",
       "facility": "fabricator",
-      "energy_kj": 12000,
-      "heat_kj": 12000,
       "work": 20000,
       "power_kw": 50,
       "inputs": [

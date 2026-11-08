@@ -43,10 +43,13 @@ const CONNECTOR_FIELDS := ["id", "type", "size", "pos_mm", "facing", "up", "load
 const COLLISION_FIELDS := ["shape", "center_mm", "size_mm"]
 ## Factory rates (C30, B29). A recipe needs `energy_kj` and `heat_kj` per run, and may set its own
 ## `throughput_kg_per_s`. A facility has a `throughput_kg_per_s` and its module's `power_kw` as its
-## rating. `work`, the recipe's `power_kw` and `work_per_tick` stay optional until C30 is on main,
-## and go then. `seconds` is gone (B11b), so a recipe that still has it is an unknown field.
-const RECIPE_FIELDS := ["id", "facility", "energy_kj", "heat_kj", "inputs", "outputs", "abstract"]
-const RECIPE_OPTIONAL := ["points", "throughput_kg_per_s", "work", "power_kw"]
+## rating. Until B30 a legacy recipe, lab test or facility may instead keep the old `work` with the
+## recipe's `power_kw`, and `work_per_tick`, from which C30 derives the same run (Lead, 2026-11-08:
+## B29 stays additive, so what was on main keeps its figures). A legacy recipe may say so in
+## `legacy`, a note such as "removed in B30". `seconds` is gone (B11b), so a recipe that still has it
+## is an unknown field.
+const RECIPE_FIELDS := ["id", "facility", "inputs", "outputs", "abstract"]
+const RECIPE_OPTIONAL := ["energy_kj", "heat_kj", "points", "throughput_kg_per_s", "work", "power_kw", "legacy"]
 ## The most energy or heat a run may state: a terajoule.
 const MAX_RUN_KJ := 1_000_000_000
 ## A recipe draws its stated power at this rate, and in proportion at any other (PowerSystem).
@@ -96,8 +99,8 @@ const SCENARIO_OPTIONAL := ["frames", "research"]
 const ANY_ITEM := "*"
 ## theories.json may carry the default bench test beside its entries (C12, section 5).
 const FILE_EXTRAS := { "theories": ["bench_test"] }
-const BENCH_TEST_FIELDS := ["inputs", "energy_kj", "heat_kj"]
-const BENCH_TEST_OPTIONAL := ["work", "power_kw"]
+const BENCH_TEST_FIELDS := ["inputs"]
+const BENCH_TEST_OPTIONAL := ["energy_kj", "heat_kj", "work", "power_kw"]
 const BODY_FIELDS := ["key", "name", "kind", "radius_mm", "visual_seed", "deposits"]
 const BODY_OPTIONAL := ["pos_mm", "gm_km3_s2", "orbit", "frame", "planet"]
 const PLANET_FIELDS := ["seed", "height_range_m"]
@@ -470,9 +473,14 @@ func _shape_capabilities(where: String, capabilities: Variant) -> void:
 		elif key == "max_mass_kg":
 			_check_positive(at, key, value, 1000, MAX_STACK_G)
 		elif key == "facility":
-			if value is Dictionary and _has_fields(at, value, ["type", "throughput_kg_per_s"], ["work_per_tick"]):
+			if value is Dictionary and _has_fields(at, value, ["type"], ["throughput_kg_per_s", "work_per_tick"]):
 				_check_enum(at, "type", value["type"], FACILITIES)
-				_check_positive(at, "throughput_kg_per_s", value["throughput_kg_per_s"], 1000, MAX_RATE)
+				# Until B30 a legacy facility may keep work_per_tick alone (C30's fallback).
+				if value.has("throughput_kg_per_s") or not value.has("work_per_tick"):
+					if not value.has("throughput_kg_per_s"):
+						_err("missing_field", at, "throughput_kg_per_s")
+					else:
+						_check_positive(at, "throughput_kg_per_s", value["throughput_kg_per_s"], 1000, MAX_RATE)
 				if value.has("work_per_tick"):
 					_check_whole(at, "work_per_tick", value["work_per_tick"], 1, MAX_RATE)
 			elif not value is Dictionary:
@@ -584,21 +592,34 @@ func _shape_connector(where: String, connector: Dictionary) -> void:
 		_err("bad_core_connector", at, "core connectors are type side")
 
 
+## A run's figures: energy and heat, or until B30 the legacy work and power (C30's fallback).
+func _check_run_figures(where: String, run: Dictionary) -> void:
+	if run.has("energy_kj") or run.has("heat_kj") or not (run.has("work") and run.has("power_kw")):
+		for field: String in ["energy_kj", "heat_kj"]:
+			if not run.has(field):
+				_err("missing_field", where, field)
+		if run.has("energy_kj"):
+			_check_whole(where, "energy_kj", run["energy_kj"], 1, MAX_RUN_KJ)
+		if run.has("heat_kj"):
+			_check_whole(where, "heat_kj", run["heat_kj"], 0, MAX_RUN_KJ)
+	if run.has("work"):
+		_check_whole(where, "work", run["work"], 1, MAX_RATE)
+	if run.has("power_kw"):
+		_check_number(where, "power_kw", run["power_kw"], 1000, MAX_RATE)
+
+
 func _shape_recipe(recipe: Dictionary) -> void:
 	var where := "recipes.json:%s" % recipe["id"]
 	if not _has_fields(where, recipe, RECIPE_FIELDS, RECIPE_OPTIONAL):
 		return
 	_check_enum(where, "facility", recipe["facility"], FACILITIES)
-	_check_whole(where, "energy_kj", recipe["energy_kj"], 1, MAX_RUN_KJ)
-	_check_whole(where, "heat_kj", recipe["heat_kj"], 0, MAX_RUN_KJ)
+	_check_run_figures(where, recipe)
+	if recipe.has("legacy") and not recipe["legacy"] is String:
+		_err("bad_recipe", where, "legacy is not a note")
 	if recipe.has("throughput_kg_per_s"):
 		_check_positive(where, "throughput_kg_per_s", recipe["throughput_kg_per_s"], 1000, MAX_RATE)
-	if recipe.has("work"):
-		_check_whole(where, "work", recipe["work"], 1, MAX_RATE)
 	if recipe.has("points"):
 		_check_whole(where, "points", recipe["points"], 1, MAX_RATE)
-	if recipe.has("power_kw"):
-		_check_number(where, "power_kw", recipe["power_kw"], 1000, MAX_RATE)
 	if not recipe["abstract"] is bool:
 		_err("bad_recipe", where, "abstract is not a boolean")
 	if not recipe["inputs"] is Array or recipe["inputs"].is_empty():
@@ -1580,12 +1601,7 @@ func _shape_bench_test() -> void:
 	if not _bench_test is Dictionary or not _has_fields(where, _bench_test, BENCH_TEST_FIELDS, BENCH_TEST_OPTIONAL):
 		return
 	_shape_inputs(where, _bench_test["inputs"])
-	_check_whole(where, "energy_kj", _bench_test["energy_kj"], 1, MAX_RUN_KJ)
-	_check_whole(where, "heat_kj", _bench_test["heat_kj"], 0, MAX_RUN_KJ)
-	if _bench_test.has("work"):
-		_check_whole(where, "work", _bench_test["work"], 1, MAX_RATE)
-	if _bench_test.has("power_kw"):
-		_check_number(where, "power_kw", _bench_test["power_kw"], 1000, MAX_RATE)
+	_check_run_figures(where, _bench_test)
 
 
 func _check_research_inputs(where: String, inputs: Array) -> void:

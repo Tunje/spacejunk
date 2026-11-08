@@ -140,7 +140,7 @@ A whole number converts by integer multiplication, so a value such as the star's
 | `port` | `transfer_kg_per_s`, `dock_seconds` (whole), `undock_seconds` (whole), `capture_range_mm` (whole), `capture_speed_m_s` | Docking ports |
 | `thruster` | `speed_m_s`, `propellant_kg_per_s`, `rated_mass_kg`, `exhaust_m_s`, `thrust_kn`, optional `min_throttle_ppm` (whole) | Thrusters |
 | `landing_gear` | `max_touchdown_m_s` | Landing legs |
-| `facility` | `type`: `refinery`, `fabricator`, `lab`, `electrolyser`, `arc_furnace` or `semiconductor_fab`; `throughput_kg_per_s`; `work_per_tick` (whole, optional until C30 is on main) | Facilities. `throughput_kg_per_s`, above 0, is the most input mass a run takes in a second, and loads as `throughput_g_per_s` (C30, B29). The module's `power_kw` is the rating, the most a running job draws; `heat_kw` is only its fitting figure. `work_per_tick` goes with C30 |
+| `facility` | `type`: `refinery`, `fabricator`, `lab`, `electrolyser`, `arc_furnace` or `semiconductor_fab`; `throughput_kg_per_s`, or until B30 on a legacy machine `work_per_tick` (whole) alone | Facilities. `throughput_kg_per_s`, above 0, is the most input mass a run takes in a second, and loads as `throughput_g_per_s` (C30, B29). The module's `power_kw` is the rating, the most a running job draws; `heat_kw` is only its fitting figure. `work_per_tick` goes in B30 |
 | `always_on` | `true` | A load that runs whenever healthy, such as a command hub |
 | `cryo` | `boil_off_ppm_per_day` per cargo class (whole, at most 1,000,000), `cooler_kw` | Cryogenic tanks (B29). A class boils off at its daily rate into the `boil_off` sink unless the tank's cooler is powered. The cooler's draw is also in the module's `power_kw` and `heat_kw`. `hydrolox_tank_mk1` loses 1% of its LH₂ and 0.1% of its LOX a day unpowered, and its cooler draws 1 kW |
 
@@ -180,7 +180,7 @@ Rule: a pair of ports uses the lower of each limit. A54 shows these figures, and
 
 A run ends when its energy is spent. So a bigger machine is faster at the same recipe, and a heat-heavy step such as copper smelting is held back by the radiators, not by the power.
 
-Today's one-step recipes carry interim values, each the real process the abstract recipe stands for, until the deep chains of [production_chains.md](production_chains.md) replace them:
+**B29 is additive (Lead, 2026-11-08).** The recipes, lab tests and machines that were on main before B29 keep their legacy `work`, recipe `power_kw` and `work_per_tick`, from which C30 derives the same runs as before. The abstract `refine_*` recipes say so in a `legacy` note, "removed in B30". Only B29's new chain recipes and machines carry real energies and throughputs. B30, with C35's bot rebalance, gives the remaining recipes and machines the figures below, and removes `refine_*`:
 
 | Recipe | Energy a run | Heat a run | What it stands for |
 | --- | --- | --- | --- |
@@ -236,11 +236,12 @@ The `core` size is used only by cores and the core connector on root parts, whic
 | ----- | ---- | ------- |
 | `id` | string | Recipe ID |
 | `facility` | `refinery`, `fabricator` | Runs on a part with this `facility.type` |
-| `energy_kj` | whole, at least 1 | The energy one run takes, in kJ, from real process figures (C30, B29). It loads as `energy_j` |
+| `energy_kj` | whole, at least 1 | The energy one run takes, in kJ, from real process figures (C30, B29). It loads as `energy_j`. Until B30 a legacy recipe may leave it and `heat_kj` out and keep `work` and `power_kw` |
 | `heat_kj` | whole, at least 0 | The heat one run gives off, in kJ, which the unit's radiators must reject. It loads as `heat_j`. It is the energy put in, less what the products store, plus any reaction heat, so an exothermic step can give off more heat than its energy |
 | `throughput_kg_per_s` | number, optional | A slower material rate for this recipe than the machine's, such as an acid leach. The run uses the lower of the two |
-| `work` | whole, above 0, optional | Work points (C11). Kept until C30 is on main, then removed, with `seconds` long gone (B11b) |
-| `power_kw` | number, optional | The old fixed draw. Kept until C30 is on main, then removed |
+| `work` | whole, above 0, optional | Work points (C11), for a legacy recipe without energy. Removed in B30, with `seconds` long gone (B11b) |
+| `power_kw` | number, optional | The old fixed draw, for a legacy recipe. Removed in B30 |
+| `legacy` | string, optional | A note on a legacy recipe, such as "removed in B30" on the abstract `refine_*` |
 | `inputs` | array | At least one entry |
 | `outputs` | array | At least one entry |
 | `abstract` | boolean | True for every slice recipe |
