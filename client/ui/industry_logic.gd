@@ -194,29 +194,55 @@ static func job_line(job: Dictionary, defs: Dictionary, ticks_per_second: float,
 		line += ", %s" % OrderText.reason(job["reason"])
 	if job["count_left"] > 1:
 		line += " (%d left)" % job["count_left"]
+	var held := IndustryLogic.limit_text(job)
+	if not held.is_empty():
+		line += ", %s" % held
 	var left := IndustryLogic.seconds_left(job, ticks_per_second)
 	if left > 0.0:
 		line += ", about %s" % OrderText.duration(left)
 	return line
+
+
+## Words for C30's limit on a running job: which of power, radiator heat headroom
+## and the machine's own throughput holds it, at its rate now; or that its inputs
+## are still coming through the docks. "" when the job isn't running or says none.
+static func limit_text(job: Dictionary) -> String:
+	if job.get("status", "") != "running":
+		return ""
+	var rate := InspectText.watts(int(job.get("rate_w", 0)))
+	match job.get("limit", ""):
+		"power":
+			return "held to %s by power" % rate
+		"heat":
+			return "held to %s by radiator headroom" % rate
+		"throughput":
+			return "at the machine's full %s" % rate
+		"feed":
+			return "waiting on inputs through the docks"
+	return ""
 
 
 ## A queued job's row: being in the queue says it is queued, so the line is the
 ## recipe, its runs and their time.
-static func queue_line(job: Dictionary, defs: Dictionary, ticks_per_second: float) -> String:
+static func queue_line(job: Dictionary, defs: Dictionary, ticks_per_second: float, full_rate := 0) -> String:
 	var line := IndustryLogic.name_of(job["recipe"], defs)
 	if job["count_left"] > 1:
 		line += " (%d left)" % job["count_left"]
-	var left := IndustryLogic.seconds_left(job, ticks_per_second)
+	# Queued, it has no rate yet: at the machine's full speed is the best it can do.
+	var left := IndustryLogic.seconds_left(job, ticks_per_second, full_rate)
 	if left > 0.0:
-		line += ", about %s" % OrderText.duration(left)
+		line += ", at least %s" % OrderText.duration(left)
 	return line
 
 
-## How far the current run is, from its work points. A paused run keeps its place.
+## How far the current run is, from its energy (C30), or work points before. A paused
+## run keeps its place.
 static func job_progress(job: Dictionary) -> float:
-	if job["work"] <= 0 or job["work_left"] <= 0:
+	var total := int(job.get("energy_j", 0))
+	var left := int(job.get("energy_left_j", 0))
+	if total <= 0 or left <= 0:
 		return 0.0
-	return 1.0 - float(job["work_left"]) / float(job["work"])
+	return 1.0 - float(left) / float(total)
 
 
 ## Ticks for `work` points at `rate` a tick: the facility does its rate each tick,
@@ -227,10 +253,14 @@ static func run_ticks(work: int, rate: int) -> int:
 
 ## Seconds until the active run delivers, or, for a queued job, all its runs. 0 when
 ## nothing is under way or the time isn't known.
-static func seconds_left(job: Dictionary, ticks_per_second: float) -> float:
-	var rate: int = job["work_per_tick"]
+## C30: a running run's time is its energy left at its rate now (W is J a second), and
+## unknown while it is fed through the docks at no rate. A queued job is put at the
+## machine's full speed, the best it can do.
+## `full_rate` is the facility's own rate a tick from its defs (work_per_tick until B29).
+static func seconds_left(job: Dictionary, ticks_per_second: float, full_rate := 0) -> float:
 	if job.get("queue_pos", 0) > 0:
-		return job["count_left"] * IndustryLogic.run_ticks(job["work"], rate) / ticks_per_second
+		return job["count_left"] * IndustryLogic.run_ticks(int(job.get("energy_j", 0)), full_rate) / ticks_per_second
 	if job["status"] != "running":
 		return 0.0
-	return IndustryLogic.run_ticks(job["work_left"], rate) / ticks_per_second
+	var watts := int(job.get("rate_w", 0))
+	return float(job.get("energy_left_j", 0)) / watts if watts > 0 else 0.0

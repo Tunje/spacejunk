@@ -589,7 +589,7 @@
         "size_mm": [1400, 1400, 1400]
       },
       "visual": {
-        "model": null,
+        "model": "compact_fabricator_mk1",
         "tint": "#e8641b"
       }
     },
@@ -630,7 +630,7 @@
         "size_mm": [1400, 1600, 1500]
       },
       "visual": {
-        "model": null,
+        "model": "compact_refinery_mk1",
         "tint": "#e8641b"
       }
     },
@@ -897,7 +897,7 @@
         "size_mm": [1200, 1200, 1000]
       },
       "visual": {
-        "model": null,
+        "model": "goods_container_mk1",
         "tint": "#8a8d91"
       }
     },
@@ -1591,7 +1591,7 @@
         "size_mm": [2000, 2000, 2000]
       },
       "visual": {
-        "model": null,
+        "model": "research_lab_mk1",
         "tint": "#e8e4d8"
       }
     },
@@ -1676,7 +1676,7 @@
         "size_mm": [600, 600, 400]
       },
       "visual": {
-        "model": null,
+        "model": "small_battery_bank_mk1",
         "tint": "#8a8d91"
       }
     },
@@ -1961,7 +1961,7 @@
         "size_mm": [3000, 3000, 3000]
       },
       "visual": {
-        "model": null,
+        "model": "small_hub",
         "tint": "#e8e4d8"
       }
     },
