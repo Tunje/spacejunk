@@ -14,11 +14,42 @@ const AXIS_WORDS: Dictionary = {
 }
 
 
-static func burn_command(unit_id: int, tick: int, components: Array) -> Dictionary:
+## A55's burn options: throttle in parts per million, and how the burn steers.
+const FULL_THROTTLE_PPM := 1_000_000
+const STEER_FIXED := "fixed"
+## The steering choices in the burn panel, in its order, with their words.
+const STEERS: Array[Array] = [
+	["fixed", "Hold its direction"], ["orbit", "Follow the orbit"],
+	["target", "Toward the target"], ["target_retrograde", "Null motion against the target"],
+]
+
+static func burn_command(unit_id: int, tick: int, components: Array, throttle_ppm := FULL_THROTTLE_PPM,
+		steer := STEER_FIXED, target := 0) -> Dictionary:
 	var args: Dictionary = { "tick": tick }
 	for index in AXES.size():
 		args[AXES[index]] = int(components[index])
+	# A55: left out at their defaults, so a plain burn is the same command as before.
+	if throttle_ppm != FULL_THROTTLE_PPM:
+		args["throttle_ppm"] = throttle_ppm
+	if steer != STEER_FIXED:
+		args["steer"] = steer
+	if target != 0:
+		args["target"] = target
 	return { "type": "plan_burn", "unit": unit_id, "args": args }
+
+
+## The lowest throttle the craft's engines allow (B29's min_throttle_ppm, full when an
+## engine gives none): the highest minimum among its thrusters, which all fire together.
+static func min_throttle_ppm(unit: Dictionary, modules: Dictionary) -> int:
+	var floor_ppm := 0
+	var found := false
+	for part: Dictionary in InspectText.flatten(unit.get("parts", {})):
+		var capabilities: Dictionary = modules.get(part["def"], {}).get("capabilities", {})
+		if capabilities.has("thruster"):
+			var thruster: Dictionary = capabilities["thruster"]
+			found = true
+			floor_ppm = maxi(floor_ppm, int(thruster.get("min_throttle_ppm", FULL_THROTTLE_PPM)))
+	return floor_ppm if found else FULL_THROTTLE_PPM
 
 
 static func cancel_command(unit_id: int, burn_id: int) -> Dictionary:
@@ -123,10 +154,19 @@ static func preview_lines(detail: Dictionary, view: Dictionary, unit_id: int, ti
 		cost += ". Only %s aboard, so it will stop short" % OrderText.tonnes(aboard)
 	var after := ""
 	if FlightLogic.near_surface(unit) or not unit.get("landed", {}).is_empty():
-		var motion := FlightLogic.vertical_motion(unit["pos_mm"], detail.get("vel_um_s", [0, 0, 0]))
-		after = "Then %s" % FlightLogic.motion_text(motion)
-		if detail.get("approximate", false):
-			after += " (as one kick; gravity pulls back meanwhile)"
+		# A55 flies the burn exactly here: say where the flight ends, the ground or an orbit.
+		var contact: Dictionary = detail.get("contact", {})
+		var orbit_after: Dictionary = detail.get("orbit", {})
+		if not contact.is_empty():
+			after = "Then back on the ground in %s at %s" % [
+				OrderText.duration(float(int(contact["tick"]) - int(view.get("tick", 0))) / ticks_per_second),
+				FlightLogic.speed(int(contact.get("speed_um_s", 0)))]
+			if String(contact.get("outcome", "")).begins_with("crash"):
+				after += ": a crash"
+		elif not orbit_after.is_empty():
+			after = "Then in orbit, %s" % FlightLogic.orbit_text(view, orbit_after)
+		else:
+			after = "Then %s" % FlightLogic.motion_text(FlightLogic.vertical_motion(unit["pos_mm"], detail.get("vel_um_s", [0, 0, 0])))
 	elif not unit.get("orbit", {}).is_empty():
 		var orbit: Dictionary = detail.get("orbit", {})
 		var parent := FlightLogic.body_name(view, orbit.get("parent", unit["orbit"]["parent"]))
@@ -236,7 +276,21 @@ static func return_warning(result: Dictionary, propellant_aboard_g: int, frames:
 
 ## A planned burn's row: "In 12 s: 20.0 m/s prograde".
 static func planned_text(burn: Dictionary, tick: int, ticks_per_second: int) -> String:
-	return "In %s: %s" % [OrderText.duration(float(burn["tick"] - tick) / ticks_per_second), FlightLogic.components_text(burn)]
+	return "In %s: %s%s" % [OrderText.duration(float(burn["tick"] - tick) / ticks_per_second), FlightLogic.components_text(burn),
+		FlightLogic.options_text(burn)]
+
+
+## ", at 40%, following the orbit" for a burn's A55 options; "" at full and held.
+static func options_text(burn: Dictionary) -> String:
+	var text := ""
+	var throttle := int(burn.get("throttle_ppm", FULL_THROTTLE_PPM))
+	if throttle != FULL_THROTTLE_PPM:
+		text += ", at %d%%" % roundi(throttle / 10_000.0)
+	var steer: String = burn.get("steer", STEER_FIXED)
+	for choice: Array in STEERS:
+		if choice[0] == steer and steer != STEER_FIXED:
+			text += ", %s" % String(choice[1]).to_lower()
+	return text
 
 
 static func running_text(burn: Dictionary) -> String:

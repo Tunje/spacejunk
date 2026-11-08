@@ -164,6 +164,7 @@ func _ready() -> void:
 		var spin := _add_spin(row, -MAX_DV_M_S, MAX_DV_M_S, DV_STEP_M_S)
 		spin.value_changed.connect(func(_value: float) -> void: _edited())
 		_axes.append(spin)
+	_build_burn_options(column)
 	_cost = _add_label(column)
 	_after = _add_label(column)
 	var buttons := HBoxContainer.new()
@@ -282,7 +283,56 @@ func set_components(prograde_m_s: float, normal_m_s := 0.0, radial_m_s := 0.0) -
 func pending_command() -> Dictionary:
 	if components() == [0, 0, 0]:
 		return {}
-	return FlightLogic.burn_command(unit_id(), burn_tick, components())
+	var steer: String = FlightLogic.STEERS[maxi(0, throttle_steer.selected)][0]
+	var aimed: bool = steer.begins_with("target")
+	return FlightLogic.burn_command(unit_id(), burn_tick, components(), roundi(throttle.value * 10_000.0), steer,
+		target_id if aimed else 0)
+
+
+# --- Throttle and steering (A55) ---
+
+## The burn's throttle in percent, from the engines' lowest (B29) to full.
+var throttle: SpinBox
+## How the burn steers: FlightLogic.STEERS, by index. Named so tests can pick one.
+var throttle_steer: OptionButton
+## Module defs for the throttle floor, read once: thrusters don't change in play.
+var _burn_modules: Dictionary = {}
+
+
+func _build_burn_options(column: VBoxContainer) -> void:
+	var row := HBoxContainer.new()
+	column.add_child(row)
+	var label := _add_label(row)
+	label.text = "Throttle (%)"
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	throttle = _add_spin(row, 1.0, 100.0, 1.0)
+	throttle.value = 100.0
+	throttle.value_changed.connect(func(_value: float) -> void: _edited())
+	var steer_row := HBoxContainer.new()
+	column.add_child(steer_row)
+	var steer_label := _add_label(steer_row)
+	steer_label.text = "Steering"
+	steer_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	throttle_steer = OptionButton.new()
+	throttle_steer.focus_mode = Control.FOCUS_NONE
+	for index in FlightLogic.STEERS.size():
+		throttle_steer.add_item(FlightLogic.STEERS[index][1], index)
+	throttle_steer.item_selected.connect(func(_index: int) -> void: _edited())
+	steer_row.add_child(throttle_steer)
+
+
+## The engines' throttle floor, and steering at a target only with one.
+func _show_burn_options() -> void:
+	if _burn_modules.is_empty():
+		_burn_modules = bridge.defs()["modules"]
+	var floor_pct := FlightLogic.min_throttle_ppm(unit(), _burn_modules) / 10_000.0
+	throttle.min_value = floor_pct
+	throttle.editable = floor_pct < 100.0
+	throttle.tooltip_text = "The engines go down to %d%%" % roundi(floor_pct) if floor_pct < 100.0 else "These engines only run at full thrust"
+	for index in FlightLogic.STEERS.size():
+		throttle_steer.set_item_disabled(index, FlightLogic.STEERS[index][0].begins_with("target") and target_id == 0)
+	if throttle_steer.is_item_disabled(throttle_steer.selected):
+		throttle_steer.select(0)
 
 
 func burn_now() -> void:
@@ -353,6 +403,7 @@ func refresh() -> void:
 	_peri_button.disabled = orbit.is_empty() or OrbitPath.ticks_until(orbit, tick, 0.0) < 0
 	_apo_button.disabled = orbit.is_empty() or OrbitPath.is_open(orbit)
 	_sync_burns(shown, tick)
+	_show_burn_options()
 	var command := pending_command()
 	_update_preview(shown, command, flying)
 	_show_preview(view, flying)
