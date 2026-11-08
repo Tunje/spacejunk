@@ -339,7 +339,8 @@ func _sync_recipes() -> void:
 		row.add_child(with_button)
 		var inputs := _add_label(row)
 		var outputs := _add_label(row)
-		outputs.text = "Makes %s in %s" % [
+		# C30: a run goes as fast as power, heat and the machine allow; this is its best.
+		outputs.text = "Makes %s in %s at full speed" % [
 			IndustryLogic.outputs_line(recipe, _defs),
 			OrderText.duration(IndustryLogic.run_ticks(recipe["work"], facility["rate"]) / bridge.ticks_per_second()),
 		]

@@ -254,9 +254,38 @@ func test_a_queued_job_shows_all_its_runs() -> void:
 		"queue_pos": 2, "work_left": 0, "work": 3000, "work_per_tick": 100 }
 	assert_eq(IndustryLogic.seconds_left(job, 10.0), 12.0, "4 runs of 30 ticks")
 	assert_eq(IndustryLogic.job_line(job, defs, 10.0), "Iron: Queued (4 left), about 12 s")
-	assert_eq(IndustryLogic.queue_line(job, defs, 10.0), "Iron (4 left), about 12 s", "the queue says queued")
+	assert_eq(IndustryLogic.queue_line(job, defs, 10.0), "Iron (4 left), at least 12 s", "the queue says queued")
 
 
 func test_no_facilities_gives_no_working_unit() -> void:
 	var state := { "units": { 1: { "dock": {}, "parts": { "id": 2, "def": "starter_hull", "children": [] } } } }
 	assert_eq(IndustryLogic.working_unit(state, defs["modules"], "", 0, 1), 0)
+
+
+## D49: C30's jobs run on energy, at the lowest of power, heat and throughput. The
+## line names which holds a run and at what rate; the time is its energy left at that
+## rate, and unknown while its inputs come through the docks.
+func test_a_running_job_on_energy_names_its_limit() -> void:
+	var job := { "recipe": "refine_hematite", "status": "running", "reason": "", "count_left": 1, "queue_pos": 0,
+		"energy_j": 60_000, "energy_left_j": 15_000, "rate_w": 5_000, "limit": "power",
+		"limits_w": { "power": 5_000, "heat": 9_000, "throughput": 20_000 }, "work_per_tick": 500 }
+	assert_almost_eq(IndustryLogic.job_progress(job), 0.75, 0.001)
+	assert_eq(IndustryLogic.seconds_left(job, 10.0), 3.0, "15 kJ at 5 kW")
+	assert_eq(IndustryLogic.limit_text(job), "held to %s by power" % InspectText.watts(5_000))
+	job["limit"] = "heat"
+	assert_string_contains(IndustryLogic.limit_text(job), "radiator headroom")
+	job["limit"] = "throughput"
+	assert_string_contains(IndustryLogic.limit_text(job), "full")
+	job["limit"] = "feed"
+	job["rate_w"] = 0
+	assert_eq(IndustryLogic.limit_text(job), "waiting on inputs through the docks")
+	assert_eq(IndustryLogic.seconds_left(job, 10.0), 0.0, "no rate, no time yet")
+	job["status"] = "paused"
+	assert_eq(IndustryLogic.limit_text(job), "", "paused says its reason instead")
+
+
+func test_a_queued_job_is_put_at_full_speed_as_a_floor() -> void:
+	var job := { "recipe": "refine_hematite", "status": "queued", "reason": "", "count_left": 2, "queue_pos": 1,
+		"energy_j": 60_000, "energy_left_j": 60_000, "work_per_tick": 1_000 }
+	assert_eq(IndustryLogic.seconds_left(job, 10.0), 12.0, "2 runs of 60 ticks")
+	assert_string_ends_with(IndustryLogic.queue_line(job, defs, 10.0), "at least 12 s")

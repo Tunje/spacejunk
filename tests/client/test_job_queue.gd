@@ -102,7 +102,7 @@ func test_a_second_job_queues_behind_the_first() -> void:
 	assert_eq(jobs[1]["status"], "queued")
 	assert_eq(screen._queue_heading.text, "Queue: 2 of 16")
 	assert_eq(screen._queue_rows.size(), 1)
-	assert_eq(screen._queue_rows[0]["label"].text, "1. Solar Slab (2 left), about 4 s", "2 runs of 2000 work at 100 a tick")
+	assert_eq(screen._queue_rows[0]["label"].text, "1. Solar Slab (2 left), at least 4 s", "2 runs of 2000 work at 100 a tick")
 	assert_eq(_events_of("job_queued").back()["data"]["position"], 1)
 
 
