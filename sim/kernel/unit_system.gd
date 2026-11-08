@@ -29,9 +29,13 @@ func fill_view(ctx: SimContext, view: Dictionary) -> void:
 	for id: int in _sorted(deposits):
 		var deposit: Dictionary = deposits[id]
 		if deposit["found"]:
+			# Found by a class scan, its mineral is known but not how much or how hard: -1 for
+			# each until a grade scan (C34).
+			var graded: bool = deposit.get("graded", true)
 			view["deposits"][id] = {
 				"body": deposit["body"], "item": deposit["item"],
-				"remaining_g": deposit["remaining_g"], "hardness": deposit["hardness"],
+				"remaining_g": deposit["remaining_g"] if graded else -1,
+				"hardness": deposit["hardness"] if graded else -1,
 			}
 
 
