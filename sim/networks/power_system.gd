@@ -96,10 +96,12 @@ func _job_loads(ctx: SimContext, unit: int, jobs: Array, power_w: int, heat_w: i
 
 
 ## C30: the heat the healthy radiators can reject this tick beyond what the kept fixed loads give
-## off, floored at 0. Jobs share it, so they never add heat faster than it is taken off.
+## off, less TICKS_PER_SECOND watts, floored at 0. Jobs share it, so they never add heat faster than
+## it is taken off. The allowance covers the joule a tick the two remainders can differ by, so a
+## cold loop stays cold, as HeatSystem's horizon needs, rather than holding a joule now and then.
 func _heat_headroom(ctx: SimContext, unit: int, loads: Array[Dictionary]) -> int:
 	var index := UnitIndex.of(ctx, unit)
-	var headroom := UnitIndex.healthy_total(ctx, index["radiators"])
+	var headroom := UnitIndex.healthy_total(ctx, index["radiators"]) - Sim.TICKS_PER_SECOND
 	for entry: Dictionary in loads:
 		if entry["keep"]:
 			headroom -= index["heat_w"][entry["part"]]

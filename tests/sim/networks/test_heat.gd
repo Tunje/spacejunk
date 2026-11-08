@@ -150,7 +150,9 @@ func test_exactly_at_the_limit_is_not_a_fault() -> void:
 	assert_eq(state["parts"][LIDAR]["fault"], "over_heat_limit")
 
 
-func test_faults_take_lowest_priority_and_highest_id_first() -> void:
+## C30: a job only gets the radiators' headroom, so with none left it makes no heat and is never
+## the part that faults. The laser, a fixed load, is.
+func test_faults_take_the_fixed_load_a_job_held_by_heat_never_faults() -> void:
 	_set_reject(5000)
 	_set_heat(LIMIT_J)
 	_run_op(LASER)
@@ -160,7 +162,8 @@ func test_faults_take_lowest_priority_and_highest_id_first() -> void:
 	sim.step()
 	var faulted: Array = _events_of("fault").map(func(event: Dictionary) -> int:
 		return event["data"]["module"])
-	assert_eq(faulted, [LIDAR, LASER], "both priority 3, higher ID first, and input still above 5 kW")
+	assert_eq(faulted, [LASER], "the job made no heat, so only the laser faults")
+	assert_eq([state["jobs"][40]["status"], state["jobs"][40]["reason"]], ["paused", "no_heat_headroom"])
 	assert_eq(state["parts"][CORE]["fault"], "", "2 kW is within rejection")
 
 

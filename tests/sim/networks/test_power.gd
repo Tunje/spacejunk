@@ -269,7 +269,9 @@ func test_a_shed_load_holds_for_five_seconds_then_restores() -> void:
 	assert_eq(_event_types(), ["power_restored"])
 
 
-func test_higher_id_sheds_first_within_a_class() -> void:
+## C30: a facility is a variable load, after the fixed loads whatever its ID. The laser, a fixed load
+## of the same priority, keeps its whole draw, and the job on the lidar takes only what is left.
+func test_a_job_takes_what_the_fixed_loads_leave_whatever_its_id() -> void:
 	sim._ctx.defs = sim._ctx.defs.duplicate(true)
 	var modules: Dictionary = sim._ctx.defs["modules"]
 	modules["lidar_mk1"]["power_w"] = 100_000
@@ -281,7 +283,12 @@ func test_higher_id_sheds_first_within_a_class() -> void:
 	sim._ctx.defs["recipes"]["wiring"] = { "power_w": 100_000, "work": 100 }
 	sim.step()
 	assert_eq(_part_state(LASER), "on")
-	assert_eq(_part_state(LIDAR), "shed")
+	var flow: Dictionary = sim._ctx.flows[PowerSystem.FLOW_KEY][SHIP]
+	var given: Dictionary = flow["jobs"][40]
+	assert_eq(given["limit"], "power")
+	assert_eq(given["rate_w"], flow["budget_w"] - (flow["consumed_w"] - given["rate_w"]), "all that is left")
+	assert_lt(given["rate_w"], 100_000)
+	assert_eq(state["parts"][LIDAR]["draw_w"], given["rate_w"])
 
 
 func test_a_small_load_is_readmitted_after_a_big_one_is_shed() -> void:
