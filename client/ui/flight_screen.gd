@@ -54,8 +54,9 @@ var target_kind := ""
 var target_id := 0
 ## The Sim's relative state to the target, Sim.relative (A54) through RendezvousLogic.fetch.
 var rendezvous: Dictionary = {}
+## Screenshots only, until Sim.relative exists (A54): a state shown in its place.
+var sample_relative: Dictionary = {}
 var _target_title: Label
-var _target_box: VBoxContainer
 var _target_button: Button
 var _untarget_button: Button
 ## World-mm point lists, from the last time the path data was worked out.
@@ -368,9 +369,6 @@ func _build_target(column: VBoxContainer) -> void:
 	column.add_child(HSeparator.new())
 	_target_title = _add_label(column)
 	_target_title.modulate = ClientTheme.MID_GREY.lightened(0.35)
-	_target_box = VBoxContainer.new()
-	_target_box.add_theme_constant_override("separation", 2)
-	column.add_child(_target_box)
 	var buttons := HBoxContainer.new()
 	column.add_child(buttons)
 	_target_button = _add_button(buttons, "Target the selection")
@@ -416,31 +414,13 @@ func _show_target(view: Dictionary) -> void:
 		clear_target()
 		return
 	rendezvous = RendezvousLogic.fetch(bridge.sim, unit_id(), target_id, view["tick"])
-	var lines := PackedStringArray()
+	if rendezvous.is_empty() and not sample_relative.is_empty() and target_id != 0:
+		rendezvous = sample_relative
 	if target_id == 0:
 		_target_title.text = "No target: select a craft or rock, then Target the selection"
 	else:
-		_target_title.text = "Target: %s" % target_name(view)
-		lines = RendezvousLogic.lines(rendezvous, view["tick"], bridge.ticks_per_second())
-		if lines.is_empty():
-			lines.append("The Sim gives no relative state for this target yet")
-	# One label a line, kept between refreshes; only their text changes.
-	while _target_box.get_child_count() > lines.size():
-		var extra := _target_box.get_child(_target_box.get_child_count() - 1)
-		_target_box.remove_child(extra)
-		extra.queue_free()
-	while _target_box.get_child_count() < lines.size():
-		_add_label(_target_box)
-	for index in range(lines.size()):
-		(_target_box.get_child(index) as Label).text = lines[index]
-
-
-## The target's readout lines as shown, for tests.
-func target_lines() -> PackedStringArray:
-	var shown := PackedStringArray()
-	for child: Node in _target_box.get_children():
-		shown.append((child as Label).text)
-	return shown
+		# The readouts themselves are in the RendezvousPanel, at the top of the view.
+		_target_title.text = "Target: %s, readouts at the top" % target_name(view)
 
 
 ## Works the paths out again on the next refresh, whatever the wait, as tests need.

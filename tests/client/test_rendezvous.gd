@@ -98,12 +98,16 @@ func test_the_flight_screen_targets_the_selection() -> void:
 	flight.refresh()
 	assert_false(flight._target_button.disabled)
 	flight._target_button.pressed.emit()
-	assert_eq(flight._target_title.text, "Target: Red Rock")
-	assert_gt(flight.target_lines().size(), 0, "a line, if only that the Sim gives nothing yet")
+	assert_string_starts_with(flight._target_title.text, "Target: Red Rock")
+	main.rendezvous_panel.refresh()
+	assert_true(main.rendezvous_panel.visible, "the readouts' panel, while flying with a target")
+	assert_gt(main.rendezvous_panel.shown_lines().size(), 0, "a line, if only that the Sim gives nothing yet")
 	assert_true(flight._target_button.disabled, "already the target")
 	flight._untarget_button.pressed.emit()
 	assert_eq(flight.target_id, 0)
 	assert_eq(main.rendezvous_markers.spots(), {}, "no target, no markers")
+	main.rendezvous_panel.refresh()
+	assert_false(main.rendezvous_panel.visible)
 
 
 ## The burn preview says how early to start, from check(plan_burn)'s lead_ticks (A54).
