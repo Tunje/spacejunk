@@ -7,6 +7,8 @@
         "count": 10
       }
     ],
+    "energy_kj": 30000,
+    "heat_kj": 30000,
     "work": 300000,
     "power_kw": 100
   },

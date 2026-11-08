@@ -435,6 +435,7 @@
       "capabilities": {
         "facility": {
           "type": "fabricator",
+          "throughput_kg_per_s": 0.02,
           "work_per_tick": 50
         }
       },
@@ -476,6 +477,7 @@
       "capabilities": {
         "facility": {
           "type": "refinery",
+          "throughput_kg_per_s": 0.05,
           "work_per_tick": 50
         }
       },
@@ -570,6 +572,7 @@
       "capabilities": {
         "facility": {
           "type": "fabricator",
+          "throughput_kg_per_s": 0.05,
           "work_per_tick": 100
         }
       },
@@ -948,6 +951,7 @@
       "capabilities": {
         "facility": {
           "type": "refinery",
+          "throughput_kg_per_s": 0.2,
           "work_per_tick": 100
         }
       },
@@ -1208,6 +1212,7 @@
       "capabilities": {
         "facility": {
           "type": "lab",
+          "throughput_kg_per_s": 0.1,
           "work_per_tick": 100
         }
       },

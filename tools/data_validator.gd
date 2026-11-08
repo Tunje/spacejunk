@@ -40,10 +40,14 @@ const MODULE_FIELDS := [
 ]
 const CONNECTOR_FIELDS := ["id", "type", "size", "pos_mm", "facing", "up", "load_limit_kg"]
 const COLLISION_FIELDS := ["shape", "center_mm", "size_mm"]
-## Work points (C11, contract v4). A recipe needs `work`, and a facility removes `work_per_tick` of
-## it each tick. `seconds` is gone (B11b), so a recipe that still has it is an unknown field.
-const RECIPE_FIELDS := ["id", "facility", "work", "power_kw", "inputs", "outputs", "abstract"]
-const RECIPE_OPTIONAL := ["points"]
+## Factory rates (C30, B29). A recipe needs `energy_kj` and `heat_kj` per run, and may set its own
+## `throughput_kg_per_s`. A facility has a `throughput_kg_per_s` and its module's `power_kw` as its
+## rating. `work`, the recipe's `power_kw` and `work_per_tick` stay optional until C30 is on main,
+## and go then. `seconds` is gone (B11b), so a recipe that still has it is an unknown field.
+const RECIPE_FIELDS := ["id", "facility", "energy_kj", "heat_kj", "inputs", "outputs", "abstract"]
+const RECIPE_OPTIONAL := ["points", "throughput_kg_per_s", "work", "power_kw"]
+## The most energy or heat a run may state: a terajoule.
+const MAX_RUN_KJ := 1_000_000_000
 ## A recipe draws its stated power at this rate, and in proportion at any other (PowerSystem).
 const FULL_RATE_WORK_PER_TICK := 100
 const MODULE_OPTIONAL := ["ideas"]
@@ -75,7 +79,7 @@ const IDEA_DIRECTIONS := {
 	"capabilities.thruster.rated_mass_kg": 1, "capabilities.thruster.exhaust_m_s": 1,
 	"capabilities.thruster.thrust_kn": 1,
 	"capabilities.landing_gear.max_touchdown_m_s": 1,
-	"capabilities.facility.work_per_tick": 1,
+	"capabilities.facility.work_per_tick": 1, "capabilities.facility.throughput_kg_per_s": 1,
 }
 const MAX_IDEAS_PER_VARIANT := 4
 const DEPOSIT_FIELDS := ["id", "item", "mass_kg", "hardness"]
@@ -91,7 +95,8 @@ const SCENARIO_OPTIONAL := ["frames", "research"]
 const ANY_ITEM := "*"
 ## theories.json may carry the default bench test beside its entries (C12, section 5).
 const FILE_EXTRAS := { "theories": ["bench_test"] }
-const BENCH_TEST_FIELDS := ["inputs", "work", "power_kw"]
+const BENCH_TEST_FIELDS := ["inputs", "energy_kj", "heat_kj"]
+const BENCH_TEST_OPTIONAL := ["work", "power_kw"]
 const BODY_FIELDS := ["key", "name", "kind", "radius_mm", "visual_seed", "deposits"]
 const BODY_OPTIONAL := ["pos_mm", "gm_km3_s2", "orbit", "frame", "planet"]
 const PLANET_FIELDS := ["seed", "height_range_m"]
@@ -454,9 +459,11 @@ func _shape_capabilities(where: String, capabilities: Variant) -> void:
 		elif key == "max_mass_kg":
 			_check_positive(at, key, value, 1000, MAX_STACK_G)
 		elif key == "facility":
-			if value is Dictionary and _has_fields(at, value, ["type", "work_per_tick"]):
+			if value is Dictionary and _has_fields(at, value, ["type", "throughput_kg_per_s"], ["work_per_tick"]):
 				_check_enum(at, "type", value["type"], FACILITIES)
-				_check_whole(at, "work_per_tick", value["work_per_tick"], 1, MAX_RATE)
+				_check_positive(at, "throughput_kg_per_s", value["throughput_kg_per_s"], 1000, MAX_RATE)
+				if value.has("work_per_tick"):
+					_check_whole(at, "work_per_tick", value["work_per_tick"], 1, MAX_RATE)
 			elif not value is Dictionary:
 				_err("bad_capability", at, "not an object")
 		elif key == "always_on":
@@ -549,10 +556,16 @@ func _shape_recipe(recipe: Dictionary) -> void:
 	if not _has_fields(where, recipe, RECIPE_FIELDS, RECIPE_OPTIONAL):
 		return
 	_check_enum(where, "facility", recipe["facility"], FACILITIES)
-	_check_whole(where, "work", recipe["work"], 1, MAX_RATE)
+	_check_whole(where, "energy_kj", recipe["energy_kj"], 1, MAX_RUN_KJ)
+	_check_whole(where, "heat_kj", recipe["heat_kj"], 0, MAX_RUN_KJ)
+	if recipe.has("throughput_kg_per_s"):
+		_check_positive(where, "throughput_kg_per_s", recipe["throughput_kg_per_s"], 1000, MAX_RATE)
+	if recipe.has("work"):
+		_check_whole(where, "work", recipe["work"], 1, MAX_RATE)
 	if recipe.has("points"):
 		_check_whole(where, "points", recipe["points"], 1, MAX_RATE)
-	_check_number(where, "power_kw", recipe["power_kw"], 1000, MAX_RATE)
+	if recipe.has("power_kw"):
+		_check_number(where, "power_kw", recipe["power_kw"], 1000, MAX_RATE)
 	if not recipe["abstract"] is bool:
 		_err("bad_recipe", where, "abstract is not a boolean")
 	if not recipe["inputs"] is Array or recipe["inputs"].is_empty():
@@ -774,6 +787,8 @@ func _check_recipe_facility(where: String, recipe: Dictionary) -> void:
 		if capabilities.get("facility", {}).get("type") != recipe["facility"]:
 			continue
 		found = true
+		if not recipe.has("power_kw") or not capabilities["facility"].has("work_per_tick"):
+			continue
 		# A slower facility draws the recipe's power in proportion to its work rate.
 		var rate: float = float(capabilities["facility"]["work_per_tick"]) / FULL_RATE_WORK_PER_TICK
 		if float(recipe["power_kw"]) * rate > float(_modules[id]["power_kw"]):
@@ -1564,11 +1579,15 @@ func _shape_bench_test() -> void:
 		if not _theories.is_empty():
 			_err("missing_field", "theories.json", "bench_test")
 		return
-	if not _bench_test is Dictionary or not _has_fields(where, _bench_test, BENCH_TEST_FIELDS):
+	if not _bench_test is Dictionary or not _has_fields(where, _bench_test, BENCH_TEST_FIELDS, BENCH_TEST_OPTIONAL):
 		return
 	_shape_inputs(where, _bench_test["inputs"])
-	_check_whole(where, "work", _bench_test["work"], 1, MAX_RATE)
-	_check_number(where, "power_kw", _bench_test["power_kw"], 1000, MAX_RATE)
+	_check_whole(where, "energy_kj", _bench_test["energy_kj"], 1, MAX_RUN_KJ)
+	_check_whole(where, "heat_kj", _bench_test["heat_kj"], 0, MAX_RUN_KJ)
+	if _bench_test.has("work"):
+		_check_whole(where, "work", _bench_test["work"], 1, MAX_RATE)
+	if _bench_test.has("power_kw"):
+		_check_number(where, "power_kw", _bench_test["power_kw"], 1000, MAX_RATE)
 
 
 func _check_research_inputs(where: String, inputs: Array) -> void:
@@ -1581,7 +1600,7 @@ func _cross_research() -> void:
 		_check_research_inputs("theories.json:bench_test", _bench_test["inputs"])
 		for id: String in _sorted(_modules):
 			if _modules[id]["capabilities"].get("facility", {}).get("type") == "lab" \
-					and float(_bench_test["power_kw"]) > float(_modules[id]["power_kw"]):
+					and _bench_test.has("power_kw") and float(_bench_test["power_kw"]) > float(_modules[id]["power_kw"]):
 				_err("recipe_over_power", "theories.json:bench_test", "above the rating of %s" % id)
 	for scenario: Dictionary in _scenarios:
 		for id: String in scenario.get("research", {}).get("theories", []):
