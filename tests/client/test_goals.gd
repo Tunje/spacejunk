@@ -166,26 +166,44 @@ func test_the_core_hint_holds_on_the_real_sim() -> void:
 		var core_slot := { "part": unit["parts"]["id"], "connector": "core" }
 		var from := { "item": "assisted_core", "from": unit["dock"]["target_unit"] }
 		var result: Dictionary = bridge.check(FittingLogic.attach_command(drone, from, core_slot))
+		# C30: fitting no longer refuses on power; it warns, and the hint says so.
+		var codes: Array = result.get("detail", {}).get("warnings", []).map(func(warning: Dictionary) -> String: return warning["code"])
+		assert_true(result["ok"])
 		if fitted == 0:
-			assert_eq(result["reason"], "over_power_budget")
+			assert_has(codes, "over_power_budget", "a bare craft can't power the core")
 		else:
-			assert_true(result["ok"], "fits with the solar panel and radiator on")
+			assert_does_not_have(codes, "over_power_budget", "powered with the solar panel and radiator on")
 
 
-func test_fix_needs_a_limit_failure_then_that_part_fitted() -> void:
-	var state := _view({ 1: _unit("ship", {}, { "id": 7, "def": "laser", "children": [] }) })
+## C30: a fit over a limit is allowed and warned. The goal is hitting one, then
+## bringing that craft back within its limits.
+func _fit(over_heat: bool) -> Dictionary:
+	return { "mass_g": 1000, "mass_limit_g": 5000, "power_rated_w": 100, "power_budget_w": 200,
+		"heat_rated_w": 280 if over_heat else 150, "heat_budget_w": 200 }
+
+
+func test_fix_needs_a_warned_fit_then_back_within_limits() -> void:
+	var ship := _unit("ship", {}, { "id": 7, "def": "laser", "children": [] })
+	ship["fit"] = _fit(true)
+	var state := _view({ 1: ship })
 	tracker.complete("install")
-	tracker.note_fit_blocked("laser", "connector_occupied")
-	assert_true(tracker.observe_event(_event("part_attached", 1, { "part": 7 }), state, defs).is_empty(), "not a limit")
-	tracker.note_fit_blocked("laser", "over_heat_budget")
-	assert_eq(tracker.observe_event(_event("part_attached", 1, { "part": 7 }), state, defs), ["fix"] as Array[String])
+	var heat := { "part": 7, "warnings": [{ "code": "over_heat_budget", "need_w": 280, "have_w": 200 }] }
+	assert_true(tracker.observe_event(_event("part_attached", 1, heat), state, defs).is_empty(), "the limit is hit")
+	assert_true(tracker.observe_view(state, {}, defs["modules"]).is_empty(), "still over")
+	ship["fit"] = _fit(false)
+	assert_eq(tracker.observe_view(state, {}, defs["modules"]), ["fix"] as Array[String], "a radiator brings it back")
 
 
-func test_fix_ignores_a_different_part() -> void:
-	var state := _view({ 1: _unit("ship", {}, { "id": 7, "def": "tank", "children": [] }) })
+func test_fix_needs_the_limit_hit_first() -> void:
+	var ship := _unit("ship", {}, { "id": 7, "def": "tank", "children": [] })
+	ship["fit"] = _fit(false)
+	var state := _view({ 1: ship })
 	tracker.complete("install")
-	tracker.note_fit_blocked("laser", "over_power_budget")
-	assert_true(tracker.observe_event(_event("part_attached", 1, { "part": 7 }), state, defs).is_empty())
+	assert_true(tracker.observe_event(_event("part_attached", 1, { "part": 7 }), state, defs).is_empty(), "no warning")
+	assert_true(tracker.observe_view(state, {}, defs["modules"]).is_empty(), "within limits all along isn't a fix")
+	var heavy := { "part": 7, "warnings": [{ "code": "over_load_limit", "need_g": 9, "have_g": 5 }] }
+	tracker.observe_event(_event("part_attached", 1, heavy), state, defs)
+	assert_true(tracker.observe_view(state, {}, defs["modules"]).is_empty(), "a connector's load isn't counted")
 
 
 func test_the_real_game_starts_on_goal_one_with_a_hint() -> void:
@@ -274,7 +292,7 @@ func test_fitting_works_on_a_selected_station_for_check_9() -> void:
 	assert_gt(main.fitting_screen._stock.size(), 0, "a station fits from its own stock")
 
 
-func test_a_blocked_fit_reaches_the_tracker() -> void:
+func test_a_warned_fit_says_so_before_attaching() -> void:
 	var main: Node = add_child_autofree(StubScene.build())
 	var bridge: SimBridge = main.get_node("Bridge")
 	bridge.set_paused(true)
@@ -300,7 +318,8 @@ func test_a_blocked_fit_reaches_the_tracker() -> void:
 	for slot: Dictionary in FittingLogic.free_slots(screen.unit(), screen._modules):
 		if slot["connector"] == "ext_a":
 			screen.choose_slot(slot)
-	assert_true(main.goal_panel.tracker._blocked_items.has("stub_laser"))
+	assert_true(screen._verdict.text.contains("fits, but"), screen._verdict.text)
+	assert_false(screen._attach_button.disabled, "a warning doesn't stop the fit (C30)")
 
 
 # --- D26: the new start's list (C13), picked by scenario ---

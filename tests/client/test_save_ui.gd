@@ -203,14 +203,14 @@ func test_event_based_goals_survive_a_load() -> void:
 	var tracker: GoalTracker = main.goal_panel.tracker
 	tracker.complete("refine")
 	tracker.complete("handover")
-	tracker.note_fit_blocked("mining_laser_mk1", "over_heat_budget")
+	tracker._warned[42] = true
 	main.save_game()
 	tracker.done.clear()
-	tracker._blocked_items.clear()
+	tracker._warned.clear()
 	main.load_game()
 	assert_true(tracker.done.has("refine"))
 	assert_true(tracker.done.has("handover"))
-	assert_true(tracker._blocked_items.has("mining_laser_mk1"), "a fix after the load still counts")
+	assert_true(tracker._warned.has(42), "a fix after the load still counts")
 
 
 func test_goals_survive_a_fresh_start_of_the_client() -> void:

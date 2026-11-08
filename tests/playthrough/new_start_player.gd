@@ -340,17 +340,19 @@ func stage_chain() -> void:
 	if station == 0:
 		_problem("no station was built")
 		return
+	# C30 (D48): the LIDAR fits over the station's power and heat with a warning, then the
+	# solar panel and radiator bring it back within: the "fix" goal.
+	if fit("lidar_mk1", "side_a_px") != "":
+		_problem("the LIDAR refused")
+		return
 	for fix: Array in [["solar_panel_mk1", "side_a_nx"], ["heat_radiator_mk1", "side_a_nz"]]:
-		if fit("lidar_mk1", "side_a_px") == "":
-			_problem("the station took the LIDAR before %s" % fix[0])
-			return
 		if held(probe, fix[0]) == 0:
 			queue(probe, "fabricator", fix[0], 1)
 			wait_jobs()
 		if fit(fix[0], fix[1]) != "":
 			_problem("%s refused" % fix[0])
-	if fit("lidar_mk1", "side_a_px") != "":
-		_problem("the LIDAR still refused")
+	if not GoalTracker.within_limits(unit(station).get("fit", {})):
+		_problem("the station is still over its limits after the solar panel and radiator")
 	queue(probe, "fabricator", "ore_container_mk1", 1, [station, "side_a_pz"])
 	note("A built station docks at the probe's port, so the dock is the station's: before D31, Unload and Load were offered only on the station.")
 	wait_jobs()

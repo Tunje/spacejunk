@@ -620,14 +620,16 @@ func _validate_attach_parts(unit: Dictionary, args: Dictionary) -> Dictionary:
 	var fit := _fit(unit, [module] as Array[Dictionary], carried)
 	var failure := _fit_failure(fit, parent, parent_end, part_end, module["mass_g"])
 	if failure.is_empty():
-		return _result("", fit)
+		var detail := fit.duplicate()
+		detail["warnings"] = _fit_warnings(fit, parent_end, module["mass_g"])
+		return _result("", detail)
 	var detail: Dictionary = fit.duplicate()
 	detail.merge(failure["detail"])
 	return _result(failure["reason"], detail)
 
 
-## Same order as FittingSystem._fit_failure, so check 10 reads alike on both.
-func _fit_failure(fit: Dictionary, parent: Dictionary, parent_end: Dictionary, part_end: Dictionary, mass_g: int) -> Dictionary:
+## Same as FittingSystem._fit_failure: since C30 only the connector refuses.
+func _fit_failure(_fit: Dictionary, parent: Dictionary, parent_end: Dictionary, part_end: Dictionary, _mass_g: int) -> Dictionary:
 	if parent_end["type"] != part_end["type"] or parent_end["type"] == "dock":
 		return { "reason": "connector_type_mismatch", "detail": {} }
 	if (parent_end["size"] == "core") != (part_end["size"] == "core"):
@@ -635,15 +637,21 @@ func _fit_failure(fit: Dictionary, parent: Dictionary, parent_end: Dictionary, p
 	for child: Dictionary in parent["children"]:
 		if child["parent_connector"] == parent_end["id"]:
 			return { "reason": "connector_occupied", "detail": {} }
-	if mass_g > parent_end["load_limit_g"]:
-		return { "reason": "over_load_limit", "detail": { "need_g": mass_g, "have_g": parent_end["load_limit_g"] } }
-	if fit["mass_g"] > fit["mass_limit_g"]:
-		return { "reason": "over_mass_limit", "detail": { "need_g": fit["mass_g"], "have_g": fit["mass_limit_g"] } }
-	if fit["power_rated_w"] > fit["power_budget_w"]:
-		return { "reason": "over_power_budget", "detail": { "need_w": fit["power_rated_w"], "have_w": fit["power_budget_w"] } }
-	if fit["heat_rated_w"] > fit["heat_budget_w"]:
-		return { "reason": "over_heat_budget", "detail": { "need_w": fit["heat_rated_w"], "have_w": fit["heat_budget_w"] } }
 	return {}
+
+
+## C30's warnings for a fit over its limits: allowed, and said, as the Sim does.
+func _fit_warnings(fit: Dictionary, parent_end: Dictionary, mass_g: int) -> Array[Dictionary]:
+	var warnings: Array[Dictionary] = []
+	if mass_g > parent_end["load_limit_g"]:
+		warnings.append({ "code": "over_load_limit", "need_g": mass_g, "have_g": parent_end["load_limit_g"] })
+	if fit["mass_g"] > fit["mass_limit_g"]:
+		warnings.append({ "code": "over_mass_limit", "need_g": fit["mass_g"], "have_g": fit["mass_limit_g"] })
+	if fit["power_rated_w"] > fit["power_budget_w"]:
+		warnings.append({ "code": "over_power_budget", "need_w": fit["power_rated_w"], "have_w": fit["power_budget_w"] })
+	if fit["heat_rated_w"] > fit["heat_budget_w"]:
+		warnings.append({ "code": "over_heat_budget", "need_w": fit["heat_rated_w"], "have_w": fit["heat_budget_w"] })
+	return warnings
 
 
 func _connector(module: Dictionary, connector_id: String) -> Dictionary:
@@ -840,7 +848,12 @@ func _apply_attach(unit: Dictionary, args: Dictionary, announce := true) -> void
 	})
 	_find_part(unit, args["parent_part"])["children"].append(part)
 	if announce:
-		_emit("part_attached", unit["id"], { "part": part["id"] })
+		var data := { "part": part["id"] }
+		# The unit as it is now, as the Sim warns on part_attached; no connector load here.
+		var warnings := _fit_warnings(_fit(unit), { "load_limit_g": 1 << 60 }, 0)
+		if not warnings.is_empty():
+			data["warnings"] = warnings
+		_emit("part_attached", unit["id"], data)
 
 
 func _apply_detach(unit: Dictionary, args: Dictionary) -> void:

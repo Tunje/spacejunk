@@ -107,17 +107,18 @@ func test_detach_goes_to_the_docked_host() -> void:
 	assert_eq(FittingLogic.detach_target(bridge.current_view, ship), station)
 
 
-func test_check_10_fails_on_a_limit_then_is_fixed_by_fitting_another_part() -> void:
+## C30: a fit over a limit is allowed, and the verdict says what it costs first.
+func test_check_10_warns_on_a_limit_then_another_part_brings_it_back() -> void:
 	_open_docked()
 	_fit_item("stub_laser", "ext_a")
-	assert_true(screen._attach_button.disabled)
+	assert_false(screen._attach_button.disabled, "over a limit is allowed, with a warning")
 	assert_string_contains(screen._verdict.text, "Over the power budget")
+	assert_eq(screen._verdict.modulate, ClientTheme.GOLD)
 	assert_eq(screen._power_bar.modulate, ClientTheme.ORANGE)
 	_fit_item("stub_solar", "ext_a")
-	assert_true(screen._attach_button.disabled, "the heat budget was already over")
-	assert_string_contains(screen._verdict.text, "Over the heat budget")
+	assert_string_contains(screen._verdict.text, "Over the heat budget", "the heat budget was already over")
 	_fit_item("stub_radiator", "ext_a")
-	assert_false(screen._attach_button.disabled)
+	assert_string_contains(screen._verdict.text, "fits here")
 	screen.attach()
 	_run_ticks(8)
 	screen.refresh()
@@ -127,7 +128,7 @@ func test_check_10_fails_on_a_limit_then_is_fixed_by_fitting_another_part() -> v
 	_run_ticks(8)
 	screen.refresh()
 	_fit_item("stub_solar", "ext_c")
-	assert_false(screen._attach_button.disabled, "two radiators now cover the heat")
+	assert_string_contains(screen._verdict.text, "fits here", "two radiators now cover the heat")
 
 
 func test_attaching_moves_stock_and_shows_on_the_craft() -> void:
@@ -154,14 +155,18 @@ func test_attach_conserves_matter() -> void:
 
 func test_a_failed_submit_emits_attach_failed_with_the_item() -> void:
 	_open_docked()
+	_fit_item("stub_radiator", "ext_a")
+	screen.attach()
+	_run_ticks(8)
 	bridge.sim.take_events()
+	# Since C30 only the connector refuses: ext_a is taken now.
 	var command := FittingLogic.attach_command(ship, { "item": "stub_laser", "from": station }, _slot("ext_a"))
 	bridge.sim.submit(command)
 	bridge.sim.step(1)
 	var events: Array[Dictionary] = bridge.sim.take_events()
 	assert_eq(events[0]["type"], "attach_failed")
 	assert_eq(events[0]["data"]["item"], "stub_laser")
-	assert_eq(events[0]["data"]["reason"], "over_power_budget")
+	assert_eq(events[0]["data"]["reason"], "connector_occupied")
 
 
 func test_removing_a_part_returns_it_to_the_host() -> void:

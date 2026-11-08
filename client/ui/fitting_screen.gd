@@ -11,7 +11,6 @@ const COPY_ROW_PX := 38
 const COPY_ROWS_SHOWN := 4
 
 signal closed
-signal fit_blocked(item: String, reason: String)
 
 var bridge: SimBridge
 var local_view: LocalView
@@ -312,13 +311,16 @@ func _show_verdict(result: Dictionary) -> void:
 	elif slot.is_empty():
 		_verdict.text = "%s: choose a connector." % chosen["name"]
 		_verdict.modulate = ClientTheme.MID_GREY.lightened(0.35)
+	elif result["ok"] and not result.get("detail", {}).get("warnings", []).is_empty():
+		# C30: over a limit is allowed; what it costs is said before it's attached.
+		_verdict.text = "%s fits, but: %s." % [chosen["name"], FittingLogic.warnings_text(result["detail"]["warnings"])]
+		_verdict.modulate = ClientTheme.GOLD
 	elif result["ok"]:
 		_verdict.text = "%s fits here." % chosen["name"]
 		_verdict.modulate = ClientTheme.OFF_WHITE
 	else:
 		_verdict.text = OrderText.reason(result["reason"], result["detail"])
 		_verdict.modulate = ClientTheme.ORANGE
-		fit_blocked.emit(chosen["item"], result["reason"])
 
 
 func _add_label(parent: Control) -> Label:
