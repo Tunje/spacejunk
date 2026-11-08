@@ -48,6 +48,16 @@ var system_map: SystemMap
 ## The burn's tick, absolute, so its place on the path holds while time runs.
 var burn_tick := 0
 var preview: Dictionary = {}
+## The rendezvous target (D46): a craft or a rock, chosen from the selection. The
+## readouts and the local view's markers follow it until it is cleared.
+var target_kind := ""
+var target_id := 0
+## The Sim's relative state to the target, Sim.relative (A54) through RendezvousLogic.fetch.
+var rendezvous: Dictionary = {}
+var _target_title: Label
+var _target_box: VBoxContainer
+var _target_button: Button
+var _untarget_button: Button
 ## World-mm point lists, from the last time the path data was worked out.
 var current_path: Array[PackedFloat64Array] = []
 var planned_path: Array[PackedFloat64Array] = []
@@ -163,6 +173,7 @@ func _ready() -> void:
 	_clear_button.pressed.connect(clear)
 	_message = _add_label(column)
 	_message.modulate = ClientTheme.ORANGE
+	_build_target(column)
 	_build_landing(column)
 	_build_descent(column)
 	# Landing and descent sit under the place and diagram, seen first near a planet.
@@ -348,6 +359,88 @@ func refresh() -> void:
 	_update_paths(view, command)
 	_show_descent(view, shown)
 	_show_landing(view, shown)
+	_show_target(view)
+
+
+# --- Rendezvous (D46) ---
+
+func _build_target(column: VBoxContainer) -> void:
+	column.add_child(HSeparator.new())
+	_target_title = _add_label(column)
+	_target_title.modulate = ClientTheme.MID_GREY.lightened(0.35)
+	_target_box = VBoxContainer.new()
+	_target_box.add_theme_constant_override("separation", 2)
+	column.add_child(_target_box)
+	var buttons := HBoxContainer.new()
+	column.add_child(buttons)
+	_target_button = _add_button(buttons, "Target the selection")
+	_target_button.pressed.connect(target_selection)
+	_untarget_button = _add_button(buttons, "Clear target")
+	_untarget_button.pressed.connect(clear_target)
+
+
+## Takes the selected craft or rock as the target.
+func target_selection() -> void:
+	if _selection_targetable():
+		target_kind = local_view.selected_kind
+		target_id = local_view.selected_id
+		refresh()
+
+
+func clear_target() -> void:
+	target_kind = ""
+	target_id = 0
+	rendezvous = {}
+	refresh()
+
+
+## Another craft, or a rock or body, but not the craft being flown.
+func _selection_targetable() -> bool:
+	match local_view.selected_kind:
+		"unit":
+			return local_view.selected_id != unit_id() and bridge.current_view["units"].has(local_view.selected_id)
+		"body":
+			return bridge.current_view["bodies"].has(local_view.selected_id)
+	return false
+
+
+func target_name(view: Dictionary) -> String:
+	var table: Dictionary = view["units"] if target_kind == "unit" else view["bodies"]
+	return table.get(target_id, {}).get("name", "")
+
+
+func _show_target(view: Dictionary) -> void:
+	_target_button.disabled = not _selection_targetable() or (local_view.selected_kind == target_kind and local_view.selected_id == target_id)
+	_untarget_button.disabled = target_id == 0
+	if target_id != 0 and target_name(view).is_empty():
+		clear_target()
+		return
+	rendezvous = RendezvousLogic.fetch(bridge.sim, unit_id(), target_id, view["tick"])
+	var lines := PackedStringArray()
+	if target_id == 0:
+		_target_title.text = "No target: select a craft or rock, then Target the selection"
+	else:
+		_target_title.text = "Target: %s" % target_name(view)
+		lines = RendezvousLogic.lines(rendezvous, view["tick"], bridge.ticks_per_second())
+		if lines.is_empty():
+			lines.append("The Sim gives no relative state for this target yet")
+	# One label a line, kept between refreshes; only their text changes.
+	while _target_box.get_child_count() > lines.size():
+		var extra := _target_box.get_child(_target_box.get_child_count() - 1)
+		_target_box.remove_child(extra)
+		extra.queue_free()
+	while _target_box.get_child_count() < lines.size():
+		_add_label(_target_box)
+	for index in range(lines.size()):
+		(_target_box.get_child(index) as Label).text = lines[index]
+
+
+## The target's readout lines as shown, for tests.
+func target_lines() -> PackedStringArray:
+	var shown := PackedStringArray()
+	for child: Node in _target_box.get_children():
+		shown.append((child as Label).text)
+	return shown
 
 
 ## Works the paths out again on the next refresh, whatever the wait, as tests need.

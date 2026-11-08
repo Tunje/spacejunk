@@ -106,6 +106,11 @@ static func preview_lines(detail: Dictionary, view: Dictionary, unit_id: int, ti
 	]
 	if detail.get("approximate", false):
 		cost += " (estimated: too long to fly through ahead)"
+	# D46: a finite burn lands where an instant kick would only if it starts early by
+	# its lead (A54's lead_ticks, half its length), so say how much once it matters.
+	var lead := int(detail.get("lead_ticks", 0))
+	if lead >= ticks_per_second:
+		cost += ". Start it %s before the moment it's aimed at" % OrderText.duration(float(lead) / ticks_per_second)
 	var aboard: int = unit["inventory"].get("propellant", 0)
 	if detail["propellant_g"] > aboard:
 		cost += ". Only %s aboard, so it will stop short" % OrderText.tonnes(aboard)
