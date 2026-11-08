@@ -1,7 +1,8 @@
 class_name HeatSystem
 extends SimSystem
 ## The heat loop of networks.md section 4. One loop per unit. Waste heat comes from the parts
-## PowerSystem ran this tick, so this system must be registered after it.
+## PowerSystem ran this tick, so this system must be registered after it. A facility's heat is its
+## job's, at the rate it ran (C30); any other part's is its module's heat_w.
 
 const HEAT_CLEAR_PPM := 800000
 const PPM := 1000000
@@ -14,7 +15,7 @@ func update_stores(ctx: SimContext) -> void:
 	ctx.flows[FLOW_KEY] = flows
 	var power: Dictionary = ctx.flows[PowerSystem.FLOW_KEY]
 	for id: int in _sorted(ctx.state["units"]):
-		flows[id] = _settle_loop(ctx, id, power[id]["ran"])
+		flows[id] = _settle_loop(ctx, id, power[id]["ran"], power[id]["job_heat_w"])
 
 
 func detect(ctx: SimContext) -> void:
@@ -119,13 +120,13 @@ func fill_ledger(ctx: SimContext, ledger: Dictionary) -> void:
 
 ## Phase 6: heat rises first, then radiators take off what they can. A clamped amount is dropped,
 ## so radiators build no credit while the loop is cold.
-func _settle_loop(ctx: SimContext, id: int, ran: Array) -> Dictionary:
+func _settle_loop(ctx: SimContext, id: int, ran: Array, job_heat_w: Dictionary) -> Dictionary:
 	var unit: Dictionary = ctx.state["units"][id]
 	var index := UnitIndex.of(ctx, id)
 	var heat_w: Dictionary = index["heat_w"]
 	var input_w := 0
 	for part_id: int in ran:
-		input_w += heat_w[part_id]
+		input_w += job_heat_w.get(part_id, heat_w[part_id])
 	var reject_w := UnitIndex.healthy_total(ctx, index["radiators"])
 	var before_j: int = unit["heat_stored_j"]
 	var in_rem: int = unit["heat_in_remainder"]
@@ -152,10 +153,11 @@ func _fault_parts(ctx: SimContext, id: int, flow: Dictionary) -> void:
 			return parts[a]["priority"] < parts[b]["priority"]
 		return a > b)
 	var input_w: int = flow["input_w"]
+	var job_heat_w: Dictionary = ctx.flows[PowerSystem.FLOW_KEY][id]["job_heat_w"]
 	for part_id: int in producers:
 		if input_w <= flow["reject_w"]:
 			return
-		var heat_w: int = UnitIndex.of(ctx, id)["heat_w"][part_id]
+		var heat_w: int = job_heat_w.get(part_id, UnitIndex.of(ctx, id)["heat_w"][part_id])
 		if heat_w > 0:
 			parts[part_id]["fault"] = REASON_OVER_LIMIT
 			input_w -= heat_w

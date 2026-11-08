@@ -240,8 +240,9 @@ static func _exact(value: float, factor: int, where: String) -> int:
 	return rounded
 
 
-## "" if every recipe needs a whole `work` of at least 1 and has no duration left over, and every
-## facility does a whole `work_per_tick` of at least 1 (C11, contracts section 5). Otherwise what is
+## "" if every recipe needs a whole `energy_j`, or until B29 `work`, of at least 1 and has no
+## duration left over, and every facility has a `throughput_g_per_s`, or until B29 a whole
+## `work_per_tick`, of at least 1 (C11, C30, contracts section 5). Otherwise what is
 ## wrong, naming the first entry in ID order. A job on a facility of rate 0 would never end, and one
 ## without a rate would fail its first lookup.
 static func work_problem(recipes: Dictionary, modules: Dictionary) -> String:
@@ -251,15 +252,28 @@ static func work_problem(recipes: Dictionary, modules: Dictionary) -> String:
 		var recipe: Dictionary = recipes[id]
 		if recipe.has("ticks"):
 			return "recipe %s has seconds; recipes take work points instead" % id
-		if typeof(recipe.get("work")) != TYPE_INT or recipe["work"] < 1:
+		# C30: a run needs energy. Until B29 a recipe may still give work instead, from which the
+		# same energy is derived (JobSystem.run_energy_j).
+		if recipe.has("energy_j"):
+			if typeof(recipe["energy_j"]) != TYPE_INT or recipe["energy_j"] < 1:
+				return "recipe %s needs a whole energy of at least 1 J" % id
+		elif typeof(recipe.get("work")) != TYPE_INT or recipe["work"] < 1:
 			return "recipe %s needs a whole work of at least 1" % id
+		if recipe.has("heat_j") and (typeof(recipe["heat_j"]) != TYPE_INT or recipe["heat_j"] < 0):
+			return "recipe %s needs a whole heat of at least 0 J" % id
+		if recipe.has("throughput_g_per_s") and (typeof(recipe["throughput_g_per_s"]) != TYPE_INT
+				or recipe["throughput_g_per_s"] < 1):
+			return "recipe %s needs a throughput of at least 1 g/s" % id
 	var module_ids := modules.keys()
 	module_ids.sort()
 	for id: String in module_ids:
 		var facility: Variant = modules[id].get("capabilities", {}).get("facility")
 		if facility == null:
 			continue
-		if typeof(facility.get("work_per_tick")) != TYPE_INT or facility["work_per_tick"] < 1:
+		if facility.has("throughput_g_per_s"):
+			if typeof(facility["throughput_g_per_s"]) != TYPE_INT or facility["throughput_g_per_s"] < 1:
+				return "module %s's facility needs a throughput of at least 1 g/s" % id
+		elif typeof(facility.get("work_per_tick")) != TYPE_INT or facility["work_per_tick"] < 1:
 			return "module %s's facility needs a whole work_per_tick of at least 1" % id
 	return ""
 

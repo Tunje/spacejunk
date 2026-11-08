@@ -8,7 +8,8 @@ extends SimSystem
 
 const SET_PRIORITY := "set_priority"
 const SHED_HOLD_SECONDS := 5
-## The work_per_tick of a full-size facility, at which a recipe draws its stated power.
+## The work_per_tick of a full-size facility, at which a recipe drew its stated power. Only the
+## interim defaults of C30 still use it, until B29 (JobSystem.run_energy_j).
 const FULL_RATE_WORK_PER_TICK := 100
 const PPM := 1000000
 const REASON_NO_POWER := "no_power"
@@ -55,9 +56,54 @@ func allocate(ctx: SimContext) -> void:
 	var jobs := _jobs_by_unit(ctx)
 	for id: int in _sorted(ctx.state["units"]):
 		var flow: Dictionary = flows[id]
-		var loads := _loads(ctx, id, jobs.get(id, []))
-		_choose(ctx, id, loads, flow["budget_w"])
+		var loads := _loads(ctx, id)
+		var kept_w := _choose(loads, flow["budget_w"])
+		loads.append_array(_job_loads(ctx, id, jobs.get(id, []), flow["budget_w"] - kept_w,
+			_heat_headroom(ctx, id, loads), flow))
+		_apply_choice(ctx, id, loads)
 		_settle_flows(flow, loads)
+
+
+## C30, the owner's ruling: a facility is a variable load. Once the fixed loads are kept or shed,
+## each running job, in keep order, takes up to what JobSystem.rate_for allows it from the power and
+## the radiators' heat headroom still left. A job given no power is shed as any load is; one held
+## at no speed by heat alone is kept, and pauses on no_heat_headroom. What each job is given goes
+## into the flows for JobSystem's phase 5, and the heat it makes for HeatSystem's phase 6.
+func _job_loads(ctx: SimContext, unit: int, jobs: Array, power_w: int, heat_w: int, flow: Dictionary) -> Array[Dictionary]:
+	var parts: Dictionary = ctx.state["parts"]
+	var ordered: Array = jobs.filter(func(job: Dictionary) -> bool: return parts[job["facility"]]["fault"] == "")
+	ordered.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var pa: int = parts[a["facility"]]["priority"]
+		var pb: int = parts[b["facility"]]["priority"]
+		if pa != pb:
+			return pa > pb
+		return a["facility"] < b["facility"])
+	var result: Array[Dictionary] = []
+	for job: Dictionary in ordered:
+		var part_id: int = job["facility"]
+		var held: bool = parts[part_id]["shed_until_tick"] > ctx.tick
+		var given := JobSystem.rate_for(ctx, job, 0 if held else power_w, heat_w)
+		power_w -= given["rate_w"]
+		heat_w -= given["heat_w"]
+		flow["jobs"][job["id"]] = given
+		flow["job_heat_w"][part_id] = given["heat_w"]
+		result.append({
+			"part": part_id, "draw_w": given["rate_w"], "demand_w": given["want_w"],
+			"priority": parts[part_id]["priority"], "held": held,
+			"keep": given["rate_w"] > 0 or (not held and given["limit"] != JobSystem.LIMIT_POWER),
+		})
+	return result
+
+
+## C30: the heat the healthy radiators can reject this tick beyond what the kept fixed loads give
+## off, floored at 0. Jobs share it, so they never add heat faster than it is taken off.
+func _heat_headroom(ctx: SimContext, unit: int, loads: Array[Dictionary]) -> int:
+	var index := UnitIndex.of(ctx, unit)
+	var headroom := UnitIndex.healthy_total(ctx, index["radiators"])
+	for entry: Dictionary in loads:
+		if entry["keep"]:
+			headroom -= index["heat_w"][entry["part"]]
+	return maxi(0, headroom)
 
 
 func update_stores(ctx: SimContext) -> void:
@@ -600,13 +646,14 @@ func _available(ctx: SimContext, unit: int, casters: Array) -> Dictionary:
 		budget_w += cap_w
 	return {
 		"generated_w": supply_w, "budget_w": budget_w + supply_w, "consumed_w": 0, "discharged_w": 0,
-		"charged_w": 0, "curtailed_w": 0, "batteries": batteries, "ran": [],
+		"charged_w": 0, "curtailed_w": 0, "batteries": batteries, "ran": [], "jobs": {}, "job_heat_w": {},
 	}
 
 
-## Every load on a unit in keep order: priority descending, then part ID ascending.
-func _loads(ctx: SimContext, unit: int, jobs: Array) -> Array[Dictionary]:
-	var wanted := _wanted_draws(ctx, unit, jobs)
+## Every fixed load on a unit in keep order: priority descending, then part ID ascending. Jobs are
+## variable loads, taken after these (_job_loads).
+func _loads(ctx: SimContext, unit: int) -> Array[Dictionary]:
+	var wanted := _wanted_draws(ctx, unit)
 	var result: Array[Dictionary] = []
 	var parts: Dictionary = ctx.state["parts"]
 	for part_id: int in _sorted(wanted):
@@ -621,8 +668,8 @@ func _loads(ctx: SimContext, unit: int, jobs: Array) -> Array[Dictionary]:
 	return result
 
 
-## Draw by part ID, for each part that wants power (networks.md section 2).
-func _wanted_draws(ctx: SimContext, unit_id: int, jobs: Array) -> Dictionary:
+## Draw by part ID, for each fixed load that wants power (networks.md section 2).
+func _wanted_draws(ctx: SimContext, unit_id: int) -> Dictionary:
 	var state := ctx.state
 	var unit: Dictionary = state["units"][unit_id]
 	var index := UnitIndex.of(ctx, unit_id)
@@ -637,19 +684,10 @@ func _wanted_draws(ctx: SimContext, unit_id: int, jobs: Array) -> Dictionary:
 	var op: Dictionary = unit["op"]
 	if op["part"] != 0 and op["type"] != OP_IDLE and op["type"] != OP_MOVING and powers.has(op["part"]):
 		wanted[op["part"]] = powers[op["part"]]
-	for job: Dictionary in jobs:
-		wanted[job["facility"]] = job_draw_w(ctx, job)
 	for part_id: int in wanted.keys():
 		if parts[part_id]["fault"] != "":
 			wanted.erase(part_id)
 	return wanted
-
-
-## A job's draw: its recipe's power at the full-size rate, scaled to its facility's rate and rounded
-## up, so a run uses about the same energy on any size of facility (contracts section 5).
-static func job_draw_w(ctx: SimContext, job: Dictionary) -> int:
-	return IntMath.mul_div_ceil(ctx.defs["recipes"][job["recipe"]]["power_w"],
-		JobSystem.work_per_tick(ctx, job["facility"]), FULL_RATE_WORK_PER_TICK)
 
 
 ## Load-making jobs by the unit their facility is on, in ascending job ID.
@@ -666,11 +704,12 @@ func _jobs_by_unit(ctx: SimContext) -> Dictionary:
 
 func _job_is_load(job: Dictionary) -> bool:
 	return job["status"] == JOB_RUNNING \
-		or (job["status"] == JOB_PAUSED and job["reason"] == REASON_NO_POWER)
+		or (job["status"] == JOB_PAUSED
+			and (job["reason"] == REASON_NO_POWER or job["reason"] == JobSystem.REASON_NO_HEAT))
 
 
-## Phase 4 allocation, then the state and events of what changed.
-func _choose(ctx: SimContext, unit: int, loads: Array[Dictionary], budget_w: int) -> void:
+## Phase 4 allocation of the fixed loads. Returns what the kept ones draw.
+func _choose(loads: Array[Dictionary], budget_w: int) -> int:
 	var total_w := 0
 	for entry: Dictionary in loads:
 		entry["keep"] = not entry["held"]
@@ -684,7 +723,7 @@ func _choose(ctx: SimContext, unit: int, loads: Array[Dictionary], budget_w: int
 		if not entry["keep"] and not entry["held"] and total_w + entry["draw_w"] <= budget_w:
 			entry["keep"] = true
 			total_w += entry["draw_w"]
-	_apply_choice(ctx, unit, loads)
+	return total_w
 
 
 func _apply_choice(ctx: SimContext, unit: int, loads: Array[Dictionary]) -> void:
@@ -694,7 +733,7 @@ func _apply_choice(ctx: SimContext, unit: int, loads: Array[Dictionary]) -> void
 	for entry: Dictionary in loads:
 		var part: Dictionary = parts[entry["part"]]
 		is_load[entry["part"]] = true
-		demand_w += entry["draw_w"]
+		demand_w += entry.get("demand_w", entry["draw_w"])
 		part["draw_w"] = entry["draw_w"] if entry["keep"] else 0
 		if entry["keep"] and part["shed"]:
 			part["shed"] = false
