@@ -2,11 +2,54 @@
   "schema_version": 1,
   "entries": [
     {
+      "id": "anode_slime",
+      "name": "Anode Slime",
+      "stage": 3,
+      "cargo_class": "ore",
+      "density_kg_m3": 3000
+    },
+    {
+      "id": "blister_copper",
+      "name": "Blister Copper",
+      "stage": 3,
+      "cargo_class": "goods",
+      "density_kg_m3": 8900
+    },
+    {
+      "id": "carbon",
+      "name": "Carbon",
+      "stage": 3,
+      "cargo_class": "goods",
+      "density_kg_m3": 1500
+    },
+    {
+      "id": "carbon_monoxide",
+      "name": "Carbon Monoxide",
+      "stage": 3,
+      "cargo_class": "gas",
+      "density_kg_m3": 230
+    },
+    {
+      "id": "carbonaceous_ore",
+      "name": "Carbonaceous Ore",
+      "stage": 2,
+      "cargo_class": "ore",
+      "density_kg_m3": 2200
+    },
+    {
       "id": "chalcopyrite",
       "name": "Chalcopyrite Ore",
       "stage": 2,
       "cargo_class": "ore",
       "density_kg_m3": 4200
+    },
+    {
+      "id": "chip",
+      "name": "Chip",
+      "stage": 5,
+      "cargo_class": "goods",
+      "density_kg_m3": 2330,
+      "unit_mass_kg": 0.002
     },
     {
       "id": "copper",
@@ -16,11 +59,39 @@
       "density_kg_m3": 8900
     },
     {
+      "id": "copper_matte",
+      "name": "Copper Matte",
+      "stage": 3,
+      "cargo_class": "goods",
+      "density_kg_m3": 5600
+    },
+    {
+      "id": "glass",
+      "name": "Glass",
+      "stage": 4,
+      "cargo_class": "goods",
+      "density_kg_m3": 2200
+    },
+    {
+      "id": "glass_fibre",
+      "name": "Glass Fibre",
+      "stage": 4,
+      "cargo_class": "goods",
+      "density_kg_m3": 1000
+    },
+    {
       "id": "hematite",
       "name": "Hematite Ore",
       "stage": 2,
       "cargo_class": "ore",
       "density_kg_m3": 5000
+    },
+    {
+      "id": "hydrogen",
+      "name": "Liquid Hydrogen",
+      "stage": 3,
+      "cargo_class": "fuel",
+      "density_kg_m3": 71
     },
     {
       "id": "iron",
@@ -30,11 +101,39 @@
       "density_kg_m3": 7800
     },
     {
+      "id": "magnesia",
+      "name": "Magnesia",
+      "stage": 3,
+      "cargo_class": "goods",
+      "density_kg_m3": 1500
+    },
+    {
+      "id": "magnesium_sulfate",
+      "name": "Magnesium Sulfate",
+      "stage": 3,
+      "cargo_class": "goods",
+      "density_kg_m3": 1200
+    },
+    {
       "id": "olivine",
       "name": "Olivine Ore",
       "stage": 2,
       "cargo_class": "ore",
       "density_kg_m3": 3300
+    },
+    {
+      "id": "oxygen",
+      "name": "Liquid Oxygen",
+      "stage": 3,
+      "cargo_class": "oxidiser",
+      "density_kg_m3": 1141
+    },
+    {
+      "id": "phosphorus",
+      "name": "Phosphorus",
+      "stage": 3,
+      "cargo_class": "goods",
+      "density_kg_m3": 1820
     },
     {
       "id": "processor",
@@ -52,11 +151,32 @@
       "density_kg_m3": 1000
     },
     {
+      "id": "pure_silicon",
+      "name": "Electronic-Grade Silicon",
+      "stage": 4,
+      "cargo_class": "goods",
+      "density_kg_m3": 2330
+    },
+    {
+      "id": "silica",
+      "name": "Silica",
+      "stage": 3,
+      "cargo_class": "goods",
+      "density_kg_m3": 600
+    },
+    {
       "id": "silicon",
       "name": "Silicon",
       "stage": 3,
       "cargo_class": "goods",
       "density_kg_m3": 2300
+    },
+    {
+      "id": "silicon_scrap",
+      "name": "Silicon Scrap",
+      "stage": 3,
+      "cargo_class": "ore",
+      "density_kg_m3": 1200
     },
     {
       "id": "slag",
@@ -66,12 +186,69 @@
       "density_kg_m3": 2500
     },
     {
+      "id": "spent_acid",
+      "name": "Spent Acid",
+      "stage": 3,
+      "cargo_class": "acid",
+      "density_kg_m3": 1600
+    },
+    {
+      "id": "sponge_iron",
+      "name": "Sponge Iron",
+      "stage": 3,
+      "cargo_class": "goods",
+      "density_kg_m3": 3500
+    },
+    {
+      "id": "steel",
+      "name": "Steel",
+      "stage": 4,
+      "cargo_class": "goods",
+      "density_kg_m3": 7850
+    },
+    {
+      "id": "steel_scrap",
+      "name": "Steel Scrap",
+      "stage": 3,
+      "cargo_class": "ore",
+      "density_kg_m3": 2000
+    },
+    {
       "id": "structural_frame",
       "name": "Structural Frame",
       "stage": 5,
       "cargo_class": "goods",
       "density_kg_m3": 1000,
       "unit_mass_kg": 50
+    },
+    {
+      "id": "sulfur_dioxide",
+      "name": "Sulfur Dioxide",
+      "stage": 3,
+      "cargo_class": "gas",
+      "density_kg_m3": 1460
+    },
+    {
+      "id": "sulfuric_acid",
+      "name": "Sulfuric Acid",
+      "stage": 3,
+      "cargo_class": "acid",
+      "density_kg_m3": 1830
+    },
+    {
+      "id": "wafer",
+      "name": "Wafer",
+      "stage": 4,
+      "cargo_class": "goods",
+      "density_kg_m3": 2330,
+      "unit_mass_kg": 0.05
+    },
+    {
+      "id": "water",
+      "name": "Water",
+      "stage": 3,
+      "cargo_class": "water",
+      "density_kg_m3": 1000
     },
     {
       "id": "water_ice",
