@@ -50,7 +50,9 @@ func run(ctx: SimContext) -> void:
 			_arrive(ctx, id)
 		match unit["op"]["type"]:
 			TransferStep.OP_LOADING, TransferStep.OP_UNLOADING:
-				if TaskSystem.is_running(ctx, unit) and not unit["op"].has("reason"):
+				# A dock a job's feed holds this tick carries nothing else (C30).
+				if TaskSystem.is_running(ctx, unit) and not unit["op"].has("reason") \
+						and not JobSystem.dock_feeding(ctx, unit["op"]["from"], unit["op"]["to"]):
 					_transfer(ctx, id)
 			DockStep.OP_DOCKING:
 				if ctx.tick >= unit["op"]["end_tick"] and unit["op"].has("granted"):
@@ -278,6 +280,11 @@ func _transfer(ctx: SimContext, id: int) -> void:
 
 
 ## The smaller of the two docked ports' rates.
+## The grams per second a dock between two docked units carries, for a job's feed (C30).
+static func dock_rate(ctx: SimContext, a: int, b: int) -> int:
+	return _transfer_rate(ctx, a, b)
+
+
 static func _transfer_rate(ctx: SimContext, from: int, to: int) -> int:
 	var units: Dictionary = ctx.state["units"]
 	var dock: Dictionary = units[from]["dock"]

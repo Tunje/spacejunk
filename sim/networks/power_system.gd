@@ -702,10 +702,15 @@ func _jobs_by_unit(ctx: SimContext) -> Dictionary:
 	return result
 
 
+## A run in progress that could work this tick. One still taking its inputs through the docks does
+## no work yet, so it draws nothing (C30). One paused by a fault is a load again once its facility
+## is healthy, so it works on the tick it resumes; a faulted facility is never a load.
 func _job_is_load(job: Dictionary) -> bool:
-	return job["status"] == JOB_RUNNING \
-		or (job["status"] == JOB_PAUSED
-			and (job["reason"] == REASON_NO_POWER or job["reason"] == JobSystem.REASON_NO_HEAT))
+	if not job.get("feed", {}).is_empty():
+		return false
+	return job["status"] == JOB_RUNNING or (job["status"] == JOB_PAUSED and job["reason"] in [
+		REASON_NO_POWER, JobSystem.REASON_NO_HEAT, JobSystem.REASON_MODULE_FAULT,
+	])
 
 
 ## Phase 4 allocation of the fixed loads. Returns what the kept ones draw.
