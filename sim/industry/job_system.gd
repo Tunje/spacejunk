@@ -188,9 +188,13 @@ func _route_feeds(ctx: SimContext) -> void:
 	var feeding: Array[int] = []
 	for id: int in _sorted(jobs):
 		var job: Dictionary = jobs[id]
-		if not job.get("feed", {}).is_empty() and not routed.has(id) and job["status"] != STATUS_CANCELLING:
-			_claim_need(ctx, job)
-			feeding.append(id)
+		if job.get("feed", {}).is_empty() or routed.has(id) or job["status"] == STATUS_CANCELLING:
+			continue
+		# What has reached the run's own unit since, unloaded or mined there, it takes straight away.
+		if not _take_own(ctx, job):
+			continue
+		_claim_need(ctx, job)
+		feeding.append(id)
 	for id: int in feeding:
 		var job: Dictionary = jobs[id]
 		var feed: Dictionary = job["feed"]
@@ -214,6 +218,37 @@ func _route_feeds(ctx: SimContext) -> void:
 		routed[id] = true
 		for port: int in route["ports"]:
 			busy[port] = id
+
+
+## Takes into the run what its own unit holds of what it still needs, as a run's start does. Returns
+## false, with job_fed, once nothing more is needed (C30).
+func _take_own(ctx: SimContext, job: Dictionary) -> bool:
+	var need: Dictionary = job["feed"]["need"]
+	var stock: Dictionary = ctx.state["units"][job["unit"]]["inventory"]
+	for item: String in _sorted(need):
+		var taken := mini(need[item], Reservations.free_stock(ctx, job["unit"], item))
+		if taken <= 0:
+			continue
+		Units.remove_stock(stock, item, taken)
+		job["held"][item] = job["held"].get(item, 0) + taken
+		need[item] -= taken
+		if need[item] == 0:
+			need.erase(item)
+			if job["feed"]["route"].get("item", "") == item:
+				job["feed"]["route"] = {}
+	if not need.is_empty():
+		return true
+	_fed(ctx, job)
+	if job["status"] == STATUS_PAUSED:
+		_resume(ctx, job)
+	return false
+
+
+## Ends a run's feed once all its inputs are held: it works from now on.
+func _fed(ctx: SimContext, job: Dictionary) -> void:
+	job["feed"] = {}
+	job["limit"] = ""
+	ctx.emit_event("job_fed", job["unit"], { "job": job["id"] })
 
 
 ## Claims, once a tick, what a feeding run still needs from its group's units, nearest first, and
@@ -404,9 +439,7 @@ func _apply_feed(ctx: SimContext, payload: Dictionary) -> void:
 		need.erase(item)
 		job["feed"]["route"] = {}
 	if need.is_empty():
-		job["feed"] = {}
-		job["limit"] = ""
-		ctx.emit_event("job_fed", job["unit"], { "job": job["id"] })
+		_fed(ctx, job)
 
 
 ## C24. For each facility, by part ID, whose active job waits starved with no run in progress: the

@@ -120,10 +120,11 @@ func _part_c() -> void:
 	_job(FABRICATOR, "processor", 24)
 	_job(FABRICATOR, "heat_radiator_mk1", 1)
 	_job(FABRICATOR, "mining_laser_mk1", 1)
+	# Check 10 (C30, the owner's ruling): the second laser fits, warned it is over the heat budget,
+	# and a radiator brings the ship back within it.
 	_attach(SHIP, "mining_laser_mk1", HULL, "side_b_nz", "mount")
-	mark("fit_failed")
+	mark("fit_warned")
 	_attach(SHIP, "heat_radiator_mk1", HULL, "side_c_nx", "mount")
-	_attach(SHIP, "mining_laser_mk1", HULL, "side_b_nz", "mount")
 	mark("fit_fixed")
 
 
@@ -206,9 +207,10 @@ func mark(label: String) -> void:
 	marks[label] = sim.view()
 
 
-func first_event(type: String) -> Dictionary:
+## The first event of `type`, or of `type` that `matching` accepts.
+func first_event(type: String, matching: Callable = Callable()) -> Dictionary:
 	for event in events:
-		if event["type"] == type:
+		if event["type"] == type and (not matching.is_valid() or matching.call(event)):
 			return event
 	return {}
 

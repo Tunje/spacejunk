@@ -281,7 +281,8 @@ func test_a_new_drone_takes_a_core_and_has_it_fitted_without_one() -> void:
 	var id: int = _first(sim.take_events(), "unit_created")["data"]["unit"]
 	var hull: int = state["units"][id]["root"]
 	var command := _attach(id, "assisted_core", hull, "core")
-	assert_eq(_warnings(sim.check(command)), ["over_power_budget"], "a core draws power too, but it fits (C30)")
+	assert_eq(_warnings(sim.check(command)), ["over_power_budget", "over_heat_budget"],
+		"a core draws power and gives off heat too, but it fits (C30)")
 	sim.submit(_attach(id, "small_solar_panel_mk1", hull, "side_a_px"))
 	sim.submit(_attach(id, "small_heat_radiator_mk1", hull, "side_a_nx"))
 	_step_balanced(1)

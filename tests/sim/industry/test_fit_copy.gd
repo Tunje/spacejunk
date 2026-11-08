@@ -186,6 +186,7 @@ func test_no_rule_is_bypassed_a_part_attach_part_refuses_is_refused() -> void:
 	# The target's own spot is taken, by a part attach_part would also refuse to fit over.
 	var taken := Units.add_part(sim._ctx, target, SOLAR, hull, "side_a_nz", "mount")
 	state["parts"][hull]["children"].append(taken)
+	state["matter_start_g"] = sim.ledger()["matter"]["total_g"]
 	var attach := { "type": "attach_part", "unit": target, "args": { "item": LASER, "from": STATION,
 		"parent_part": hull, "parent_connector": "side_a_nz", "part_connector": "mount" } }
 	assert_eq(sim.check(attach)["reason"], "connector_occupied")

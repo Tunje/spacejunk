@@ -117,7 +117,7 @@ func test_the_rating_caps_a_machine_that_could_handle_more() -> void:
 
 
 func test_a_run_takes_the_power_left_when_the_unit_is_short() -> void:
-	_rated(sim, 1_000_000_000_000, 0, 1_000_000_000, 1_000_000_000_000)
+	_rated(sim, 1_000_000_000_000, 0, 1_000_000_000, 100_000_000_000)
 	_give(sim, STATION, "copper", COPPER_RUN_G)
 	sim.submit(_start())
 	sim.step()
@@ -134,7 +134,7 @@ func test_a_run_takes_the_power_left_when_the_unit_is_short() -> void:
 
 func test_a_run_never_makes_heat_faster_than_the_radiators_take_it_off() -> void:
 	# Ten joules of heat for every joule in, on a machine with power to spare.
-	_rated(sim, 1_000_000_000, 10_000_000_000, 1_000_000_000, 1_000_000_000_000)
+	_rated(sim, 1_000_000_000, 10_000_000_000, 1_000_000_000, 100_000_000_000)
 	_give(sim, STATION, "copper", COPPER_RUN_G)
 	sim.submit(_start())
 	for i in 20:
@@ -246,7 +246,7 @@ func _pair(energy_j: int, heat_j: int, throughput: int, rating_w: int, runs: int
 
 func test_power_and_heat_limited_runs_coast_exactly() -> void:
 	for heat_j: int in [0, 10_000_000_000]:
-		var both := _pair(1_000_000_000, heat_j, 1_000_000_000, 1_000_000_000_000, 3)
+		var both := _pair(1_000_000_000, heat_j, 1_000_000_000, 100_000_000_000, 3)
 		var calls := _same_both_ways(both[0], both[1], 30_000)
 		assert_lt(calls, 3_000, "coasted, not stepped")
 

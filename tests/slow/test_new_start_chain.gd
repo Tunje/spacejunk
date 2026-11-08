@@ -56,9 +56,12 @@ func test_a_small_station_is_built_docked_at_the_probe() -> void:
 	assert_eq(station["dock"]["target_unit"], NewStartBot.PROBE)
 
 
-func test_the_bare_station_refuses_a_powered_part_until_it_has_solar_and_a_radiator() -> void:
-	var reasons := bot.refused_fits.map(func(fit: Dictionary) -> String: return fit["reason"])
-	assert_eq(reasons, ["over_power_budget", "over_heat_budget"])
+## C30: over a budget is a warning, so the player checks, fits the fixes, and fits the LIDAR clean.
+func test_the_bare_station_is_warned_off_a_powered_part_until_it_has_solar_and_a_radiator() -> void:
+	var warned := bot.warned_fits.map(func(fit: Dictionary) -> Array: return fit["warnings"])
+	assert_eq(warned.size(), 2)
+	assert_true(warned[0].has("over_power_budget"), "short of power first")
+	assert_eq(warned[1], ["over_heat_budget"], "then only of radiators")
 	var defs: Array = InspectText.flatten(bot.marks["fit_fixed"]["units"][bot.station]["parts"]) \
 		.map(func(part: Dictionary) -> String: return part["def"])
 	assert_has(defs, "lidar_mk1")

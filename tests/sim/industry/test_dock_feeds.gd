@@ -29,7 +29,7 @@ func _the_job() -> Dictionary:
 	return state["jobs"].values()[0]
 
 
-func _held() -> int:
+func _run_held() -> int:
 	return _the_job()["held"].get("hematite", 0)
 
 
@@ -82,11 +82,11 @@ func test_a_run_feeds_its_input_from_a_docked_unit_at_the_port_rate() -> void:
 	assert_eq([job["status"], job["limit"], job["rate_w"]], ["running", "feed", 0])
 	assert_eq(job["feed"]["route"]["path"], [SHIP, STATION])
 	assert_eq(job["feed"]["route"]["rate_g_per_s"], 50_000)
-	assert_eq([_held(), _stock(SHIP)], [PORT_TICK_G, HEMATITE_RUN_G - PORT_TICK_G], "5 kg in the first tick")
+	assert_eq([_run_held(), _stock(SHIP)], [PORT_TICK_G, HEMATITE_RUN_G - PORT_TICK_G], "5 kg in the first tick")
 	assert_eq(state["parts"][REFINERY]["draw_w"], 0, "no work, no power while it feeds")
 	var events := _step_balanced(19)
 	assert_eq(_types(events).count("job_fed"), 1, "all 100 kg in on tick 20")
-	assert_eq([_held(), _stock(SHIP)], [HEMATITE_RUN_G, 0])
+	assert_eq([_run_held(), _stock(SHIP)], [HEMATITE_RUN_G, 0])
 	assert_eq(job["feed"], {})
 	assert_eq(job["energy_left_j"], JobSystem.run_energy_j(sim._ctx, job), "no work done yet")
 	_step_balanced(1)
@@ -103,7 +103,7 @@ func test_the_jobs_own_unit_gives_first() -> void:
 	_refine()
 	_step_balanced(1)
 	assert_eq(_stock(STATION), 0, "all 60 kg of its own at once")
-	assert_eq(_held(), 60_000 + PORT_TICK_G)
+	assert_eq(_run_held(), 60_000 + PORT_TICK_G)
 	_step_balanced(7)
 	assert_eq(_the_job()["feed"], {})
 	assert_eq(_stock(SHIP), 30_000, "then 40 kg fed from the ship, over 8 ticks")
@@ -121,9 +121,9 @@ func test_a_feed_runs_along_the_dock_chain_at_its_slowest_port() -> void:
 	assert_eq(route["path"], [far, near, STATION], "two docks away, through the craft between")
 	assert_eq(route["ports"].size(), 4, "both ports of both docks")
 	assert_eq(route["rate_g_per_s"], 20_000, "the small ports, not the station's")
-	assert_eq(_held(), 2_000)
+	assert_eq(_run_held(), 2_000)
 	_step_balanced(49)
-	assert_eq([_held(), _stock(far), _stock(near)], [HEMATITE_RUN_G, 0, 0], "nothing stops in the middle")
+	assert_eq([_run_held(), _stock(far), _stock(near)], [HEMATITE_RUN_G, 0, 0], "nothing stops in the middle")
 
 
 func test_a_transfer_through_a_feeding_dock_waits_for_the_feed() -> void:
@@ -148,7 +148,7 @@ func test_a_feed_waits_for_a_transfer_already_using_the_dock() -> void:
 	_refine()
 	_step_balanced(5)
 	var job := _the_job()
-	assert_eq([job["status"], job["limit"], _held()], ["running", "feed", 0], "waiting for the dock")
+	assert_eq([job["status"], job["limit"], _run_held()], ["running", "feed", 0], "waiting for the dock")
 	assert_eq(_stock(SHIP), HEMATITE_RUN_G)
 	_step_balanced(40)
 	assert_eq(_stock(STATION, "copper"), 100_000)
@@ -164,13 +164,13 @@ func test_undocking_on_the_path_cuts_the_feed_and_keeps_what_came() -> void:
 	var events := _step_balanced(2)
 	var job := _the_job()
 	assert_eq([job["status"], job["reason"]], ["paused", "missing_inputs"], "nothing else in the group has ore")
-	assert_eq(_held(), 5 * PORT_TICK_G, "what came stays held")
+	assert_eq(_run_held(), 5 * PORT_TICK_G, "what came stays held")
 	assert_eq(_stock(SHIP), HEMATITE_RUN_G - 5 * PORT_TICK_G)
 	assert_true(_types(events).has("job_paused"))
 	state["units"][SHIP]["dock"] = dock
 	_step_balanced(15)
 	assert_eq(job["feed"], {}, "fed the rest once docked again")
-	assert_eq(_held(), HEMATITE_RUN_G)
+	assert_eq(_run_held(), HEMATITE_RUN_G)
 
 
 func test_a_unit_outside_the_group_does_not_count() -> void:
