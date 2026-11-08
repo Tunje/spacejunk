@@ -167,9 +167,15 @@ func view() -> Dictionary:
 
 
 ## Positions along a unit's current path, for drawing it: { place, points }, or {} if out of range
-## (contracts section 3). Planned burns are not applied.
-func predict(unit_id: int, from_tick: int, ticks: int, step: int) -> Dictionary:
-	return BurnSystem.predict(_ctx, unit_id, from_tick, ticks, step)
+## (contracts section 3). Planned burns are applied only with `with_burns` (A54).
+func predict(unit_id: int, from_tick: int, ticks: int, step: int, with_burns: bool = false) -> Dictionary:
+	return BurnSystem.predict(_ctx, unit_id, from_tick, ticks, step, with_burns)
+
+
+## The target as seen from the unit (A54, contracts section 3): relative state, closest approach,
+## plane, phase, window, what stopping takes, and the docking condition. Read-only, like view().
+func relative(unit_id: int, target: int, from_tick: int, horizon_ticks: int = 0) -> Dictionary:
+	return Relative.query(_ctx, unit_id, target, from_tick, horizon_ticks)
 
 
 ## The trip a move_to would take from the next chance at or after from_tick (contracts section 3).
