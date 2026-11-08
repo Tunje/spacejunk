@@ -219,6 +219,8 @@ func test_predict_with_burns_is_the_flown_path() -> void:
 	sim.step()
 	assert_false(sim.predict(keys["Ship"], 1, 10, 1).has("burns"), "the default is unchanged")
 	var ahead := sim.predict(keys["Ship"], 1, 600, 1, true)
+	var plain := sim.predict(keys["Ship"], 1, 600, 1)
+	assert_ne(plain["points"][599], ahead["points"][599], "the burn changes the path")
 	assert_eq(ahead["burns"].size(), 1)
 	assert_eq(ahead["burns"][0]["start_tick"], 20)
 	var unit: Dictionary = sim._state["units"][keys["Ship"]]
@@ -230,8 +232,6 @@ func test_predict_with_burns_is_the_flown_path() -> void:
 				ended = t
 		assert_eq(unit["pos_mm"], ahead["points"][t - 1], "tick %d" % t)
 	assert_eq(ahead["burns"][0]["end_tick"], ended)
-	var plain := sim.predict(keys["Ship"], 1, 600, 1)
-	assert_ne(plain["points"][599], ahead["points"][599], "the burn changed the path")
 
 
 func test_closest_planned_flies_the_planned_burns() -> void:

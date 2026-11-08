@@ -102,11 +102,11 @@ func _precision() -> void:
 		var b0 := OrbitMath.position_at(other, t)
 		var a1 := OrbitMath.position_at(cluster, t + 1)
 		var b1 := OrbitMath.position_at(other, t + 1)
-		var va := OrbitMath.state_at(cluster, gm, t)["v"]
-		var vb := OrbitMath.state_at(other, gm, t)["v"]
+		var va: Array = OrbitMath.state_at(cluster, gm, t)["v"]
+		var vb: Array = OrbitMath.state_at(other, gm, t)["v"]
 		for axis in 3:
 			var moved := (b1[axis] - a1[axis]) - (b0[axis] - a0[axis])
-			var expected := (vb[axis] - va[axis]) / 10000.0
+			var expected: float = (vb[axis] - va[axis]) / 10000.0
 			worst_jitter = maxf(worst_jitter, absf(moved - expected))
 	print("  two craft 2 m apart closing at 5 cm/s, over %d ticks: relative position error %.1f mm, relative velocity error %.0f um/s"
 		% [ticks, worst_pos, worst_vel])
@@ -163,6 +163,11 @@ func _costs() -> void:
 	ahead["m0_angle"] = (int(cluster["m0_angle"]) + IntMath.mul_div(OrbitMath.TURN, 50_000_000,
 		int(cluster["a_mm"]) * 6283 / 1000)) & OrbitMath.ANGLE_MASK
 	var normal := Relative.normal_of(cluster)
+	for tries: int in [3_000, 6_000, 12_000, 18_000, 36_000, 60_000]:
+		var tried := Lambert.solve(gm, now["r"], now["v"], ahead, 0, tries, normal)
+		print("    Lambert over %d ticks: %s" % [tries, str(tried.get("miss_mm", "no hit"))])
+		var flipped := Lambert.solve(gm, now["r"], now["v"], ahead, 0, tries, [-normal[0], -normal[1], -normal[2]])
+		print("    ... with the normal flipped: %s" % str(flipped.get("miss_mm", "no hit")))
 	var trip_ticks := 18_000
 	var found := {}
 	var lambert_us := _per_call(func() -> void:
@@ -179,7 +184,7 @@ func _costs() -> void:
 	print("  Lambert, 50 km ahead on the cluster's circle in 30 min: %.0f us, miss %s mm, dv %d + %d um/s"
 		% [lambert_us, str(found.get("miss_mm", "none")), dv1, dv2])
 	# Burn ticks for that trip at the probe's and a drone's thrust and mass.
-	var probe := keys["Probe"]
+	var probe: int = keys["Probe"]
 	var drone := _drone("Measure drone", 0)
 	for id: int in [probe, drone]:
 		var mass := Units.unit_mass(sim._state, sim._ctx.defs, id)
@@ -210,12 +215,14 @@ func _per_call(work: Callable, runs: int = RUNS) -> float:
 
 # ------------------------------------------------------------------------------ fleet
 
-## A mining drone on the cluster's orbit, `k` hundredths of a degree along, with a full tank.
+## A mining drone on its own circle round Frost, k km above 400 km, with a full tank.
 func _drone(name: String, k: int) -> int:
 	var id := Units.create(sim._ctx, "mining_drone", name, [0, 0, 0])
-	var orbit := cluster.duplicate(true)
+	# On their own 400 km circle, well clear of the cluster's frame, so no frame join caps a coast.
+	# In the cluster's plane and at its phase, where the sun is, so the solar panels run the engines.
+	var orbit := OrbitMath.make_orbit(gm, 400_000_000 + 1_000_000 * k, 0, cluster["p_q30"], cluster["q_q30"],
+		int(cluster["m0_angle"]) + OrbitMath.TURN / 36_000 * k, int(cluster["epoch_tick"]))
 	orbit["parent"] = frost
-	orbit["m0_angle"] = (int(cluster["m0_angle"]) + OrbitMath.TURN / 36_000 * (k + 1)) & OrbitMath.ANGLE_MASK
 	var unit: Dictionary = sim._state["units"][id]
 	unit["orbit"] = orbit
 	unit["pos_mm"] = OrbitMath.position_at(orbit, sim.current_tick())
@@ -228,13 +235,38 @@ func _fleet() -> void:
 	print("\n== Six drones round Frost")
 	var drones: Array[int] = []
 	for k in DRONES:
-		drones.append(_drone("Fleet drone %d" % k, 100 * k))
+		drones.append(_drone("Fleet drone %d" % k, k))
+	var base_game := sim
+	sim = Sim.new_game("new_start", 1)
+	var bare := _step_samples(400)
+	var bare_started := Time.get_ticks_usec()
+	var bare_skip := sim.coast(1_000_000)
+	var bare_us := Time.get_ticks_usec() - bare_started
+	print("  coast on the new start alone: skipped %d ticks (capped by %s) in %d us" % [bare_skip["ticks"],
+		bare_skip["capped_by"], bare_us])
+	sim = base_game
+	var fleet_started := Time.get_ticks_usec()
+	var fleet_skip := sim.coast(1_000_000)
+	print("  coast with six idle drones: skipped %d ticks (capped by %s) in %d us" % [fleet_skip["ticks"],
+		fleet_skip["capped_by"], Time.get_ticks_usec() - fleet_started])
 	sim.step(10)
+	_profile(200, "coasting")
 	var coasting := _step_samples(400)
+	print("  Sim.step on the new start alone, no drones: %d us per tick (median)" % bare)
 	for id in drones:
 		sim.submit({ "type": "plan_burn", "unit": id, "args": { "tick": sim.current_tick() + 2,
 			"prograde_um_s": 20_000_000, "normal_um_s": 0, "radial_um_s": 0 } })
 	sim.step(3)
+	for event in sim.take_events():
+		if str(event["type"]).begins_with("burn"):
+			print("    event %s" % str(event))
+	for id in drones:
+		var unit: Dictionary = sim._state["units"][id]
+		var part: int = BurnSystem.thruster(sim._ctx, id)["part"]
+		print("    drone %d: burn %s, thruster can run %s, in shadow %s" % [id, str(not unit["burn"].is_empty()),
+			str(Units.can_run(sim._state["parts"][part])), str(RailSystem.in_shadow(sim._state, id))])
+		break
+	_profile(200, "burning")
 	var burning := _step_samples(1000)
 	var running := 0
 	for id in drones:
@@ -268,3 +300,49 @@ func _step_samples(count: int) -> int:
 		sim.take_events()
 	samples.sort()
 	return samples[samples.size() / 2]
+
+
+## The tick's time by system and phase, over `ticks` ticks run as Sim._run_tick runs them.
+func _profile(ticks: int, label: String) -> void:
+	var spent := {}
+	var add := func(key: String, started: int) -> void:
+		spent[key] = int(spent.get(key, 0)) + Time.get_ticks_usec() - started
+	for n in ticks:
+		var tick := sim.current_tick() + 1
+		var ctx := sim._ctx
+		ctx.begin_tick(tick)
+		ctx.phase = 1
+		var t0 := Time.get_ticks_usec()
+		sim._apply_commands(tick)
+		add.call("commands", t0)
+		var phases := ["update_tasks", "calculate_power", "allocate", "run"]
+		for i in phases.size():
+			ctx.phase = i + 2
+			for system in sim._systems:
+				t0 = Time.get_ticks_usec()
+				system.call(phases[i], ctx)
+				add.call("%s.%s" % [system.get_script().get_global_name(), phases[i]], t0)
+		ctx.phase = 6
+		t0 = Time.get_ticks_usec()
+		for delta in ctx.take_deltas():
+			delta["system"].apply_delta(ctx, delta["payload"])
+		add.call("deltas", t0)
+		for system in sim._systems:
+			t0 = Time.get_ticks_usec()
+			system.update_stores(ctx)
+			add.call("%s.update_stores" % system.get_script().get_global_name(), t0)
+		ctx.phase = 7
+		for system in sim._systems:
+			t0 = Time.get_ticks_usec()
+			system.detect(ctx)
+			add.call("%s.detect" % system.get_script().get_global_name(), t0)
+		ctx.phase = 8
+		t0 = Time.get_ticks_usec()
+		sim._commit(tick)
+		add.call("commit", t0)
+		sim.take_events()
+	var keys_sorted := spent.keys()
+	keys_sorted.sort_custom(func(a: String, b: String) -> bool: return spent[a] > spent[b])
+	print("  profile, %s, us per tick:" % label)
+	for key: String in keys_sorted.slice(0, 8):
+		print("    %-36s %8.1f" % [key, float(spent[key]) / ticks])
