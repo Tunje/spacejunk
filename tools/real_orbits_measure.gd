@@ -245,10 +245,34 @@ func _fleet() -> void:
 	print("  coast on the new start alone: skipped %d ticks (capped by %s) in %d us" % [bare_skip["ticks"],
 		bare_skip["capped_by"], bare_us])
 	sim = base_game
+	var probe_sim := Sim.from_save(sim.to_save())
+	var limited := {}
+	for round in 60:
+		probe_sim.step()
+		var low := SimSystem.NO_LIMIT
+		var who := ""
+		for system in probe_sim._systems:
+			probe_sim._ctx.coast_limit = 1_000_000
+			var h: int = system.horizon(probe_sim._ctx)
+			if h < low:
+				low = h
+				who = system.get_script().get_global_name()
+		probe_sim._ctx.coast_limit = 0
+		limited[who] = limited.get(who, []) + [low]
+		if low > 0:
+			probe_sim.step(0)
+	print("  first 60 ticks of six new drones, the lowest horizon by system: %s" % str(limited).left(600))
 	var fleet_started := Time.get_ticks_usec()
+	var rounds_before := sim.coast_rounds
 	var fleet_skip := sim.coast(1_000_000)
-	print("  coast with six idle drones: skipped %d ticks (capped by %s) in %d us" % [fleet_skip["ticks"],
-		fleet_skip["capped_by"], Time.get_ticks_usec() - fleet_started])
+	print("  coast with six idle drones: skipped %d ticks (capped by %s) in %d us, %d rounds" % [fleet_skip["ticks"],
+		fleet_skip["capped_by"], Time.get_ticks_usec() - fleet_started, sim.coast_rounds - rounds_before])
+	var caps := {}
+	for i in 40:
+		sim.step()
+		var skip := sim._horizon(1_000_000)
+		caps[sim._ctx.coast_cap + ":" + str(skip)] = caps.get(sim._ctx.coast_cap + ":" + str(skip), 0) + 1
+	print("  horizons on the next 40 ticks: %s" % str(caps))
 	sim.step(10)
 	_profile(200, "coasting")
 	var coasting := _step_samples(400)

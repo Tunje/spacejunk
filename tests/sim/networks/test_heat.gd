@@ -167,6 +167,34 @@ func test_faults_take_the_fixed_load_a_job_held_by_heat_never_faults() -> void:
 	assert_eq(state["parts"][CORE]["fault"], "", "2 kW is within rejection")
 
 
+## Two fixed heat loads, the core and the laser, over a cold radiator (A58, from C30's review: jobs
+## no longer fault, so this is where the fault order lives). The lowest priority faults first, and
+## between equals the higher part ID. Each faults only while the input is still over rejection.
+func test_two_fixed_loads_fault_lowest_priority_then_highest_id_first() -> void:
+	_set_reject(5000)
+	sim._ctx.defs["modules"]["basic_core"]["heat_w"] = 120_000
+	_set_heat(LIMIT_J)
+	_run_op(LASER)
+	state["parts"][CORE]["priority"] = state["parts"][LASER]["priority"]
+	sim.step()
+	var faulted: Array = _events_of("fault").map(func(event: Dictionary) -> int:
+		return event["data"]["module"])
+	assert_eq(faulted, [LASER, CORE], "equal priority: the higher ID first, and 120 kW is still over 5 kW")
+
+
+func test_a_lower_priority_fixed_load_faults_first() -> void:
+	_set_reject(125_000)
+	sim._ctx.defs["modules"]["basic_core"]["heat_w"] = 10_000
+	_set_heat(LIMIT_J)
+	_run_op(LASER)
+	state["parts"][CORE]["priority"] = state["parts"][LASER]["priority"] - 1
+	sim.step()
+	var faulted: Array = _events_of("fault").map(func(event: Dictionary) -> int:
+		return event["data"]["module"])
+	assert_eq(faulted, [CORE], "the core is lower, and once it is off the 120 kW laser is within 125 kW")
+	assert_eq(state["parts"][LASER]["fault"], "")
+
+
 func test_faulting_stops_once_input_is_within_rejection() -> void:
 	_set_reject(121_000)
 	_set_heat(LIMIT_J + 1_000_000)

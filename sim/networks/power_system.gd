@@ -159,7 +159,9 @@ func horizon(ctx: SimContext) -> int:
 				skip = mini(skip, _shadow_horizon(ctx, id, casters, chains, mini(skip, walk_limit)))
 		var batteries: Dictionary = flows[id]["batteries"]
 		for part_id: int in _sorted(batteries):
-			skip = mini(skip, _battery_horizon(ctx, part_id, batteries[part_id], shed))
+			skip = mini(skip, _battery_horizon(ctx, part_id, batteries[part_id]))
+		if shed:
+			skip = mini(skip, _budget_horizon(ctx, id, flows[id]))
 		if skip <= 0:
 			break
 	# One bound from each frame's centre, less its farthest still unit's distance from it, is below
@@ -519,7 +521,7 @@ const MAX_BATTERY_WINDOW := 1 << 40
 ## unit's budget each tick, which could bring back a shed load, so with any load shed it is stepped.
 ## Stored energy moves one way, so checking the last tick of a window is enough, and the window is
 ## found by doubling and halving.
-func _battery_horizon(ctx: SimContext, part_id: int, battery: Dictionary, shed: bool) -> int:
+func _battery_horizon(ctx: SimContext, part_id: int, battery: Dictionary) -> int:
 	var part: Dictionary = ctx.state["parts"][part_id]
 	var drawn: int = battery["discharged_w"]
 	var charged: int = battery["charged_w"]
@@ -537,9 +539,51 @@ func _battery_horizon(ctx: SimContext, part_id: int, battery: Dictionary, shed: 
 	var free_now: int = (limits["capacity_j"] - part["stored_j"]) * Sim.TICKS_PER_SECOND - part["charge_remainder"]
 	if charged > 0 and free_now < limits["max_charge_w"]:
 		return 0  # the room left, not the rate, limits the charge
-	if charged > 0 and shed and cap_now < limits["max_discharge_w"]:
-		return 0  # a rising budget could bring a shed load back
 	return _battery_window(part, battery, limits)
+
+
+## The most loads _choose weighs by every subset in _budget_horizon; more than this steps.
+const MAX_BUDGET_LOADS := 12
+
+
+## A58: while a battery charges below its discharge limit the budget rises each tick, and a rising
+## budget could bring a shed load back. _choose's choice depends only on the budget, and changes only
+## where the budget reaches a sum of some of the loads' draws, since each of its tests is a total of
+## draws against the budget. So it holds until the budget reaches the smallest such sum above today's.
+## The budget rises at most each charging battery's stored_w, plus a tick's rounding, per tick.
+## A job held to what power is left takes a rising budget at once, so that steps (0). Was 0 whenever
+## a load was shed and a battery charged (A35), which held new drones charging at one tick per coast.
+func _budget_horizon(ctx: SimContext, unit: int, flow: Dictionary) -> int:
+	for job_id: int in _sorted(flow["jobs"]):
+		if flow["jobs"][job_id]["limit"] == JobSystem.LIMIT_POWER:
+			return 0
+	var rise := 0
+	var batteries: Dictionary = flow["batteries"]
+	for part_id: int in _sorted(batteries):
+		var battery: Dictionary = batteries[part_id]
+		var limits: Dictionary = Units.module_of(ctx.state, ctx.defs, part_id)["capabilities"]["battery"]
+		if int(battery["stored_w"]) > 0 and int(battery["discharge_cap_w"]) < int(limits["max_discharge_w"]):
+			rise += int(battery["stored_w"]) + Sim.TICKS_PER_SECOND
+	if rise == 0:
+		return NO_LIMIT
+	var draws: Array[int] = []
+	for entry: Dictionary in _loads(ctx, unit):
+		if not entry["held"] and int(entry["draw_w"]) > 0:
+			draws.append(entry["draw_w"])
+	if draws.size() > MAX_BUDGET_LOADS:
+		return 0
+	var budget: int = flow["budget_w"]
+	var next := NO_LIMIT
+	for mask in range(1, 1 << draws.size()):
+		var total := 0
+		for i in draws.size():
+			if mask & (1 << i):
+				total += draws[i]
+		if total > budget:
+			next = mini(next, total)
+	if next == NO_LIMIT:
+		return NO_LIMIT
+	return maxi(0, (next - budget - 1) / rise)
 
 
 ## The largest k below MAX_BATTERY_WINDOW for which _battery_holds, which only stops holding once.
