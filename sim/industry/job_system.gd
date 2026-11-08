@@ -3,10 +3,12 @@ extends SimSystem
 ## Refining, fabrication and building units: start_job and cancel_job, the job states of
 ## autonomy.md section 9 and the matter rules of accounting.md section 2. Jobs belong to facilities
 ## and need no core. A run takes its inputs and reserves its outputs in phase 4, works in phase 5
-## and delivers in phase 6, all at once. A run needs its recipe's `work` points, and its facility
-## does its `work_per_tick` each tick it runs, so a slower facility takes longer at the same recipe.
-## Work left over on the last tick is lost. A run that builds a unit claims a port only on its last
-## tick, so a long build never shuts other craft out.
+## and delivers in phase 6, all at once. A run needs its recipe's energy (C30, the owner's ruling of
+## 2026-11-07). Each tick it gets the lowest of the power its unit's network gives it, the power
+## whose heat the radiators can still reject, and what the machine's throughput handles, which
+## PowerSystem works out in phase 4 (rate_for), and that power goes into the run. Energy left over
+## on the last tick is lost. A run that builds a unit claims a port only on its last tick, so a
+## long build never shuts other craft out.
 ##
 ## Lab jobs follow research's rules (ResearchRules): a recipe may need a proven theory or a qualified
 ## design to start, a test needs its evidence and science points to run, and a finished run may
@@ -59,14 +61,20 @@ const REASON_JOB_BUSY := "job_busy"
 const REASON_INSTALL_BLOCKED := "install_blocked"
 const REASON_NOT_DOCKED := "not_docked"
 const REASON_CONNECTOR_OCCUPIED := "connector_occupied"
+## C30: a run held at no speed because its unit's radiators have nothing left to reject its heat.
+const REASON_NO_HEAT := "no_heat_headroom"
+## C30: what holds a run's speed, in the job's `limit`.
+const LIMIT_POWER := "power"
+const LIMIT_HEAT := "heat"
+const LIMIT_THROUGHPUT := "throughput"
 ## The active job's reasons a queued job may go ahead of (C24).
 const STARVED_REASONS: Array[String] = [REASON_MISSING_INPUTS, REASON_OUTPUT_FULL]
 const INSTALL_FIELDS := {
 	"unit": TYPE_INT, "parent_part": TYPE_INT, "parent_connector": TYPE_STRING, "part_connector": TYPE_STRING,
 }
 const VIEW_FIELDS: Array[String] = [
-	"unit", "facility", "recipe", "count_left", "status", "reason", "start_tick", "queue_pos", "work_left",
-	"points_held", "install_to",
+	"unit", "facility", "recipe", "count_left", "status", "reason", "start_tick", "queue_pos", "energy_left_j",
+	"rate_w", "limit", "limits_w", "points_held", "install_to",
 ]
 
 ## Builds in place through attach_part's own rules.
@@ -284,8 +292,15 @@ func fill_view(ctx: SimContext, view: Dictionary) -> void:
 		var shown := {}
 		for field in VIEW_FIELDS:
 			shown[field] = jobs[id][field]
-		shown["work"] = _recipe(ctx, jobs[id])["work"]
-		shown["work_per_tick"] = work_per_tick(ctx, jobs[id]["facility"])
+		var energy := run_energy_j(ctx, jobs[id])
+		shown["energy_j"] = energy
+		shown["limits_w"] = jobs[id]["limits_w"].duplicate()
+		# Deprecated aliases until the client reads the energy fields (C30): the same progress and
+		# time left, in joules, at this tick's rate or, with none yet, the machine's own.
+		var rate: int = jobs[id]["rate_w"] if jobs[id]["rate_w"] > 0 else throughput_w(ctx, jobs[id])
+		shown["work"] = energy
+		shown["work_left"] = jobs[id]["energy_left_j"]
+		shown["work_per_tick"] = maxi(1, rate / Sim.TICKS_PER_SECOND)
 		view["jobs"][id] = shown
 	ResearchRules.fill_view(ctx, view)
 
@@ -368,7 +383,8 @@ func _create(ctx: SimContext, command: Dictionary) -> void:
 	ctx.state["jobs"][id] = {
 		"id": id, "unit": command["unit"], "facility": args["facility"], "recipe": args["recipe"],
 		"count_left": args["count"], "status": STATUS_WAITING if position == 0 else STATUS_QUEUED,
-		"reason": "", "start_tick": 0, "work_left": 0, "since_tick": ctx.tick,
+		"reason": "", "start_tick": 0, "energy_left_j": 0, "energy_remainder": 0, "rate_w": 0, "limit": "",
+		"limits_w": {}, "since_tick": ctx.tick,
 		"command": command["id"], "started": false, "held": {}, "reserved": {}, "port": 0, "points_held": 0,
 		"queue_pos": position, "install_to": args.get("install_to", {}).duplicate(),
 	}
@@ -477,7 +493,8 @@ func _start_run(ctx: SimContext, job: Dictionary) -> void:
 	ctx.state["science"]["points"] -= job["points_held"]
 	job["status"] = STATUS_RUNNING
 	job["reason"] = ""
-	job["work_left"] = recipe["work"]
+	job["energy_left_j"] = run_energy_j(ctx, job)
+	job["energy_remainder"] = 0
 	job["start_tick"] = ctx.tick
 	if not job["started"]:
 		job["started"] = true
@@ -519,10 +536,12 @@ func _release_outputs(ctx: SimContext, job: Dictionary) -> void:
 	job["reserved"] = {}
 
 
-## True on the tick a run that builds a unit would end, if it has no port yet.
+## True on the tick a run that builds a unit would end at last tick's rate, if it has no port yet.
+## A run whose rate rises past that is held back a joule short (_count_down), so it asks here again.
 func _needs_port(ctx: SimContext, job: Dictionary) -> bool:
 	return (job["status"] == STATUS_RUNNING or job["status"] == STATUS_PAUSED) and job["port"] == 0 \
-		and job["work_left"] <= work_per_tick(ctx, job["facility"]) and _template_of(_recipe(ctx, job)) != ""
+		and job["energy_left_j"] <= Rate.amount(job["rate_w"], job["energy_remainder"]) \
+		and _template_of(_recipe(ctx, job)) != ""
 
 
 ## Takes the first free healthy port, or holds the run with its inputs until one is free.
@@ -565,14 +584,43 @@ func _count_down(ctx: SimContext, job: Dictionary) -> void:
 	if job["reason"] == REASON_NO_FREE_PORT:
 		return
 	var part: Dictionary = ctx.state["parts"][job["facility"]]
+	var given := _given(ctx, job)
 	if not Units.can_run(part):
+		given["rate_w"] = 0
+		_take_rate(job, given)
 		_pause(ctx, job, REASON_MODULE_FAULT if part["fault"] != "" else REASON_NO_POWER)
+		return
+	_take_rate(job, given)
+	if job["rate_w"] == 0:
+		_pause(ctx, job, REASON_NO_HEAT if job["limit"] == LIMIT_HEAT else REASON_NO_POWER)
 		return
 	if job["status"] == STATUS_PAUSED:
 		_resume(ctx, job)
-	job["work_left"] = maxi(0, job["work_left"] - work_per_tick(ctx, job["facility"]))
-	if job["work_left"] == 0:
+	var done := Rate.amount(job["rate_w"], job["energy_remainder"])
+	job["energy_remainder"] = Rate.carry(job["rate_w"], job["energy_remainder"])
+	if done >= job["energy_left_j"] and job["port"] == 0 and _template_of(_recipe(ctx, job)) != "":
+		# The rate rose past what phase 4 claimed a port for: a joule is left, and the next phase 4
+		# claims the port for the last tick.
+		done = job["energy_left_j"] - 1
+	job["energy_left_j"] = maxi(0, job["energy_left_j"] - done)
+	if job["energy_left_j"] == 0:
 		ctx.record_delta(job["id"], self, { "job": job["id"] })
+
+
+## What PowerSystem gave this job in this tick's phase 4, or no power if it was not a load.
+func _given(ctx: SimContext, job: Dictionary) -> Dictionary:
+	var flows: Dictionary = ctx.flows.get(PowerSystem.FLOW_KEY, {})
+	var unit: int = ctx.state["parts"][job["facility"]]["unit"]
+	var given: Dictionary = flows.get(unit, {}).get("jobs", {}).get(job["id"], {})
+	if given.is_empty():
+		return { "rate_w": 0, "limit": LIMIT_POWER, "limits_w": { "power": 0, "heat": -1, "throughput": 0 } }
+	return given.duplicate(true)
+
+
+func _take_rate(job: Dictionary, given: Dictionary) -> void:
+	job["rate_w"] = given["rate_w"]
+	job["limit"] = given["limit"]
+	job["limits_w"] = given["limits_w"]
 
 
 func _resume(ctx: SimContext, job: Dictionary) -> void:
@@ -599,7 +647,8 @@ func _cancel(ctx: SimContext, job: Dictionary) -> void:
 		return
 	_release_outputs(ctx, job)
 	_release_port(ctx, job)
-	job["work_left"] = 0
+	job["energy_left_j"] = 0
+	job["rate_w"] = 0
 	ctx.state["science"]["points"] += job["points_held"]
 	job["points_held"] = 0
 	_try_return(ctx, job)
@@ -628,9 +677,88 @@ func _emit_ended(ctx: SimContext, job: Dictionary, type: String, reason: String 
 	ctx.emit_event(type, job["unit"], data)
 
 
-## The work points a facility part does per tick it runs.
+## C30, interim: a facility's old work_per_tick, which only derives the defaults below until B29
+## gives every recipe and facility its energy, heat and throughput. 100 if the data has none.
 static func work_per_tick(ctx: SimContext, facility: int) -> int:
-	return Units.module_of(ctx.state, ctx.defs, facility)["capabilities"]["facility"]["work_per_tick"]
+	return Units.module_of(ctx.state, ctx.defs, facility)["capabilities"]["facility"].get(
+		"work_per_tick", PowerSystem.FULL_RATE_WORK_PER_TICK)
+
+
+## The energy one run needs, in joules: the recipe's energy_j, or until B29 its old figures, which
+## gave the same energy: power_w for work / (100 * TICKS_PER_SECOND) seconds. At least 1.
+static func run_energy_j(ctx: SimContext, job: Dictionary) -> int:
+	var recipe: Dictionary = ctx.defs["recipes"][job["recipe"]]
+	if recipe.has("energy_j"):
+		return maxi(1, recipe["energy_j"])
+	return maxi(1, IntMath.mul_div(recipe["power_w"], recipe["work"],
+		PowerSystem.FULL_RATE_WORK_PER_TICK * Sim.TICKS_PER_SECOND))
+
+
+## The waste heat one run gives off, in joules: the recipe's heat_j, or until B29 its energy in
+## the proportion the facility's heat_w bears to its power_w.
+static func run_heat_j(ctx: SimContext, job: Dictionary) -> int:
+	var recipe: Dictionary = ctx.defs["recipes"][job["recipe"]]
+	if recipe.has("heat_j"):
+		return recipe["heat_j"]
+	var module := Units.module_of(ctx.state, ctx.defs, job["facility"])
+	if module["power_w"] <= 0:
+		return 0
+	return IntMath.mul_div(run_energy_j(ctx, job), module["heat_w"], module["power_w"])
+
+
+## The grams of material one run handles: its inputs.
+static func run_mass_g(recipe: Dictionary) -> int:
+	var grams := 0
+	for input: Dictionary in recipe["inputs"]:
+		grams += input["grams"]
+	return grams
+
+
+## The power at which the machine's material handling, or its rating, holds a run, in watts: the
+## run's energy over the time its mass takes at the throughput, the lower of the facility's and the
+## recipe's own, and never above the facility's power_w. A run with no mass is held by the rating
+## alone. Until B29 a facility with no throughput holds the run at the old draw,
+## ceil(power_w * work_per_tick / 100), so every run keeps its old duration.
+static func throughput_w(ctx: SimContext, job: Dictionary) -> int:
+	var recipe: Dictionary = ctx.defs["recipes"][job["recipe"]]
+	var module := Units.module_of(ctx.state, ctx.defs, job["facility"])
+	var rating: int = module["power_w"]
+	var facility: Dictionary = module["capabilities"]["facility"]
+	var grams_per_s: int = facility.get("throughput_g_per_s", 0)
+	if recipe.has("throughput_g_per_s"):
+		grams_per_s = recipe["throughput_g_per_s"] if grams_per_s == 0 else mini(grams_per_s, recipe["throughput_g_per_s"])
+	if grams_per_s == 0:
+		var old := IntMath.mul_div_ceil(recipe.get("power_w", rating), work_per_tick(ctx, job["facility"]),
+			PowerSystem.FULL_RATE_WORK_PER_TICK)
+		return maxi(1, mini(rating, old) if rating > 0 else old)
+	var mass := run_mass_g(recipe)
+	if mass == 0:
+		return rating
+	return mini(rating, IntMath.mul_div(grams_per_s, run_energy_j(ctx, job), mass))
+
+
+## C30, the owner's ruling: a run goes at the lowest of the power it is given, the power whose
+## waste heat the radiators can still reject, and what the machine handles. `power_w` and `heat_w`
+## are what the unit's network and radiators have left for this job, in keep order. The limit is
+## the first of power, heat and throughput to hold it. A run that makes no heat has no heat limit,
+## shown as -1.
+static func rate_for(ctx: SimContext, job: Dictionary, power_w: int, heat_w: int) -> Dictionary:
+	var energy := run_energy_j(ctx, job)
+	var heat := run_heat_j(ctx, job)
+	var by_heat := -1 if heat == 0 else IntMath.mul_div(heat_w, energy, heat)
+	var by_machine := throughput_w(ctx, job)
+	var want := by_machine if by_heat < 0 else mini(by_machine, by_heat)
+	var rate := mini(want, power_w)
+	var limit := LIMIT_POWER
+	if rate == by_heat and rate < power_w:
+		limit = LIMIT_HEAT
+	elif rate < power_w:
+		limit = LIMIT_THROUGHPUT
+	return {
+		"rate_w": rate, "want_w": want, "limit": limit,
+		"heat_w": 0 if heat == 0 else IntMath.mul_div(rate, heat, energy),
+		"limits_w": { "power": power_w, "heat": by_heat, "throughput": by_machine },
+	}
 
 
 func _recipe(ctx: SimContext, job: Dictionary) -> Dictionary:
@@ -661,7 +789,7 @@ func _sorted(table: Dictionary) -> Array:
 	return keys
 
 
-## Coast (A33, C17). A running job works work_per_tick a tick, so it coasts until its run's last
+## Coast (A33, C17, C30). A running job takes its rate's energy each tick, so it coasts until its run's last
 ## tick, which is stepped, and with it a build's port claim. A queued, paused or cancelling job, or a
 ## waiting one held for a reason, changes nothing until something else does, which is stepped. But
 ## a job about to start its next run (waiting, no reason) steps, and so does any held job whose
@@ -677,8 +805,14 @@ func horizon(ctx: SimContext) -> int:
 		var job: Dictionary = jobs[id]
 		match job["status"]:
 			STATUS_RUNNING:
-				var rate := work_per_tick(ctx, job["facility"])
-				skip = mini(skip, (job["work_left"] + rate - 1) / rate - 1)
+				# At last tick's rate, which the power and heat horizons keep, the run's last tick is
+				# the first n with n * rate + remainder >= energy_left * TICKS_PER_SECOND (C30).
+				var rate: int = job["rate_w"]
+				if rate <= 0:
+					skip = 0
+				else:
+					var owed: int = job["energy_left_j"] * Sim.TICKS_PER_SECOND - job["energy_remainder"]
+					skip = mini(skip, maxi(0, (owed + rate - 1) / rate - 1))
 			STATUS_QUEUED:
 				# A queued job may go ahead of a starved active job (C24), once its own stores let it,
 				# on an idle facility only.
@@ -768,10 +902,13 @@ func _stores_moving(ctx: SimContext) -> Dictionary:
 	return moving
 
 
-## Coast (C17): each running job does its work for the skipped ticks.
+## Coast (C17, C30): each running job takes its rate's energy for the skipped ticks, in closed form
+## with its remainder.
 func coast(ctx: SimContext, ticks: int) -> void:
 	var jobs: Dictionary = ctx.state["jobs"]
 	for id: int in _sorted(jobs):
 		var job: Dictionary = jobs[id]
 		if job["status"] == STATUS_RUNNING:
-			job["work_left"] -= ticks * work_per_tick(ctx, job["facility"])
+			var total: int = job["rate_w"] * ticks + job["energy_remainder"]
+			job["energy_left_j"] -= total / Sim.TICKS_PER_SECOND
+			job["energy_remainder"] = total % Sim.TICKS_PER_SECOND

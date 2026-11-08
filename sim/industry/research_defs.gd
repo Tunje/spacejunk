@@ -157,8 +157,19 @@ static func _variant_recipe(id: String, module: Dictionary, base_recipe: Diction
 		"work": IntMath.mul_div_ceil(base_recipe["work"], COMPLEXITY_BASE + complexity, COMPLEXITY_BASE),
 		"inputs": inputs, "abstract": base_recipe.get("abstract", true),
 	}
+	_carry_energy(recipe, base_recipe, COMPLEXITY_BASE + complexity, COMPLEXITY_BASE)
 	recipe["outputs"] = _part_and_scrap(id, module["mass_g"], inputs)
 	return recipe
+
+
+## C30: a derived recipe takes its source's energy and heat, scaled as its work is, and its
+## throughput as it is, once the data gives them (B29).
+static func _carry_energy(recipe: Dictionary, source: Dictionary, times: int, over: int) -> void:
+	for key: String in ["energy_j", "heat_j"]:
+		if source.has(key):
+			recipe[key] = IntMath.mul_div_ceil(source[key], times, over)
+	if source.has("throughput_g_per_s"):
+		recipe["throughput_g_per_s"] = source["throughput_g_per_s"]
 
 
 ## Adds a design's prototype item, its prototype recipe (twice the normal recipe, plus `points`)
@@ -182,6 +193,7 @@ static func _add_research_entries(
 		"work": recipe["work"] * 2, "inputs": inputs, "abstract": recipe.get("abstract", true),
 		"outputs": _part_and_scrap(prototype, module["mass_g"], inputs),
 	}
+	_carry_energy(built, recipe, 2, 1)
 	if points > 0:
 		built["points"] = points
 	recipes[prototype] = built
@@ -199,6 +211,7 @@ static func _add_research_entries(
 		"id": qualify_id(design), "facility": LAB, "power_w": bench["power_w"], "work": bench["work"],
 		"inputs": test_inputs, "outputs": test_outputs, "abstract": true,
 	}
+	_carry_energy(recipes[qualify_id(design)], bench, 1, 1)
 
 
 ## One part of `mass_g`, then the rest of the inputs to the scrap sink. The part takes from the
