@@ -61,7 +61,7 @@ A whole number converts by integer multiplication, so a value such as the star's
 | `id` | string | Item ID |
 | `name` | string | Display name |
 | `stage` | whole, 2 to 5 | Economy stage (spec section 2) |
-| `cargo_class` | `ore`, `goods` or `propellant` | |
+| `cargo_class` | `ore`, `goods`, `propellant`, `water`, `fuel`, `oxidiser`, `acid` or `gas` | The fluid classes (B29) each need their own tanks, since none may share one: hydrogen with oxygen, or acid with water. `propellant` goes with the switch to hydrolox (B30) |
 | `density_kg_m3` | whole | Sets stack volume |
 | `unit_mass_kg` | number, optional | Present only on discrete items |
 
@@ -140,8 +140,9 @@ A whole number converts by integer multiplication, so a value such as the star's
 | `port` | `transfer_kg_per_s`, `dock_seconds` (whole), `undock_seconds` (whole), `capture_range_mm` (whole), `capture_speed_m_s` | Docking ports |
 | `thruster` | `speed_m_s`, `propellant_kg_per_s`, `rated_mass_kg`, `exhaust_m_s`, `thrust_kn`, optional `min_throttle_ppm` (whole) | Thrusters |
 | `landing_gear` | `max_touchdown_m_s` | Landing legs |
-| `facility` | `type`: `refinery` or `fabricator`; `work_per_tick` (whole, optional) | Facilities. `work_per_tick` (required) is the work points removed from a running recipe each tick (C11): 100 for full-size facilities, which gives 1% steps for research ideas, and 50 for the probe's compact refinery and fabricator (B11b). A recipe draws its `power_kw` at 100 and in proportion at other rates, so the validator compares `power_kw` × `work_per_tick` / 100 with the facility's rating |
+| `facility` | `type`: `refinery`, `fabricator`, `lab`, `electrolyser`, `arc_furnace` or `semiconductor_fab`; `throughput_kg_per_s`, or until B30 on a legacy machine `work_per_tick` (whole) alone | Facilities. `throughput_kg_per_s`, above 0, is the most input mass a run takes in a second, and loads as `throughput_g_per_s` (C30, B29). The module's `power_kw` is the rating, the most a running job draws; `heat_kw` is only its fitting figure. `work_per_tick` goes in B30 |
 | `always_on` | `true` | A load that runs whenever healthy, such as a command hub |
+| `cryo` | `boil_off_ppm_per_day` per cargo class (whole, at most 1,000,000), `cooler_kw` | Cryogenic tanks (B29). A class boils off at its daily rate into the `boil_off` sink unless the tank's cooler is powered. The cooler's draw is also in the module's `power_kw` and `heat_kw`. `hydrolox_tank_mk1` loses 1% of its LH₂ and 0.1% of its LOX a day unpowered, and its cooler draws 1 kW |
 
 ```json
 {
@@ -168,9 +169,42 @@ Typical large chemical engines that aren't built to land throttle to about 40 to
 - `docking_port_mk1`: 100 mm at 0.1 m/s, like a medium androgynous port's guide petals;
 - `small_docking_port_mk1`: 50 mm at 0.05 m/s, since a small craft has less mass to absorb the contact.
 
-Proposed: a pair is limited by the stricter of its two ports. A54 shows these figures, and stage 4 enforces them.
+Rule: a pair of ports uses the lower of each limit. A54 shows these figures, and stage 4 enforces them.
 
 **Landing gear.** `max_touchdown_m_s` is the fastest touchdown the part survives, above 0, and it loads as `max_touchdown_mm_s` (task B15). A unit's touchdown limit is the highest figure among its healthy parts with landing gear, and 0 when it has none. A touchdown at or under the limit lands, and one over it crashes. Hand-flown landings and the core autopilot's `land` both obey this, so a unit with no gear cannot land. `max_slope_mdeg` is reserved on this object for a later slope limit. It is not part of the schema yet, and the validator rejects nothing for its absence. Today's parts are `landing_legs_mk1` (6 m/s, 150 kg, three structural frames) and `small_landing_legs_mk1` (4 m/s, 50 kg, one frame), both side-mounted. The long legs mount on the four low side connectors of the probe's `propellant_tank_mk2`, 0.4 m above its bottom, and reach 2.8 m below their mount, which is 0.4 m below the thruster's nozzle (task B11). The client stands a landed craft on its lowest collision point, so the legs' collision box sets where it stands. It is provisional until the long-leg model arrives, and is then fitted to it.
+
+**Factory rates (C30, B29).** A job runs at the lowest of three rates:
+- the power supplied, up to the machine's `power_kw`;
+- the power its share of radiator headroom allows, which is the headroom times `energy_kj` / `heat_kj`;
+- the machine's throughput, or the recipe's if lower, times `energy_kj` per kg of input.
+
+A run ends when its energy is spent. So a bigger machine is faster at the same recipe, and a heat-heavy step such as copper smelting is held back by the radiators, not by the power.
+
+**B29 is additive (Lead, 2026-11-08).** The recipes, lab tests and machines that were on main before B29 keep their legacy `work`, recipe `power_kw` and `work_per_tick`, from which C30 derives the same runs as before. The abstract `refine_*` recipes say so in a `legacy` note, "removed in B30". Only B29's new chain recipes and machines carry real energies and throughputs. B30, with C35's bot rebalance, gives the remaining recipes and machines the figures below, and removes `refine_*`:
+
+| Recipe | Energy a run | Heat a run | What it stands for |
+| --- | --- | --- | --- |
+| `refine_hematite` | 352 MJ | 296 MJ | Hydrogen reduction of 100 kg of ore, then melting the 69 kg of iron at 2.2 MJ/kg |
+| `refine_chalcopyrite` | 75 MJ | 400 MJ | Flash smelting, converting and electrorefining, exothermic |
+| `refine_olivine` | 830 MJ | 518 MJ | Acid leach and carbothermic reduction, 19 kg of silicon |
+| `refine_water_ice` | 2,576 MJ | 1,086 MJ | Melting, then electrolysis and liquefaction of 90 kg of water at 55 kWh per kg of hydrogen |
+| `structural_frame` | 75 MJ | 75 MJ | Rolling, cutting and welding 50 kg at 1.5 MJ/kg |
+| `wiring` | 12 MJ | 12 MJ | Drawing and insulating 10 kg of copper |
+| `processor` | 130 MJ | 130 MJ | Two radiation-hard chips at 55 MJ each, plus the board |
+| A part or a unit | 2 MJ per kg | the same | Machining, welding, integration and test of the part's mass, or of the template's parts |
+| A lab test | its run at 100 kW | the same | Today's run length, until field trials replace the tests |
+
+Machine throughputs:
+
+| Machine | Throughput |
+| --- | --- |
+| `compact_fabricator_mk1` | 0.02 kg/s |
+| `fabricator_mk1` | 0.05 kg/s |
+| `compact_refinery_mk1` | 0.05 kg/s |
+| `ore_refinery_mk1` | 0.2 kg/s |
+| `research_lab_mk1` | 0.1 kg/s |
+
+**This is far slower than today.** A frame takes 2,500 s on the compact fabricator, limited by throughput. A run of ice takes 25,760 s on the 100 kW compact refinery, limited by power. Real propellant from ice costs about 29 MJ per kg. So power, not machine count, becomes the new start's main limit.
 
 ## 6. Connectors
 
@@ -202,8 +236,12 @@ The `core` size is used only by cores and the core connector on root parts, whic
 | ----- | ---- | ------- |
 | `id` | string | Recipe ID |
 | `facility` | `refinery`, `fabricator` | Runs on a part with this `facility.type` |
-| `work` | whole, above 0 | Work points one run needs (C11, contract v4). A facility removes its `work_per_tick` each tick, so a run lasts `work` / `work_per_tick` ticks: at 100 per tick and 10 ticks a second, 1000 work is one second. There is no `seconds` field (B11b) |
-| `power_kw` | number | Draw while a run is active |
+| `energy_kj` | whole, at least 1 | The energy one run takes, in kJ, from real process figures (C30, B29). It loads as `energy_j`. Until B30 a legacy recipe may leave it and `heat_kj` out and keep `work` and `power_kw` |
+| `heat_kj` | whole, at least 0 | The heat one run gives off, in kJ, which the unit's radiators must reject. It loads as `heat_j`. It is the energy put in, less what the products store, plus any reaction heat, so an exothermic step can give off more heat than its energy |
+| `throughput_kg_per_s` | number, optional | A slower material rate for this recipe than the machine's, such as an acid leach. The run uses the lower of the two |
+| `work` | whole, above 0, optional | Work points (C11), for a legacy recipe without energy. Removed in B30, with `seconds` long gone (B11b) |
+| `power_kw` | number, optional | The old fixed draw, for a legacy recipe. Removed in B30 |
+| `legacy` | string, optional | A note on a legacy recipe, such as "removed in B30" on the abstract `refine_*` |
 | `inputs` | array | At least one entry |
 | `outputs` | array | At least one entry |
 | `abstract` | boolean | True for every slice recipe |
@@ -316,7 +354,7 @@ B4 enforces these on top of section 3 of the accounting spec.
 - Every deposit's `hardness` is within at least one `mine.hardness_max`.
 
 **Templates**
-- Each template passes the fitting rules in contracts section 5, including mass, power, heat and connectors.
+- Each shipped template passes the fitting rules in contracts section 5, including mass, power, heat and connectors, as a check on the content. **In play, fitting warns and allows** (owner, 2026-11-07): mass, connector load, power and heat are all reported, never refused. The physical consequence comes from the structure and damage item of the simplification audit: an overloaded connector or an over-mass structure fails under load. Designs are no longer checked for a fit order that keeps within budgets (`design_fit_order` is gone).
 - A unit with any `heat_kw` above 0 has `heat_capacity`, since its limit is otherwise 0.
 - A unit with `thruster` has `propellant` storage.
 

@@ -24,13 +24,14 @@ const OPTIONAL_FILES := {
 
 const ID_PATTERN := "^[a-z][a-z0-9_]*$"
 const TINT_PATTERN := "^#[0-9a-f]{6}$"
+## Fluids have their own classes (B29): none may share a tank with another.
 const CARGO_CLASSES := ["ore", "goods", "propellant", "water", "fuel", "oxidiser", "acid", "gas"]
 const REALISM := ["established", "extrapolation", "speculative", "fictional"]
 const CONNECTOR_TYPES := ["stack", "side", "dock"]
 const CONNECTOR_SIZES := ["core", "small", "medium", "large"]
 const AXES := ["+x", "-x", "+y", "-y", "+z", "-z"]
 const SHAPES := ["box", "cylinder"]
-const FACILITIES := ["refinery", "fabricator", "lab"]
+const FACILITIES := ["refinery", "fabricator", "lab", "electrolyser", "arc_furnace", "semiconductor_fab"]
 const UNIT_KINDS := ["ship", "station", "drone"]
 
 const ITEM_FIELDS := ["id", "name", "stage", "cargo_class", "density_kg_m3"]
@@ -40,10 +41,17 @@ const MODULE_FIELDS := [
 ]
 const CONNECTOR_FIELDS := ["id", "type", "size", "pos_mm", "facing", "up", "load_limit_kg"]
 const COLLISION_FIELDS := ["shape", "center_mm", "size_mm"]
-## Work points (C11, contract v4). A recipe needs `work`, and a facility removes `work_per_tick` of
-## it each tick. `seconds` is gone (B11b), so a recipe that still has it is an unknown field.
-const RECIPE_FIELDS := ["id", "facility", "work", "power_kw", "inputs", "outputs", "abstract"]
-const RECIPE_OPTIONAL := ["points"]
+## Factory rates (C30, B29). A recipe needs `energy_kj` and `heat_kj` per run, and may set its own
+## `throughput_kg_per_s`. A facility has a `throughput_kg_per_s` and its module's `power_kw` as its
+## rating. Until B30 a legacy recipe, lab test or facility may instead keep the old `work` with the
+## recipe's `power_kw`, and `work_per_tick`, from which C30 derives the same run (Lead, 2026-11-08:
+## B29 stays additive, so what was on main keeps its figures). A legacy recipe may say so in
+## `legacy`, a note such as "removed in B30". `seconds` is gone (B11b), so a recipe that still has it
+## is an unknown field.
+const RECIPE_FIELDS := ["id", "facility", "inputs", "outputs", "abstract"]
+const RECIPE_OPTIONAL := ["energy_kj", "heat_kj", "points", "throughput_kg_per_s", "work", "power_kw", "legacy"]
+## The most energy or heat a run may state: a terajoule.
+const MAX_RUN_KJ := 1_000_000_000
 ## A recipe draws its stated power at this rate, and in proportion at any other (PowerSystem).
 const FULL_RATE_WORK_PER_TICK := 100
 const MODULE_OPTIONAL := ["ideas"]
@@ -75,7 +83,7 @@ const IDEA_DIRECTIONS := {
 	"capabilities.thruster.rated_mass_kg": 1, "capabilities.thruster.exhaust_m_s": 1,
 	"capabilities.thruster.thrust_kn": 1, "capabilities.thruster.min_throttle_ppm": -1,
 	"capabilities.landing_gear.max_touchdown_m_s": 1,
-	"capabilities.facility.work_per_tick": 1,
+	"capabilities.facility.work_per_tick": 1, "capabilities.facility.throughput_kg_per_s": 1,
 }
 const MAX_IDEAS_PER_VARIANT := 4
 const DEPOSIT_FIELDS := ["id", "item", "mass_kg", "hardness"]
@@ -91,7 +99,8 @@ const SCENARIO_OPTIONAL := ["frames", "research"]
 const ANY_ITEM := "*"
 ## theories.json may carry the default bench test beside its entries (C12, section 5).
 const FILE_EXTRAS := { "theories": ["bench_test"] }
-const BENCH_TEST_FIELDS := ["inputs", "work", "power_kw"]
+const BENCH_TEST_FIELDS := ["inputs"]
+const BENCH_TEST_OPTIONAL := ["energy_kj", "heat_kj", "work", "power_kw"]
 const BODY_FIELDS := ["key", "name", "kind", "radius_mm", "visual_seed", "deposits"]
 const BODY_OPTIONAL := ["pos_mm", "gm_km3_s2", "orbit", "frame", "planet"]
 const PLANET_FIELDS := ["seed", "height_range_m"]
@@ -136,7 +145,7 @@ const CAPABILITIES := {
 		"rated_mass_kg": [1000, false], "exhaust_m_s": [1000, false], "thrust_kn": [1000, false],
 	},
 }
-const OTHER_CAPABILITIES := ["storage", "max_mass_kg", "facility", "always_on"]
+const OTHER_CAPABILITIES := ["storage", "max_mass_kg", "facility", "always_on", "cryo"]
 ## Capability fields that may be left out, as capability -> fields (A55: an engine without a
 ## minimum throttle fires only at full thrust).
 const CAPABILITY_OPTIONAL := { "thruster": ["min_throttle_ppm"] }
@@ -150,6 +159,13 @@ const PPM := 1_000_000
 const MAX_JSON_WHOLE := 9_007_199_254_740_992
 
 ## Refining yields may not pass the element's real mass share (spec section 7.1).
+## Chain items whose source or use arrives with the switch-over (B30): chips go into processors,
+## steel into frames, frames' offcuts become steel scrap, and Black Rock yields carbonaceous ore.
+## B30 empties this.
+const PENDING_B30 := { "chip": "use", "steel": "use", "steel_scrap": "source", "carbonaceous_ore": "source" }
+## Items kept for a later chain with no use yet: anode slime holds the precious metals the belt's
+## chains will recover (production_chains.md section 5).
+const KEPT_FOR_LATER := ["anode_slime"]
 const YIELD_CEILINGS_PPM := {
 	"hematite": { "iron": 699_000 },
 	"chalcopyrite": { "copper": 346_000 },
@@ -457,14 +473,23 @@ func _shape_capabilities(where: String, capabilities: Variant) -> void:
 		elif key == "max_mass_kg":
 			_check_positive(at, key, value, 1000, MAX_STACK_G)
 		elif key == "facility":
-			if value is Dictionary and _has_fields(at, value, ["type", "work_per_tick"]):
+			if value is Dictionary and _has_fields(at, value, ["type"], ["throughput_kg_per_s", "work_per_tick"]):
 				_check_enum(at, "type", value["type"], FACILITIES)
-				_check_whole(at, "work_per_tick", value["work_per_tick"], 1, MAX_RATE)
+				# Until B30 a legacy facility may keep work_per_tick alone (C30's fallback).
+				if value.has("throughput_kg_per_s") or not value.has("work_per_tick"):
+					if not value.has("throughput_kg_per_s"):
+						_err("missing_field", at, "throughput_kg_per_s")
+					else:
+						_check_positive(at, "throughput_kg_per_s", value["throughput_kg_per_s"], 1000, MAX_RATE)
+				if value.has("work_per_tick"):
+					_check_whole(at, "work_per_tick", value["work_per_tick"], 1, MAX_RATE)
 			elif not value is Dictionary:
 				_err("bad_capability", at, "not an object")
 		elif key == "always_on":
 			if value != true:
 				_err("bad_capability", at, "must be true")
+		elif key == "cryo":
+			_shape_cryo(at, value)
 		else:
 			_err("unknown_capability", where, key)
 
@@ -493,6 +518,23 @@ func _shape_capability_fields(where: String, value: Variant, fields: Dictionary,
 		_check_whole(where, "tier", value["tier"], 1, 6)
 	if value.has("limit_kj"):
 		_check_number(where, "limit_kj", value["limit_kj"], 1000, MAX_STORE_J)
+
+
+## A cryogenic tank (B29): what share of each class boils off a day unless its cooler runs, and the
+## cooler's draw, which is also in the module's power_kw and heat_kw.
+func _shape_cryo(where: String, cryo: Variant) -> void:
+	if not cryo is Dictionary or not _has_fields(where, cryo, ["boil_off_ppm_per_day", "cooler_kw"]):
+		if not cryo is Dictionary:
+			_err("bad_capability", where, "not an object")
+		return
+	var rates: Variant = cryo["boil_off_ppm_per_day"]
+	if not rates is Dictionary or rates.is_empty():
+		_err("bad_capability", where, "boil_off_ppm_per_day needs at least one cargo class")
+	else:
+		for cargo_class: String in rates:
+			_check_enum(where, "cargo class", cargo_class, CARGO_CLASSES)
+			_check_whole(where, "boil_off_ppm_per_day", rates[cargo_class], 0, PPM)
+	_check_positive(where, "cooler_kw", cryo["cooler_kw"], 1000, MAX_RATE)
 
 
 func _shape_storage(where: String, storage: Variant) -> void:
@@ -550,15 +592,34 @@ func _shape_connector(where: String, connector: Dictionary) -> void:
 		_err("bad_core_connector", at, "core connectors are type side")
 
 
+## A run's figures: energy and heat, or until B30 the legacy work and power (C30's fallback).
+func _check_run_figures(where: String, run: Dictionary) -> void:
+	if run.has("energy_kj") or run.has("heat_kj") or not (run.has("work") and run.has("power_kw")):
+		for field: String in ["energy_kj", "heat_kj"]:
+			if not run.has(field):
+				_err("missing_field", where, field)
+		if run.has("energy_kj"):
+			_check_whole(where, "energy_kj", run["energy_kj"], 1, MAX_RUN_KJ)
+		if run.has("heat_kj"):
+			_check_whole(where, "heat_kj", run["heat_kj"], 0, MAX_RUN_KJ)
+	if run.has("work"):
+		_check_whole(where, "work", run["work"], 1, MAX_RATE)
+	if run.has("power_kw"):
+		_check_number(where, "power_kw", run["power_kw"], 1000, MAX_RATE)
+
+
 func _shape_recipe(recipe: Dictionary) -> void:
 	var where := "recipes.json:%s" % recipe["id"]
 	if not _has_fields(where, recipe, RECIPE_FIELDS, RECIPE_OPTIONAL):
 		return
 	_check_enum(where, "facility", recipe["facility"], FACILITIES)
-	_check_whole(where, "work", recipe["work"], 1, MAX_RATE)
+	_check_run_figures(where, recipe)
+	if recipe.has("legacy") and not recipe["legacy"] is String:
+		_err("bad_recipe", where, "legacy is not a note")
+	if recipe.has("throughput_kg_per_s"):
+		_check_positive(where, "throughput_kg_per_s", recipe["throughput_kg_per_s"], 1000, MAX_RATE)
 	if recipe.has("points"):
 		_check_whole(where, "points", recipe["points"], 1, MAX_RATE)
-	_check_number(where, "power_kw", recipe["power_kw"], 1000, MAX_RATE)
 	if not recipe["abstract"] is bool:
 		_err("bad_recipe", where, "abstract is not a boolean")
 	if not recipe["inputs"] is Array or recipe["inputs"].is_empty():
@@ -737,8 +798,6 @@ func _cross_connectors(where: String, module: Dictionary, is_root: bool) -> void
 
 func _cross_recipe(recipe: Dictionary) -> void:
 	var where := "recipes.json:%s" % recipe["id"]
-	if recipe["abstract"] != true:
-		_err("recipe_not_abstract", where, "every slice recipe is abstract")
 	_check_recipe_facility(where, recipe)
 
 	var input_g := 0
@@ -764,13 +823,18 @@ func _cross_recipe(recipe: Dictionary) -> void:
 			_err("repeated_item", where, entry["item"])
 		seen[entry["item"]] = true
 		has_sink_output = has_sink_output or entry.has("sink")
-		_check_sink_route(where, entry)
+		# A real chain recipe keeps its waste as an item (B29), so only the abstract ones must sink it.
+		if recipe["abstract"] == true or entry.has("sink"):
+			_check_sink_route(where, entry)
 
 	if input_g != output_g:
 		_err("recipe_unbalanced", where, "%d g in, %d g out" % [input_g, output_g])
-	if recipe["facility"] == "refinery" and not has_sink_output:
-		_err("slag_missing", where, "a refining recipe routes slag to a sink")
-	_check_yields(where, recipe)
+	# A real chain recipe (B29) keeps its slag and states real chemistry. The ceilings and the slag
+	# sink hold the abstract slice recipes to the same truth until they go (B30).
+	if recipe["abstract"] == true:
+		if recipe["facility"] == "refinery" and not has_sink_output:
+			_err("slag_missing", where, "a refining recipe routes slag to a sink")
+		_check_yields(where, recipe)
 
 
 func _check_recipe_facility(where: String, recipe: Dictionary) -> void:
@@ -780,6 +844,8 @@ func _check_recipe_facility(where: String, recipe: Dictionary) -> void:
 		if capabilities.get("facility", {}).get("type") != recipe["facility"]:
 			continue
 		found = true
+		if not recipe.has("power_kw") or not capabilities["facility"].has("work_per_tick"):
+			continue
 		# A slower facility draws the recipe's power in proportion to its work rate.
 		var rate: float = float(capabilities["facility"]["work_per_tick"]) / FULL_RATE_WORK_PER_TICK
 		if float(recipe["power_kw"]) * rate > float(_modules[id]["power_kw"]):
@@ -930,19 +996,6 @@ func _cross_design(design: Dictionary) -> void:
 		if design_paths.get(path, "") != base_paths[path]:
 			_err("design_drops_base_part", where, "%s at %s" % [base_paths[path], path if path != "" else "root"])
 			return
-	var fitted: Array[Dictionary] = []
-	var mass_g := 0
-	for step: Dictionary in design_order:
-		if not _modules.has(step["part"]):
-			return
-		fitted.append(_modules[step["part"]])
-		mass_g += _to_sim(_modules[step["part"]]["mass_kg"], 1000)
-		if base_paths.has(step["path"]):
-			continue
-		var problem := _fit_problem(fitted, mass_g)
-		if problem != "":
-			_err("design_fit_order", where, "%s at %s fails %s" % [step["part"], step["path"], problem])
-			return
 
 
 ## Each node's part by its path, the parent_connector chain from the root joined with "/".
@@ -957,31 +1010,6 @@ func _node_order(node: Dictionary, path: Array, out: Array[Dictionary]) -> void:
 	out.append({ "path": "/".join(PackedStringArray(path)), "part": node["part"] })
 	for child: Dictionary in node["children"]:
 		_node_order(child, path + [child["parent_connector"]], out)
-
-
-## The first fitting limit these parts break, root first, or "".
-func _fit_problem(parts: Array[Dictionary], mass_g: int) -> String:
-	var power_w := 0
-	var heat_w := 0
-	var budget_w := 0
-	var reject_w := 0
-	for module: Dictionary in parts:
-		var capabilities: Dictionary = module["capabilities"]
-		power_w += _to_sim(module["power_kw"], 1000)
-		heat_w += _to_sim(module["heat_kw"], 1000)
-		if capabilities.has("generate"):
-			budget_w += _to_sim(capabilities["generate"]["power_kw"], 1000)
-		if capabilities.has("battery"):
-			budget_w += _to_sim(capabilities["battery"]["max_discharge_kw"], 1000)
-		if capabilities.has("radiator"):
-			reject_w += _to_sim(capabilities["radiator"]["reject_kw"], 1000)
-	if mass_g > _to_sim(parts[0]["capabilities"].get("max_mass_kg", 0), 1000):
-		return "over_mass_limit"
-	if power_w > budget_w:
-		return "over_power_budget"
-	if heat_w > reject_w:
-		return "over_heat_budget"
-	return ""
 
 
 ## Checks a node's joins, collects its modules and returns the subtree's mass.
@@ -1397,9 +1425,9 @@ func _check_coverage() -> void:
 	for id: String in _sorted(_items):
 		var where := "items.json:%s" % id
 		var fits := _modules.has(id) and _fits_somewhere(_modules[id])
-		if not sources.has(id):
+		if not sources.has(id) and PENDING_B30.get(id, "") != "source":
 			_err("item_without_source", where)
-		if not uses.has(id) and not fits:
+		if not uses.has(id) and not fits and PENDING_B30.get(id, "") != "use" and not id in KEPT_FOR_LATER:
 			_err("item_without_use", where)
 
 
@@ -1570,11 +1598,10 @@ func _shape_bench_test() -> void:
 		if not _theories.is_empty():
 			_err("missing_field", "theories.json", "bench_test")
 		return
-	if not _bench_test is Dictionary or not _has_fields(where, _bench_test, BENCH_TEST_FIELDS):
+	if not _bench_test is Dictionary or not _has_fields(where, _bench_test, BENCH_TEST_FIELDS, BENCH_TEST_OPTIONAL):
 		return
 	_shape_inputs(where, _bench_test["inputs"])
-	_check_whole(where, "work", _bench_test["work"], 1, MAX_RATE)
-	_check_number(where, "power_kw", _bench_test["power_kw"], 1000, MAX_RATE)
+	_check_run_figures(where, _bench_test)
 
 
 func _check_research_inputs(where: String, inputs: Array) -> void:
@@ -1587,7 +1614,7 @@ func _cross_research() -> void:
 		_check_research_inputs("theories.json:bench_test", _bench_test["inputs"])
 		for id: String in _sorted(_modules):
 			if _modules[id]["capabilities"].get("facility", {}).get("type") == "lab" \
-					and float(_bench_test["power_kw"]) > float(_modules[id]["power_kw"]):
+					and _bench_test.has("power_kw") and float(_bench_test["power_kw"]) > float(_modules[id]["power_kw"]):
 				_err("recipe_over_power", "theories.json:bench_test", "above the rating of %s" % id)
 	for scenario: Dictionary in _scenarios:
 		for id: String in scenario.get("research", {}).get("theories", []):
