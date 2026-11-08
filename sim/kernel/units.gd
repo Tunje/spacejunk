@@ -7,7 +7,9 @@ const IDLE_OP := "idle"
 const STATE_ON := "on"
 const STATE_SHED := "shed"
 const STATE_FAULT := "fault"
-const CLASS_ORDER: Array[String] = ["goods", "ore", "propellant"]
+## Cargo classes in the order capacity is checked (B29 adds the chains' water, fuel (LH2), oxidiser
+## (LOX), acid and gas).
+const CLASS_ORDER: Array[String] = ["goods", "ore", "propellant", "water", "fuel", "oxidiser", "acid", "gas"]
 
 
 ## Creates a unit and its parts from a template, issuing IDs unit first, then parents before
