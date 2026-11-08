@@ -89,8 +89,8 @@ func test_the_panel_says_all_goals_are_done() -> void:
 	assert_eq(main.goal_panel._title.text, "All ten goals done")
 
 
-func test_the_second_laser_is_refused_with_the_page_figures() -> void:
-	assert_eq(player.refusal, "Over the heat budget: needs 280 kW, has 200 kW")
+func test_the_second_laser_is_warned_with_the_page_figures() -> void:
+	assert_eq(player.warning, "Mining Laser fits, but: Over the heat budget: needs 280 kW, has 200 kW.")
 
 
 func test_the_radiator_fix_shows_on_the_ship() -> void:

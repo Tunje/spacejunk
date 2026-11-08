@@ -783,7 +783,9 @@ func _apply(command: Dictionary) -> void:
 	var result := _validate(command)
 	_applying = false
 	if not result["ok"]:
-		var is_fit_failure: bool = command.get("type", "") == "attach_part" and result["detail"].has("mass_limit_g")
+		# As the Sim: any fitting refusal is attach_failed; since C30 only the connector refuses.
+		var connector_refusals := ["connector_type_mismatch", "connector_size_mismatch", "connector_occupied"]
+		var is_fit_failure: bool = command.get("type", "") == "attach_part" and connector_refusals.has(result["reason"])
 		var data: Dictionary = { "command": command["id"], "reason": result["reason"], "detail": result["detail"] }
 		if is_fit_failure:
 			data["item"] = command["args"]["item"]

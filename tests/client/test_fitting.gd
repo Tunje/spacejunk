@@ -155,18 +155,19 @@ func test_attach_conserves_matter() -> void:
 
 func test_a_failed_submit_emits_attach_failed_with_the_item() -> void:
 	_open_docked()
+	var ext_a := _slot("ext_a")
 	_fit_item("stub_radiator", "ext_a")
 	screen.attach()
 	_run_ticks(8)
 	bridge.sim.take_events()
 	# Since C30 only the connector refuses: ext_a is taken now.
-	var command := FittingLogic.attach_command(ship, { "item": "stub_laser", "from": station }, _slot("ext_a"))
+	var command := FittingLogic.attach_command(ship, { "item": "stub_laser", "from": station }, ext_a)
 	bridge.sim.submit(command)
 	bridge.sim.step(1)
-	var events: Array[Dictionary] = bridge.sim.take_events()
-	assert_eq(events[0]["type"], "attach_failed")
-	assert_eq(events[0]["data"]["item"], "stub_laser")
-	assert_eq(events[0]["data"]["reason"], "connector_occupied")
+	var failed: Array = bridge.sim.take_events().filter(func(event: Dictionary) -> bool: return event["type"] == "attach_failed")
+	assert_eq(failed.size(), 1)
+	assert_eq(failed[0]["data"]["item"], "stub_laser")
+	assert_eq(failed[0]["data"]["reason"], "connector_occupied")
 
 
 func test_removing_a_part_returns_it_to_the_host() -> void:

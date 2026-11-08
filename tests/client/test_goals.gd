@@ -189,9 +189,9 @@ func test_fix_needs_a_warned_fit_then_back_within_limits() -> void:
 	tracker.complete("install")
 	var heat := { "part": 7, "warnings": [{ "code": "over_heat_budget", "need_w": 280, "have_w": 200 }] }
 	assert_true(tracker.observe_event(_event("part_attached", 1, heat), state, defs).is_empty(), "the limit is hit")
-	assert_true(tracker.observe_view(state, {}, defs["modules"]).is_empty(), "still over")
+	assert_true(tracker.observe_view(state, {}, {}).is_empty(), "still over")
 	ship["fit"] = _fit(false)
-	assert_eq(tracker.observe_view(state, {}, defs["modules"]), ["fix"] as Array[String], "a radiator brings it back")
+	assert_eq(tracker.observe_view(state, {}, {}), ["fix"] as Array[String], "a radiator brings it back")
 
 
 func test_fix_needs_the_limit_hit_first() -> void:
@@ -200,10 +200,10 @@ func test_fix_needs_the_limit_hit_first() -> void:
 	var state := _view({ 1: ship })
 	tracker.complete("install")
 	assert_true(tracker.observe_event(_event("part_attached", 1, { "part": 7 }), state, defs).is_empty(), "no warning")
-	assert_true(tracker.observe_view(state, {}, defs["modules"]).is_empty(), "within limits all along isn't a fix")
+	assert_true(tracker.observe_view(state, {}, {}).is_empty(), "within limits all along isn't a fix")
 	var heavy := { "part": 7, "warnings": [{ "code": "over_load_limit", "need_g": 9, "have_g": 5 }] }
 	tracker.observe_event(_event("part_attached", 1, heavy), state, defs)
-	assert_true(tracker.observe_view(state, {}, defs["modules"]).is_empty(), "a connector's load isn't counted")
+	assert_true(tracker.observe_view(state, {}, {}).is_empty(), "a connector's load isn't counted")
 
 
 func test_the_real_game_starts_on_goal_one_with_a_hint() -> void:
