@@ -50,5 +50,5 @@ func test_sun_tick_is_minus_one_when_the_place_ahead_cannot_be_foreseen() -> voi
 	assert_true(_power(sim)["in_shadow"], "the probe starts in the moon's shadow")
 	# In low flight a unit flies by forces, not rails, so its place ahead is unknown.
 	var probe: Dictionary = sim._state["units"][keys["Probe"]]
-	probe["low_flight"] = keys["Moon"]
+	probe["stepped"] = keys["Moon"]
 	assert_eq(PowerSystem.sun_tick(sim._state, keys["Probe"]), -1)

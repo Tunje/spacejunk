@@ -90,17 +90,18 @@ func _until(event_type: String, limit: int) -> Dictionary:
 	return {}
 
 
-## Puts the ship in low flight a height above the ground of a cell, still.
+## Puts the ship in stepped flight a height above the ground of a cell, still.
 func _hover(cell: int, height_mm: int) -> void:
 	var ground := LandingSystem.cell_mm(sim._ctx, keys["Planet"], cell)
 	var up := OrbitMath.unit(ground)
 	var ship := _ship()
 	ship["orbit"] = {}
-	ship["low_flight"] = keys["Planet"]
+	ship["stepped"] = keys["Planet"]
 	ship["pos_mm"] = [ground[0] + OrbitMath.smul_div(up[0], height_mm, ONE),
 		ground[1] + OrbitMath.smul_div(up[1], height_mm, ONE), ground[2] + OrbitMath.smul_div(up[2], height_mm, ONE)]
 	ship["vel_um_s"] = [0, 0, 0]
 	ship["drift_carry"] = [0, 0, 0]
+	ship["vel_carry_nm"] = [0, 0, 0]
 
 
 func _until_any(types: Array, limit: int) -> Dictionary:
