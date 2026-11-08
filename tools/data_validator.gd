@@ -73,7 +73,7 @@ const IDEA_DIRECTIONS := {
 	"capabilities.port.capture_range_mm": 1, "capabilities.port.capture_speed_m_s": 1,
 	"capabilities.thruster.speed_m_s": 1, "capabilities.thruster.propellant_kg_per_s": -1,
 	"capabilities.thruster.rated_mass_kg": 1, "capabilities.thruster.exhaust_m_s": 1,
-	"capabilities.thruster.thrust_kn": 1,
+	"capabilities.thruster.thrust_kn": 1, "capabilities.thruster.min_throttle_ppm": -1,
 	"capabilities.landing_gear.max_touchdown_m_s": 1,
 	"capabilities.facility.work_per_tick": 1,
 }
@@ -137,6 +137,9 @@ const CAPABILITIES := {
 	},
 }
 const OTHER_CAPABILITIES := ["storage", "max_mass_kg", "facility", "always_on"]
+## Capability fields that may be left out, as capability -> fields (A55: an engine without a
+## minimum throttle fires only at full thrust).
+const CAPABILITY_OPTIONAL := { "thruster": ["min_throttle_ppm"] }
 
 const MAX_STACK_G := 1_000_000_000_000_000
 const MAX_STORE_J := 1_000_000_000_000_000
@@ -448,7 +451,7 @@ func _shape_capabilities(where: String, capabilities: Variant) -> void:
 		var value: Variant = capabilities[key]
 		var at := "%s.%s" % [where, key]
 		if CAPABILITIES.has(key):
-			_shape_capability_fields(at, value, CAPABILITIES[key])
+			_shape_capability_fields(at, value, CAPABILITIES[key], CAPABILITY_OPTIONAL.get(key, []))
 		elif key == "storage":
 			_shape_storage(at, value)
 		elif key == "max_mass_kg":
@@ -466,12 +469,15 @@ func _shape_capabilities(where: String, capabilities: Variant) -> void:
 			_err("unknown_capability", where, key)
 
 
-func _shape_capability_fields(where: String, value: Variant, fields: Dictionary) -> void:
+func _shape_capability_fields(where: String, value: Variant, fields: Dictionary, optional: Array = []) -> void:
 	if not value is Dictionary:
 		_err("bad_capability", where, "not an object")
 		return
-	if not _has_fields(where, value, fields.keys()):
+	if not _has_fields(where, value, fields.keys(), optional):
 		return
+	# Parts per million of full thrust: 1 deep-throttles to almost nothing, 1000000 is full only.
+	if value.has("min_throttle_ppm"):
+		_check_whole(where, "min_throttle_ppm", value["min_throttle_ppm"], 1, PPM)
 	for field: String in fields:
 		var factor: int = fields[field][0]
 		if fields[field][1]:
