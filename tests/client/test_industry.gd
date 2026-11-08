@@ -221,40 +221,42 @@ func test_the_key_and_escape_work() -> void:
 
 func test_text_helpers() -> void:
 	var job := { "recipe": "iron", "status": "paused", "reason": "no_power", "count_left": 3, "start_tick": 0,
-		"queue_pos": 0, "work_left": 0, "work": 3000, "work_per_tick": 100 }
+		"queue_pos": 0, "energy_left_j": 0, "energy_j": 3000, "rate_w": 0 }
 	assert_eq(IndustryLogic.job_line(job, defs, 10.0), "Iron: Paused, Not enough power (3 left)")
 	assert_eq(IndustryLogic.job_progress(job), 0.0, "no run under way")
 	assert_eq(IndustryLogic.name_of("no_such_thing", defs), "No Such Thing")
 
 
-## D23: progress and time come from work points, not ticks.
-func test_progress_and_time_left_come_from_work() -> void:
+## D23, D49: progress comes from the run's energy, and time from what is left at the
+## rate it runs now (C30), not from ticks.
+func test_progress_and_time_left_come_from_energy() -> void:
 	var job := { "recipe": "iron", "status": "running", "reason": "", "count_left": 1, "start_tick": 0,
-		"queue_pos": 0, "work_left": 750, "work": 3000, "work_per_tick": 100 }
+		"queue_pos": 0, "energy_left_j": 750, "energy_j": 3000, "rate_w": 1000 }
 	assert_almost_eq(IndustryLogic.job_progress(job), 0.75, 0.001)
-	assert_eq(IndustryLogic.seconds_left(job, 10.0), 0.8, "ceil(750 / 100) = 8 ticks")
+	assert_eq(IndustryLogic.seconds_left(job, 10.0), 0.75, "750 J at 1 kW")
 	assert_eq(IndustryLogic.job_line(job, defs, 10.0), "Iron: Running, about 1 s")
-	job["work_left"] = 2000
+	job["energy_left_j"] = 2000
 	assert_eq(IndustryLogic.job_line(job, defs, 10.0), "Iron: Running, about 2 s")
 	# A paused run keeps its place and gives no time, since it isn't moving.
 	job["status"] = "paused"
 	job["reason"] = "no_power"
 	assert_almost_eq(IndustryLogic.job_progress(job), 1.0 / 3.0, 0.001)
 	assert_eq(IndustryLogic.seconds_left(job, 10.0), 0.0)
-	# A half-rate facility takes twice as long; spare work on the last tick is lost.
+	# Held to half the rate, it takes twice as long.
 	job["status"] = "running"
-	job["work_per_tick"] = 50
+	job["rate_w"] = 500
 	assert_eq(IndustryLogic.seconds_left(job, 10.0), 4.0)
 	assert_eq(IndustryLogic.run_ticks(3000, 70), 43)
 	assert_eq(IndustryLogic.run_ticks(3000, 0), 0)
 
 
+## Queued, a job has no rate yet: its runs at the facility's full rate are the floor.
 func test_a_queued_job_shows_all_its_runs() -> void:
 	var job := { "recipe": "iron", "status": "queued", "reason": "", "count_left": 4, "start_tick": 0,
-		"queue_pos": 2, "work_left": 0, "work": 3000, "work_per_tick": 100 }
-	assert_eq(IndustryLogic.seconds_left(job, 10.0), 12.0, "4 runs of 30 ticks")
-	assert_eq(IndustryLogic.job_line(job, defs, 10.0), "Iron: Queued (4 left), about 12 s")
-	assert_eq(IndustryLogic.queue_line(job, defs, 10.0), "Iron (4 left), at least 12 s", "the queue says queued")
+		"queue_pos": 2, "energy_left_j": 0, "energy_j": 3000, "rate_w": 0 }
+	assert_eq(IndustryLogic.seconds_left(job, 10.0, 100), 12.0, "4 runs of 30 ticks")
+	assert_eq(IndustryLogic.queue_line(job, defs, 10.0, 100), "Iron (4 left), at least 12 s", "the queue says queued")
+	assert_eq(IndustryLogic.job_line(job, defs, 10.0), "Iron: Queued (4 left)")
 
 
 func test_no_facilities_gives_no_working_unit() -> void:
@@ -268,7 +270,7 @@ func test_no_facilities_gives_no_working_unit() -> void:
 func test_a_running_job_on_energy_names_its_limit() -> void:
 	var job := { "recipe": "refine_hematite", "status": "running", "reason": "", "count_left": 1, "queue_pos": 0,
 		"energy_j": 60_000, "energy_left_j": 15_000, "rate_w": 5_000, "limit": "power",
-		"limits_w": { "power": 5_000, "heat": 9_000, "throughput": 20_000 }, "work_per_tick": 500 }
+		"limits_w": { "power": 5_000, "heat": 9_000, "throughput": 20_000 } }
 	assert_almost_eq(IndustryLogic.job_progress(job), 0.75, 0.001)
 	assert_eq(IndustryLogic.seconds_left(job, 10.0), 3.0, "15 kJ at 5 kW")
 	assert_eq(IndustryLogic.limit_text(job), "held to %s by power" % InspectText.watts(5_000))
@@ -286,6 +288,6 @@ func test_a_running_job_on_energy_names_its_limit() -> void:
 
 func test_a_queued_job_is_put_at_full_speed_as_a_floor() -> void:
 	var job := { "recipe": "refine_hematite", "status": "queued", "reason": "", "count_left": 2, "queue_pos": 1,
-		"energy_j": 60_000, "energy_left_j": 60_000, "work_per_tick": 1_000 }
-	assert_eq(IndustryLogic.seconds_left(job, 10.0), 12.0, "2 runs of 60 ticks")
-	assert_string_ends_with(IndustryLogic.queue_line(job, defs, 10.0), "at least 12 s")
+		"energy_j": 60_000, "energy_left_j": 60_000 }
+	assert_eq(IndustryLogic.seconds_left(job, 10.0, 1_000), 12.0, "2 runs of 60 ticks")
+	assert_string_ends_with(IndustryLogic.queue_line(job, defs, 10.0, 1_000), "at least 12 s")

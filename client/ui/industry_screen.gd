@@ -476,7 +476,7 @@ func _show_queue(view: Dictionary) -> void:
 	for index in range(queued.size()):
 		var row: Dictionary = _queue_rows[index]
 		var label: Label = row["label"]
-		label.text = "%d. %s" % [index + 1, IndustryLogic.queue_line(queued[index], _defs, bridge.ticks_per_second())]
+		label.text = "%d. %s" % [index + 1, IndustryLogic.queue_line(queued[index], _defs, bridge.ticks_per_second(), facility["rate"])]
 		label.tooltip_text = label.text
 		(row["up"] as Button).disabled = index == 0
 		(row["down"] as Button).disabled = index == queued.size() - 1

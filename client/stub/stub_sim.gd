@@ -30,7 +30,7 @@ const PLANET_SEA_LEVEL_M := -400
 ## C9: jobs on one facility, counting the active one.
 const QUEUE_LIMIT := 16
 const JOB_VIEW_FIELDS: Array[String] = [
-	"unit", "facility", "recipe", "count_left", "status", "reason", "start_tick", "queue_pos", "work_left", "install_to",
+	"unit", "facility", "recipe", "count_left", "status", "reason", "start_tick", "queue_pos", "install_to",
 ]
 ## Statuses of an active job that move_job refuses with job_busy.
 const BUSY_STATUSES: Array[String] = ["running", "paused", "cancelling"]
@@ -1005,8 +1005,15 @@ func _jobs_view() -> Dictionary:
 		var job: Dictionary = {}
 		for field: String in JOB_VIEW_FIELDS:
 			job[field] = _state["jobs"][id][field]
-		job["work"] = _defs["recipes"][job["recipe"]]["work"]
-		job["work_per_tick"] = _work_per_tick(job["facility"])
+		# C30's energy fields: the stub runs at the machine's own rate, so throughput holds it.
+		var full_w: int = _work_per_tick(job["facility"]) * TICKS_PER_SECOND
+		var running: bool = job["status"] == "running"
+		job["energy_j"] = _defs["recipes"][job["recipe"]]["work"]
+		job["energy_left_j"] = _state["jobs"][id]["work_left"]
+		job["rate_w"] = full_w if running else 0
+		job["limit"] = "throughput" if running else ""
+		job["limits_w"] = { "power": full_w, "heat": -1, "throughput": full_w }
+		job["feed"] = {}
 		job["points_held"] = 0
 		shown[id] = job
 	return shown
