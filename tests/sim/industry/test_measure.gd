@@ -129,8 +129,10 @@ func test_composition_is_measured_at_a_rock_with_the_lidar() -> void:
 
 func test_measure_refuses_what_does_not_apply() -> void:
 	_reference()
+	# Docked at the station, the ship measures from the station's place, out of range of the rock
+	# rather than refused for being docked (C34).
 	var docked := sim.check({ "type": "measure", "unit": 23, "args": { "target": 2, "kind": "composition" } })
-	assert_eq(docked["reason"], "docked")
+	assert_eq(docked["reason"], "out_of_range")
 	assert_eq(sim.check({ "type": "measure", "unit": 23, "args": { "target": 2, "kind": "luck" } })["reason"],
 		"malformed_command")
 	assert_eq(sim.check({ "type": "measure", "unit": 23, "args": { "target": 2, "kind": "gravity_field" } })["reason"],
@@ -232,3 +234,47 @@ func test_a_surface_sample_is_taken_landed() -> void:
 	assert_eq([ended["type"], ended["data"].get("reason", "")], ["task_finished", ""])
 	assert_eq(state["science"]["paid"], { "surface:%d:default" % keys["Planet"]: 1 })
 	assert_eq(state["science"]["points"], 50)
+
+
+## C34: docked, a ship measures on its host's orbit. Here the host is a bare craft on the ship's own
+## low orbit of the planet, and the ship rides it.
+func _docked_to_a_host(ship: int) -> int:
+	var host := Units.create(sim._ctx, "small_craft", "Host", [0, 0, 0])
+	var unit: Dictionary = state["units"][ship]
+	state["units"][host]["frame"] = 0
+	state["units"][host]["orbit"] = unit["orbit"].duplicate(true)
+	state["units"][host]["pos_mm"] = unit["pos_mm"].duplicate()
+	unit["orbit"] = {}
+	unit["dock"] = { "port": 0, "target_unit": host, "target_port": 0 }
+	sim._ctx.index.clear()
+	state["matter_start_g"] = sim.ledger()["matter"]["total_g"]
+	return host
+
+
+func test_a_docked_ship_measures_a_gravity_field_on_its_hosts_orbit() -> void:
+	var ship := _small_world()
+	var host := _docked_to_a_host(ship)
+	var period: int = (state["units"][host]["orbit"]["period_subticks"] + OrbitMath.SUB_TICKS - 1) / OrbitMath.SUB_TICKS
+	var start := sim.current_tick()
+	assert_eq(_order(ship, "measure", { "target": keys["Planet"], "kind": "gravity_field" })["type"], "task_finished")
+	assert_eq(sim.current_tick() - start, period + 1, "one lap of the host's orbit")
+	assert_eq(state["science"]["paid"], { "gravity_field:%d" % keys["Planet"]: 1 })
+
+
+func test_undocking_ends_a_gravity_field_taken_on_the_hosts_orbit() -> void:
+	var ship := _small_world()
+	var host := _docked_to_a_host(ship)
+	sim.submit({ "type": "measure", "unit": ship, "args": { "target": keys["Planet"], "kind": "gravity_field" } })
+	sim.step(50)
+	var unit: Dictionary = state["units"][ship]
+	unit["dock"] = {}
+	unit["orbit"] = state["units"][host]["orbit"].duplicate(true)
+	sim._ctx.index.clear()
+	var ended := {}
+	for i in 5:
+		sim.step()
+		for event in sim.take_events():
+			if event["type"] == "task_cancelled":
+				ended = event
+	assert_eq(ended.get("data", {}).get("reason"), "orbit_changed", "the same orbit, but its own now")
+	assert_eq(state["science"]["paid"], {})

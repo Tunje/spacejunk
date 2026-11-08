@@ -71,7 +71,7 @@ func test_a_scan_takes_its_data_time_and_reveals_the_deposit() -> void:
 	var events := sim.take_events()
 	assert_eq(_types(events), ["deposit_found", "scan_finished", "science_gained"])
 	assert_eq(events[0]["data"], { "deposit": DEPOSIT, "item": "hematite", "grams": 200000000 })
-	assert_eq(events[1]["data"], { "target": ROCK, "deposits": [DEPOSIT] })
+	assert_eq(events[1]["data"], { "target": ROCK, "deposits": [DEPOSIT], "reveals": "legacy" })
 	assert_eq(events[2]["data"], { "kind": "survey", "target": ROCK, "key": "survey:%d" % ROCK, "points": 10 })
 	var view := sim.view()
 	assert_true(view["bodies"][ROCK]["scanned"])
@@ -113,9 +113,16 @@ func test_a_scan_changes_no_matter() -> void:
 	assert_eq(ledger["violations"], PackedStringArray())
 
 
-func test_a_scan_is_refused_while_docked() -> void:
+## C34: a docked unit scans from where it really is, its host's place, so docked at the station it
+## is out of a LIDAR's range of the rock, not refused for being docked.
+func test_a_docked_unit_scans_from_where_it_is() -> void:
 	state["units"][SHIP]["dock"] = { "port": 28, "target_unit": 8, "target_port": 12 }
-	_assert_refused(_scan(), "docked")
+	state["units"][SHIP]["at_target"] = 8
+	_assert_refused(_scan(), "out_of_range")
+	var detail: Dictionary = sim.check(_scan())["detail"]
+	assert_eq(detail["need_m"], ScanStep.LEGACY_RANGE_M)
+	assert_eq(detail["range_m"], Reach.range_mm(sim._ctx, SHIP, ROCK) / 1000)
+	assert_gt(detail["range_m"], ScanStep.LEGACY_RANGE_M)
 
 
 func test_a_scan_is_refused_away_from_the_body() -> void:
