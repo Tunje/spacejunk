@@ -524,7 +524,7 @@ func _update_paths(view: Dictionary, command: Dictionary) -> void:
 	# Velocity changes every tick in low flight, so there it is left out: the time
 	# limit below keeps a falling craft's path fresh without asking every tick. A
 	# drift's velocity only changes with a burn, so a new drift is drawn at once.
-	var low := int(shown.get("low_flight", 0))
+	var low := int(shown.get("stepped", 0))
 	var drift := "" if low != 0 else str(shown.get("vel_um_s", []))
 	var motion := "%s:%s" % [str(shown.get("orbit", {})), drift]
 	# A running burn changes the orbit or drift every tick, so while it runs the
@@ -534,7 +534,7 @@ func _update_paths(view: Dictionary, command: Dictionary) -> void:
 	var key := "%d:%s:%d:%s:%s:%s:%s" % [unit_id(), motion, low,
 		str(shown.get("landed", {})), str(shown["dock"]), str(command), str(preview.get("ok", false))]
 	var now := Time.get_ticks_msec()
-	var every := DESCENT_REFRESH_MS if int(shown.get("low_flight", 0)) != 0 else PATH_REFRESH_MS
+	var every := DESCENT_REFRESH_MS if FlightLogic.near_surface(shown) else PATH_REFRESH_MS
 	if key != _path_key:
 		_contact_tick = 0
 	elif now - _path_ms < maxi(every, _path_cost_ms * COST_GAP):
@@ -584,7 +584,7 @@ func _current_path(view: Dictionary) -> Array[PackedFloat64Array]:
 	var orbit: Dictionary = shown.get("orbit", {})
 	contact = {}
 	touchdown = PackedFloat64Array()
-	if int(shown.get("low_flight", 0)) != 0:
+	if FlightLogic.near_surface(shown):
 		return _descent_path(view)
 	if not shown.get("landed", {}).is_empty():
 		return points
@@ -634,7 +634,7 @@ func lift_off() -> void:
 
 ## The descent block: shown in low flight and on the ground.
 func _show_descent(view: Dictionary, shown: Dictionary) -> void:
-	var low := int(shown.get("low_flight", 0)) != 0
+	var low := FlightLogic.near_surface(shown)
 	var on_ground: bool = not shown.get("landed", {}).is_empty()
 	_descent_box.visible = low or on_ground
 	if not _descent_box.visible:
@@ -664,8 +664,8 @@ func _position_at(view: Dictionary, tick: int) -> PackedFloat64Array:
 func _place_world(view: Dictionary, place: Dictionary) -> Array:
 	if place.has("orbit_parent"):
 		return WorldPosition.of(view["bodies"][place["orbit_parent"]])
-	if place.has("low_flight"):
-		return WorldPosition.of(view["bodies"][place["low_flight"]])
+	if place.has("stepped"):
+		return WorldPosition.of(view["bodies"][place["stepped"]])
 	var frame: Dictionary = view.get("frames", {}).get(place.get("frame", 0), {})
 	return frame.get("world_mm", [0, 0, 0]) if not frame.is_empty() else [0, 0, 0]
 

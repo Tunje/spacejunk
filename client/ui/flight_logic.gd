@@ -52,13 +52,20 @@ static func components_text(burn: Dictionary) -> String:
 
 
 ## Where the craft is and how it is moving, in one line.
+## Whether the craft's path, its burns flown, meets the ground (A55's surface_contact_tick):
+## the condition for the descent readouts and a lander's upright heading. Stepped flight
+## alone isn't it: every burn in orbit is stepped.
+static func near_surface(unit: Dictionary) -> bool:
+	return int(unit.get("surface_contact_tick", -1)) >= 0
+
+
 static func place_text(view: Dictionary, unit_id: int) -> String:
 	var unit: Dictionary = view["units"].get(unit_id, {})
 	if unit.is_empty():
 		return ""
 	if not unit["dock"].is_empty():
 		return "Docked at %s: undock to fly" % view["units"][unit["dock"]["target_unit"]]["name"]
-	var low: int = unit.get("low_flight", 0)
+	var low: int = unit.get("stepped", 0) if FlightLogic.near_surface(unit) else 0
 	if low != 0:
 		var radius: float = float(view["bodies"].get(low, {}).get("radius_mm", 0))
 		var motion := FlightLogic.vertical_motion(unit["pos_mm"], unit["vel_um_s"])
@@ -115,7 +122,7 @@ static func preview_lines(detail: Dictionary, view: Dictionary, unit_id: int, ti
 	if detail["propellant_g"] > aboard:
 		cost += ". Only %s aboard, so it will stop short" % OrderText.tonnes(aboard)
 	var after := ""
-	if int(unit.get("low_flight", 0)) != 0 or not unit.get("landed", {}).is_empty():
+	if FlightLogic.near_surface(unit) or not unit.get("landed", {}).is_empty():
 		var motion := FlightLogic.vertical_motion(unit["pos_mm"], detail.get("vel_um_s", [0, 0, 0]))
 		after = "Then %s" % FlightLogic.motion_text(motion)
 		if detail.get("approximate", false):
