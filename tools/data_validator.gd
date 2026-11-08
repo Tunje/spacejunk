@@ -24,7 +24,7 @@ const OPTIONAL_FILES := {
 
 const ID_PATTERN := "^[a-z][a-z0-9_]*$"
 const TINT_PATTERN := "^#[0-9a-f]{6}$"
-const CARGO_CLASSES := ["ore", "goods", "propellant"]
+const CARGO_CLASSES := ["ore", "goods", "propellant", "water", "fuel", "oxidiser", "acid", "gas"]
 const REALISM := ["established", "extrapolation", "speculative", "fictional"]
 const CONNECTOR_TYPES := ["stack", "side", "dock"]
 const CONNECTOR_SIZES := ["core", "small", "medium", "large"]
