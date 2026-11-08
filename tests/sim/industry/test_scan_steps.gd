@@ -185,3 +185,15 @@ func test_old_data_with_no_steps_scans_everything_at_the_body_as_before() -> voi
 	assert_true(state["deposits"][DEPOSIT]["graded"])
 	assert_eq(_of(events, "deposit_found")[0]["data"]["grams"], state["deposits"][DEPOSIT]["remaining_g"])
 	assert_eq(state["science"]["paid"], { "survey:%d" % ROCK: 1 })
+
+
+func test_a_scan_drifting_slowly_in_range_coasts_exactly() -> void:
+	var coasted := _world()
+	for game: Sim in [sim, coasted]:
+		_stand_off(5_000, game)
+		game._state["units"][SHIP]["vel_um_s"] = [1_000_000, 0, 0]
+		game.submit(_scan())
+		game.step()
+		game.take_events()
+	_same_both_ways(sim, coasted, CLASS_TICKS + 10)
+	assert_true(sim._state["deposits"][DEPOSIT]["found"], "60 m of drift keeps it well within 10 km")
