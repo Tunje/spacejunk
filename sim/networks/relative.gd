@@ -488,3 +488,171 @@ static func _free_port(ctx: SimContext, unit_id: int) -> int:
 		if ctx.state["parts"][part]["fault"] == "" and not Units.port_in_use(ctx.state, part):
 			return part
 	return 0
+
+
+# ------------------------------------------------------------------------------ for systems (A59)
+
+## The tick "now" is for a system: the tick being run during phases 2 to 7, when rails have placed
+## everything at it, and the last completed tick otherwise (a view, a check, after a load).
+static func now_tick(ctx: SimContext) -> int:
+	return ctx.tick if ctx.phase >= 2 and ctx.phase <= 7 else int(ctx.state["tick"])
+
+
+## Tracks of a unit and a target as they are now: a straight line or a route is where its state
+## says, not moved on by a tick, since mid-tick its state may already be this tick's.
+static func _tracks_now(ctx: SimContext, unit_id: int, target: int, tick: int) -> Array:
+	var mine := unit_track(ctx, unit_id)
+	var theirs := thing_track(ctx, target)
+	for track: Dictionary in [mine, theirs]:
+		if track.has("tick"):
+			track["tick"] = tick
+	return [mine, theirs]
+
+
+static func _valid(ctx: SimContext, unit_id: int, target: int) -> bool:
+	return ctx.state["units"].has(unit_id) and target != unit_id \
+		and (ctx.state["units"].has(target) or ctx.state["bodies"].has(target))
+
+
+## The target, a unit or a body, as seen from the unit now, for systems to call as they call
+## RailSystem.world_mm (A59, for C's Reach): { parent, rel_pos_mm, rel_vel_um_s, range_mm, speed_um_s,
+## closing_um_s, lateral_um_s }, as Sim.relative gives them, from the same code. {} for an unknown
+## unit or target. A docked unit is measured as its host; a body's range is to its centre.
+static func now_between(ctx: SimContext, unit_id: int, target: int) -> Dictionary:
+	if not _valid(ctx, unit_id, target):
+		return {}
+	var tick := now_tick(ctx)
+	var tracks := _tracks_now(ctx, unit_id, target, tick)
+	return state_between(ctx, tracks[0], tracks[1], tick)
+
+
+## The range from the unit to the target now, in mm, from positions only, or -1 if either is unknown.
+static func range_now_mm(ctx: SimContext, unit_id: int, target: int) -> int:
+	if not _valid(ctx, unit_id, target):
+		return -1
+	var tick := now_tick(ctx)
+	var tracks := _tracks_now(ctx, unit_id, target, tick)
+	return range_at(ctx, tracks[0], tracks[1], tick)
+
+
+## The ticks before the range from the unit to the target could cross limit_mm, either way, for a
+## coast horizon (A59, for Reach.horizon): the gap to the limit over the most the two can close or
+## open per tick, by CoastBounds. 0 when either moves in a way no bound holds (stepped flight, a
+## drift in a frame, an open orbit), so the caller steps.
+static func range_horizon(ctx: SimContext, unit_id: int, target: int, limit_mm: int) -> int:
+	var range_mm := range_now_mm(ctx, unit_id, target)
+	if range_mm < 0:
+		return 0
+	var gap := absi(range_mm - limit_mm)
+	var place := RailSystem.unit_place(ctx.state, unit_id)
+	if place > 0 and place == RailSystem.target_place(ctx.state, target):
+		var local := _local_um_s(ctx.state, unit_id) + _local_um_s(ctx.state, target)
+		return 0 if local >= CoastBounds.UNBOUNDED_UM_S else CoastBounds.ticks_to_close(gap, local)
+	var mine := _pull_bound(ctx.state, unit_id)
+	var theirs := _pull_bound(ctx.state, target)
+	if mine[1] >= 0 and theirs[1] >= 0 and mine[0] == theirs[0]:
+		var seen := now_between(ctx, unit_id, target)
+		return _ticks_under_pull(gap, int(seen["speed_um_s"]), int(mine[1]) + int(theirs[1]))
+	var speed := _closing_bound_um_s(ctx, unit_id, target)
+	if speed >= CoastBounds.UNBOUNDED_UM_S:
+		return 0
+	return CoastBounds.ticks_to_close(gap, speed)
+
+
+## [the body a thing falls round, the most its acceleration can be in um/s^2], for things whose
+## only acceleration is that body's pull: an elliptic orbit (the pull at periapsis), a frame and
+## what sits still in it (the frame's orbit), or nothing for the landed. [0, -1] for anything else:
+## thrust, a drift, a route, an open orbit.
+static func _pull_bound(state: Dictionary, id: int) -> Array:
+	var orbit: Dictionary = {}
+	if state["units"].has(id):
+		var unit: Dictionary = state["units"][id]
+		if not unit["dock"].is_empty():
+			return _pull_bound(state, unit["dock"]["target_unit"])
+		if not unit.get("landed", {}).is_empty():
+			return [unit["landed"]["body"], 0]
+		if not unit["burn"].is_empty() or unit.get("low_flight", unit.get("stepped", 0)) != 0 				or not unit["route"].is_empty() or not unit["transfer"].is_empty():
+			return [0, -1]
+		if not unit["orbit"].is_empty():
+			orbit = unit["orbit"]
+		elif unit["frame"] != 0 and unit["vel_um_s"] == [0, 0, 0]:
+			orbit = state["frames"][unit["frame"]]["orbit"]
+	else:
+		var body: Dictionary = state["bodies"][id]
+		if not body["orbit"].is_empty():
+			orbit = body["orbit"]
+		elif body["frame"] != 0:
+			orbit = state["frames"][body["frame"]]["orbit"]
+	if orbit.is_empty() or orbit.get("hyperbolic", false):
+		return [0, -1]
+	var parent: int = orbit["parent"]
+	var periapsis := maxi(1, CoastBounds.periapsis_mm(orbit))
+	var gm: int = state["bodies"][parent]["gm"]
+	var pull_nm := OrbitMath.smul_div(OrbitMath.smul_div(gm, 1_000_000_000_000, periapsis), 1_000_000, periapsis)
+	return [parent, pull_nm / 1000 + 1]
+
+
+## The ticks before a gap can close or open, from a relative speed now and the most the relative
+## acceleration can be: v t + a t^2 / 2 <= gap, solved for t and rounded down, less a tick. Speeds and
+## the gap take CoastBounds' slack.
+static func _ticks_under_pull(gap_mm: int, speed_um_s: int, accel_um_s2: int) -> int:
+	var gap_um := (gap_mm - CoastBounds.GAP_SLACK_MM) * 1000
+	if gap_um <= 0:
+		return 0
+	var v := IntMath.mul_div(speed_um_s, CoastBounds.SPEED_SLACK_PERMILLE, 1000) + 1
+	var a := maxi(1, IntMath.mul_div(accel_um_s2, CoastBounds.SPEED_SLACK_PERMILLE, 1000))
+	# 100 (v^2 + 2 a gap), capped so it stays in range; a smaller gap only shortens the answer.
+	var limit := 90_000_000_000_000_000
+	var squared := mini(v, 3_000_000_000) * mini(v, 3_000_000_000)
+	var room := maxi(0, limit - squared) / (2 * a)
+	var disc := squared + 2 * a * mini(gap_um, room)
+	var ticks := (IntMath.isqrt(100 * disc) - 10 * v) / a
+	return clampi(ticks - 1, 0, SimSystem.NO_LIMIT)
+
+
+## The most the unit and the target can close or open per second: each one's own motion below the
+## first body both hang from, as CoastBounds bounds a unit against a body.
+static func _closing_bound_um_s(ctx: SimContext, unit_id: int, target: int) -> int:
+	var state := ctx.state
+	# Two things in one frame move with it alike: only their own motion in it counts.
+	var place := RailSystem.unit_place(state, unit_id)
+	if place > 0 and place == RailSystem.target_place(state, target):
+		return mini(_local_um_s(state, unit_id) + _local_um_s(state, target), CoastBounds.UNBOUNDED_UM_S)
+	var mine := CoastBounds.unit_base(state, unit_id)
+	if int(mine[1]) >= CoastBounds.UNBOUNDED_UM_S:
+		return CoastBounds.UNBOUNDED_UM_S
+	var base: int = mine[0]
+	var speed: int = mine[1]
+	if state["units"].has(target):
+		var theirs := CoastBounds.unit_base(state, target)
+		if int(theirs[1]) >= CoastBounds.UNBOUNDED_UM_S:
+			return CoastBounds.UNBOUNDED_UM_S
+		speed += int(theirs[1])
+		if base == 0 or int(theirs[0]) == 0:
+			return speed if base == int(theirs[0]) else CoastBounds.UNBOUNDED_UM_S
+		return mini(speed + CoastBounds.chain_um_s(state, base, theirs[0]), CoastBounds.UNBOUNDED_UM_S)
+	var body: Dictionary = state["bodies"][target]
+	if body["orbit"].is_empty() and body["frame"] != 0:
+		# A rock in a frame moves with the frame's orbit round the frame's parent.
+		var frame: Dictionary = state["frames"][body["frame"]]
+		var parent: int = frame["orbit"]["parent"]
+		var carried := CoastBounds.orbit_max_um_s(state["bodies"][parent]["gm"], frame["orbit"])
+		if base == 0:
+			return CoastBounds.UNBOUNDED_UM_S
+		return mini(speed + carried + CoastBounds.chain_um_s(state, base, parent), CoastBounds.UNBOUNDED_UM_S)
+	if base == 0:
+		return speed if body["orbit"].is_empty() else CoastBounds.UNBOUNDED_UM_S
+	return CoastBounds.relative_speed_um_s(state, unit_id, target)
+
+
+## The most a thing moves within its frame per second: a route's speed, nothing for something still
+## or a body, unbounded for a drift.
+static func _local_um_s(state: Dictionary, id: int) -> int:
+	if not state["units"].has(id):
+		return 0
+	var unit: Dictionary = state["units"][id]
+	if not unit["dock"].is_empty():
+		return _local_um_s(state, unit["dock"]["target_unit"])
+	if not unit["route"].is_empty():
+		return int(unit["route"]["speed_mm_s"]) * 1000 + 1
+	return 0 if unit["vel_um_s"] == [0, 0, 0] else CoastBounds.UNBOUNDED_UM_S
