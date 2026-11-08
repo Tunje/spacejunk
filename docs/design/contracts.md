@@ -1,6 +1,6 @@
 # Simulation Contracts
 
-Contract version: 8. Signed off by the Lead (task L7) after review by Agents A, C and D. Version 2 added the job queue (C9). Version 3 adds orbits and frames ([orbital_flight.md](orbital_flight.md) section 11, task A10). Version 4 makes jobs take work points, not time (C11). Version 5 adds research: science, theories, prototypes and variants (C12). Version 6 adds fabricating in place, `install_to` on jobs (C15). Version 7 adds an optional `grams` to `start_mining` (C19), and lets `attach_part` and `copy_fit` take parts from any unit in the docked group (C21). Version 8 lets a queued job go ahead of a starved active job (C24), and gives `set_cycle` an optional `laps` count (C25), with a one-shot plan open to tier 1 (C27), lets a cycle scan (C28), and lets jobs draw inputs from the docked group (C26). Changes go through the Lead.
+Contract version: 9. Signed off by the Lead (task L7) after review by Agents A, C and D. Version 2 added the job queue (C9). Version 3 adds orbits and frames ([orbital_flight.md](orbital_flight.md) section 11, task A10). Version 4 makes jobs take work points, not time (C11). Version 5 adds research: science, theories, prototypes and variants (C12). Version 6 adds fabricating in place, `install_to` on jobs (C15). Version 7 adds an optional `grams` to `start_mining` (C19), and lets `attach_part` and `copy_fit` take parts from any unit in the docked group (C21). Version 8 lets a queued job go ahead of a starved active job (C24), and gives `set_cycle` an optional `laps` count (C25), with a one-shot plan open to tier 1 (C27), lets a cycle scan (C28), and lets jobs draw inputs from the docked group (C26). Version 9 applies the owner's rulings of 2026-11-07 (C30): jobs run on energy, at the lowest of power, radiator heat headroom and throughput; fitting warns on mass, load, power and heat instead of refusing; and a run's inputs come through the docks by a timed feed. Changes go through the Lead.
 
 These contracts expand section 5 of `plan/workplan.md`. If the two disagree, raise it with the Lead.
 
@@ -220,24 +220,45 @@ Every command has this envelope. `submit` fills in `id` and `tick`.
 - Detaching a subtree containing a part with a job or active operation is rejected with `part_busy`.
 - A detach that would leave a unit over its cargo capacity, counting reserved space, is rejected with `cargo_full`.
 
-**Fitting.** `attach_part` checks against declared ratings, and `check` reports the same results.
-- Mass: total against the root's `max_mass_kg`.
-- Power: summed `power_kw` against generation plus battery maximum discharge.
-- Heat: summed `heat_kw` against radiator rejection.
-- Connectors: type, a `core` connector joining only another `core` connector, occupancy, and mass carried below the connector against `load_limit_kg`. Other sizes do not decide a join.
+**Fitting.** `attach_part` checks against declared ratings, and `check` reports the same results. Since v9 (C30, the owner's rulings of 2026-11-07), only what cannot be done refuses:
+- Connectors: type, and a `core` connector joining only another `core` connector (`connector_type_mismatch`, `connector_size_mismatch`), and occupancy (`connector_occupied`). Other sizes do not decide a join.
 
-Running shortfalls are still handled by shedding and faults.
+Everything else warns and allows. The attach goes through, `check`'s `detail.warnings` and the `part_attached` event's `warnings` list each one as `{ code, need_g, have_g }` or `{ code, need_w, have_w }`, and `part_attached` has no `warnings` when there are none. A `detach_part` check's `detail.warnings` gives what the unit would be left with.
+- `over_load_limit`: mass carried below a connector, the joined one or any above it, against its `load_limit_kg`. The first overloaded connector, from the joined one up, is reported.
+- `over_mass_limit`: total mass against the root's `max_mass_kg`.
+- `over_power_budget`: summed `power_kw` against generation plus battery maximum discharge.
+- `over_heat_budget`: summed `heat_kw` against radiator rejection.
+
+Running short of power or radiators is handled in play: loads shed, facilities slow (Energy below) and loops fault. What overloading does comes with A's structure work.
 
 **Building units.** A recipe output may name a unit template. When the job finishes, the unit appears docked at a free port of the facility's unit, or failing that of the unit it is docked to, and takes that unit's place (frame, orbit or landed cell). The port is reserved in phase 4, and the job blocks with `no_free_port` if none is free. B4 checks that template part mass equals recipe input mass, and that the template holds a port.
 
 **Jobs.** With `count` above 1, inputs are taken at the start of each run and `job_finished` fires per run.
-- **Inputs come from the docked group (C26).** A run's inputs may be anywhere in the job's unit's docked group, the units joined to it through dock records followed both ways, as for `attach_part` (C21). Each input is taken from the job's own unit first, then from the other members in ascending unit ID, all in phase 4 with the rest of the run. `missing_inputs` means the group as a whole lacks an input. Only what the job's own unit gives frees room there for the outputs. Outputs, held inputs and anything returned on cancel stay with the job's own unit.
+- **Inputs come through the docks (C26, C30).** A run may start once the job's unit's docked group holds its inputs, the units joined to it through dock records followed both ways (C21). A run takes what its own unit holds in phase 4. The rest is brought by a **feed**, through the docks, into the run's `held`. A run does no work, and draws no power, until all its inputs are held.
+  - Each phase 4, a feeding run keeps its route if every dock on it still joins the same ports, no other feed holds those ports, and its source still has unclaimed stock of the item. Otherwise it takes a new route: needed items in recipe order, then sources by fewest docks away and lowest unit ID. A unit docks to one other, so the path from a source is unique. A new route is not taken through a dock a `load_cargo` or `unload_cargo` runs on.
+  - The route's rate is the lowest `transfer_g_per_s` of all ports on its path. Each phase 5 it moves `Rate.amount(rate, remainder)` grams, whole units only for a whole-unit item with a credit (A42), at most what is still needed and what the source holds. Phase 6 takes them from the source into `held`.
+  - While a route holds a dock's ports, a cargo transfer between those units moves nothing that tick. The source's stock for the route is claimed in phase 4, so no other run or transfer takes it.
+  - Undocking anywhere on the path cuts the route. What has moved stays held, and the next phase 4 routes again. With no source left in the group, the run pauses on `missing_inputs`, keeping what it holds. A feed's progress is `job.feed = { need, route }`, `{}` when none is needed. `job_fed` fires when the last input arrives.
+  - `missing_inputs` means the group as a whole lacks an input. Only what the job's own unit gives frees room there for the outputs. Outputs, held inputs and anything returned on cancel stay with the job's own unit.
 
-**Work points.** A recipe has no set duration. A run needs the recipe's `work` points, and its facility does its `facility.work_per_tick` each tick it runs, so a slower facility takes longer at the same recipe. Full-size facilities do 100 a tick, and a recipe's `work` is its old `seconds` times 1000, so every recipe kept its duration on them.
-- A run sets the job's `work_left` to `work` when it starts in phase 4. Each phase 5 tick that the facility runs takes `work_per_tick` off it, floored at 0, and at 0 the run delivers in phase 6 of that tick. So a run takes `ceil(work / work_per_tick)` ticks. Work left over on the last tick is lost: nothing carries to the next run or job.
-- A shed or faulted facility does no work that tick. The run pauses with its inputs and `work_left` held, and resumes when power returns. A cancelled run loses its progress.
-- A run that builds a unit claims its port on its last tick of work, when `work_left <= work_per_tick`.
-- A running job draws `ceil(recipe power_w * work_per_tick / 100)`, so a run uses the same energy on any size of facility, and full-size facilities draw the recipe's figure.
+**Energy (C30, v9).** Work points are gone, by the owner's ruling of 2026-11-07. A run needs its recipe's `energy_j`, and gives off its `heat_j` as waste heat, both spread over the run. A facility's `power_w` is the most it draws, and its `throughput_g_per_s` is how much material it handles, on the run's input mass. A recipe may give its own lower `throughput_g_per_s`.
+- **Rate.** In phase 4, after the unit's fixed loads (ops, cores and `always_on` parts) are kept or shed (networks.md section 3), each load-making job, by facility `priority` descending and then part ID, gets `rate_w`, the lowest of:
+  - power: what is left of `budget_w`;
+  - heat: what is left of the heat headroom, times `energy_j / heat_j`. The headroom is the healthy radiators' `reject_w`, less the `heat_w` of the kept fixed loads and an allowance of `TICKS_PER_SECOND` watts for rounding, floored at 0. There is no heat limit (shown as -1) when `heat_j` is 0;
+  - throughput: `throughput_g_per_s × energy_j / input grams`, never above the facility's `power_w`. A run of no input mass is held by `power_w` alone.
+- **`limit`** is the first of `power`, `heat` and `throughput` that equals `rate_w` and is below the power left. It is `feed` while the run takes its inputs through the docks. `limits_w = { power, heat, throughput }`.
+- **Drawing.** The job draws `rate_w`, and its facility puts `mul_div(rate_w, heat_j, energy_j)` into the heat loop instead of its module's `heat_w`. Jobs share the power and heat left in that order.
+  - A job given no power is shed like any load (`power_shed`, the shed hold) and pauses on `no_power`.
+  - One held at 0 by heat alone is not shed, and pauses on `no_heat_headroom`.
+- **Progress.** A run sets `energy_left_j` to `energy_j` when it starts. Each phase 5 takes `Rate.amount(rate_w, energy_remainder)` off it. At 0 the run delivers in phase 6 of that tick. Energy left over on the last tick is lost.
+  - A shed or faulted facility does no work that tick, and the run pauses with its inputs and progress held. A cancelled run loses its progress.
+- **Building a unit.** A run that builds a unit claims its port when `energy_left_j <= Rate.amount(rate_w, energy_remainder)` at last tick's rate. If its rate rises past that on a tick it has no port, it keeps 1 J, and claims next tick.
+- **Until B29 gives every recipe and facility these fields,** they are derived from the old ones, which keeps every run's energy and duration:
+  - `energy_j = power_w × work / 1000`;
+  - `heat_j = energy_j ×` the facility's `heat_w / power_w`;
+  - with no `throughput_g_per_s`, the throughput limit is the old draw, `ceil(power_w × work_per_tick / 100)`.
+
+  Derived research recipes scale `energy_j` and `heat_j` as they scale `work`.
 
 **Science (C12).** A finished measurement pays science points, held in `state.science = { points, earned, spent, paid }`.
 - `measure` kinds come from `data/science.json`. `survey` is the scan step itself, and a finished scan pays it.
@@ -347,7 +368,9 @@ Events are ordered by phase, then the event's `unit`, then emission order. Unit 
 | `design_qualified` | `design` |
 | `variant_designed` | `variant`, `base`, `ideas` (unit 0) |
 | `idea_discovered` | `base`, `idea` |
-| `part_attached`, `part_detached` | `part` |
+| `part_attached` | `part`, and `warnings` (list of `{ code, need_g or need_w, have_g or have_w }`) when the fit is over a limit (C30) |
+| `part_detached` | `part` |
+| `job_fed` | `job`: the last of a run's inputs has come through the docks (C30) |
 | `fit_copied` | `source`, `attached` (new part IDs), `missing` (`{ item: count }`), `refused` (list of `{ source_part, item, reason }`) |
 | `power_shed` | `module`, `reason` |
 | `power_restored` | `module` |
@@ -358,7 +381,7 @@ Each failure emits exactly one event. Fitting failures emit `attach_failed`, and
 
 `reason` is a stable lowercase code, with display text held in the client. `detail` is an optional Dictionary of integers, such as `{ need_w, have_w }`, so the player sees numbers as well as a code.
 
-Known reason codes: `over_mass_limit`, `over_power_budget`, `over_heat_budget`, `over_heat_limit`, `over_load_limit`, `connector_type_mismatch`, `connector_size_mismatch`, `connector_occupied`, `not_whole_unit`, `no_free_port`, `no_propellant`, `cargo_full`, `deposit_exhausted`, `root_part`, `part_busy`, `float_in_command`, `unknown_unit`, `unknown_part`, `invalid_target`, `unknown_command`, `malformed_command`, `queue_full`, `job_busy`, `fit_mismatch`, `parent_not_fitted`, and for research `theory_locked`, `already_proven`, `already_qualified`, `design_unqualified`, `idea_locked`, `variant_exists`, `stat_out_of_range`, `missing_points`, `missing_evidence` and `orbit_changed` (C12), and `install_blocked` (C15). Autonomy adds its own codes, job statuses and view fields in `docs/design/autonomy.md` sections 3, 8, 9 and 10. `connector_size_mismatch` means a `core` connector met a non-core one.
+Known reason codes: `over_mass_limit`, `over_power_budget`, `over_heat_budget`, `over_heat_limit`, `over_load_limit`, `connector_type_mismatch`, `connector_size_mismatch`, `connector_occupied`, `not_whole_unit`, `no_free_port`, `no_propellant`, `cargo_full`, `deposit_exhausted`, `root_part`, `part_busy`, `float_in_command`, `unknown_unit`, `unknown_part`, `invalid_target`, `unknown_command`, `malformed_command`, `queue_full`, `job_busy`, `fit_mismatch`, `parent_not_fitted`, and for research `theory_locked`, `already_proven`, `already_qualified`, `design_unqualified`, `idea_locked`, `variant_exists`, `stat_out_of_range`, `missing_points`, `missing_evidence` and `orbit_changed` (C12), and `install_blocked` (C15), and `no_heat_headroom` (C30). Since C30, `over_mass_limit`, `over_load_limit`, `over_power_budget` and `over_heat_budget` are fitting warnings, not refusals (section 5). Autonomy adds its own codes, job statuses and view fields in `docs/design/autonomy.md` sections 3, 8, 9 and 10. `connector_size_mismatch` means a `core` connector met a non-core one.
 
 Orbit reason codes:
 - `unsupported_orbit`: a `move_to` target that is on an orbit or in another frame, a burn whose result is exactly parabolic (which neither orbit form can hold, and which rounding makes vanishingly rare), and the planner's limits: a hyperbolic orbit, an eccentric target, or a trip across spheres of influence out of the planet's plane. Orbits in different planes round one parent are a plane change, not a refusal (A41a), and a bound eccentric orbit round the target's own parent leaves on an arc (A49).
@@ -411,8 +434,9 @@ This shape is frozen. Fields may be added, but changes or removals go through th
   frames = { 6: { name = "...", radius_mm = 0, orbit = {}, pos_mm = [], world_mm = [] } },
   deposits = { 12: { body = 3, item = "hematite", remaining_g = 0, hardness = 0 } },
   jobs = { 30: { unit = 2, facility = 8, recipe = "...", count_left = 1, status = "running",
-                 reason = "", start_tick = 0, queue_pos = 0, work_left = 0, work = 0,
-                 work_per_tick = 0, points_held = 0, install_to = {} } },
+                 reason = "", start_tick = 0, queue_pos = 0, energy_j = 0, energy_left_j = 0,
+                 rate_w = 0, limit = "", limits_w = {}, feed = {}, points_held = 0, install_to = {},
+                 work = 0, work_left = 0, work_per_tick = 0 } },
   tasks = {},
   science = { points = 0, earned = 0, spent = 0, paid = { "survey:3": 1 }, evidence = { survey = 1 } },
   research = { theories = { "...": 0 }, designs = { "...": "prototype" },
@@ -428,7 +452,7 @@ This shape is frozen. Fields may be added, but changes or removals go through th
 - While waiting, the op keeps the trip it will fly as `plan`. It is the same dictionary `quote` gives, so a save mid-wait leaves on exactly the same legs. While `burning`, `part` is the thruster, which draws power and gives heat like any running load. A shed thruster gives no thrust that tick.
 - A unit also shows `vel_um_s`, its local velocity in a frame. It shows `burns`, its planned burns in tick order as `{ id, tick, prograde_um_s, normal_um_s, radial_um_s }`. And it shows `burn`, the running burn as `{ id, dv_um_s, done_um_s, start_tick }`, or `{}`.
 - A part's `state`: `on`, `shed` or `fault`.
-- A job's `status`: `queued`, `waiting`, `running`, `paused` or `cancelling`. `queue_pos` is its place in its facility's queue, 0 for the active job. `work_left` is the current run's work still to do, 0 until a run starts. `work` is one run's total, from the recipe, and `work_per_tick` is the facility's rate, so a client shows progress as `1 - work_left / work` and the time left as `ceil(work_left / work_per_tick)` ticks. `points_held` is the science points a lab run holds. `install_to` is `{}`, or where the job builds its part in place.
+- A job's `status`: `queued`, `waiting`, `running`, `paused` or `cancelling`. `queue_pos` is its place in its facility's queue, 0 for the active job. `energy_left_j` is the current run's energy still to put in, 0 until a run starts, and `energy_j` is one run's total (C30). `rate_w` is the power the run went at this tick, `limit` what held it (`power`, `heat`, `throughput`, or `feed` while its inputs come through the docks) and `limits_w` all three, with `heat` -1 when the run makes no heat. A client shows progress as `1 - energy_left_j / energy_j` and the time left at the present rate as `ceil(energy_left_j × TICKS_PER_SECOND / rate_w)` ticks. `feed` is `{}` or `{ need, route }` (section 5). `work`, `work_left` and `work_per_tick` are deprecated aliases kept until the client moves: `energy_j`, `energy_left_j`, and the joules a tick at `rate_w` or, with none yet, at the throughput limit. `points_held` is the science points a lab run holds. `install_to` is `{}`, or where the job builds its part in place.
 - `science.evidence` counts, per kind, the different keys that have paid. `research` is the state's research map as it is.
 - Each unit has one inventory, keyed by item. Capacity is by cargo class, summed across its storage modules.
 - `pos_mm` is in the object's own place (section 1): relative to its orbit's parent, local to its frame, or in the old world. `world_mm` adds up the chain to the root body, for drawing a system map. Floats are for drawing only: an orbit is drawn from its record with 64-bit floats as `position_float` in tests/sim/kernel/test_orbit_math.gd does, never Godot's 32-bit `Vector3`.
@@ -473,7 +497,7 @@ Task B3 owns the schemas. These fields are fixed here because other agents depen
 - **`realism`:** `established`, `extrapolation`, `speculative` or `fictional`.
 - **Connectors:** `id` (unique within a module), `type` (`stack`, `side`, `dock`), `size`, `pos_mm`, `facing`, `up`, `load_limit_kg`. `facing` and `up` are axis values (+/-x, +/-y, +/-z), written in the module's own frame. A child part is turned as it mates, so that in the craft's frame the connectors have opposite facings and equal ups. `load_limit_kg` is the mass carried below the connector.
 - **Collision:** `{ shape, center_mm, size_mm }`, where `shape` is `box` or `cylinder`, with the cylinder axis along the module's Y. `size_mm` is full extents `[x, y, z]`; a cylinder's diameter is `x` and its height is `y`. Placeholders use the same shape. B3 may extend it.
-- **Recipes:** `id`, `facility`, `work`, `power_kw`, `inputs`, `outputs`, `abstract`. `work` is a whole number of work points, at least 1. Every facility capability has `work_per_tick`, a whole number of at least 1. An output may route straight to a declared sink, such as `slag_vent`, instead of an inventory. The validator requires a route only for waste, an item no recipe takes as an input, such as slag. Any other route, such as a test's goods to `test_consumed`, is the recipe's choice. A recipe may also take `points`, a whole number above 0, and may have the outputs `{ theory }` and `{ qualifies }` (section 5).
+- **Recipes:** `id`, `facility`, `energy_kj`, `heat_kj`, `inputs`, `outputs`, `abstract`, and optionally `throughput_kg_per_s` (C30). `energy_kj` is a whole number of at least 1, `heat_kj` one of at least 0, and either may exceed the other. Every facility capability has `throughput_kg_per_s`, above 0, on a run's input mass. Until B29 lands, a recipe may still give `work` and `power_kw` instead, and a facility `work_per_tick`, from which the energy fields are derived (section 5). An output may route straight to a declared sink, such as `slag_vent`, instead of an inventory. The validator requires a route only for waste, an item no recipe takes as an input, such as slag. Any other route, such as a test's goods to `test_consumed`, is the recipe's choice. A recipe may also take `points`, a whole number above 0, and may have the outputs `{ theory }` and `{ qualifies }` (section 5).
 - **No nulls.** Data holds no null values. An optional field is left out, so an idea that needs no theory has no `theory`.
 - `visual` is read by the client only. The simulation never reads it.
 

@@ -120,10 +120,11 @@ func _part_c() -> void:
 	_job(FABRICATOR, "processor", 24)
 	_job(FABRICATOR, "heat_radiator_mk1", 1)
 	_job(FABRICATOR, "mining_laser_mk1", 1)
+	# Check 10 (C30, the owner's ruling): the second laser fits, warned it is over the heat budget,
+	# and a radiator brings the ship back within it.
 	_attach(SHIP, "mining_laser_mk1", HULL, "side_b_nz", "mount")
-	mark("fit_failed")
+	mark("fit_warned")
 	_attach(SHIP, "heat_radiator_mk1", HULL, "side_c_nx", "mount")
-	_attach(SHIP, "mining_laser_mk1", HULL, "side_b_nz", "mount")
 	mark("fit_fixed")
 
 
@@ -206,9 +207,10 @@ func mark(label: String) -> void:
 	marks[label] = sim.view()
 
 
-func first_event(type: String) -> Dictionary:
+## The first event of `type`, or of `type` that `matching` accepts.
+func first_event(type: String, matching: Callable = Callable()) -> Dictionary:
 	for event in events:
-		if event["type"] == type:
+		if event["type"] == type and (not matching.is_valid() or matching.call(event)):
 			return event
 	return {}
 
@@ -283,9 +285,7 @@ func _job(facility: int, recipe: String, count: int) -> void:
 		return
 	var id := _command("start_job", STATION, { "facility": facility, "recipe": recipe, "count": count })
 	var start := sim.current_tick() + 1
-	var rate: int = sim.defs()["modules"][_def_of(sim.view()["units"][STATION]["parts"], facility)]["capabilities"] \
-		["facility"]["work_per_tick"]
-	var limit: int = ceili(float(sim.defs()["recipes"][recipe]["work"]) / rate) * count + ORDER_LIMIT_TICKS
+	var limit: int = JobSystem.machine_ticks(sim._ctx, facility, recipe) * count + ORDER_LIMIT_TICKS
 	var job := 0
 	var left := count
 	for i in limit:

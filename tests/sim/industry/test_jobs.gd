@@ -9,6 +9,9 @@ const SHIP := 23
 const RUN_TICKS := 3
 ## A full-size facility's work_per_tick, so a recipe of RUN_TICKS * FULL_RATE work takes RUN_TICKS.
 const FULL_RATE := 100
+## Wiring's energy, 50 kW for RUN_TICKS ticks until B29 (C30), and what one tick puts in.
+const WIRING_J := 15_000
+const TICK_J := 5_000
 const HEMATITE_RUN_G := 100000
 const IRON_RUN_G := 69000
 const SLAG_RUN_G := 31000
@@ -92,12 +95,18 @@ func test_a_run_turns_inputs_into_outputs_in_its_ticks() -> void:
 	assert_eq(sim.take_events()[0]["data"], { "job": job, "command": command_id })
 	assert_eq(_stock("copper"), 0, "inputs move at the start")
 	assert_eq(sim.ledger()["matter"]["jobs_g"], COPPER_RUN_G)
-	assert_eq(sim.view()["jobs"][job], {
+	var shown: Dictionary = sim.view()["jobs"][job].duplicate()
+	var limits: Dictionary = shown["limits_w"]
+	shown.erase("limits_w")
+	assert_eq(shown, {
 		"unit": STATION, "facility": FABRICATOR, "recipe": "wiring", "count_left": 1,
 		"status": "running", "reason": "", "start_tick": 1, "queue_pos": 0,
-		"work_left": (RUN_TICKS - 1) * FULL_RATE, "work": RUN_TICKS * FULL_RATE, "work_per_tick": FULL_RATE,
+		"energy_j": WIRING_J, "energy_left_j": WIRING_J - TICK_J, "rate_w": 50_000, "limit": "throughput",
+		"feed": {}, "work_left": WIRING_J - TICK_J, "work": WIRING_J, "work_per_tick": TICK_J,
 		"points_held": 0, "install_to": {},
 	})
+	assert_eq(limits["throughput"], 50_000)
+	assert_gt(limits["power"], 50_000, "power to spare")
 	_step_balanced(RUN_TICKS - 2)
 	assert_eq(_stock("wiring"), 0)
 	_step_balanced(1)
@@ -163,7 +172,7 @@ func test_a_later_run_waits_for_inputs_without_restarting() -> void:
 	var job := _started("wiring", 2)
 	sim.step(RUN_TICKS)
 	assert_eq(sim.view()["jobs"][job]["reason"], "missing_inputs")
-	assert_eq(sim.view()["jobs"][job]["work_left"], 0, "no run in progress")
+	assert_eq(sim.view()["jobs"][job]["energy_left_j"], 0, "no run in progress")
 
 
 func test_a_job_waits_for_output_space() -> void:
@@ -209,7 +218,7 @@ func test_a_faulted_facility_pauses_the_run_with_inputs_held() -> void:
 	var shown: Dictionary = sim.view()["jobs"][job]
 	assert_eq(shown["status"], "paused")
 	assert_eq(shown["reason"], "module_fault")
-	assert_eq(shown["work_left"], (RUN_TICKS - 1) * FULL_RATE, "a paused run keeps its progress")
+	assert_eq(shown["energy_left_j"], WIRING_J - TICK_J, "a paused run keeps its progress")
 	assert_eq(sim.ledger()["matter"]["jobs_g"], COPPER_RUN_G)
 	assert_eq(_types(sim.take_events()), ["job_paused"])
 
@@ -218,7 +227,7 @@ func test_a_faulted_facility_pauses_the_run_with_inputs_held() -> void:
 	var events := sim.take_events()
 	assert_eq(_types(events), ["job_resumed"])
 	assert_eq(events[0]["data"]["reason"], "module_fault")
-	assert_eq(sim.view()["jobs"][job]["work_left"], FULL_RATE, "2 of 3 ticks of work were done")
+	assert_eq(sim.view()["jobs"][job]["energy_left_j"], TICK_J, "2 of 3 ticks of work were done")
 	sim.step()
 	assert_eq(_stock("wiring"), WIRING_G)
 
@@ -232,11 +241,14 @@ func test_a_waiting_job_does_not_start_on_a_faulted_facility() -> void:
 	assert_eq(_stock("copper"), COPPER_RUN_G)
 
 
+## A run takes what power is left (C30), so it is shed only when there is none: here the station's
+## battery is flat and its generators have failed.
 func test_lost_power_pauses_a_run_and_it_resumes_after_the_hold() -> void:
 	_give("copper", COPPER_RUN_G)
 	state["parts"][18]["stored_j"] = 0
-	var recipe: Dictionary = defs["recipes"]["wiring"]
-	recipe["power_w"] = 1000000
+	var generators: Array = UnitIndex.of(sim._ctx, STATION)["generators"]
+	for entry: Array in generators:
+		state["parts"][entry[0]]["fault"] = "test_fault"
 	var job := _started()
 	assert_eq(sim.view()["jobs"][job]["status"], "paused")
 	assert_eq(sim.view()["jobs"][job]["reason"], "no_power")
@@ -245,7 +257,8 @@ func test_lost_power_pauses_a_run_and_it_resumes_after_the_hold() -> void:
 	assert_true(_types(events).has("job_paused"))
 	assert_eq(sim.ledger()["matter"]["jobs_g"], COPPER_RUN_G)
 
-	recipe["power_w"] = 50000
+	for entry: Array in generators:
+		state["parts"][entry[0]]["fault"] = ""
 	sim.step(PowerSystem.SHED_HOLD_SECONDS * Sim.TICKS_PER_SECOND)
 	assert_eq(sim.view()["jobs"][job]["status"], "running")
 	sim.step(RUN_TICKS - 1)
@@ -324,7 +337,7 @@ func test_a_cancel_with_no_room_waits_on_the_job() -> void:
 	var shown: Dictionary = sim.view()["jobs"][job]
 	assert_eq(shown["status"], "cancelling")
 	assert_eq(shown["reason"], "cargo_full")
-	assert_eq(shown["work_left"], 0, "the cancelled run's progress is gone")
+	assert_eq(shown["energy_left_j"], 0, "the cancelled run's progress is gone")
 	assert_eq(sim.ledger()["matter"]["jobs_g"], COPPER_RUN_G)
 	assert_eq(sim.view()["units"][STATION]["cargo"]["goods"]["reserved_g"], 0, "the reservation is gone")
 	assert_eq(state["units"][STATION]["demand_w"], 7000, "a cancelling job draws nothing")

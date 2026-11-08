@@ -288,14 +288,16 @@ Jobs are not tasks. They belong to a facility part, have no owner task and need 
 | Inputs absent | `waiting` | `missing_inputs` | All inputs are present in the docked group (C26) |
 | No room for outputs | `waiting` | `output_full` | Room appears |
 | Facility faulted | `paused` | `module_fault` | State leaves `fault` |
+| Feed cut, nothing left to feed from | `paused` | `missing_inputs` | A unit of the docked group holds what the run still needs (C30) |
 | Facility shed | `paused` | `no_power` | State is `on` |
+| No radiator headroom for the run's heat | `paused` | `no_heat_headroom` | The radiators can reject some of its heat again (C30) |
 | No port at run end | `paused` | `no_free_port` | A port is granted |
 
 Rules:
 - A facility holds an ordered queue of up to 16 jobs (C9). Only the job at `queue_pos` 0 is active. `queue_job` adds to the end, `move_job` reorders and `cancel_job` removes. The queue rules are in [contracts.md](contracts.md) section 5. A job that is `waiting` on `missing_inputs` can be moved back, so a stuck job does not hold up the jobs behind it. It need not be: while it waits on `missing_inputs` or `output_full` with no run in progress, the first queued job that can run goes ahead of it one run at a time, with `job_went_ahead`, and it takes the facility back when it can start (C24).
 - `start_job` does not check stock. It is rejected only with `facility_busy` if the facility has a job, or for an unknown recipe or wrong facility. A job can wait for ore that is still being hauled, so a large `count` is how a player sets up a production line.
 - Each entry into `waiting` or `paused` emits `job_paused`, and each exit emits `job_resumed`. Moving to `running` for the first time emits `job_started`, and later runs emit nothing further.
-- Work is counted in work points, held in the job as `work_left`. The facility takes its `work_per_tick` off it each tick it runs, and nothing while paused (contracts section 5).
+- A run needs energy, held in the job as `energy_left_j`. Each tick it takes what it runs at, the lowest of the power it is given, its radiator heat limit and the machine's throughput, and nothing while paused or still feeding (C30, contracts section 5). While its inputs come through the docks it is `running` with `limit` `feed`.
 - A job with `missing_inputs` can run forever. It costs nothing and is not an error.
 - `detach_part` is rejected with `part_busy` if the subtree has a job, including a `cancelling` one. Cancel it first. Matter in a job must have a place to go.
 
@@ -337,7 +339,7 @@ Each failure emits exactly one event (contracts section 6), and the view shows t
 
 ## 11. Save and determinism
 
-All of this is ordinary state, and saves with no special handling: tasks, `moved_g`, reservations, `cycle_task`, `last_cycle` and job `work_left`. The port queue is not stored. It is derived from `since_tick` and entity ID each tick.
+All of this is ordinary state, and saves with no special handling: tasks, `moved_g`, reservations, `cycle_task`, `last_cycle` and job `energy_left_j` and `feed`. The port queue is not stored. It is derived from `since_tick` and entity ID each tick.
 
 The order of `steps` has meaning and is kept (contracts section 8).
 

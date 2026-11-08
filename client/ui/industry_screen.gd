@@ -184,6 +184,11 @@ func open_picker(recipe: Dictionary) -> void:
 			var button := _add_button(_picker, "%s: %s (%s, %s)" % [names[slot["part"]], slot["connector"], slot["type"], slot["size"]])
 			button.disabled = not check["ok"]
 			button.tooltip_text = "" if check["ok"] else OrderText.reason(check["reason"], check.get("detail", {}))
+			# C30: a spot over the craft's limits is allowed; say what it costs.
+			var warnings: Array = check.get("detail", {}).get("warnings", []) if check["ok"] else []
+			if not warnings.is_empty():
+				button.tooltip_text = "Allowed, but: %s" % FittingLogic.warnings_text(warnings)
+				button.modulate = ClientTheme.GOLD
 			button.pressed.connect(_pick_slot.bind(recipe, command))
 			_slot_buttons.append({ "slot": slot, "unit": target, "button": button, "command": command })
 	var close_button := _add_button(_picker, "Cancel")

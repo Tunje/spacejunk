@@ -33,3 +33,4 @@ func test_the_station_is_built_fitted_and_holds_ore() -> void:
 	for def in ["lidar_mk1", "solar_panel_mk1", "heat_radiator_mk1", "ore_container_mk1"]:
 		assert_has(defs, def)
 	assert_gt(player.held(player.station, "hematite"), 0, "ore hauled in")
+	assert_true(player.main.goal_panel.tracker.done.has("fix"), "a fit over the limits, then brought back (C30)")

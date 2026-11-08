@@ -80,22 +80,24 @@ func _assert_refused(command: Dictionary, reason: String, event_type: String = "
 	assert_eq(state["next_entity_id"], before, "no ID issued")
 
 
-func test_check_10_fails_on_heat_then_a_radiator_fixes_it() -> void:
+## C30, the owner's ruling: over the heat budget is a warning, not a refusal. The laser goes on,
+## warned, and a radiator then brings the ship back within its budget.
+func test_check_10_warns_on_heat_then_a_radiator_clears_it() -> void:
 	_give(STATION, "mining_laser_mk1")
 	_give(STATION, "heat_radiator_mk1")
 	var laser := _attach(SHIP, "mining_laser_mk1", HULL, "side_b_nz")
-	var failed := _run(laser)
-	assert_eq(failed["type"], "attach_failed")
-	assert_eq(failed["data"]["reason"], "over_heat_budget")
-	assert_eq(failed["data"]["item"], "mining_laser_mk1")
-	assert_eq(failed["data"]["detail"]["need_w"], 280_000)
-	assert_eq(failed["data"]["detail"]["have_w"], 200_000)
-	assert_eq(failed["data"]["detail"]["power_rated_w"], 322_000)
-	assert_eq(failed["data"]["detail"]["power_budget_w"], 420_000)
+	var checked := sim.check(laser)
+	assert_true(checked["ok"])
+	assert_eq(checked["detail"]["power_rated_w"], 322_000)
+	assert_eq(checked["detail"]["power_budget_w"], 420_000)
+	assert_eq(checked["detail"]["warnings"], [{ "code": "over_heat_budget", "need_w": 280_000, "have_w": 200_000 }])
+	var attached := _run(laser)
+	assert_eq(attached["type"], "part_attached")
+	assert_eq(attached["data"]["warnings"], [{ "code": "over_heat_budget", "need_w": 280_000, "have_w": 200_000 }])
 	var radiator := _run(_attach(SHIP, "heat_radiator_mk1", HULL, "side_c_nx"))
 	assert_eq(radiator["type"], "part_attached")
+	assert_false(radiator["data"].has("warnings"), "within every budget again")
 	assert_eq(sim.view()["units"][SHIP]["fit"]["heat_budget_w"], 400_000)
-	assert_eq(_run(laser)["type"], "part_attached")
 	assert_eq(Units.installed_mass(state, sim._ctx.defs, SHIP), 5_180_000)
 
 
@@ -172,43 +174,39 @@ func test_a_part_cannot_mate_to_a_dock_connector() -> void:
 	_assert_refused(command, "connector_type_mismatch", "attach_failed")
 
 
-func test_over_mass_limit_counts_inventory() -> void:
+func test_over_mass_limit_counts_inventory_and_warns() -> void:
 	_give(STATION, "lidar_mk1")
 	_own_defs()["modules"]["starter_hull"]["capabilities"]["max_mass_g"] = 5_600_000
 	var event := sim.check(_attach(SHIP, "lidar_mk1", HULL, "side_c_pz"))
-	assert_eq(event["reason"], "over_mass_limit")
-	assert_eq(event["detail"]["need_g"], 5_680_000)
-	assert_eq(event["detail"]["have_g"], 5_600_000)
+	assert_eq(_warning(event, "over_mass_limit"), { "code": "over_mass_limit", "need_g": 5_680_000, "have_g": 5_600_000 })
 
 
 func test_moving_a_part_within_a_unit_does_not_add_mass() -> void:
 	_give(SHIP, "lidar_mk1")
 	_own_defs()["modules"]["starter_hull"]["capabilities"]["max_mass_g"] = 5_680_000
-	assert_true(sim.check(_attach(SHIP, "lidar_mk1", HULL, "side_c_pz", SHIP))["ok"])
+	assert_eq(sim.check(_attach(SHIP, "lidar_mk1", HULL, "side_c_pz", SHIP))["detail"]["warnings"], [])
 
 
-func test_over_power_budget() -> void:
+func test_over_power_budget_warns() -> void:
 	_give(STATION, "lidar_mk1")
 	var defs := _own_defs()
 	defs["modules"]["battery_bank_mk1"]["capabilities"]["battery"]["max_discharge_w"] = 0
 	defs["modules"]["lidar_mk1"]["power_w"] = 200_000
 	defs["modules"]["lidar_mk1"]["heat_w"] = 0
 	var checked := sim.check(_attach(SHIP, "lidar_mk1", HULL, "side_c_pz"))
-	assert_eq(checked["reason"], "over_power_budget")
-	assert_eq(checked["detail"]["have_w"], 120_000)
+	assert_eq(_warning(checked, "over_power_budget")["have_w"], 120_000)
 
 
-func test_load_limit_on_the_joining_connector() -> void:
+func test_load_limit_on_the_joining_connector_warns() -> void:
 	_give(STATION, "lidar_mk1")
 	var defs := _own_defs()
 	for connector: Dictionary in defs["modules"]["starter_hull"]["connectors"]:
 		connector["load_limit_g"] = 50_000
 	var checked := sim.check(_attach(SHIP, "lidar_mk1", HULL, "side_c_pz"))
-	assert_eq(checked["reason"], "over_load_limit")
-	assert_eq(checked["detail"]["need_g"], 100_000)
+	assert_eq(_warning(checked, "over_load_limit")["need_g"], 100_000)
 
 
-func test_load_limit_counts_every_connector_above() -> void:
+func test_load_limit_counts_every_connector_above_and_warns() -> void:
 	_clear(SHIP, "propellant")
 	_give(STATION, "propellant_tank_mk1")
 	_run(_detach(SHIP, THRUSTER))
@@ -217,8 +215,17 @@ func test_load_limit_counts_every_connector_above() -> void:
 		if connector["id"] == "stack_bottom":
 			connector["load_limit_g"] = 300_000
 	var checked := sim.check(_attach(SHIP, "propellant_tank_mk1", TANK, "stack_bottom"))
-	assert_eq(checked["reason"], "over_load_limit")
-	assert_eq(checked["detail"]["need_g"], 400_000)
+	assert_eq(_warning(checked, "over_load_limit")["need_g"], 400_000)
+
+
+## The warning with `code` on a check that went through (C30), or {} after a failed assertion.
+func _warning(checked: Dictionary, code: String) -> Dictionary:
+	assert_true(checked["ok"], "warned, not refused")
+	for warning: Dictionary in checked.get("detail", {}).get("warnings", []):
+		if warning["code"] == code:
+			return warning
+	fail_test("no %s warning in %s" % [code, str(checked)])
+	return {}
 
 
 func test_attach_refusals_that_are_not_fitting_failures() -> void:

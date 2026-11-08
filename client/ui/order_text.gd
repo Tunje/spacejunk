@@ -46,6 +46,7 @@ const REASONS: Dictionary = {
 	"no_core": "No AI core assigned",
 	"no_free_port": "No free docking port",
 	"no_power": "Not enough power",
+	"no_heat_headroom": "No radiator headroom left for its heat",
 	"no_propellant": "Out of propellant",
 	"no_safe_step": "Cannot resume safely",
 	"not_docked": "Not docked",
