@@ -313,4 +313,11 @@ So, my proposal:
 8. **Hydrolox's Δv drop stays real.** It's settled in the stage 4 rebalance, with a bigger tank or a different start. The start's propellant doesn't change before then.
 9. **B28 isn't merged.** Its 9.7 and its gap rulings are now in balance.md, and Part G is rewritten after A53 and C30.
 
-**Still open, for B30 or later:** the electrolyser's catalyst and electrolyte. Real electrolysers use nickel or platinum electrodes and a potassium hydroxide or membrane electrolyte, and the cluster has none of those. The B29 electrolyser is built from steel, copper and electronics. A real answer is either a seed of catalyst carried like the chips, or the belt's metals. That's a question for the owner.
+10. **Electrodes and electrolyte, decided by the Lead.** The electrolyser is alkaline, with nickel-plated steel electrodes.
+   - **Nickel from the cluster.** Chondritic rock carries real iron-nickel metal. Red Rock's ore becomes about 82% hematite, 8% Fe-Ni metal at about 10% nickel, and 10% silica, so 0.8% nickel in all.
+   - **The metal rides through hydrogen reduction** into the sponge iron. A carbonyl step (the Mond process) then recovers the nickel before steelmaking:
+     - carbon monoxide takes up nickel as Ni(CO)₄ at about 50 °C;
+     - the gas gives the nickel back at about 230 °C;
+     - the CO is reused.
+   - **The KOH electrolyte is a seed stock** carried in the probe's hold, like the chips. It's lost slowly, at a realistic rate, so it needs a top-up in time. Potassium from the belt can replace it later.
+   - **These changes come in B30,** since they touch the start: the ore's composition, the reduction and carbonyl recipes, the electrolyser's recipe, its electrolyte and its loss rate, and the seed stock.
