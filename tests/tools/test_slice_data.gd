@@ -232,7 +232,8 @@ func test_refining_fills_no_storage() -> void:
 				assert_eq(output.get("sink"), "slag_vent")
 
 
-## The chains (B29) carry real figures: electrolysis and liquefaction at 66.4 kWh per kg of hydrogen,
+## The chains (B29) carry real figures: electrolysis and liquefaction at 69.2 kWh per kg of hydrogen
+## (55 to split, 11 to liquefy the hydrogen, and 0.4 a kg for the oxygen's 7.9 kg),
 ## and the three loops close.
 func test_the_chains_carry_real_energy_and_close_their_loops() -> void:
 	var recipes := {}
@@ -241,7 +242,7 @@ func test_the_chains_carry_real_energy_and_close_their_loops() -> void:
 	var electrolysis: Dictionary = recipes["electrolyse_water"]
 	var hydrogen_kg: float = electrolysis["outputs"].filter(
 		func(o: Dictionary) -> bool: return o["item"] == "hydrogen")[0]["kg"]
-	assert_almost_eq(electrolysis["energy_kj"] / 3600.0 / hydrogen_kg, 66.4, 0.5, "kWh per kg of hydrogen")
+	assert_almost_eq(electrolysis["energy_kj"] / 3600.0 / hydrogen_kg, 69.2, 0.1, "kWh per kg of hydrogen")
 	# Hydrogen reduces iron and comes back as water; carbon reduces silica and comes back from CO;
 	# acid leaches olivine and comes back from the salt.
 	for loop: Array in [["reduce_hematite", "hydrogen", "water"], ["reduce_silica", "carbon", "carbon_monoxide"],

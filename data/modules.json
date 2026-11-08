@@ -103,7 +103,8 @@
       "capabilities": {
         "facility": {
           "type": "arc_furnace",
-          "throughput_kg_per_s": 0.1
+          "throughput_kg_per_s": 0.1,
+          "work_per_tick": 100
         }
       },
       "fabrication": {
@@ -702,7 +703,8 @@
       "capabilities": {
         "facility": {
           "type": "electrolyser",
-          "throughput_kg_per_s": 0.01
+          "throughput_kg_per_s": 0.01,
+          "work_per_tick": 100
         }
       },
       "fabrication": {
@@ -989,7 +991,7 @@
       "id": "hydrolox_tank_mk1",
       "name": "Hydrolox Tank",
       "mass_kg": 450,
-      "volume_m3": 5.5,
+      "volume_m3": 6,
       "power_kw": 1,
       "heat_kw": 1,
       "priority": 1,
@@ -1612,7 +1614,8 @@
       "capabilities": {
         "facility": {
           "type": "semiconductor_fab",
-          "throughput_kg_per_s": 0.002
+          "throughput_kg_per_s": 0.002,
+          "work_per_tick": 100
         }
       },
       "fabrication": {
@@ -2586,7 +2589,7 @@
       "id": "water_tank_mk1",
       "name": "Water Tank",
       "mass_kg": 250,
-      "volume_m3": 4.5,
+      "volume_m3": 5,
       "power_kw": 0,
       "heat_kw": 0,
       "priority": 0,

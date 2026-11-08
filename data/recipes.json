@@ -6,6 +6,8 @@
       "facility": "fabricator",
       "energy_kj": 400000,
       "heat_kj": 400000,
+      "work": 4000000,
+      "power_kw": 100,
       "inputs": [
         {
           "item": "structural_frame",
@@ -29,6 +31,8 @@
       "facility": "fabricator",
       "energy_kj": 6000000,
       "heat_kj": 6000000,
+      "work": 60000000,
+      "power_kw": 100,
       "inputs": [
         {
           "item": "structural_frame",
@@ -230,6 +234,8 @@
       "facility": "refinery",
       "energy_kj": 50000,
       "heat_kj": 50000,
+      "work": 250000,
+      "power_kw": 200,
       "inputs": [
         {
           "item": "spent_acid",
@@ -253,6 +259,8 @@
       "facility": "refinery",
       "energy_kj": 20000,
       "heat_kj": 154799,
+      "work": 100000,
+      "power_kw": 200,
       "inputs": [
         {
           "item": "copper_matte",
@@ -305,6 +313,8 @@
       "facility": "arc_furnace",
       "energy_kj": 540000,
       "heat_kj": 540000,
+      "work": 1080000,
+      "power_kw": 500,
       "inputs": [
         {
           "item": "slag",
@@ -324,6 +334,8 @@
       "facility": "electrolyser",
       "energy_kj": 2786790,
       "heat_kj": 1198833,
+      "work": 13933950,
+      "power_kw": 200,
       "inputs": [
         {
           "item": "water",
@@ -347,6 +359,8 @@
       "facility": "fabricator",
       "energy_kj": 2400000,
       "heat_kj": 2400000,
+      "work": 24000000,
+      "power_kw": 100,
       "inputs": [
         {
           "item": "structural_frame",
@@ -378,6 +392,8 @@
       "facility": "electrolyser",
       "energy_kj": 106285,
       "heat_kj": 106285,
+      "work": 531425,
+      "power_kw": 200,
       "inputs": [
         {
           "item": "blister_copper",
@@ -405,6 +421,8 @@
       "facility": "semiconductor_fab",
       "energy_kj": 5400000,
       "heat_kj": 5400000,
+      "work": 18000000,
+      "power_kw": 300,
       "inputs": [
         {
           "item": "wafer",
@@ -473,6 +491,8 @@
       "facility": "arc_furnace",
       "energy_kj": 250000,
       "heat_kj": 250000,
+      "work": 500000,
+      "power_kw": 500,
       "inputs": [
         {
           "item": "silica",
@@ -492,6 +512,8 @@
       "facility": "fabricator",
       "energy_kj": 1200000,
       "heat_kj": 1200000,
+      "work": 12000000,
+      "power_kw": 100,
       "inputs": [
         {
           "item": "structural_frame",
@@ -553,6 +575,8 @@
       "facility": "semiconductor_fab",
       "energy_kj": 12600000,
       "heat_kj": 12600000,
+      "work": 42000000,
+      "power_kw": 300,
       "inputs": [
         {
           "item": "pure_silicon",
@@ -601,6 +625,8 @@
       "facility": "fabricator",
       "energy_kj": 900000,
       "heat_kj": 900000,
+      "work": 9000000,
+      "power_kw": 100,
       "inputs": [
         {
           "item": "structural_frame",
@@ -677,6 +703,8 @@
       "facility": "refinery",
       "energy_kj": 40000,
       "heat_kj": 212292,
+      "work": 200000,
+      "power_kw": 200,
       "inputs": [
         {
           "item": "olivine",
@@ -737,6 +765,8 @@
       "facility": "arc_furnace",
       "energy_kj": 190222,
       "heat_kj": 190222,
+      "work": 380444,
+      "power_kw": 500,
       "inputs": [
         {
           "item": "sponge_iron",
@@ -764,6 +794,8 @@
       "facility": "refinery",
       "energy_kj": 15000,
       "heat_kj": 376235,
+      "work": 75000,
+      "power_kw": 200,
       "inputs": [
         {
           "item": "sulfur_dioxide",
@@ -815,6 +847,8 @@
       "facility": "refinery",
       "energy_kj": 68000,
       "heat_kj": 6800,
+      "work": 340000,
+      "power_kw": 200,
       "inputs": [
         {
           "item": "water_ice",
@@ -1118,6 +1152,8 @@
       "facility": "refinery",
       "energy_kj": 180000,
       "heat_kj": 150000,
+      "work": 900000,
+      "power_kw": 200,
       "inputs": [
         {
           "item": "carbonaceous_ore",
@@ -1149,6 +1185,8 @@
       "facility": "arc_furnace",
       "energy_kj": 60000,
       "heat_kj": 60000,
+      "work": 120000,
+      "power_kw": 500,
       "inputs": [
         {
           "item": "silicon_scrap",
@@ -1168,6 +1206,8 @@
       "facility": "refinery",
       "energy_kj": 50000,
       "heat_kj": 675848,
+      "work": 250000,
+      "power_kw": 200,
       "inputs": [
         {
           "item": "carbon_monoxide",
@@ -1195,6 +1235,8 @@
       "facility": "refinery",
       "energy_kj": 200000,
       "heat_kj": 144316,
+      "work": 1000000,
+      "power_kw": 200,
       "inputs": [
         {
           "item": "hematite",
@@ -1222,6 +1264,8 @@
       "facility": "arc_furnace",
       "energy_kj": 1851049,
       "heat_kj": 715953,
+      "work": 3702098,
+      "power_kw": 500,
       "inputs": [
         {
           "item": "silica",
@@ -1327,6 +1371,8 @@
       "facility": "semiconductor_fab",
       "energy_kj": 7200000,
       "heat_kj": 7200000,
+      "work": 24000000,
+      "power_kw": 300,
       "inputs": [
         {
           "item": "silicon",
@@ -1376,6 +1422,8 @@
       "facility": "refinery",
       "energy_kj": 300000,
       "heat_kj": 171138,
+      "work": 1500000,
+      "power_kw": 200,
       "inputs": [
         {
           "item": "magnesium_sulfate",
@@ -1403,6 +1451,8 @@
       "facility": "arc_furnace",
       "energy_kj": 220000,
       "heat_kj": 220000,
+      "work": 440000,
+      "power_kw": 500,
       "inputs": [
         {
           "item": "steel_scrap",
@@ -1451,6 +1501,8 @@
       "facility": "fabricator",
       "energy_kj": 10000000,
       "heat_kj": 10000000,
+      "work": 100000000,
+      "power_kw": 100,
       "inputs": [
         {
           "item": "structural_frame",
@@ -1747,6 +1799,8 @@
       "facility": "refinery",
       "energy_kj": 30000,
       "heat_kj": 306043,
+      "work": 150000,
+      "power_kw": 200,
       "inputs": [
         {
           "item": "chalcopyrite",
@@ -1857,6 +1911,8 @@
       "facility": "fabricator",
       "energy_kj": 500000,
       "heat_kj": 500000,
+      "work": 5000000,
+      "power_kw": 100,
       "inputs": [
         {
           "item": "structural_frame",

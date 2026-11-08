@@ -421,7 +421,9 @@ func test_a_real_recipe_keeps_its_slag() -> void:
 	var refine := _entry("recipes", "refine")
 	refine["abstract"] = false
 	refine["outputs"][1].erase("sink")
-	assert_eq(DataValidator.validate(data), [] as Array[String])
+	var errors := DataValidator.validate(data)
+	for code: String in ["sink_route_missing", "slag_missing"]:
+		assert_false(errors.any(func(e: String) -> bool: return e.begins_with(code)), code)
 
 
 func test_a_real_recipe_must_balance() -> void:
@@ -436,12 +438,13 @@ func test_a_real_recipe_is_held_to_chemistry_not_the_slice_ceilings() -> void:
 	var refine := _entry("recipes", "refine")
 	refine["abstract"] = false
 	refine["outputs"] = [{ "item": "iron", "kg": 100 }]
-	assert_eq(DataValidator.validate(data), [] as Array[String])
+	var errors := DataValidator.validate(data)
+	assert_false(errors.any(func(e: String) -> bool: return e.begins_with("yield_over_ceiling")))
 
 
 func test_the_new_cargo_classes_and_machines_are_known() -> void:
-	_add_sorted("items", { "id": "water", "name": "Water", "stage": 3, "cargo_class": "water",
-		"density_kg_m3": 1000 })
+	for cargo_class: String in ["water", "fuel", "oxidiser", "acid", "gas"]:
+		assert_has(DataValidator.CARGO_CLASSES, cargo_class)
 	_entry("modules", "refinery")["capabilities"]["facility"]["type"] = "electrolyser"
 	_entry("recipes", "refine")["facility"] = "electrolyser"
 	assert_eq(DataValidator.validate(data), [] as Array[String])

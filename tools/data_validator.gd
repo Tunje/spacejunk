@@ -156,6 +156,13 @@ const PPM := 1_000_000
 const MAX_JSON_WHOLE := 9_007_199_254_740_992
 
 ## Refining yields may not pass the element's real mass share (spec section 7.1).
+## Chain items whose source or use arrives with the switch-over (B30): chips go into processors,
+## steel into frames, frames' offcuts become steel scrap, and Black Rock yields carbonaceous ore.
+## B30 empties this.
+const PENDING_B30 := { "chip": "use", "steel": "use", "steel_scrap": "source", "carbonaceous_ore": "source" }
+## Items kept for a later chain with no use yet: anode slime holds the precious metals the belt's
+## chains will recover (production_chains.md section 5).
+const KEPT_FOR_LATER := ["anode_slime"]
 const YIELD_CEILINGS_PPM := {
 	"hematite": { "iron": 699_000 },
 	"chalcopyrite": { "copper": 346_000 },
@@ -795,7 +802,9 @@ func _cross_recipe(recipe: Dictionary) -> void:
 			_err("repeated_item", where, entry["item"])
 		seen[entry["item"]] = true
 		has_sink_output = has_sink_output or entry.has("sink")
-		_check_sink_route(where, entry)
+		# A real chain recipe keeps its waste as an item (B29), so only the abstract ones must sink it.
+		if recipe["abstract"] == true or entry.has("sink"):
+			_check_sink_route(where, entry)
 
 	if input_g != output_g:
 		_err("recipe_unbalanced", where, "%d g in, %d g out" % [input_g, output_g])
@@ -1395,9 +1404,9 @@ func _check_coverage() -> void:
 	for id: String in _sorted(_items):
 		var where := "items.json:%s" % id
 		var fits := _modules.has(id) and _fits_somewhere(_modules[id])
-		if not sources.has(id):
+		if not sources.has(id) and PENDING_B30.get(id, "") != "source":
 			_err("item_without_source", where)
-		if not uses.has(id) and not fits:
+		if not uses.has(id) and not fits and PENDING_B30.get(id, "") != "use" and not id in KEPT_FOR_LATER:
 			_err("item_without_use", where)
 
 
