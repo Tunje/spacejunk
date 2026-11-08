@@ -64,6 +64,7 @@ A whole number converts by integer multiplication, so a value such as the star's
 | `cargo_class` | `ore`, `goods`, `propellant`, `water`, `fuel`, `oxidiser`, `acid` or `gas` | The fluid classes (B29) each need their own tanks, since none may share one: hydrogen with oxygen, or acid with water. `propellant` goes with the switch to hydrolox (B30) |
 | `density_kg_m3` | whole | Sets stack volume |
 | `unit_mass_kg` | number, optional | Present only on discrete items |
+| `resistance_ppm` | whole, optional | A conductor's resistance against refined-copper `wiring`, in parts per million (B30). `mi_cable`, blister copper in magnesia, is 1,500,000: blister copper's impurities cut its conductivity to about two thirds. A part wired with it loses more of its power in the wiring, a rule for A and C |
 
 ```json
 [
@@ -93,6 +94,7 @@ A whole number converts by integer multiplication, so a value such as the star's
 | `volume_m3` | number | Cargo volume while uninstalled. Not a fit limit. |
 | `power_kw` | number | Non-negative draw while active. Generation is a capability. |
 | `heat_kw` | number | Non-negative waste heat while active |
+| `heat_temp_k` | whole, optional | The temperature the load gives its heat at, 300 K when left out (B30). See **Heat temperatures** in section 5 |
 | `priority` | whole | Default power priority. Higher sheds last. |
 | `durability` | whole | Stored but unused in the slice |
 | `min_ai_tier` | whole, 1 to 6 | |
@@ -128,14 +130,14 @@ A whole number converts by integer multiplication, so a value such as the star's
 
 | Key | Fields | Used by |
 | --- | ------ | ------- |
-| `scan` | `seconds` (whole) | LIDAR |
-| `mine` | `rate_kg_per_s`, `hardness_max` (whole) | Lasers |
-| `ai_core` | `tier` (whole, 1 to 6) | Cores |
+| `scan` | `steps`; `seconds` (whole) until B30b | Instruments. See **Scan steps** below |
+| `mine` | `rate_kg_per_s`, `hardness_max` (whole), `contact_range_m` (whole), `contact_speed_m_s` | Lasers. Mining starts only within `contact_range_m` of the rock's surface, closing no faster than `contact_speed_m_s`, which loads as `contact_speed_mm_s` (B30, C33). Both lasers: 5 m; 0.1 m/s for `mining_laser_mk1`, about a touch-and-go sampler's speed, and 0.05 m/s for the small one, as its port |
+| `ai_core` | `tier` (whole, 1 to 6), `cycle_reserve_ppm` (whole, 1 to 1,000,000) | Cores. The reserve is the share of the tank a cycle keeps back, planning policy rather than hardware (B30, C33). Both cores keep 100,000, a tenth, at the top of real missions' 5 to 10% margin since hydrolox boils off. A `set_cycle` order's own `reserve_g` overrides it |
 | `storage` | Per cargo class: `{ "mass_kg", "volume_m3" }` | Containers, tanks |
 | `max_mass_kg` | number | Root parts only |
 | `generate` | `power_kw` | Solar |
 | `battery` | `capacity_kj`, `max_charge_kw`, `max_discharge_kw`, `charge_efficiency_ppm` (whole, up to 1000000) | Batteries |
-| `radiator` | `reject_kw` | Radiators |
+| `radiator` | `reject_kw`, `temp_k` (whole) | Radiators. `temp_k` is the loop's temperature. See **Heat temperatures** below |
 | `heat_capacity` | `limit_kj` | Summed to give the unit's heat limit |
 | `port` | `transfer_kg_per_s`, `dock_seconds` (whole), `undock_seconds` (whole), `capture_range_mm` (whole), `capture_speed_m_s` | Docking ports |
 | `thruster` | `speed_m_s`, `propellant_kg_per_s`, `rated_mass_kg`, `exhaust_m_s`, `thrust_kn`, optional `min_throttle_ppm` (whole) | Thrusters |
@@ -205,6 +207,27 @@ Machine throughputs:
 | `research_lab_mk1` | 0.1 kg/s |
 
 **This is far slower than today.** A frame takes 2,500 s on the compact fabricator, limited by throughput. A run of ice takes 25,760 s on the 100 kW compact refinery, limited by power. Real propellant from ice costs about 29 MJ per kg. So power, not machine count, becomes the new start's main limit.
+
+**Scan steps (B30, C33).** An instrument's `scan` lists `steps`, each `{ "reveals", "range_m", "seconds" }`:
+- `reveals` is `shape`, `class` or `grade`, at most once per instrument;
+- `range_m`, whole metres above 0, is the farthest the step works, from the rock's surface;
+- `seconds`, whole above 0, loads as `ticks`, the time the step holds.
+
+| Instrument | Steps | Real reference |
+| --- | --- | --- |
+| `lidar_mk1` | shape, 25 km, 30 s | Hayabusa2's LIDAR ranged from 30 m to 25 km. A LIDAR measures shape and range, not composition |
+| `spectrometer_mk1` | class, 10 km, 60 s; grade, 1 km, 600 s | A point spectrometer such as OSIRIS-REx's OVIRS, 17 kg. Far off it tells the mineral class; close in, held for ten minutes, each deposit's grade |
+
+C33 sets what each step reveals and the science each earns. The old `seconds` stays beside the steps until B30b, for today's code.
+
+**Heat temperatures (B30).** Every radiator states its loop's `temp_k`, and a load may state its `heat_temp_k`, 300 K when left out. A load can dump heat only into radiators at or below its own temperature (A's HeatSystem rule), so a hot radiator never takes a cold load's heat. A hotter loop rejects far more per square metre, as the fourth power of its temperature, so it is lighter for its rating:
+
+| | Temperature | Mass per kW | Takes heat from |
+| --- | --- | --- | --- |
+| `heat_radiator_mk1`, `small_heat_radiator_mk1` | 300 K | about 25 kg (B30b) | every load |
+| `high_temp_radiator_mk1` | 500 K | 5 kg | loads at 500 K and over |
+
+The hot loads are the furnaces and refineries: `arc_furnace_mk1`, `compact_refinery_mk1` and `ore_refinery_mk1` at 500 K. The alkaline `electrolyser_mk1` runs at about 350 K, too cool for the hot loop. Electronics, cores and everything else are at 300 K.
 
 ## 6. Connectors
 
@@ -321,6 +344,8 @@ A node is `{ "part": module_id, "children": [] }`. A child node adds `parent_con
 | `id` | string | Sink ID |
 | `name` | string | Display name |
 | `items` | array of item IDs | What it accepts |
+
+`electrolyte_loss` (B30) takes the KOH an alkaline electrolyser loses: 10 g a run of 100 kg of water.
 
 ```json
 [
