@@ -13,6 +13,8 @@ const RUN_TICKS := 3
 ## A full-size facility's work_per_tick, so a recipe of RUN_TICKS * FULL_RATE work takes RUN_TICKS.
 const FULL_RATE := 100
 const CRAFT_G := 120000
+## One tick of a small craft's build: 100 kW for a tenth of a second (C30).
+const CRAFT_TICK_J := 10_000
 const STATION_ORE_G := 50000000
 
 var sim: Sim
@@ -197,7 +199,7 @@ func test_with_no_free_port_the_run_waits_with_its_inputs_held() -> void:
 	var shown: Dictionary = sim.view()["jobs"][job]
 	assert_eq(shown["status"], "paused")
 	assert_eq(shown["reason"], "no_free_port")
-	assert_eq(shown["work_left"], FULL_RATE, "held with its last tick of work still to do")
+	assert_eq(shown["energy_left_j"], CRAFT_TICK_J, "held with its last tick of work still to do")
 	assert_eq(sim.ledger()["matter"]["jobs_g"], CRAFT_G)
 	assert_eq(state["jobs"][job]["since_tick"], RUN_TICKS)
 	var events := sim.take_events()
@@ -241,7 +243,7 @@ func test_cancelling_a_claimed_port_releases_it() -> void:
 	var job: int = sim.view()["jobs"].keys()[0]
 	state["parts"][FABRICATOR]["shed"] = true
 	state["parts"][FABRICATOR]["shed_until_tick"] = 1000
-	state["jobs"][job]["work_left"] = FULL_RATE
+	state["jobs"][job]["energy_left_j"] = CRAFT_TICK_J
 	sim.step()
 	assert_eq(state["jobs"][job]["port"], FREE_PORT, "claimed, but the facility has no power")
 	sim.submit({ "type": "cancel_job", "unit": STATION, "args": { "job": job } })
@@ -256,7 +258,7 @@ func test_a_build_shed_on_its_last_tick_finishes_when_power_returns() -> void:
 	var job: int = sim.view()["jobs"].keys()[0]
 	state["parts"][FABRICATOR]["shed"] = true
 	state["parts"][FABRICATOR]["shed_until_tick"] = sim.current_tick() + 3
-	state["jobs"][job]["work_left"] = FULL_RATE
+	state["jobs"][job]["energy_left_j"] = CRAFT_TICK_J
 	_step_balanced(5)
 	assert_true(_types(sim.take_events()).has("unit_created"))
 
@@ -279,19 +281,20 @@ func test_a_new_drone_takes_a_core_and_has_it_fitted_without_one() -> void:
 	var id: int = _first(sim.take_events(), "unit_created")["data"]["unit"]
 	var hull: int = state["units"][id]["root"]
 	var command := _attach(id, "assisted_core", hull, "core")
-	assert_eq(sim.check(command)["reason"], "over_power_budget", "a core draws power too")
+	assert_eq(_warnings(sim.check(command)), ["over_power_budget"], "a core draws power too, but it fits (C30)")
 	sim.submit(_attach(id, "small_solar_panel_mk1", hull, "side_a_px"))
 	sim.submit(_attach(id, "small_heat_radiator_mk1", hull, "side_a_nx"))
 	_step_balanced(1)
 	sim.take_events()
-	assert_true(sim.check(command)["ok"])
+	assert_eq(_warnings(sim.check(command)), [])
 	sim.submit(command)
 	_step_balanced(1)
 	assert_eq(_types(sim.take_events()), ["part_attached"])
 	assert_eq(sim.view()["units"][id]["mass_g"], CRAFT_G + 190000)
 
 
-func test_a_bare_craft_refuses_a_laser_or_thruster_until_it_has_a_budget() -> void:
+## C30: the fits go through, warned, until the craft has the power and radiators for them.
+func test_a_bare_craft_is_warned_off_a_laser_or_thruster_until_it_has_a_budget() -> void:
 	_give_inputs("small_craft")
 	sim.submit(_start("small_craft"))
 	sim.step(RUN_TICKS)
@@ -302,16 +305,22 @@ func test_a_bare_craft_refuses_a_laser_or_thruster_until_it_has_a_budget() -> vo
 	])
 	var laser := _attach(id, "small_mining_laser_mk1", hull, "side_a_nz")
 	var thruster := _attach(id, "small_chemical_thruster_mk1", hull, "stack_bottom")
-	assert_eq(sim.check(laser)["reason"], "over_power_budget")
-	assert_eq(sim.check(thruster)["reason"], "over_power_budget")
+	assert_true(_warnings(sim.check(laser)).has("over_power_budget"))
+	assert_true(_warnings(sim.check(thruster)).has("over_power_budget"))
 	sim.submit(_attach(id, "small_solar_panel_mk1", hull, "side_a_px"))
 	_step_balanced(1)
-	assert_eq(sim.check(laser)["reason"], "over_heat_budget")
-	assert_eq(sim.check(thruster)["reason"], "over_heat_budget")
+	assert_eq(_warnings(sim.check(laser)), ["over_heat_budget"])
+	assert_eq(_warnings(sim.check(thruster)), ["over_heat_budget"])
 	sim.submit(_attach(id, "small_heat_radiator_mk1", hull, "side_a_nx"))
 	_step_balanced(1)
-	assert_true(sim.check(laser)["ok"])
-	assert_true(sim.check(thruster)["ok"])
+	assert_eq(_warnings(sim.check(laser)), [])
+	assert_eq(_warnings(sim.check(thruster)), [])
+
+
+## The codes of a check that went through with warnings (C30); fails if the check was refused.
+func _warnings(result: Dictionary) -> Array:
+	assert_true(result["ok"], "allowed: %s" % result.get("reason", ""))
+	return result.get("detail", {}).get("warnings", []).map(func(warning: Dictionary) -> String: return warning["code"])
 
 
 ## Check 9: output from the industry chain becomes a larger station.

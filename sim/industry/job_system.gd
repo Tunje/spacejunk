@@ -67,6 +67,13 @@ const REASON_NO_HEAT := "no_heat_headroom"
 const LIMIT_POWER := "power"
 const LIMIT_HEAT := "heat"
 const LIMIT_THROUGHPUT := "throughput"
+## C30: a run still taking its inputs through the docks.
+const LIMIT_FEED := "feed"
+const DELTA_FEED := "feed"
+## Per-tick flows: the dock ports feeds hold, and the jobs routed this tick.
+const FEED_PORTS_KEY := "feed_ports"
+const FEED_ROUTED_KEY := "feed_routed"
+const FEED_CLAIMS_KEY := "feed_claims"
 ## The active job's reasons a queued job may go ahead of (C24).
 const STARVED_REASONS: Array[String] = [REASON_MISSING_INPUTS, REASON_OUTPUT_FULL]
 const INSTALL_FIELDS := {
@@ -74,7 +81,7 @@ const INSTALL_FIELDS := {
 }
 const VIEW_FIELDS: Array[String] = [
 	"unit", "facility", "recipe", "count_left", "status", "reason", "start_tick", "queue_pos", "energy_left_j",
-	"rate_w", "limit", "limits_w", "points_held", "install_to",
+	"rate_w", "limit", "limits_w", "points_held", "install_to", "feed",
 ]
 
 ## Builds in place through attach_part's own rules.
@@ -137,6 +144,8 @@ func update_tasks(ctx: SimContext) -> void:
 ## job has already proven or qualified leaves the queue instead, holding nothing.
 func allocate(ctx: SimContext) -> void:
 	var jobs: Dictionary = ctx.state["jobs"]
+	# Feeds under way claim their sources' stock first, so no run starting below counts it (C30).
+	_route_feeds(ctx)
 	for id: int in _sorted(jobs):
 		if not jobs.has(id):
 			continue
@@ -157,9 +166,247 @@ func allocate(ctx: SimContext) -> void:
 			else:
 				_set_reason(ctx, job, STATUS_WAITING, reason)
 	_skip_starved(ctx)
+	_route_feeds(ctx)
 	for id: int in _sorted(jobs):
 		if _needs_port(ctx, jobs[id]):
 			_claim_port(ctx, jobs[id])
+
+
+## C30, the Lead's ruling: what a run lacks on its own unit comes through the docks, along the
+## path of docked units from the nearest unit that holds it, at the lowest port rate on the path.
+## Each phase 4, every run still feeding first claims all it still needs from the nearest holders,
+## so no other run or transfer counts that stock. Then it keeps its route if every dock on it still
+## holds and its source still has the item, and otherwise finds a new one: needed items in recipe
+## order, sources by fewest docks away and then lowest ID. A unit docks to one other, so the path is
+## unique. A route's ports are busy for this tick: no other feed and no cargo transfer uses those
+## docks, and a new route is not taken over a dock a transfer is using. With no source left in the
+## group, the run pauses on missing_inputs, keeping what it holds.
+func _route_feeds(ctx: SimContext) -> void:
+	var jobs: Dictionary = ctx.state["jobs"]
+	var busy: Dictionary = ctx.flows.get_or_add(FEED_PORTS_KEY, {})
+	var routed: Dictionary = ctx.flows.get_or_add(FEED_ROUTED_KEY, {})
+	var feeding: Array[int] = []
+	for id: int in _sorted(jobs):
+		var job: Dictionary = jobs[id]
+		if not job.get("feed", {}).is_empty() and not routed.has(id) and job["status"] != STATUS_CANCELLING:
+			_claim_need(ctx, job)
+			feeding.append(id)
+	for id: int in feeding:
+		var job: Dictionary = jobs[id]
+		var feed: Dictionary = job["feed"]
+		if not feed["route"].is_empty() and not _route_holds(ctx, job, feed["route"], busy):
+			feed["route"] = {}
+		if feed["route"].is_empty():
+			feed["route"] = _plan_route(ctx, job, busy)
+		job["rate_w"] = 0
+		job["limit"] = LIMIT_FEED
+		job["limits_w"] = {}
+		var route: Dictionary = feed["route"]
+		if route.is_empty():
+			if _source_of_need(ctx, job):
+				if job["status"] == STATUS_PAUSED:
+					_resume(ctx, job)
+			else:
+				_pause(ctx, job, REASON_MISSING_INPUTS)
+			continue
+		if job["status"] == STATUS_PAUSED:
+			_resume(ctx, job)
+		routed[id] = true
+		for port: int in route["ports"]:
+			busy[port] = id
+
+
+## Claims, once a tick, what a feeding run still needs from its group's units, nearest first, and
+## keeps what it claimed from each in the flows, so its own routes still see that stock (C30).
+func _claim_need(ctx: SimContext, job: Dictionary) -> void:
+	var claims: Dictionary = ctx.flows.get_or_add(FEED_CLAIMS_KEY, {})
+	if claims.has(job["id"]):
+		return
+	var mine := {}
+	claims[job["id"]] = mine
+	var tree := _dock_tree(ctx.state, job["unit"])
+	var need: Dictionary = job["feed"]["need"]
+	for item: String in _sorted(need):
+		var left: int = need[item]
+		for source: int in tree["order"]:
+			if left <= 0:
+				break
+			if source == job["unit"]:
+				continue
+			var taken := mini(left, Reservations.free_stock(ctx, source, item))
+			if taken > 0:
+				Reservations.claim_stock(ctx, source, item, taken)
+				mine.get_or_add(source, {})[item] = taken
+				left -= taken
+
+
+## A unit's stock of an item that is free for this run: unclaimed, or claimed by the run itself.
+func _free_for(ctx: SimContext, job: Dictionary, unit: int, item: String) -> int:
+	var mine: Dictionary = ctx.flows.get(FEED_CLAIMS_KEY, {}).get(job["id"], {})
+	return Reservations.free_stock(ctx, unit, item) + mine.get(unit, {}).get(item, 0)
+
+
+## A route's units, nearest the source first, are still docked by the same ports, none of its
+## ports is held by another feed this tick, and its source still has the item for this run.
+func _route_holds(ctx: SimContext, job: Dictionary, route: Dictionary, busy: Dictionary) -> bool:
+	if _free_for(ctx, job, route["from"], route["item"]) <= 0:
+		return false
+	for port: int in route["ports"]:
+		if busy.has(port):
+			return false
+	return _route_docked(ctx.state, route)
+
+
+static func _route_docked(state: Dictionary, route: Dictionary) -> bool:
+	var path: Array = route["path"]
+	for hop in range(path.size() - 1):
+		var ports := hop_ports(state, path[hop], path[hop + 1])
+		if ports.is_empty() or ports[0] != route["ports"][hop * 2] or ports[1] != route["ports"][hop * 2 + 1]:
+			return false
+	return true
+
+
+## The nearest free route for the run's first needed item that some unit of its group holds, or {}.
+func _plan_route(ctx: SimContext, job: Dictionary, busy: Dictionary) -> Dictionary:
+	var tree := _dock_tree(ctx.state, job["unit"])
+	var need: Dictionary = job["feed"]["need"]
+	for input: Dictionary in _recipe(ctx, job)["inputs"]:
+		var item: String = input["item"]
+		if need.get(item, 0) <= 0:
+			continue
+		for source: int in tree["order"]:
+			if source == job["unit"] or _free_for(ctx, job, source, item) <= 0:
+				continue
+			var path: Array = [source]
+			while path[-1] != job["unit"]:
+				path.append(tree["parent"][path[-1]])
+			var ports: Array = []
+			var rate := -1
+			var free := true
+			for hop in range(path.size() - 1):
+				var pair := hop_ports(ctx.state, path[hop], path[hop + 1])
+				ports.append_array(pair)
+				free = free and not busy.has(pair[0]) and not busy.has(pair[1]) \
+					and not _transfer_on(ctx.state, path[hop], path[hop + 1])
+				var hop_rate := CargoSystem.dock_rate(ctx, path[hop], path[hop + 1])
+				rate = hop_rate if rate < 0 else mini(rate, hop_rate)
+			if not free or rate <= 0:
+				continue
+			return {
+				"from": source, "item": item, "path": path, "ports": ports, "rate_g_per_s": rate,
+				"remainder": 0, "credit_g": 0,
+			}
+	return {}
+
+
+## True when some unit of the run's group, other than its own, holds an item it still needs.
+func _source_of_need(ctx: SimContext, job: Dictionary) -> bool:
+	for item: String in _sorted(job["feed"]["need"]):
+		for source: int in Units.docked_group(ctx.state, job["unit"]):
+			if source != job["unit"] and _free_for(ctx, job, source, item) > 0:
+				return true
+	return false
+
+
+## The units joined to `root` by docks, nearest first and by ID within a distance, with each one's
+## neighbour on the way back to `root`.
+static func _dock_tree(state: Dictionary, root: int) -> Dictionary:
+	var units: Dictionary = state["units"]
+	var ids: Array = units.keys()
+	ids.sort()
+	var order: Array[int] = [root]
+	var parent := {}
+	var level: Array[int] = [root]
+	while not level.is_empty():
+		var next: Array[int] = []
+		for current: int in level:
+			var target: int = units[current]["dock"].get("target_unit", 0)
+			var around: Array[int] = []
+			if target != 0 and units.has(target):
+				around.append(target)
+			for id: int in ids:
+				if units[id]["dock"].get("target_unit", 0) == current:
+					around.append(id)
+			for id: int in around:
+				if id != root and not parent.has(id):
+					parent[id] = current
+					next.append(id)
+		next.sort()
+		order.append_array(next)
+		level = next
+	return { "order": order, "parent": parent }
+
+
+## The two ports of the dock between two units, the holder of the dock record's first, or [].
+static func hop_ports(state: Dictionary, a: int, b: int) -> Array[int]:
+	var units: Dictionary = state["units"]
+	for pair: Array in [[a, b], [b, a]]:
+		var dock: Dictionary = units[pair[0]]["dock"]
+		if dock.get("target_unit", 0) == pair[1]:
+			return [dock["port"], dock["target_port"]] as Array[int]
+	return [] as Array[int]
+
+
+## True when a cargo transfer runs between two docked units, either way.
+static func _transfer_on(state: Dictionary, a: int, b: int) -> bool:
+	var units: Dictionary = state["units"]
+	for id: int in [a, b]:
+		var op: Dictionary = units[id]["op"]
+		if op["type"] in [TransferStep.OP_LOADING, TransferStep.OP_UNLOADING] \
+				and ((op["from"] == a and op["to"] == b) or (op["from"] == b and op["to"] == a)):
+			return true
+	return false
+
+
+## C30, for CargoSystem: true while a feed holds a dock port of a transfer between two units, so the
+## transfer waits that tick.
+static func dock_feeding(ctx: SimContext, a: int, b: int) -> bool:
+	var busy: Dictionary = ctx.flows.get(FEED_PORTS_KEY, {})
+	if busy.is_empty():
+		return false
+	var ports := hop_ports(ctx.state, a, b)
+	return not ports.is_empty() and (busy.has(ports[0]) or busy.has(ports[1]))
+
+
+## Phase 5 of a feed: this tick's grams along its route, at its rate with a remainder, and whole
+## units of a whole-unit item, with the credit cargo transfers keep (A42). They reach the run in
+## phase 6.
+func _feed(ctx: SimContext, job: Dictionary) -> void:
+	var route: Dictionary = job["feed"]["route"]
+	if not _route_docked(ctx.state, route):
+		return
+	var item: String = route["item"]
+	var unit_mass_g: int = ctx.defs["items"][item].get("unit_mass_g", 0)
+	var credit: int = route["credit_g"] if unit_mass_g != 0 else 0
+	var grams: int = credit + Rate.amount(route["rate_g_per_s"], route["remainder"])
+	route["remainder"] = Rate.carry(route["rate_g_per_s"], route["remainder"])
+	var held: int = ctx.state["units"][route["from"]]["inventory"].get(item, 0)
+	var moved := mini(grams, mini(job["feed"]["need"][item], held))
+	if unit_mass_g != 0:
+		moved -= moved % unit_mass_g
+		route["credit_g"] = mini(grams - moved, unit_mass_g)
+	if moved > 0:
+		ctx.record_delta(job["id"], self, {
+			"kind": DELTA_FEED, "job": job["id"], "from": route["from"], "item": item, "grams": moved,
+		})
+
+
+## Phase 6 of a feed: the grams leave the source and are held by the run. Once all its inputs are
+## held the feed ends, and the run works from the next tick.
+func _apply_feed(ctx: SimContext, payload: Dictionary) -> void:
+	var job: Dictionary = ctx.state["jobs"][payload["job"]]
+	var item: String = payload["item"]
+	Units.remove_stock(ctx.state["units"][payload["from"]]["inventory"], item, payload["grams"])
+	job["held"][item] = job["held"].get(item, 0) + payload["grams"]
+	var need: Dictionary = job["feed"]["need"]
+	need[item] -= payload["grams"]
+	if need[item] <= 0:
+		need.erase(item)
+		job["feed"]["route"] = {}
+	if need.is_empty():
+		job["feed"] = {}
+		job["limit"] = ""
+		ctx.emit_event("job_fed", job["unit"], { "job": job["id"] })
 
 
 ## C24. For each facility, by part ID, whose active job waits starved with no run in progress: the
@@ -193,6 +440,11 @@ func run(ctx: SimContext) -> void:
 	var jobs: Dictionary = ctx.state["jobs"]
 	for id: int in _sorted(jobs):
 		var job: Dictionary = jobs[id]
+		if not job.get("feed", {}).is_empty():
+			if job["status"] == STATUS_RUNNING and not job["feed"]["route"].is_empty() \
+					and ctx.flows.get(FEED_ROUTED_KEY, {}).has(id):
+				_feed(ctx, job)
+			continue
 		if (job["status"] == STATUS_RUNNING or job["status"] == STATUS_PAUSED) \
 				and job["reason"] != REASON_INSTALL_BLOCKED:
 			_count_down(ctx, job)
@@ -219,6 +471,9 @@ func update_stores(ctx: SimContext) -> void:
 
 ## Phase 6. Delivers a finished run.
 func apply_delta(ctx: SimContext, payload: Dictionary) -> void:
+	if payload.get("kind", "") == DELTA_FEED:
+		_apply_feed(ctx, payload)
+		return
 	var job: Dictionary = ctx.state["jobs"][payload["job"]]
 	_release_outputs(ctx, job)
 	var unit: Dictionary = ctx.state["units"][job["unit"]]
@@ -364,7 +619,10 @@ func _validate_install(ctx: SimContext, command: Dictionary, recipe: Dictionary)
 	if not result["ok"]:
 		# A plain refusal of this command: attach_part's own attach_failed event is not this one's.
 		return SimSystem.reject(result["reason"], result["detail"])
-	return SimSystem.ok()
+	# The fit's warnings travel with the job (C30), and part_attached gives them again on delivery.
+	var allowed := SimSystem.ok()
+	allowed["detail"] = { "warnings": result["detail"].get("warnings", []) }
+	return allowed
 
 
 ## The module a recipe makes, when it is the recipe's one stored output, or "".
@@ -384,7 +642,7 @@ func _create(ctx: SimContext, command: Dictionary) -> void:
 		"id": id, "unit": command["unit"], "facility": args["facility"], "recipe": args["recipe"],
 		"count_left": args["count"], "status": STATUS_WAITING if position == 0 else STATUS_QUEUED,
 		"reason": "", "start_tick": 0, "energy_left_j": 0, "energy_remainder": 0, "rate_w": 0, "limit": "",
-		"limits_w": {}, "since_tick": ctx.tick,
+		"limits_w": {}, "feed": {}, "since_tick": ctx.tick,
 		"command": command["id"], "started": false, "held": {}, "reserved": {}, "port": 0, "points_held": 0,
 		"queue_pos": position, "install_to": args.get("install_to", {}).duplicate(),
 	}
@@ -477,17 +735,21 @@ func _start_run(ctx: SimContext, job: Dictionary) -> void:
 	if job["reason"] != "":
 		ctx.emit_event("job_resumed", job["unit"], { "job": job["id"], "reason": job["reason"] })
 	var recipe := _recipe(ctx, job)
-	var sources := _sources(ctx, job)
+	var stock: Dictionary = ctx.state["units"][job["unit"]]["inventory"]
+	var need := {}
 	for input: Dictionary in recipe["inputs"]:
 		var item: String = input["item"]
-		var left: int = input["grams"]
-		for source: int in sources:
-			var stock: Dictionary = ctx.state["units"][source]["inventory"]
-			var taken := mini(left, stock.get(item, 0))
-			if taken > 0:
-				Units.remove_stock(stock, item, taken)
-				left -= taken
-		job["held"][item] = job["held"].get(item, 0) + input["grams"]
+		var taken := mini(input["grams"], Reservations.free_stock(ctx, job["unit"], item))
+		if taken > 0:
+			Units.remove_stock(stock, item, taken)
+			job["held"][item] = job["held"].get(item, 0) + taken
+		if taken < input["grams"]:
+			need[item] = need.get(item, 0) + input["grams"] - taken
+	# What the unit lacks comes through the docks (C30), and the run does no work until it is in.
+	# Its claim is made now, so no run starting after it this tick counts the same stock.
+	job["feed"] = {} if need.is_empty() else { "need": need, "route": {} }
+	if not need.is_empty():
+		_claim_need(ctx, job)
 	_reserve_outputs(ctx, job, recipe)
 	job["points_held"] = recipe.get("points", 0)
 	ctx.state["science"]["points"] -= job["points_held"]
@@ -649,6 +911,7 @@ func _cancel(ctx: SimContext, job: Dictionary) -> void:
 	_release_port(ctx, job)
 	job["energy_left_j"] = 0
 	job["rate_w"] = 0
+	job["feed"] = {}
 	ctx.state["science"]["points"] += job["points_held"]
 	job["points_held"] = 0
 	_try_return(ctx, job)
@@ -737,6 +1000,14 @@ static func throughput_w(ctx: SimContext, job: Dictionary) -> int:
 	return mini(rating, IntMath.mul_div(grams_per_s, run_energy_j(ctx, job), mass))
 
 
+## The ticks one run of `recipe` takes on `facility` with power and radiators to spare, held only
+## by the machine: for bots and tools to bound a wait (C30). A run short of power or headroom takes
+## longer.
+static func machine_ticks(ctx: SimContext, facility: int, recipe: String) -> int:
+	var job := { "facility": facility, "recipe": recipe }
+	return IntMath.mul_div_ceil(run_energy_j(ctx, job), Sim.TICKS_PER_SECOND, throughput_w(ctx, job))
+
+
 ## C30, the owner's ruling: a run goes at the lowest of the power it is given, the power whose
 ## waste heat the radiators can still reject, and what the machine handles. `power_w` and `heat_w`
 ## are what the unit's network and radiators have left for this job, in keep order. The limit is
@@ -807,8 +1078,10 @@ func horizon(ctx: SimContext) -> int:
 			STATUS_RUNNING:
 				# At last tick's rate, which the power and heat horizons keep, the run's last tick is
 				# the first n with n * rate + remainder >= energy_left * TICKS_PER_SECOND (C30).
+				# A feed is stepped: its source's stock, its docks and the transfers it holds off all
+				# change with it (C30).
 				var rate: int = job["rate_w"]
-				if rate <= 0:
+				if rate <= 0 or not job.get("feed", {}).is_empty():
 					skip = 0
 				else:
 					var owed: int = job["energy_left_j"] * Sim.TICKS_PER_SECOND - job["energy_remainder"]
@@ -851,10 +1124,11 @@ func _sources(ctx: SimContext, job: Dictionary) -> Array[int]:
 	return sources
 
 
+## What the group holds of an item that no feed has claimed this tick (C30).
 func _group_stock(ctx: SimContext, sources: Array[int], item: String) -> int:
 	var grams := 0
 	for source: int in sources:
-		grams += ctx.state["units"][source]["inventory"].get(item, 0)
+		grams += Reservations.free_stock(ctx, source, item)
 	return grams
 
 
