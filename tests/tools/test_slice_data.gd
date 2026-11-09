@@ -4,23 +4,24 @@ extends GutTest
 
 const ITEMS := [
 	"anode_slime", "blister_copper", "carbon", "carbon_monoxide", "carbonaceous_ore", "chalcopyrite",
-	"chip", "copper", "copper_matte", "glass", "glass_fibre", "hematite", "hydrogen", "iron",
-	"magnesia", "magnesium_sulfate", "olivine", "oxygen", "phosphorus", "processor", "propellant",
-	"pure_silicon", "silica", "silicon", "silicon_scrap", "slag", "spent_acid", "sponge_iron",
-	"steel", "steel_scrap", "structural_frame", "sulfur_dioxide", "sulfuric_acid", "wafer", "water",
-	"water_ice", "wiring",
+	"chip", "copper", "copper_matte", "electrode", "glass", "glass_fibre", "hematite", "hydrogen",
+	"iron", "magnesia", "magnesium_sulfate", "mi_cable", "nickel", "olivine", "oxygen", "phosphorus",
+	"potassium_hydroxide", "processor", "propellant", "pure_silicon", "silica", "silicon",
+	"silicon_scrap", "slag", "solar_cell", "spent_acid", "sponge_iron", "steel", "steel_scrap",
+	"structural_frame", "sulfur_dioxide", "sulfuric_acid", "wafer", "water", "water_ice", "wiring",
 ]
 const MODULES := [
 	"acid_tank_mk1", "arc_furnace_mk1", "assisted_core", "basic_core", "battery_bank_mk1",
 	"chemical_thruster_mk1", "command_hub", "compact_fabricator_mk1", "compact_refinery_mk1",
 	"docking_port_mk1", "electrolyser_mk1", "fabricator_mk1", "gas_tank_mk1", "goods_container_mk1",
-	"goods_storage_mk1", "heat_radiator_mk1", "hydrolox_tank_mk1", "landing_legs_mk1", "lidar_mk1",
-	"mining_laser_mk1", "ore_container_mk1", "ore_refinery_mk1", "ore_storage_mk1",
-	"propellant_tank_mk1", "propellant_tank_mk2", "research_lab_mk1", "semiconductor_fab_mk1",
-	"small_battery_bank_mk1", "small_chemical_thruster_mk1", "small_docking_port_mk1",
-	"small_heat_radiator_mk1", "small_hub", "small_hull", "small_landing_legs_mk1",
-	"small_mining_laser_mk1", "small_ore_container_mk1", "small_propellant_tank_mk1",
-	"small_solar_panel_mk1", "solar_farm_mk1", "solar_panel_mk1", "starter_hull", "water_tank_mk1",
+	"goods_storage_mk1", "heat_radiator_mk1", "high_temp_radiator_mk1", "hydrolox_tank_mk1",
+	"landing_legs_mk1", "lidar_mk1", "mining_laser_mk1", "ore_container_mk1", "ore_refinery_mk1",
+	"ore_storage_mk1", "propellant_tank_mk1", "propellant_tank_mk2", "research_lab_mk1",
+	"semiconductor_fab_mk1", "small_battery_bank_mk1", "small_chemical_thruster_mk1",
+	"small_docking_port_mk1", "small_heat_radiator_mk1", "small_hub", "small_hull",
+	"small_landing_legs_mk1", "small_mining_laser_mk1", "small_ore_container_mk1",
+	"small_propellant_tank_mk1", "small_solar_panel_mk1", "solar_farm_mk1", "solar_panel_mk1",
+	"spectrometer_mk1", "starter_hull", "water_tank_mk1",
 ]
 const DEPOSIT_ITEMS := ["chalcopyrite", "hematite", "olivine", "water_ice"]
 const TEMPLATES := [
@@ -255,3 +256,30 @@ func test_the_chains_carry_real_energy_and_close_their_loops() -> void:
 			var outs: Array = entry["outputs"].map(func(o: Dictionary) -> String: return o.get("item", ""))
 			back = back or (ins.has(loop[2]) and outs.has(loop[1]))
 		assert_true(back, "%s comes back from %s" % [loop[1], loop[2]])
+
+
+## B30a: Red Rock's nickel rides the reduction into the sponge iron and comes out by the Mond
+## process; the alkaline stack is built from it and loses its KOH slowly; the refinery makes the first
+## steel and the first wiring before any arc furnace exists.
+func test_the_bootstrap_chains_hold() -> void:
+	var recipes := {}
+	for entry: Dictionary in data["recipes"]["entries"]:
+		recipes[entry["id"]] = entry
+	var outs := func(id: String) -> Array: return recipes[id]["outputs"].map(
+		func(o: Dictionary) -> String: return o.get("item", ""))
+	assert_has(outs.call("extract_nickel"), "nickel")
+	assert_has(outs.call("plate_electrodes"), "electrode")
+	var stack: Array = recipes["electrolyser_mk1"]["inputs"].map(func(o: Dictionary) -> String: return o["item"])
+	assert_has(stack, "electrode")
+	assert_has(stack, "potassium_hydroxide")
+	var lost: Array = recipes["electrolyse_water"]["outputs"].filter(
+		func(o: Dictionary) -> bool: return o["item"] == "potassium_hydroxide")
+	assert_eq(lost.size(), 1)
+	assert_eq(lost[0]["sink"], "electrolyte_loss")
+	# Ten grams a run of 100 kg of water: a 60 kg charge lasts 6,000 runs.
+	assert_almost_eq(60.0 / lost[0]["kg"], 6000.0, 1.0)
+	for id: String in ["induction_melt_steel", "draw_mi_cable", "extract_nickel", "burn_carbon_to_monoxide"]:
+		assert_true(recipes[id]["facility"] in ["refinery", "fabricator"], id + " runs before the arc furnace")
+	# The induction melt is slower and hotter than the arc furnace.
+	assert_gt(recipes["induction_melt_steel"]["heat_kj"], recipes["make_steel"]["heat_kj"])
+	assert_lt(recipes["induction_melt_steel"]["throughput_kg_per_s"], 0.05)
