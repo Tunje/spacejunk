@@ -90,13 +90,15 @@ static func offers(ctx: SimContext, unit_id: int, reveals: String = "") -> Array
 	return found
 
 
-## A scanning module's steps, each { reveals, range_m, ticks }. Data with no steps gives one
-## legacy step that reveals everything (before B30).
+## A scanning module's steps, each { reveals, range_m, ticks }. Data that still gives the old single
+## `ticks` gives one legacy step that reveals everything, whether or not it lists steps beside it:
+## B30a adds the LIDAR's steps but keeps its old time, and the probe's spectrometer and the science
+## split come with B30b, which drops the old time and so turns the steps on.
 static func steps_of(module: Dictionary) -> Array:
 	var capability: Dictionary = module["capabilities"][CAPABILITY]
-	if capability.has("steps"):
-		return capability["steps"]
-	return [{ "reveals": LEGACY, "range_m": LEGACY_RANGE_M, "ticks": capability["ticks"] }]
+	if capability.has("ticks") or not capability.has("steps"):
+		return [{ "reveals": LEGACY, "range_m": LEGACY_RANGE_M, "ticks": capability["ticks"] }]
+	return capability["steps"]
 
 
 ## Of the steps offered, the deepest whose range reaches the target now, then the lowest part ID.

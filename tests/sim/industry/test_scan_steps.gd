@@ -197,3 +197,16 @@ func test_a_scan_drifting_slowly_in_range_coasts_exactly() -> void:
 		game.take_events()
 	_same_both_ways(sim, coasted, CLASS_TICKS + 10)
 	assert_true(sim._state["deposits"][DEPOSIT]["found"], "60 m of drift keeps it well within 10 km")
+
+
+## B30a lists the LIDAR's steps but keeps its old time beside them, and the probe gets its
+## spectrometer only with B30b. Until the old time goes, the LIDAR scans everything, as before.
+func test_steps_beside_the_old_time_still_scan_everything() -> void:
+	sim._ctx.defs["modules"]["lidar_mk1"]["capabilities"]["scan"] = { "ticks": SHAPE_TICKS, "steps": [
+		{ "reveals": "shape", "range_m": 25_000, "ticks": SHAPE_TICKS },
+	] }
+	state["parts"][spectrometer]["fault"] = "test_fault"
+	_stand_off(400)
+	var events := _run(_scan())
+	assert_eq(_of(events, "scan_finished")[0]["data"]["reveals"], "legacy")
+	assert_true(state["deposits"][DEPOSIT]["graded"])
