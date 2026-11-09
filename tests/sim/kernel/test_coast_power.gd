@@ -204,7 +204,9 @@ func _horizon_unit_by_unit(sim: Sim) -> int:
 		var battery_ids: Array = batteries.keys()
 		battery_ids.sort()
 		for part_id: int in battery_ids:
-			skip = mini(skip, power._battery_horizon(ctx, part_id, batteries[part_id], shed))
+			skip = mini(skip, power._battery_horizon(ctx, part_id, batteries[part_id]))
+		if shed:
+			skip = mini(skip, power._budget_horizon(ctx, id, flows[id]))
 	return maxi(skip, 0)
 
 
@@ -241,3 +243,26 @@ func test_the_grouped_power_horizon_is_the_unit_by_unit_one() -> void:
 	perf.free()
 	gut.p("10 horizons compared, %d of them 0" % zero)
 	assert_lt(zero, 8, "most of them bound something")
+
+
+## A58: the reference ship (120 kW of panels, a 2 kW core) with its batteries empty and slow to
+## charge, and a 200 kW laser run as its op, which the budget can't hold at first and sheds. Each tick
+## the charging batteries raise the budget, and A35 held the coast to a tick a call until the laser
+## could come back. The exact budget bound coasts to the tick the choice could change, and stepping
+## and coasting stay byte-identical through the laser's readmission and its shedding again.
+func test_a_shed_load_while_batteries_charge_coasts_in_few_calls() -> void:
+	var game := Sim.new_game("reference", 12345)
+	game._ctx.defs = game._ctx.defs.duplicate(true)
+	game._ctx.defs["modules"]["mining_laser_mk1"]["power_w"] = 200_000
+	game._ctx.defs["modules"]["battery_bank_mk1"]["capabilities"]["battery"]["max_charge_w"] = 1_000
+	for part_id: int in [31, 32]:
+		game._state["parts"][part_id]["stored_j"] = 0
+	game._state["units"][23]["op"] = { "type": "mining", "target": 3, "part": 35, "start_tick": 0, "end_tick": 0 }
+	game.step(2)
+	assert_true(game._state["parts"][35]["shed"], "the laser is shed: 200 kW against 120 kW and empty batteries")
+	var copy_a := _copy(game)
+	copy_a._ctx.defs = game._ctx.defs
+	var copy_b := _copy(game)
+	copy_b._ctx.defs = game._ctx.defs
+	var calls := _same_both_ways(copy_a, copy_b, 4000, false)
+	assert_lt(calls, 400, "not one tick a call")

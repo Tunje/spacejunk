@@ -547,3 +547,44 @@ static func exp_neg(x: int) -> int:
 static func burn_g(mass_g: int, dv_um_s: int, exhaust_mm_s: int) -> int:
 	var ratio := exp_neg(IntMath.mul_div(dv_um_s, ONE, exhaust_mm_s * UM_PER_MM))
 	return IntMath.mul_div_ceil(mass_g, ONE - ratio, ONE)
+
+
+# ------------------------------------------------------------------------------ apsides (A57)
+
+## The periapsis distance from the parent's centre, in mm, for either kind of orbit.
+static func periapsis_radius_mm(orbit: Dictionary) -> int:
+	var a: int = orbit["a_mm"]
+	if orbit.get("hyperbolic", false):
+		return smul_div(a, int(orbit["e_q30"]) - ONE, ONE)
+	return a - smul_div(a, orbit["e_q30"], ONE)
+
+
+## The apoapsis distance from the parent's centre, in mm, or -1 for an open orbit.
+static func apoapsis_radius_mm(orbit: Dictionary) -> int:
+	if orbit.get("hyperbolic", false):
+		return -1
+	return smul_div(orbit["a_mm"], ONE + int(orbit["e_q30"]), ONE)
+
+
+## The tick nearest the next time, at or after `tick`, the orbit is at the mean anomaly `angle` (0
+## for periapsis, HALF_TURN for apoapsis). -1 on an open orbit already past
+## periapsis, or for an apoapsis on one.
+static func next_anomaly_tick(orbit: Dictionary, angle: int, tick: int) -> int:
+	if orbit.get("hyperbolic", false):
+		if angle != 0:
+			return -1
+		var m: int = orbit["m0_rad"] + smul_div(tick - int(orbit["epoch_tick"]), orbit["motion_q60"], 1 << MOTION_SHIFT - 30)
+		if m > 0:
+			return -1
+		return tick + smul_div(-m, 1 << (MOTION_SHIFT - 30), maxi(1, int(orbit["motion_q60"])))
+	var left := (angle - mean_anomaly(orbit, tick)) & ANGLE_MASK
+	var sub := IntMath.mul_div(left, orbit["period_subticks"], TURN)
+	return tick + (sub + SUB_TICKS / 2) / SUB_TICKS
+
+
+static func next_periapsis_tick(orbit: Dictionary, tick: int) -> int:
+	return next_anomaly_tick(orbit, 0, tick)
+
+
+static func next_apoapsis_tick(orbit: Dictionary, tick: int) -> int:
+	return next_anomaly_tick(orbit, HALF_TURN, tick)

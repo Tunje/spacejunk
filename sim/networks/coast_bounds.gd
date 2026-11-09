@@ -82,7 +82,7 @@ static func unit_base(state: Dictionary, unit_id: int) -> Array:
 	var unit: Dictionary = state["units"][unit_id]
 	if not unit["dock"].is_empty():
 		return unit_base(state, unit["dock"]["target_unit"])
-	if unit.get("low_flight", 0) != 0:
+	if unit.get("stepped", 0) != 0:
 		return [0, UNBOUNDED_UM_S]
 	if not unit["route"].is_empty():
 		# A straight leg at its speed, in its frame or in the old world (A37).

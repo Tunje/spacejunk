@@ -114,15 +114,17 @@ func test_on_the_ground_the_screen_offers_lift_off() -> void:
 	screen.lift_off()
 	assert_eq(screen.components(), [0, 0, 30_000_000] as Array[int], "straight up, now")
 	assert_true(screen.preview["ok"], "a burn on the ground is a lift-off")
-	assert_string_starts_with(screen._after.text, "Then climbing 30.0 m/s, 0.0 m/s across")
+	# A55 flies the lift-off exactly: 30 m/s up on Grit comes back down.
+	assert_string_starts_with(screen._after.text, "Then back on the ground in ")
 
 
 func test_a_hard_hop_predicts_the_crash_it_gets() -> void:
 	_on_the_ground(true)
 	_hop(10.0)
-	assert_ne(int(_ship()["low_flight"]), 0, "lifted off into low flight")
+	assert_ne(int(_ship()["stepped"]), 0, "lifted off into stepped flight")
 	assert_string_starts_with(screen._place.text, "Low over Grit: ")
-	assert_has(main.event_log.lines, "Probe is flying low over Grit")
+	assert_false(Array(main.event_log.lines).any(func(line: String) -> bool: return line.contains("flying low")),
+		"stepped flight isn't news (A55)")
 	assert_false(screen.contact.is_empty(), "predict finds the ground")
 	assert_string_starts_with(screen._descent_text.text, "Touchdown in ")
 	assert_string_starts_with(screen._verdict.text, "CRASH at this speed")

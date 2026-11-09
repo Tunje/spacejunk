@@ -28,8 +28,8 @@ static func parent_of(view: Dictionary, kind: String, id: int) -> String:
 				return "frame:%d" % int(unit["frame"])
 			if not unit.get("landed", {}).is_empty():
 				return "body:%d" % int(unit["landed"]["body"])
-			if int(unit.get("low_flight", 0)) != 0:
-				return "body:%d" % int(unit["low_flight"])
+			if int(unit.get("stepped", 0)) != 0:
+				return "body:%d" % int(unit["stepped"])
 			if not unit.get("dock", {}).is_empty():
 				return "unit:%d" % int(unit["dock"]["target_unit"])
 			var parent := int(unit.get("orbit", {}).get("parent", 0))

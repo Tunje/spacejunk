@@ -6,8 +6,14 @@ extends SimSystem
 ##
 ## A burn starts in phase 2 of its tick, fixing its direction from that tick's orbit, and holds the
 ## unit's operation as `burning` with the thruster as a power and heat load. From phase 5 of the same
-## tick it delivers thrust / mass each tick until its delta-v is done or the propellant runs out.
-## - On an orbit, each tick's delta-v makes a new orbit through OrbitMath.from_state.
+## tick it delivers thrust / mass each tick, times its throttle, until its delta-v is done or the
+## propellant runs out. Its steering (A55) keeps the start's direction, re-applies its prograde,
+## normal and radial parts along the current motion, or points at a target or against the velocity
+## relative to it, each tick. The turn is instant: ships have no facing yet (real_orbits.md section
+## 7, orientation); a turn rate would limit how far the direction moves per tick in thrust_step.
+## - On an orbit, the burn's start puts the unit in stepped flight (LowFlight, A55): position and
+##   velocity stepped with gravity, each tick's thrust added to the velocity. It goes back onto an
+##   exact orbit once the burn is over and it is above the ground's reach.
 ## - In a frame, it changes the unit's local velocity, and the unit drifts in a straight line. A
 ##   drifting unit leaves the frame for an orbit past leave_margin_mm beyond the frame's radius.
 ## - A unit on an orbit joins a frame within join_margin_mm of its radius at under JOIN_SPEED_UM_S.
@@ -37,12 +43,20 @@ const REASON_BUSY := "part_busy"
 const REASON_NO_PROPELLANT := "no_propellant"
 const REASON_ESCAPE := "unsupported_orbit"
 const REASON_CANCELLED := "cancelled"
+const REASON_THROTTLE := "throttle_out_of_range"
 const CAPABILITY := "thruster"
+const FULL_THROTTLE_PPM := 1_000_000
+## Steering (A55): the start's direction; the planned parts along the current motion each tick;
+## towards the target; against the velocity relative to the target, ending once it is nulled.
+const STEER_FIXED := "fixed"
+const STEER_ORBIT := "orbit"
+const STEER_TARGET := "target"
+const STEER_TARGET_RETROGRADE := "target_retrograde"
+const STEERING := [STEER_FIXED, STEER_ORBIT, STEER_TARGET, STEER_TARGET_RETROGRADE]
+const TARGET_STEERING := [STEER_TARGET, STEER_TARGET_RETROGRADE]
+## The most points check's `path` gives (A57).
+const PATH_POINTS := 500
 const MAX_DV_UM_S := 1_000_000_000_000
-## Near escape speed lies a band of orbits OrbitMath can't hold: exactly parabolic, or ellipses far
-## larger than any sphere of influence. A burn crossing it carries each tick's change forward until
-## the sum lands outside the band, up to this much, rather than stopping just short of escape.
-const MAX_HELD_UM_S := 50_000_000
 ## check flies a planned burn tick by tick, as the real one will be, for up to this many ticks.
 ## A longer burn is previewed as one impulse, marked `approximate`.
 const MAX_PREVIEW_TICKS := 20_000
@@ -62,6 +76,10 @@ const DRIFT_PER_MM := 10_000
 const MAX_PREDICT_POINTS := 10_000
 ## Axes for a burn in the old world, which has no orbit to take them from.
 const OLD_WORLD_BASIS := [[1 << 30, 0, 0], [0, 1 << 30, 0], [0, 0, 1 << 30]]
+
+## Units whose burn began this tick in phase 2, already at their state for this tick, so phase 5
+## thrusts without stepping them. Filled and emptied within one tick, never saved.
+var _entered := {}
 
 
 func commands() -> PackedStringArray:
@@ -90,6 +108,16 @@ func validate(ctx: SimContext, command: Dictionary) -> Dictionary:
 	if target != null and (typeof(target) != TYPE_INT or target == unit_id
 			or not (ctx.state["units"].has(target) or ctx.state["bodies"].has(target))):
 		return SimSystem.reject(REASON_INVALID)
+	var steer: Variant = args.get("steer", STEER_FIXED)
+	if typeof(steer) != TYPE_STRING or not STEERING.has(steer):
+		return SimSystem.reject(REASON_MALFORMED)
+	if TARGET_STEERING.has(steer) and target == null:
+		return SimSystem.reject(REASON_INVALID)
+	var throttle: Variant = args.get("throttle_ppm", FULL_THROTTLE_PPM)
+	if typeof(throttle) != TYPE_INT:
+		return SimSystem.reject(REASON_MALFORMED)
+	if throttle < min_throttle_ppm(ctx, found["part"]) or throttle > FULL_THROTTLE_PPM:
+		return SimSystem.reject(REASON_THROTTLE)
 	var result := SimSystem.ok()
 	# Only check needs the flown preview. Phase 1 validation skips it: a long burn's preview costs
 	# a fifth of a millisecond per burn tick, which would land inside the tick (A17).
@@ -101,24 +129,44 @@ func validate(ctx: SimContext, command: Dictionary) -> Dictionary:
 	return result
 
 
-## The closest approach to a target on the path after a planned burn (A54): flown from the burn's
-## tick, over one turn of the orbit it gives, or of the unit's own when that escapes. {} off an
-## orbit.
+## The closest approach to a target on the path after a planned burn (A54): flown from now through
+## the burn, over it and one turn of the orbit it gives, or of the unit's own if that escapes.
+## {} off an orbit or stepped flight.
 static func _closest_after(ctx: SimContext, unit_id: int, args: Dictionary, target: int) -> Dictionary:
-	var burn := { "id": 0, "tick": args["tick"], "prograde_um_s": args["prograde_um_s"],
-		"normal_um_s": args["normal_um_s"], "radial_um_s": args["radial_um_s"] }
-	var flown := Relative.planned_track(ctx, unit_id, [burn])
+	var flown := _fly_candidate(ctx, unit_id, args, -1)
 	if flown.is_empty():
 		return {}
-	var segments: Array = flown["track"]["segments"]
-	var after: Dictionary = segments[segments.size() - 1][1]
-	if after.get("hyperbolic", false):
-		after = ctx.state["units"][unit_id]["orbit"]
-	var end_tick := int(args["tick"])
-	for entry: Dictionary in flown["burns"]:
-		end_tick = maxi(end_tick, int(entry["end_tick"]))
-	var horizon := end_tick - int(args["tick"]) + maxi(1, int(after["period_subticks"]) / OrbitMath.SUB_TICKS)
-	return Relative.closest(ctx, flown["track"], Relative.thing_track(ctx, target), args["tick"], horizon)
+	return Relative.closest(ctx, { "kind": "flown", "segments": flown["segments"] }, Relative.thing_track(ctx, target),
+		args["tick"], int(flown["end_tick"]) - int(args["tick"]))
+
+
+## The candidate burn flown from now, alone, then on for `after_ticks` past its end: -1 is one turn
+## of the orbit it ends on, or of the unit's own if that escapes, at most 50 MAX_PREVIEW_TICKS.
+static func _fly_candidate(ctx: SimContext, unit_id: int, args: Dictionary, after_ticks: int) -> Dictionary:
+	var burn := planned_record(0, args)
+	var first := FlightAhead.fly(ctx, unit_id, [burn], int(args["tick"]) + MAX_PREVIEW_TICKS, false, true)
+	if first.is_empty():
+		return {}
+	var extra := after_ticks
+	if extra < 0:
+		var orbit: Dictionary = first["final"].get("orbit", {})
+		if orbit.is_empty() or orbit.get("hyperbolic", false):
+			orbit = Transfer.unit_orbit(ctx, unit_id)
+		if orbit.is_empty() or orbit.get("hyperbolic", false):
+			extra = MAX_PREVIEW_TICKS
+		else:
+			extra = mini(int(orbit["period_subticks"]) / OrbitMath.SUB_TICKS, 50 * MAX_PREVIEW_TICKS)
+	return FlightAhead.fly(ctx, unit_id, [burn], int(first["end_tick"]) + extra, false, false)
+
+
+## A planned-burn record from plan_burn's args.
+static func planned_record(id: int, args: Dictionary) -> Dictionary:
+	return {
+		"id": id, "tick": args["tick"], "prograde_um_s": args["prograde_um_s"],
+		"normal_um_s": args["normal_um_s"], "radial_um_s": args["radial_um_s"],
+		"throttle_ppm": args.get("throttle_ppm", FULL_THROTTLE_PPM), "steer": args.get("steer", STEER_FIXED),
+		"target": args.get("target", 0),
+	}
 
 
 func apply(ctx: SimContext, command: Dictionary) -> void:
@@ -127,16 +175,14 @@ func apply(ctx: SimContext, command: Dictionary) -> void:
 	if command["type"] == CANCEL:
 		_cancel(ctx, command["unit"], args["burn"])
 		return
-	unit["burns"].append({
-		"id": ctx.new_id(), "tick": args["tick"], "prograde_um_s": args["prograde_um_s"],
-		"normal_um_s": args["normal_um_s"], "radial_um_s": args["radial_um_s"],
-	})
+	unit["burns"].append(planned_record(ctx.new_id(), args))
 	unit["burns"].sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return a["tick"] < b["tick"] or (a["tick"] == b["tick"] and a["id"] < b["id"]))
 
 
 ## Phase 2: start each burn whose tick has come.
 func update_tasks(ctx: SimContext) -> void:
+	_entered.clear()
 	var units: Dictionary = ctx.state["units"]
 	for id: int in _sorted(units):
 		var unit: Dictionary = units[id]
@@ -144,26 +190,33 @@ func update_tasks(ctx: SimContext) -> void:
 			_start(ctx, id, unit["burns"].pop_front())
 
 
-## Phase 5: thrust, then drift, then frame changes.
+## Phase 5, unit by unit: stepped flight moves (unless it began this tick, already where it is for
+## this tick), then thrust, then the switch back to an orbit, drift, or frame and sphere changes.
 func run(ctx: SimContext) -> void:
 	var units: Dictionary = ctx.state["units"]
-	for id: int in _sorted(units):
-		if not units[id]["burn"].is_empty():
-			_thrust(ctx, id)
 	# The frames and spheres each parent's orbiters are tested against, sorted and with their join
 	# distances, once per tick rather than once per unit (A40).
 	var near := {}
 	for id: int in _sorted(units):
 		var unit: Dictionary = units[id]
 		if not unit["dock"].is_empty() or not unit["route"].is_empty() or not unit["transfer"].is_empty():
+			if not unit["burn"].is_empty():
+				_thrust(ctx, id)
 			continue
-		if unit["low_flight"] != 0:
+		if unit["stepped"] != 0 and not _entered.has(id):
 			LowFlight.step(ctx, id)
+		if not unit["burn"].is_empty():
+			_thrust(ctx, id)
+		if unit["stepped"] != 0:
+			LowFlight.settle(ctx, id)
 		elif not unit["landed"].is_empty():
 			continue
 		elif unit["orbit"].is_empty():
 			_drift(ctx, id)
-		elif _is_low(ctx, unit):
+			# Leaving a frame mid-burn lands on an orbit; the rest of the burn is stepped.
+			if not unit["orbit"].is_empty() and not unit["burn"].is_empty():
+				LowFlight.enter(ctx, id)
+		elif LowFlight.should_enter(ctx, unit):
 			LowFlight.enter(ctx, id)
 		else:
 			var parent: int = unit["orbit"]["parent"]
@@ -216,8 +269,8 @@ func horizon(ctx: SimContext) -> int:
 			skip = mini(skip, int(unit["burns"][0]["tick"]) - now - 1)
 		if not unit["dock"].is_empty() or not unit["route"].is_empty() or not unit["transfer"].is_empty():
 			continue
-		if unit["low_flight"] != 0:
-			ctx.coast_cap = "low_flight"
+		if unit["stepped"] != 0:
+			ctx.coast_cap = "stepped"
 			return 0
 		if not unit["landed"].is_empty():
 			continue
@@ -245,7 +298,7 @@ func _orbit_horizon(ctx: SimContext, unit: Dictionary, neighbours: Dictionary = 
 	var parent: Dictionary = bodies[parent_id]
 	var periapsis := CoastBounds.periapsis_mm(orbit)
 	var apoapsis := apoapsis_mm(orbit)
-	if parent["gm"] > 0 and periapsis - int(parent["radius_mm"]) < LowFlight.ENTER_MM:
+	if parent["gm"] > 0 and periapsis - int(parent["radius_mm"]) < LowFlight.enter_mm(ctx, parent_id):
 		return 0
 	var speed := CoastBounds.orbit_max_um_s(parent["gm"], orbit)
 	var here: Array = unit["pos_mm"]
@@ -405,14 +458,79 @@ func fill_view(ctx: SimContext, view: Dictionary) -> void:
 		var unit: Dictionary = units[id]
 		var shown: Dictionary = view["units"][id]
 		shown["vel_um_s"] = unit["vel_um_s"].duplicate()
-		shown["low_flight"] = unit["low_flight"]
+		shown["stepped"] = unit["stepped"]
 		shown["touchdown_mm_s"] = LowFlight.touchdown_mm_s(ctx, id)
 		shown["burns"] = unit["burns"].duplicate(true)
+		shown["surface_contact_tick"] = surface_contact_tick(ctx, id)
 		var burn: Dictionary = unit["burn"]
 		shown["burn"] = {} if burn.is_empty() else {
 			"id": burn["id"], "dv_um_s": burn["dv_um_s"], "done_um_s": burn["done_um_s"],
-			"start_tick": burn["start_tick"],
+			"start_tick": burn["start_tick"], "throttle_ppm": burn["throttle_ppm"], "steer": burn["steer"],
 		}
+		if not unit["orbit"].is_empty() and typeof(shown.get("orbit")) == TYPE_DICTIONARY and not shown["orbit"].is_empty():
+			add_apsides(shown["orbit"], unit["orbit"], ctx.state["tick"])
+	var bodies: Dictionary = ctx.state["bodies"]
+	for id: int in _sorted(bodies):
+		var shown_body: Dictionary = view["bodies"].get(id, {})
+		if not bodies[id]["orbit"].is_empty() and typeof(shown_body.get("orbit")) == TYPE_DICTIONARY \
+				and not shown_body["orbit"].is_empty():
+			add_apsides(shown_body["orbit"], bodies[id]["orbit"], ctx.state["tick"])
+
+
+## An orbit record's apsides for the view and check (A57): periapsis_mm and apoapsis_mm from the
+## parent's centre (-1 for an open orbit's apoapsis), and the next ticks it passes them, at or after
+## `tick` (-1 where there is none).
+static func add_apsides(shown: Dictionary, orbit: Dictionary, tick: int) -> void:
+	shown["periapsis_mm"] = OrbitMath.periapsis_radius_mm(orbit)
+	shown["apoapsis_mm"] = OrbitMath.apoapsis_radius_mm(orbit)
+	shown["next_periapsis_tick"] = OrbitMath.next_periapsis_tick(orbit, tick)
+	shown["next_apoapsis_tick"] = OrbitMath.next_apoapsis_tick(orbit, tick)
+
+
+## How far ahead surface_contact_tick looks.
+const SURFACE_HORIZON_TICKS := 20_000
+
+
+## The tick the unit's current path, with its planned burns flown, meets its parent's ground, or -1
+## if it doesn't within SURFACE_HORIZON_TICKS (A55). A coasting orbit whose periapsis is above the
+## ground's reach is -1 at once. A flight is cached on the context and reused while the unit is where
+## it said the unit would be and nothing in its plan has changed.
+static func surface_contact_tick(ctx: SimContext, unit_id: int) -> int:
+	var unit: Dictionary = ctx.state["units"][unit_id]
+	if not unit["dock"].is_empty() or not unit["landed"].is_empty() or not unit["route"].is_empty() \
+			or not unit["transfer"].is_empty():
+		return -1
+	if unit["stepped"] == 0:
+		if unit["orbit"].is_empty():
+			return -1
+		if unit["burns"].is_empty() and unit["burn"].is_empty():
+			var body: Dictionary = ctx.state["bodies"][unit["orbit"]["parent"]]
+			if body["gm"] <= 0 or OrbitMath.periapsis_radius_mm(unit["orbit"]) >= int(body["radius_mm"]) \
+					+ LowFlight.enter_mm(ctx, unit["orbit"]["parent"]):
+				return -1
+	var plan := str([unit["burns"], unit["burn"].get("id", 0), unit["orbit"], Units.unit_mass(ctx.state, ctx.defs, unit_id),
+		Reservations.free_stock(ctx, unit_id, Travel.PROPELLANT)])
+	var now: int = ctx.state["tick"]
+	var cached: Dictionary = ctx.flight_cache.get(unit_id, {})
+	if not cached.is_empty() and cached["plan"] == plan and now <= int(cached["until"]) and _follows(unit, cached, now):
+		return cached["contact"]
+	var flown := FlightAhead.fly(ctx, unit_id, unit["burns"], now + SURFACE_HORIZON_TICKS)
+	if flown.is_empty():
+		return -1
+	var contact: int = flown["contact"].get("tick", -1)
+	ctx.flight_cache[unit_id] = { "plan": plan, "until": flown["end_tick"], "segments": flown["segments"],
+		"contact": contact }
+	return contact
+
+
+## True if the unit is now where its cached flight said: on the same orbit, or at the same stepped
+## state.
+static func _follows(unit: Dictionary, cached: Dictionary, now: int) -> bool:
+	if unit["stepped"] == 0:
+		return not unit["orbit"].is_empty() and FlightAhead.segment_at(cached["segments"], now)[1] == unit["orbit"]
+	var state := FlightAhead.stepped_state(cached["segments"], now)
+	return not state.is_empty() and state[0] == unit["pos_mm"] and state[1] == unit["vel_um_s"] \
+		and state[2] == unit["drift_carry"] and state[3] == unit.get("vel_carry_nm", [0, 0, 0])
 
 
 # ------------------------------------------------------------------------------ queries
@@ -430,49 +548,115 @@ static func thruster(ctx: SimContext, unit_id: int) -> Dictionary:
 	return best
 
 
-## Positions along a unit's current path, ignoring planned burns, as { place, points }: relative to
-## the orbit's parent body, or local to the unit's frame. {} if the request is out of range.
+## Positions along a unit's path, as { place, points, world_points, ended }, from from_tick every
+## `step` ticks for `ticks` ticks: -1 is one turn of its orbit, or until it leaves its parent's
+## sphere, whichever is first (A57). Without with_burns the path coasts; with them its running and
+## planned burns are flown (A54, A55). Points are relative to `place`; world_points are the same
+## points relative to the root, so a moving parent needn't be worked out again. `ended` says what
+## ended it: "ticks", "revolution", "sphere" or "ground". {} if the request is out of range.
 static func predict(ctx: SimContext, unit_id: int, from_tick: int, ticks: int, step: int,
 		with_burns: bool = false) -> Dictionary:
-	if not ctx.state["units"].has(unit_id) or step < 1 or ticks < 0 or ticks / step >= MAX_PREDICT_POINTS:
+	if not ctx.state["units"].has(unit_id) or step < 1 or ticks < -1:
 		return {}
 	var unit: Dictionary = ctx.state["units"][unit_id]
 	if not unit["dock"].is_empty():
 		return predict(ctx, unit["dock"]["target_unit"], from_tick, ticks, step, with_burns)
-	if with_burns:
-		var flown := Relative.planned_track(ctx, unit_id, [])
+	var ended := "ticks"
+	if ticks == -1:
+		var span := _one_turn(ctx, unit, from_tick)
+		ticks = span[0]
+		ended = span[1]
+	if ticks / step >= MAX_PREDICT_POINTS:
+		return {}
+	if unit["stepped"] != 0 or not unit["orbit"].is_empty():
+		var now: int = ctx.state["tick"]
+		var burns: Array = unit["burns"] if with_burns else []
+		var flown := FlightAhead.fly(ctx, unit_id, burns, maxi(now, from_tick + ticks), with_burns)
 		if not flown.is_empty():
-			var segments: Array = flown["track"]["segments"]
-			var flown_points: Array = []
-			for t in range(from_tick, from_tick + ticks + 1, step):
-				flown_points.append(OrbitMath.position_at(Relative._segment(segments, t), t))
-			return { "place": { "orbit_parent": unit["orbit"]["parent"] }, "points": flown_points,
-				"burns": flown["burns"] }
-	if unit["low_flight"] != 0:
-		var ahead := LowFlight.path(ctx, unit, ticks, step)
-		var low := { "place": { "low_flight": unit["low_flight"] }, "points": ahead["points"], "contact": ahead["contact"] }
-		if with_burns:
-			low["burns"] = []
-		return low
+			var place_id: int = unit["stepped"] if unit["stepped"] != 0 else unit["orbit"]["parent"]
+			var place := { "stepped": place_id } if unit["stepped"] != 0 else { "orbit_parent": place_id }
+			var points: Array = []
+			var world: Array = []
+			var last := from_tick + ticks
+			if not flown["contact"].is_empty():
+				last = mini(last, int(flown["contact"]["tick"]))
+				ended = "ground"
+			for t in range(from_tick, last + 1, step):
+				_add_point(ctx, flown["segments"], t, place_id, points, world)
+			if ended == "ground" and (last - from_tick) % step != 0:
+				_add_point(ctx, flown["segments"], last, place_id, points, world)
+			var result := { "place": place, "points": points, "world_points": world, "ended": ended,
+				"contact": flown["contact"] }
+			if with_burns:
+				result["burns"] = flown["burns"]
+			return result
 	var points: Array = []
+	var world: Array = []
 	var orbit: Dictionary = unit["orbit"]
 	for t in range(from_tick, from_tick + ticks + 1, step):
-		if not orbit.is_empty():
-			points.append(OrbitMath.position_at(orbit, t))
-		else:
-			var dt: int = t - int(ctx.state["tick"])
-			var point: Array[int] = []
-			for axis in 3:
-				point.append(int(unit["pos_mm"][axis]) + OrbitMath.smul_div(unit["vel_um_s"][axis], dt,
-					Sim.TICKS_PER_SECOND * 1000))
-			points.append(point)
-	var place := { "orbit_parent": orbit["parent"] } if not orbit.is_empty() else { "frame": unit["frame"] }
+		var dt: int = t - int(ctx.state["tick"])
+		var point: Array[int] = []
+		for axis in 3:
+			point.append(int(unit["pos_mm"][axis]) + OrbitMath.smul_div(unit["vel_um_s"][axis], dt,
+				Sim.TICKS_PER_SECOND * 1000))
+		points.append(point)
+		var place_id: int = unit["landed"]["body"] if not unit["landed"].is_empty() else unit["frame"]
+		world.append(Relative.lift(ctx, [place_id, point, [0, 0, 0]], 0, t, false)[1])
+	var place := { "frame": unit["frame"] }
 	if not unit["landed"].is_empty():
 		place = { "landed": unit["landed"]["body"] }
-	var result := { "place": place, "points": points }
+	var result := { "place": place, "points": points, "world_points": world, "ended": ended }
 	if with_burns:
 		result["burns"] = []
 	return result
+
+
+## A flight's point at tick t, relative to `place_id` and to the root.
+static func _add_point(ctx: SimContext, segments: Array, t: int, place_id: int, points: Array, world: Array) -> void:
+	var at := FlightAhead.sample(ctx, segments, t, false)
+	var root := Relative.lift(ctx, at, 0, t, false)
+	var base := Relative.lift(ctx, [place_id, [0, 0, 0], [0, 0, 0]], 0, t, false)
+	points.append(LowFlight._add(root[1], base[1], -1))
+	world.append(root[1])
+
+
+## [ticks, ended] for predict's -1: one turn of the unit's orbit, or the ticks until it leaves its
+## parent's sphere if sooner, found by bisection. Off an orbit, MAX_PREVIEW_TICKS.
+static func _one_turn(ctx: SimContext, unit: Dictionary, from_tick: int) -> Array:
+	var orbit: Dictionary = unit["orbit"]
+	if orbit.is_empty():
+		return [MAX_PREVIEW_TICKS, "ticks"]
+	var turn := MAX_PREVIEW_TICKS * 50 if orbit.get("hyperbolic", false) \
+		else int(orbit["period_subticks"]) / OrbitMath.SUB_TICKS
+	var parent: Dictionary = ctx.state["bodies"][orbit["parent"]]
+	var soi: int = parent.get("soi_mm", 0)
+	if soi <= 0 or parent["orbit"].is_empty():
+		return [turn, "revolution"]
+	var apo := OrbitMath.apoapsis_radius_mm(orbit)
+	if apo >= 0 and apo < soi:
+		return [turn, "revolution"]
+	if not IntMath.dist_above(OrbitMath.position_at(orbit, from_tick + turn), soi):
+		# Leaves and comes back within the turn can't happen on one orbit; outside at the end means
+		# it left, and the walk below finds when.
+		var probe := from_tick
+		var stride := maxi(1, turn / 64)
+		while probe < from_tick + turn:
+			if IntMath.dist_above(OrbitMath.position_at(orbit, probe), soi):
+				break
+			probe += stride
+		if probe >= from_tick + turn:
+			return [turn, "revolution"]
+	var low := from_tick
+	var high := from_tick + turn
+	if IntMath.dist_above(OrbitMath.position_at(orbit, low), soi):
+		return [0, "sphere"]
+	while high - low > 1:
+		var mid := (low + high) / 2
+		if IntMath.dist_above(OrbitMath.position_at(orbit, mid), soi):
+			high = mid
+		else:
+			low = mid
+	return [high - from_tick, "sphere"]
 
 
 # ------------------------------------------------------------------------------ burns
@@ -511,13 +695,13 @@ func _start(ctx: SimContext, unit_id: int, planned: Dictionary) -> void:
 		return
 	if not unit["landed"].is_empty():
 		LowFlight.lift(ctx, unit_id)  # a burn on the ground is a lift-off (A19)
-	var vector := _burn_vector(ctx, unit_id, planned, ctx.tick)
-	var dv := IntMath.dist(vector, [0, 0, 0])
-	unit["burn"] = {
-		"id": planned["id"], "start_tick": ctx.tick, "dir_q30": OrbitMath.unit(vector), "dv_um_s": dv,
-		"done_um_s": 0, "thruster": found["part"], "dv_remainder": 0, "flow_remainder": 0,
-		"held_um_s": [0, 0, 0],
-	}
+		_entered[unit_id] = true
+	var here := Relative.sample(ctx, Relative.unit_track(ctx, unit_id), ctx.tick, true)
+	var vector := vector_for(ctx, planned, here, ctx.tick, not unit["orbit"].is_empty())
+	if not unit["orbit"].is_empty():
+		LowFlight.enter(ctx, unit_id)  # powered flight is stepped (A55)
+		_entered[unit_id] = true
+	unit["burn"] = new_burn(planned, vector, ctx.tick, found["part"])
 	unit["op"] = { "type": OP_BURNING, "target": 0, "part": found["part"], "start_tick": ctx.tick, "end_tick": 0 }
 	unit["at_target"] = 0
 	CargoSystem._clear_followers(ctx, unit_id)
@@ -538,37 +722,95 @@ func _thrust(ctx: SimContext, unit_id: int) -> void:
 	if not Units.can_run(part):
 		return
 	var stats: Dictionary = Units.module_of(ctx.state, ctx.defs, burn["thruster"])["capabilities"][CAPABILITY]
-	var step := _step(stats, Units.unit_mass(ctx.state, ctx.defs, unit_id), burn)
-	var dv: int = step["dv_um_s"]
-	var grams: int = step["grams"]
+	var here := Relative.sample(ctx, Relative.unit_track(ctx, unit_id), ctx.tick, true)
+	var push := thrust_step(ctx, burn, stats, mass_of(ctx, unit_id), here, ctx.tick)
+	var grams: int = push["grams"]
 	if grams > Reservations.free_stock(ctx, unit_id, Travel.PROPELLANT):
 		_end(ctx, unit_id, REASON_NO_PROPELLANT)
 		return
-	var change: Array[int] = []
 	for axis in 3:
-		change.append(OrbitMath.smul_div(burn["dir_q30"][axis], dv, OrbitMath.ONE))
-	if not _change_velocity(ctx, unit_id, change):
-		_end(ctx, unit_id, REASON_ESCAPE)
-		return
-	burn["dv_remainder"] = step["dv_remainder"]
-	burn["flow_remainder"] = step["flow_remainder"]
+		unit["vel_um_s"][axis] += push["change"][axis]
+	advance_burn(burn, push)
 	if grams > 0:
 		Reservations.claim_stock(ctx, unit_id, Travel.PROPELLANT, grams)
 		ctx.record_delta(unit_id, self, { "kind": DELTA_PROPELLANT, "unit": unit_id, "grams": grams })
-	burn["done_um_s"] += dv
-	burn["spent_g"] = burn.get("spent_g", 0) + grams
-	if burn["done_um_s"] >= burn["dv_um_s"]:
-		var held: int = IntMath.dist(burn["held_um_s"], [0, 0, 0])
-		if held > 0:
-			# It finished inside the band: the change still held could not be delivered.
-			burn["done_um_s"] -= held
-			_end(ctx, unit_id, REASON_ESCAPE)
-		else:
-			_end(ctx, unit_id, "")
+	if push["finished"]:
+		_end(ctx, unit_id, "")
+
+
+## A unit's mass now: its parts' from the unit index, which keeps it until they change, plus its
+## inventory. The same as Units.unit_mass, without walking the parts each tick.
+static func mass_of(ctx: SimContext, unit_id: int) -> int:
+	return int(UnitIndex.of(ctx, unit_id)["installed_g"]) + Units.inventory_mass(ctx.state, unit_id)
+
+
+## A running burn from a planned one, its direction from `vector`, starting at `tick` (A55).
+static func new_burn(planned: Dictionary, vector: Array, tick: int, thruster_part: int) -> Dictionary:
+	return {
+		"id": planned.get("id", 0), "start_tick": tick, "dir_q30": OrbitMath.unit(vector),
+		"dv_um_s": IntMath.dist(vector, [0, 0, 0]), "done_um_s": 0, "thruster": thruster_part,
+		"dv_remainder": 0, "flow_remainder": 0, "spent_g": 0,
+		"throttle_ppm": planned.get("throttle_ppm", FULL_THROTTLE_PPM), "steer": planned.get("steer", STEER_FIXED),
+		"target": planned.get("target", 0), "prograde_um_s": planned["prograde_um_s"],
+		"normal_um_s": planned["normal_um_s"], "radial_um_s": planned["radial_um_s"],
+	}
+
+
+## One tick of a burn, from where the unit is (`here`, [place, r, v]): { change, dv_um_s, grams,
+## dv_remainder, flow_remainder, finished }. Shared by the real burn and every flight ahead, so the
+## two agree exactly. The direction comes from the steering; it turns at once, since ships have no
+## facing yet (real_orbits.md section 7: orientation would limit the turn per tick here).
+static func thrust_step(ctx: SimContext, burn: Dictionary, stats: Dictionary, mass_g: int, here: Array,
+		tick: int) -> Dictionary:
+	var throttled := stats.duplicate()
+	throttled["thrust_n"] = IntMath.mul_div(stats["thrust_n"], burn.get("throttle_ppm", FULL_THROTTLE_PPM),
+		FULL_THROTTLE_PPM)
+	var step := _step(throttled, mass_g, burn)
+	var dv: int = step["dv_um_s"]
+	var grams: int = step["grams"]
+	var direction: Array = burn["dir_q30"]
+	var finished: bool = int(burn["done_um_s"]) + dv >= int(burn["dv_um_s"])
+	match burn.get("steer", STEER_FIXED):
+		STEER_ORBIT:
+			direction = OrbitMath.unit(_along(_basis_here(ctx, here, tick), burn))
+		STEER_TARGET, STEER_TARGET_RETROGRADE:
+			var there := Relative.sample(ctx, Relative.thing_track(ctx, burn["target"]), tick, true)
+			var seen := Relative.describe(ctx, here, there, tick)
+			if burn["steer"] == STEER_TARGET:
+				direction = OrbitMath.unit(seen["rel_pos_mm"])
+			else:
+				direction = OrbitMath.unit(seen["rel_vel_um_s"])
+				var left: int = seen["speed_um_s"]
+				if dv >= left:
+					grams = IntMath.mul_div_ceil(grams, left, maxi(1, dv))
+					dv = left
+					finished = true
+	if direction == [0, 0, 0]:
+		direction = burn["dir_q30"]
+	var change: Array[int] = []
+	for axis in 3:
+		change.append(OrbitMath.smul_div(direction[axis], dv, OrbitMath.ONE))
+	return { "change": change, "dv_um_s": dv, "grams": grams, "dv_remainder": step["dv_remainder"],
+		"flow_remainder": step["flow_remainder"], "finished": finished }
+
+
+## Books one tick's thrust on a running burn.
+static func advance_burn(burn: Dictionary, push: Dictionary) -> void:
+	burn["dv_remainder"] = push["dv_remainder"]
+	burn["flow_remainder"] = push["flow_remainder"]
+	burn["done_um_s"] = int(burn["done_um_s"]) + int(push["dv_um_s"])
+	burn["spent_g"] = int(burn.get("spent_g", 0)) + int(push["grams"])
+
+
+## The engine's least throttle, in parts per million of full thrust (B29's min_throttle_ppm; an
+## engine without it fires only at full).
+static func min_throttle_ppm(ctx: SimContext, part: int) -> int:
+	var stats: Dictionary = Units.module_of(ctx.state, ctx.defs, part)["capabilities"].get(CAPABILITY, {})
+	return int(stats.get("min_throttle_ppm", FULL_THROTTLE_PPM))
 
 
 ## One tick of a burn: thrust over mass in um/s^2, and the propellant flow, each with a carried
-## remainder. Shared by the real burn and check's preview, so the two give the same orbit.
+## remainder. Shared by the real burn and every flight ahead.
 static func _step(stats: Dictionary, mass_g: int, burn: Dictionary) -> Dictionary:
 	var accel := IntMath.mul_div(stats["thrust_n"], 1_000_000_000, mass_g)
 	var full := Rate.amount(accel, burn["dv_remainder"])
@@ -580,41 +822,6 @@ static func _step(stats: Dictionary, mass_g: int, burn: Dictionary) -> Dictionar
 		"dv_remainder": Rate.carry(accel, burn["dv_remainder"]),
 		"flow_remainder": Rate.carry(flow, burn["flow_remainder"]),
 	}
-
-
-## A velocity change on an orbit, with any change held from earlier ticks, as { orbit, held }:
-## the new orbit, or the same orbit and a larger held change inside the band near escape. {} once
-## the held change passes MAX_HELD_UM_S.
-static func _apply(ctx: SimContext, orbit: Dictionary, tick: int, change: Array, held: Array) -> Dictionary:
-	var total: Array[int] = []
-	for axis in 3:
-		total.append(int(change[axis]) + int(held[axis]))
-	var gm: int = ctx.state["bodies"][orbit["parent"]]["gm"]
-	var now := OrbitMath.state_at(orbit, gm, tick)
-	var v: Array = now["v"]
-	var after := OrbitMath.from_state(now["r"], [v[0] + total[0], v[1] + total[1], v[2] + total[2]], gm, tick)
-	if after.is_empty():
-		if IntMath.dist(total, [0, 0, 0]) > MAX_HELD_UM_S:
-			return {}
-		return { "orbit": orbit, "held": total }
-	after["parent"] = orbit["parent"]
-	return { "orbit": after, "held": [0, 0, 0] }
-
-
-## Adds a velocity change in um/s, with any change held from earlier ticks. Inside the band near
-## escape it holds the change for later instead. False once the held change passes MAX_HELD_UM_S.
-func _change_velocity(ctx: SimContext, unit_id: int, change: Array) -> bool:
-	var unit: Dictionary = ctx.state["units"][unit_id]
-	if unit["orbit"].is_empty():
-		for axis in 3:
-			unit["vel_um_s"][axis] += change[axis]
-		return true
-	var result := _apply(ctx, unit["orbit"], ctx.tick, change, unit["burn"]["held_um_s"])
-	if result.is_empty():
-		return false
-	unit["orbit"] = result["orbit"]
-	unit["burn"]["held_um_s"] = result["held"]
-	return true
 
 
 ## Ends the running burn. A reason makes it short; "" means it delivered its whole delta-v. An
@@ -633,10 +840,16 @@ func _end(ctx: SimContext, unit_id: int, reason: String) -> void:
 		unit["op"] = { "type": Units.IDLE_OP, "target": 0, "part": 0, "start_tick": 0, "end_tick": 0 }
 
 
-## The burn's velocity change in um/s, from prograde, normal and radial along the unit's orbit at
-## a tick. A unit in a frame takes the frame's orbit, and the old world takes fixed axes.
-static func _burn_vector(ctx: SimContext, unit_id: int, planned: Dictionary, tick: int) -> Array[int]:
-	var basis := _basis(ctx, unit_id, tick)
+## A planned burn's velocity change in um/s, from its prograde, normal and radial parts in the
+## basis where the unit is (`here`, [place, r, v]). On an orbit (`on_orbit`) that is the orbit's own;
+## in stepped flight or landed, LowFlight.basis_at; in a frame, the frame's orbit's; in the old
+## world, fixed axes.
+static func vector_for(ctx: SimContext, planned: Dictionary, here: Array, tick: int, on_orbit: bool) -> Array[int]:
+	var basis: Array = LowFlight.state_basis(here[1], here[2]) if on_orbit else _basis_here(ctx, here, tick)
+	return _along(basis, planned)
+
+
+static func _along(basis: Array, planned: Dictionary) -> Array[int]:
 	var vector: Array[int] = []
 	for axis in 3:
 		vector.append(OrbitMath.smul_div(planned["prograde_um_s"], basis[0][axis], OrbitMath.ONE)
@@ -645,17 +858,14 @@ static func _burn_vector(ctx: SimContext, unit_id: int, planned: Dictionary, tic
 	return vector
 
 
-## [prograde, normal, radial out] unit vectors in Q30.
-static func _basis(ctx: SimContext, unit_id: int, tick: int) -> Array:
-	var unit: Dictionary = ctx.state["units"][unit_id]
-	if unit["low_flight"] != 0 or not unit["landed"].is_empty():
-		return LowFlight.basis(unit)
-	var orbit: Dictionary = unit["orbit"]
-	if orbit.is_empty() and unit["frame"] != 0:
-		orbit = ctx.state["frames"][unit["frame"]]["orbit"]
-	if orbit.is_empty():
+## [prograde, normal, radial] where a unit is that isn't on an orbit record.
+static func _basis_here(ctx: SimContext, here: Array, tick: int) -> Array:
+	var place: int = here[0]
+	if ctx.state["frames"].has(place):
+		return orbit_basis(ctx, ctx.state["frames"][place]["orbit"], tick)
+	if place == 0 or not ctx.state["bodies"].has(place):
 		return OLD_WORLD_BASIS
-	return orbit_basis(ctx, orbit, tick)
+	return LowFlight.basis_at(ctx, place, here[1], here[2])
 
 
 ## [prograde, normal, radial out] on an orbit at a tick, in Q30.
@@ -666,69 +876,91 @@ static func orbit_basis(ctx: SimContext, orbit: Dictionary, tick: int) -> Array:
 	return [prograde, normal, OrbitMath.cross(prograde, normal)]
 
 
-## What check shows for a planned burn. On an orbit it flies the burn tick by tick from its tick,
-## through the same _step and _apply as the real one, assuming the thruster has power throughout.
-## In a frame, or past MAX_PREVIEW_TICKS, it is one impulse.
+## What check shows for a planned burn. On an orbit, in stepped flight or landed it flies the burn
+## from now, alone, through the same steps as the real one (FlightAhead), assuming the thruster has
+## power throughout. In a frame, or past MAX_PREVIEW_TICKS, it is one impulse. `path` (A57) is the
+## flown path through the burn and one turn after, as predict gives points.
 static func _preview(ctx: SimContext, unit_id: int, args: Dictionary, found: Dictionary) -> Dictionary:
 	var unit: Dictionary = ctx.state["units"][unit_id]
-	var vector := _burn_vector(ctx, unit_id, args, args["tick"])
+	var here := Relative.sample(ctx, Relative.unit_track(ctx, unit_id), ctx.state["tick"], true)
+	var on_orbit: bool = not unit["orbit"].is_empty()
+	if on_orbit:
+		var orbit: Dictionary = unit["orbit"]
+		var at := OrbitMath.state_at(orbit, ctx.state["bodies"][orbit["parent"]]["gm"], args["tick"])
+		here = [orbit["parent"], at["r"], at["v"]]
+	var planned := planned_record(0, args)
+	var vector := vector_for(ctx, planned, here, args["tick"], on_orbit)
 	var dv := IntMath.dist(vector, [0, 0, 0])
 	var mass_g := Units.unit_mass(ctx.state, ctx.defs, unit_id)
+	var thrust := IntMath.mul_div(found["thrust_n"], planned["throttle_ppm"], FULL_THROTTLE_PPM)
 	var detail := {
 		"dv_um_s": dv,
 		"propellant_g": OrbitMath.burn_g(mass_g, dv, found["exhaust_mm_s"]),
-		"burn_ticks": IntMath.mul_div_ceil(dv, mass_g * Sim.TICKS_PER_SECOND, found["thrust_n"] * 1_000_000_000),
+		"burn_ticks": IntMath.mul_div_ceil(dv, mass_g * Sim.TICKS_PER_SECOND, maxi(1, thrust) * 1_000_000_000),
 		"orbit": {}, "vel_um_s": unit["vel_um_s"].duplicate(), "leaves_frame": false,
 	}
-	var orbit: Dictionary = unit["orbit"]
-	if orbit.is_empty():
+	if not on_orbit and unit["stepped"] == 0 and unit["landed"].is_empty():
 		for axis in 3:
 			detail["vel_um_s"][axis] += vector[axis]
 		detail["leaves_frame"] = unit["frame"] != 0 and detail["vel_um_s"] != [0, 0, 0]
-		if unit["low_flight"] != 0 or not unit["landed"].is_empty():
-			detail["approximate"] = true
 		return detail
-	if detail["burn_ticks"] <= MAX_PREVIEW_TICKS:
-		return _fly_preview(ctx, orbit, vector, dv, mass_g, args["tick"], found, detail)
-	var gm: int = ctx.state["bodies"][orbit["parent"]]["gm"]
-	var at := OrbitMath.state_at(orbit, gm, args["tick"])
-	var v: Array = at["v"]
-	var after := OrbitMath.from_state(at["r"], [v[0] + vector[0], v[1] + vector[1], v[2] + vector[2]], gm, args["tick"])
-	if not after.is_empty():
-		after["parent"] = orbit["parent"]
-	detail["orbit"] = after
-	detail["approximate"] = true
+	if int(detail["burn_ticks"]) > MAX_PREVIEW_TICKS:
+		var gm: int = ctx.state["bodies"][here[0]]["gm"]
+		var after := OrbitMath.from_state(here[1], LowFlight._add(here[2], vector, 1), gm, args["tick"])
+		if not after.is_empty():
+			after["parent"] = here[0]
+			add_apsides(after, after, args["tick"])
+		detail["orbit"] = after
+		detail["approximate"] = true
+		return detail
+	var flown := _fly_candidate(ctx, unit_id, args, -1)
+	if flown.is_empty():
+		return detail
+	var record: Dictionary = {}
+	for entry: Dictionary in flown["burns"]:
+		if entry["id"] == 0:
+			record = entry
+	if not record.is_empty():
+		detail["propellant_g"] = record["propellant_g"]
+		detail["dv_um_s"] = record["dv_um_s"]
+		var end_tick: int = record["end_tick"]
+		detail["burn_ticks"] = maxi(0, end_tick - int(record["start_tick"]) + 1) if end_tick >= 0 else MAX_PREVIEW_TICKS
+		if record["reason"] != "":
+			detail["short"] = record["reason"]
+		if end_tick >= 0 and (flown["contact"].is_empty() or int(flown["contact"]["tick"]) > end_tick):
+			var at := FlightAhead.sample(ctx, flown["segments"], end_tick, true)
+			var gm: int = ctx.state["bodies"][at[0]]["gm"]
+			var after := OrbitMath.from_state(at[1], at[2], gm, end_tick)
+			if not after.is_empty():
+				after["parent"] = at[0]
+				add_apsides(after, after, end_tick)
+			detail["orbit"] = after
+	if not flown["contact"].is_empty():
+		detail["contact"] = flown["contact"]
+	detail["path"] = _path_of(ctx, unit_id, flown)
 	return detail
 
 
-static func _fly_preview(ctx: SimContext, orbit: Dictionary, vector: Array, dv: int, mass_g: int,
-		tick: int, found: Dictionary, detail: Dictionary) -> Dictionary:
-	var stats: Dictionary = Units.module_of(ctx.state, ctx.defs, found["part"])["capabilities"][CAPABILITY]
-	var direction := OrbitMath.unit(vector)
-	var burn := { "dv_um_s": dv, "done_um_s": 0, "dv_remainder": 0, "flow_remainder": 0 }
-	var held: Array = [0, 0, 0]
-	var spent := 0
-	var ticks := 0
-	while burn["done_um_s"] < dv:
-		var step := _step(stats, mass_g - spent, burn)
-		var change: Array[int] = []
-		for axis in 3:
-			change.append(OrbitMath.smul_div(direction[axis], step["dv_um_s"], OrbitMath.ONE))
-		var result := _apply(ctx, orbit, tick + ticks, change, held)
-		if result.is_empty():
-			detail["orbit"] = {}
-			return detail
-		orbit = result["orbit"]
-		held = result["held"]
-		burn["dv_remainder"] = step["dv_remainder"]
-		burn["flow_remainder"] = step["flow_remainder"]
-		burn["done_um_s"] += step["dv_um_s"]
-		spent += step["grams"]
-		ticks += 1
-	detail["orbit"] = orbit if held == [0, 0, 0] else {}
-	detail["propellant_g"] = spent
-	detail["burn_ticks"] = ticks
-	return detail
+## A flight as predict's points, at most PATH_POINTS of them, from now to its end.
+static func _path_of(ctx: SimContext, unit_id: int, flown: Dictionary) -> Dictionary:
+	var unit: Dictionary = ctx.state["units"][unit_id]
+	var now: int = ctx.state["tick"]
+	var last: int = flown["end_tick"]
+	if not flown["contact"].is_empty():
+		last = mini(last, int(flown["contact"]["tick"]))
+	var step := maxi(1, IntMath.mul_div_ceil(last - now, 1, PATH_POINTS))
+	var place_id: int = unit["stepped"] if unit["stepped"] != 0 else (unit["landed"]["body"]
+		if not unit["landed"].is_empty() else unit["orbit"]["parent"])
+	var points: Array = []
+	var world: Array = []
+	for t in range(now, last + 1, step):
+		_add_point(ctx, flown["segments"], t, place_id, points, world)
+	if (last - now) % step != 0:
+		_add_point(ctx, flown["segments"], last, place_id, points, world)
+	var place := { "stepped": place_id } if unit["stepped"] != 0 else ({ "landed": place_id }
+		if not unit["landed"].is_empty() else { "orbit_parent": place_id })
+	return { "place": place, "points": points, "world_points": world, "step": step,
+		"ended": "ground" if not flown["contact"].is_empty() else "ticks", "contact": flown["contact"] }
 
 
 # ------------------------------------------------------------------------------ drift and frames
@@ -879,12 +1111,6 @@ func _rebase(ctx: SimContext, unit_id: int, new_parent: int, between: Dictionary
 	unit["orbit"] = orbit
 	unit["pos_mm"] = r
 	ctx.emit_event("soi_changed", unit_id, { "from": old_parent, "to": new_parent })
-
-
-## True if an orbiting unit is below LowFlight.ENTER_MM over a body with gravity (A19).
-static func _is_low(ctx: SimContext, unit: Dictionary) -> bool:
-	var body: Dictionary = ctx.state["bodies"][unit["orbit"]["parent"]]
-	return body["gm"] > 0 and IntMath.dist_below(unit["pos_mm"], int(body["radius_mm"]) + LowFlight.ENTER_MM)
 
 
 ## Division rounding towards minus infinity, so drift steps the same either way along an axis.
