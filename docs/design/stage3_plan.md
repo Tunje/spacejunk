@@ -72,7 +72,8 @@ op.plan = {
     as it burns, and a burn ends early if the propellant runs out.
   - The op stays `moving`, with `plan` in it.
 - **Corrections.** By default there are two correction points: halfway, and at 90% of the coast to
-  arrival.
+  arrival. A third is added when the closest approach predicted after the 90% correction is still
+  outside the arrive tolerance (the Lead's ruling: real missions add corrections when needed).
   - At each, the step solves again from the unit's real state to the plan's arrival point at
     arrive_tick, with Lambert, and replaces the remaining burns with the result.
   - The correction ticks are saved in the plan, so a loaded save corrects on the same ticks with
@@ -188,7 +189,7 @@ until it is rebalanced.
 
 | Step | What | Test it must pass |
 |---|---|---|
-| 3a | Universal-variable Lambert, multi-rev, plane handling, integer refine | 50 km in 30 min hits ≤ 1 m; all Transfer cases hit; under 1 ms |
+| 3a | Universal-variable Lambert, multi-rev, plane handling, integer refine | 50 km in 30 min hits ≤ 1 m; all Transfer cases hit; under 1 ms (done: 5 mm, Δv within 3 µm/s of the float answer, about 0.35 ms) |
 | 3b | Plans as burn lists, corrections, quotes flown ahead, FlightAhead from a description, the quote cache | A trip's quote equals its flight, tick for tick and gram for gram; the save is exact mid-trip and across a correction |
 | 3c | SOI trips flown | Today's SOI test trips arrive, and quote equals flight |
 | 3d | Arrive modes, quote_chain, refuel mixture | Standoff and contact end inside their conditions; a chain equals its legs flown in turn |

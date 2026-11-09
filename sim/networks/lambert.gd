@@ -101,6 +101,9 @@ static func _minus(a: Array, b: Array) -> Array[int]:
 ## Bisection steps on z: its bracket is under 2^37 Q30 units wide, so 48 halvings pin it to well
 ## under one.
 const UV_STEPS := 48
+## Regula falsi steps, and the time residual (Q30) at which it stops: a part in 2^24 of a time unit.
+const UV_FALSI_STEPS := 40
+const UV_TIME_TOLERANCE := 64
 ## A universal-variable trip is refined until it misses by this much or less (stage 3a).
 const UV_HIT_MM := 1_000
 ## y / C past this makes the time of flight overflow; it is far longer than any trip.
@@ -157,13 +160,52 @@ static func universal(gm: int, r1: Array, r2: Array, ticks: int, normal: Array) 
 			low = good
 	if _uv_time(one, r2n, a_n, high) < dt_n:
 		return []  # longer than no-revolution arcs go
-	for i in UV_STEPS:
+	return _uv_velocity(r1, r2, r1_mm, r2n, a_n, _find_z(r2n, a_n, dt_n, low, high), speed)
+
+
+## The z in [low, high] whose time of flight is dt_n, the time rising with z. A few halvings first
+## until the top of the bracket gives a finite time, then the Illinois form of regula falsi, which
+## needs about ten evaluations where bisection needs fifty, finishing by bisection if it stalls.
+## Every step is integer and fixed in number, so the answer is the same everywhere.
+static func _find_z(r2n: int, a_n: int, dt_n: int, low: int, high: int) -> int:
+	var one := OrbitMath.ONE
+	var f_low := _uv_time(one, r2n, a_n, low) - dt_n
+	var f_high := _uv_time(one, r2n, a_n, high) - dt_n
+	var halvings := 0
+	while f_high > 64 * one and halvings < 40:
 		var mid := (low + high) / 2
-		if _uv_time(one, r2n, a_n, mid) < dt_n:
+		var f_mid := _uv_time(one, r2n, a_n, mid) - dt_n
+		if f_mid < 0:
 			low = mid
+			f_low = f_mid
 		else:
 			high = mid
-	return _uv_velocity(r1, r2, r1_mm, r2n, a_n, (low + high) / 2, speed)
+			f_high = f_mid
+		halvings += 1
+	var side := 0
+	for i in UV_FALSI_STEPS:
+		if high - low <= 1 or f_high == f_low:
+			break
+		var z := low + IntMath.mul_div(high - low, -f_low, f_high - f_low) if f_low < 0 and f_high > 0 			else (low + high) / 2
+		z = clampi(z, low + 1, high - 1)
+		var f_z := _uv_time(one, r2n, a_n, z) - dt_n
+		if f_z == 0:
+			return z
+		if f_z < 0:
+			low = z
+			f_low = f_z
+			if side == -1:
+				f_high /= 2
+			side = -1
+		else:
+			high = z
+			f_high = f_z
+			if side == 1:
+				f_low /= 2
+			side = 1
+		if absi(f_z) <= UV_TIME_TOLERANCE:
+			return z
+	return (low + high) / 2
 
 
 ## As universal, for an arc of `revs` whole revolutions (stage 3a's multi-rev): for N >= 1 the
@@ -294,12 +336,12 @@ static func stumpff(z: int) -> Array[int]:
 ## answer, refined by solve's shooting on the rails' own propagation to within UV_HIT_MM. {} if
 ## neither finds it.
 static func solve_uv(gm: int, r1: Array, theirs: Dictionary, depart_tick: int, arrive_tick: int,
-		normal: Array, revs: int = 0, low_branch: bool = true) -> Dictionary:
+		normal: Array, revs: int = 0, low_branch: bool = true, hit_mm: int = UV_HIT_MM) -> Dictionary:
 	var r2 := OrbitMath.position_at(theirs, arrive_tick)
 	var guess := universal_revs(gm, r1, r2, arrive_tick - depart_tick, normal, revs, low_branch)
 	if guess.is_empty():
 		return {}
-	return solve(gm, r1, guess, theirs, depart_tick, arrive_tick, normal, UV_HIT_MM)
+	return solve(gm, r1, guess, theirs, depart_tick, arrive_tick, normal, hit_mm)
 
 
 ## The square root of a Q30 number, in Q30, for any size the solver meets.
