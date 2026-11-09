@@ -346,7 +346,7 @@ static func world_at(state: Dictionary, table: String, id: int, tick: int) -> Ar
 	if table == "units":
 		if not entry["dock"].is_empty():
 			return world_at(state, "units", entry["dock"]["target_unit"], tick)
-		if entry.get("low_flight", 0) != 0:
+		if entry.get("stepped", 0) != 0:
 			return []
 		if not entry["transfer"].is_empty():
 			# A transfer rides its present orbit until its next leg or its arrival, which RailSystem
@@ -490,7 +490,7 @@ static func _frame_shadow_bound(ctx: SimContext, frame_id: int, ids: Array, cast
 static func _still_place(units: Dictionary, id: int) -> int:
 	var unit: Dictionary = units[_still_host(units, id)]
 	if unit["frame"] == 0 or not unit["orbit"].is_empty() or not unit["route"].is_empty() \
-			or unit.get("low_flight", 0) != 0 or not unit.get("landed", {}).is_empty() \
+			or unit.get("stepped", 0) != 0 or not unit.get("landed", {}).is_empty() \
 			or unit["vel_um_s"] != [0, 0, 0]:
 		return 0
 	return unit["frame"]

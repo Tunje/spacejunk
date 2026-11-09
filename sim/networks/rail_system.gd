@@ -70,6 +70,7 @@ func fill_view(ctx: SimContext, view: Dictionary) -> void:
 			"name": frame["name"], "radius_mm": frame["radius_mm"], "orbit": frame["orbit"].duplicate(true),
 			"pos_mm": frame["pos_mm"].duplicate(), "world_mm": world_mm(ctx.state, "frames", id),
 		}
+		BurnSystem.add_apsides(view["frames"][id]["orbit"], frame["orbit"], ctx.state["tick"])
 
 
 ## The frame a unit travels in, ON_ORBIT if it is on an orbit, or 0 in the old world.
@@ -77,7 +78,7 @@ static func unit_place(state: Dictionary, unit_id: int) -> int:
 	var unit: Dictionary = state["units"][unit_id]
 	if not unit["dock"].is_empty():
 		return unit_place(state, unit["dock"]["target_unit"])
-	if not unit["orbit"].is_empty() or not unit.get("landed", {}).is_empty() or unit.get("low_flight", 0) != 0:
+	if not unit["orbit"].is_empty() or not unit.get("landed", {}).is_empty() or unit.get("stepped", 0) != 0:
 		return ON_ORBIT
 	return unit["frame"]
 
@@ -101,8 +102,8 @@ static func world_mm(state: Dictionary, table: String, id: int) -> Array[int]:
 		base = world_mm(state, "bodies", entry["orbit"]["parent"])
 	elif table == "units" and not entry.get("landed", {}).is_empty():
 		base = world_mm(state, "bodies", entry["landed"]["body"])
-	elif table == "units" and entry.get("low_flight", 0) != 0:
-		base = world_mm(state, "bodies", entry["low_flight"])
+	elif table == "units" and entry.get("stepped", 0) != 0:
+		base = world_mm(state, "bodies", entry["stepped"])
 	elif table != "frames" and entry["frame"] != 0:
 		base = world_mm(state, "frames", entry["frame"])
 	return [base[0] + pos[0], base[1] + pos[1], base[2] + pos[2]]

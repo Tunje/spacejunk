@@ -161,7 +161,7 @@ func test_a_gentle_touchdown_lands() -> void:
 	assert_eq(event.get("type", ""), "landed", str(event))
 	assert_lt(event["data"]["speed_um_s"], GEAR_MM_S * 1000)
 	assert_eq(_ship()["landed"], { "body": keys["Planet"], "cell": 4242 })
-	assert_eq(_ship()["low_flight"], 0)
+	assert_eq(_ship()["stepped"], 0)
 
 
 func test_a_hard_touchdown_crashes() -> void:
@@ -184,7 +184,7 @@ func test_ground_contact_is_at_the_cells_real_height() -> void:
 func test_predict_shows_the_contact_the_flight_meets() -> void:
 	_hover(4242, 100_000)
 	var ahead := sim.predict(keys["Ship"], sim.current_tick(), 500, 10)
-	assert_eq(ahead["place"], { "low_flight": keys["Planet"] })
+	assert_eq(ahead["place"], { "stepped": keys["Planet"] })
 	var contact: Dictionary = ahead["contact"]
 	assert_false(contact.is_empty())
 	var event := _until_any(["crashed"], 500)
@@ -193,21 +193,22 @@ func test_predict_shows_the_contact_the_flight_meets() -> void:
 	assert_eq(event["data"]["cell"], contact["cell"])
 
 
-func test_an_orbit_dipping_low_enters_low_flight_and_climbing_leaves_it() -> void:
-	# An ellipse from 700 km down to a 15 km periapsis, joined 1500 ticks before periapsis rather
-	# than at apoapsis, half an orbit earlier (A24).
-	var periapsis := RADIUS_MM + 15_000_000
+func test_an_orbit_dipping_low_is_stepped_and_climbing_goes_back_onto_an_orbit() -> void:
+	# An ellipse from 700 km down to an 8.5 km periapsis, inside the ground's reach (the 8 km
+	# height range plus 1 km, A55) and over its highest ground, joined 1500 ticks before periapsis
+	# rather than at apoapsis, half an orbit earlier (A24).
+	var periapsis := RADIUS_MM + 8_500_000
 	var a := (700_000_000 + periapsis) / 2
 	var apo_speed := OrbitMath.speed_um_s(GM_PLANET, 700_000_000, a)
 	var half_orbit := OrbitMath.period_sub(GM_PLANET, a) / OrbitMath.SUB_TICKS / 2
 	var at_apoapsis := sim.current_tick() - (half_orbit - 1500)
 	_put_in_orbit(OrbitMath.from_state([700_000_000, 0, 0], [0, 0, -apo_speed], GM_PLANET, at_apoapsis))
-	assert_gt(LowFlight.altitude_mm(sim._ctx, keys["Planet"], _ship()["pos_mm"]), LowFlight.ENTER_MM, "it starts above low flight")
-	var entered := _until_any(["low_flight_entered"], 20_000)
+	assert_gt(LowFlight.altitude_mm(sim._ctx, keys["Planet"], _ship()["pos_mm"]), LowFlight.enter_mm(sim._ctx, keys["Planet"]), "it starts above the ground's reach")
+	var entered := _until_any(["stepped_entered"], 20_000)
 	assert_eq(entered.get("data", {}), { "body": keys["Planet"] })
 	assert_eq(_ship()["orbit"], {})
-	var left := _until_any(["low_flight_left", "crashed", "landed"], 20_000)
-	assert_eq(left.get("type", ""), "low_flight_left", "it skims past periapsis and climbs out")
+	var left := _until_any(["stepped_left", "crashed", "landed"], 20_000)
+	assert_eq(left.get("type", ""), "stepped_left", "it skims past periapsis and climbs out")
 	assert_eq(_ship()["orbit"]["parent"], keys["Planet"])
 
 
@@ -223,7 +224,7 @@ func test_lift_off_needs_thrust_over_weight() -> void:
 	sim.submit({ "type": "plan_burn", "unit": keys["Ship"], "args": {
 		"tick": sim.current_tick() + 1, "prograde_um_s": 0, "normal_um_s": 0, "radial_um_s": 20_000_000 } })
 	sim.step(200)
-	assert_eq(_ship()["low_flight"], keys["Planet"])
+	assert_eq(_ship()["stepped"], keys["Planet"])
 	assert_gt(LowFlight.altitude_mm(sim._ctx, keys["Planet"], _ship()["pos_mm"]), 10_000)
 
 
@@ -378,11 +379,11 @@ func test_take_off_must_clear_the_low_flight_band() -> void:
 	_strong_thruster()
 	LandingSystem._set_down(sim._ctx, keys["Ship"], keys["Planet"], 4242)
 	sim._ctx.index.clear()
-	for altitude: int in [LowFlight.ENTER_MM, LowFlight.LEAVE_MM - 1]:
+	for altitude: int in [LowFlight.enter_mm(sim._ctx, keys["Planet"]), LowFlight.LEAVE_MM - 1]:
 		var low := sim.check({ "type": "take_off", "unit": keys["Ship"], "args": { "altitude_mm": altitude } })
 		assert_eq(low.get("reason", ""), "invalid_target", "refused at %d mm" % altitude)
 	var at_leave := { "type": "take_off", "unit": keys["Ship"], "args": { "altitude_mm": LowFlight.LEAVE_MM } }
 	assert_true(sim.check(at_leave)["ok"], str(sim.check(at_leave)))
 	# The orbit it would reach is clear of low flight all the way round.
 	var orbit := LandingSystem.lift_orbit(sim._ctx, keys["Planet"], 4242, LowFlight.LEAVE_MM, 0)
-	assert_gte(CoastBounds.periapsis_mm(orbit) - RADIUS_MM, LowFlight.ENTER_MM)
+	assert_gte(CoastBounds.periapsis_mm(orbit) - RADIUS_MM, LowFlight.return_mm(sim._ctx, keys["Planet"]))

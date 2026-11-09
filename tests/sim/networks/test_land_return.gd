@@ -117,7 +117,7 @@ func test_a_waiting_move_whose_unit_drops_into_low_flight_is_cancelled() -> void
 	# probe drops into low flight a few ticks after its move is accepted.
 	var unit: Dictionary = sim._state["units"][PROBE]
 	var cell := LandingSystem.cell_below(sim._ctx, FROST, unit["pos_mm"])
-	unit["orbit"] = LandingSystem.lift_orbit(sim._ctx, FROST, cell, LowFlight.ENTER_MM, sim.current_tick())
+	unit["orbit"] = LandingSystem.lift_orbit(sim._ctx, FROST, cell, LowFlight.enter_mm(sim._ctx, FROST), sim.current_tick())
 	unit["pos_mm"] = OrbitMath.position_at(unit["orbit"], sim.current_tick())
 	sim._ctx.index.clear()
 	sim.submit({ "type": "move_to", "unit": PROBE, "args": { "target": NewStartBot.RED_ROCK } })
@@ -129,7 +129,7 @@ func test_a_waiting_move_whose_unit_drops_into_low_flight_is_cancelled() -> void
 	var depart: int = unit["op"]["depart_tick"]
 	assert_gt(depart, sim.current_tick() + 1)
 	sim.step(20)
-	assert_ne(unit["low_flight"], 0, "in low flight before its window")
+	assert_ne(unit["stepped"], 0, "in low flight before its window")
 	sim.step(depart - sim.current_tick() + 2)
 	var reasons: Array = []
 	for event: Dictionary in sim.take_events():

@@ -158,7 +158,7 @@ func _quotes() -> Array[int]:
 ## Position and velocity relative to Frost, in metres and m/s, on an orbit or in low flight.
 func _now() -> Array:
 	var probe := _probe()
-	if probe["low_flight"] != 0:
+	if probe["stepped"] != 0:
 		return [_vec(probe["pos_mm"], 1e-3), _vec(probe["vel_um_s"], 1e-6)]
 	if not probe["landed"].is_empty():
 		var ground := LandingSystem.cell_mm(sim._ctx, keys["Frost"], probe["landed"]["cell"])
