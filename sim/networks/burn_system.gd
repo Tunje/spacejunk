@@ -447,9 +447,7 @@ static func _approach_horizon(here: Array, periapsis: int, apoapsis: int, speed:
 
 
 func apply_delta(ctx: SimContext, payload: Dictionary) -> void:
-	Units.remove_stock(ctx.state["units"][payload["unit"]]["inventory"], Travel.PROPELLANT, payload["grams"])
-	var sink: Dictionary = ctx.state["sinks"].get_or_add(Travel.SINK, {})
-	sink[Travel.PROPELLANT] = sink.get(Travel.PROPELLANT, 0) + payload["grams"]
+	Propellant.spend(ctx, payload)
 
 
 func fill_view(ctx: SimContext, view: Dictionary) -> void:
@@ -509,7 +507,7 @@ static func surface_contact_tick(ctx: SimContext, unit_id: int) -> int:
 					+ LowFlight.enter_mm(ctx, unit["orbit"]["parent"]):
 				return -1
 	var plan := str([unit["burns"], unit["burn"].get("id", 0), unit["orbit"], Units.unit_mass(ctx.state, ctx.defs, unit_id),
-		Reservations.free_stock(ctx, unit_id, Travel.PROPELLANT)])
+		Propellant.usable_g(ctx, unit_id, Propellant.mixture_of(ctx, unit_id))])
 	var now: int = ctx.state["tick"]
 	var cached: Dictionary = ctx.flight_cache.get(unit_id, {})
 	if not cached.is_empty() and cached["plan"] == plan and now <= int(cached["until"]) and _follows(unit, cached, now):
@@ -738,15 +736,17 @@ func _thrust(ctx: SimContext, unit_id: int) -> void:
 	var here := Relative.sample(ctx, Relative.unit_track(ctx, unit_id), ctx.tick, true)
 	var push := thrust_step(ctx, burn, stats, mass_of(ctx, unit_id), here, ctx.tick)
 	var grams: int = push["grams"]
-	if grams > Reservations.free_stock(ctx, unit_id, Travel.PROPELLANT):
+	# A61: the grams go across the engine's propellants in its mixture, and any one short ends it.
+	var mixture := Propellant.mixture_of_part(ctx, burn["thruster"])
+	if not Propellant.fits(ctx, unit_id, mixture, grams):
 		_end(ctx, unit_id, REASON_NO_PROPELLANT)
 		return
 	for axis in 3:
 		unit["vel_um_s"][axis] += push["change"][axis]
 	advance_burn(burn, push)
 	if grams > 0:
-		Reservations.claim_stock(ctx, unit_id, Travel.PROPELLANT, grams)
-		ctx.record_delta(unit_id, self, { "kind": DELTA_PROPELLANT, "unit": unit_id, "grams": grams })
+		var shares := Propellant.claim(ctx, unit_id, mixture, grams)
+		ctx.record_delta(unit_id, self, { "kind": DELTA_PROPELLANT, "unit": unit_id, "grams": grams, "items": shares })
 	if push["finished"]:
 		_end(ctx, unit_id, "")
 

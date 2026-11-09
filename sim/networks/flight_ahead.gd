@@ -56,7 +56,11 @@ static func fly(ctx: SimContext, unit_id: int, burns: Array, until_tick: int, ru
 	var stats: Dictionary = {} if found.is_empty() else \
 		Units.module_of(ctx.state, ctx.defs, found["part"])["capabilities"][BurnSystem.CAPABILITY]
 	var mass_g := BurnSystem.mass_of(ctx, unit_id)
-	var left_g := Reservations.free_stock(ctx, unit_id, Travel.PROPELLANT)
+	# What each propellant item has left, as the burn spends it in its engine's mixture (A61).
+	var mixture: Dictionary = Propellant.LEGACY if found.is_empty() else Propellant.mixture_of_part(ctx, found["part"])
+	var left := {}
+	for item: String in Propellant.items_of(mixture):
+		left[item] = Reservations.free_stock(ctx, unit_id, item)
 	var queue: Array = burns.duplicate(true)
 	queue.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return a["tick"] < b["tick"] or (a["tick"] == b["tick"] and a.get("id", 0) < b.get("id", 0)))
@@ -136,7 +140,11 @@ static func fly(ctx: SimContext, unit_id: int, burns: Array, until_tick: int, ru
 		# Phase 5: thrust.
 		if not burn.is_empty():
 			var push := BurnSystem.thrust_step(ctx, burn, stats, mass_g, _here(ctx, s, t), t)
-			if int(push["grams"]) > left_g:
+			var shares := Propellant.split(int(push["grams"]), mixture)
+			var short := false
+			for item: String in Propellant.items_of(mixture):
+				short = short or int(shares[item]) > int(left[item])
+			if short:
 				record["end_tick"] = t - 1
 				record["reason"] = BurnSystem.REASON_NO_PROPELLANT
 				out["burns"].append(record)
@@ -146,7 +154,8 @@ static func fly(ctx: SimContext, unit_id: int, burns: Array, until_tick: int, ru
 					s["vel"][axis] = int(s["vel"][axis]) + int(push["change"][axis])
 				BurnSystem.advance_burn(burn, push)
 				mass_g -= int(push["grams"])
-				left_g -= int(push["grams"])
+				for item: String in Propellant.items_of(mixture):
+					left[item] = int(left[item]) - int(shares[item])
 				record["done_um_s"] = burn["done_um_s"]
 				record["propellant_g"] = int(record["propellant_g"]) + int(push["grams"])
 				if push["finished"]:
