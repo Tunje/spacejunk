@@ -162,7 +162,11 @@ static func _timed_plan(mine: Dictionary, theirs: Dictionary, target: int, gm: i
 			plane = OrbitMath.unit(across)
 			if OrbitMath.dot(plane, normal) < 0:
 				plane = [-plane[0], -plane[1], -plane[2]]
-		var hit := Lambert.solve(gm, r1, guess, theirs, from_tick, arrive, plane)
+		# Stage 3a: the universal-variable answer first, then A47's shooting from the Hohmann guess.
+		# Until 3b flies plans, an arrival still snaps, so A47's 100 m hit is enough here.
+		var hit := Lambert.solve_uv(gm, r1, theirs, from_tick, arrive, plane, 0, true, Lambert.HIT_MM)
+		if hit.is_empty():
+			hit = Lambert.solve(gm, r1, guess, theirs, from_tick, arrive, plane)
 		if hit.is_empty():
 			continue
 		guess = hit["v"]
