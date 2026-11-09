@@ -30,7 +30,7 @@ func _hull() -> Dictionary:
 	var hull := _module("hull", 100, {
 		"max_mass_kg": 1000,
 		"generate": { "power_kw": 100 },
-		"radiator": { "reject_kw": 100 },
+		"radiator": { "reject_kw": 100, "temp_k": 300 },
 		"heat_capacity": { "limit_kj": 100 },
 		"storage": { "ore": { "mass_kg": 100, "volume_m3": 1 } },
 	}, [
@@ -58,11 +58,12 @@ func before_each() -> void:
 				"density_kg_m3": 2000 },
 		]),
 		"modules": _envelope([
-			_module("core", 10, { "ai_core": { "tier": 1 } }, [_connector("mount", "side", "core")]),
+			_module("core", 10, { "ai_core": { "tier": 1, "cycle_reserve_ppm": 100000 } }, [_connector("mount", "side", "core")]),
 			_module("fabricator", 10, { "facility": { "type": "fabricator", "throughput_kg_per_s": 1, "work_per_tick": 100 } },
 				[_connector("mount", "side", "medium")]),
 			_hull(),
-			_module("laser", 20, { "mine": { "rate_kg_per_s": 1, "hardness_max": 6 } },
+			_module("laser", 20, { "mine": { "rate_kg_per_s": 1, "hardness_max": 6, "contact_range_m": 5,
+				"contact_speed_m_s": 0.1 } },
 				[_connector("mount", "side", "medium")]),
 			_module("refinery", 10, { "facility": { "type": "refinery", "throughput_kg_per_s": 1, "work_per_tick": 100 } },
 				[_connector("mount", "side", "medium")]),
@@ -1470,3 +1471,72 @@ func _add_sorted(file: String, entry: Dictionary) -> void:
 	var entries: Array = data[file]["entries"]
 	entries.append(entry)
 	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["id"] < b["id"])
+
+
+## B30a: instruments name what each scan step reveals, from how far and in how long (C33).
+func _scan(steps: Variant) -> void:
+	_entry("modules", "laser")["capabilities"]["scan"] = { "seconds": 30, "steps": steps }
+
+
+func test_scan_steps_pass() -> void:
+	_scan([{ "reveals": "class", "range_m": 10000, "seconds": 60 },
+		{ "reveals": "grade", "range_m": 1000, "seconds": 600 }])
+	assert_eq(DataValidator.validate(data), [] as Array[String])
+
+
+func test_a_scan_needs_steps() -> void:
+	_entry("modules", "laser")["capabilities"]["scan"] = { "seconds": 30 }
+	_assert_error("missing_field")
+	_scan([])
+	_assert_error("bad_capability")
+
+
+func test_a_scan_step_reveals_a_known_thing_once() -> void:
+	_scan([{ "reveals": "colour", "range_m": 10, "seconds": 1 }])
+	_assert_error("bad_enum")
+	_scan([{ "reveals": "shape", "range_m": 10, "seconds": 1 }, { "reveals": "shape", "range_m": 5, "seconds": 1 }])
+	_assert_error("bad_capability")
+
+
+func test_a_scan_step_needs_whole_range_and_time() -> void:
+	_scan([{ "reveals": "shape", "range_m": 0, "seconds": 1 }])
+	_assert_error("out_of_range")
+	_scan([{ "reveals": "shape", "range_m": 10, "seconds": 0.5 }])
+	_assert_error("not_whole")
+	_scan([{ "reveals": "shape", "seconds": 1 }])
+	_assert_error("missing_field")
+
+
+## B30a: a miner's contact limits, a core's cycle reserve, a radiator's temperature.
+func test_a_miner_needs_its_contact_limits() -> void:
+	_entry("modules", "laser")["capabilities"]["mine"].erase("contact_speed_m_s")
+	_assert_error("missing_field")
+
+
+func test_contact_range_is_whole_metres() -> void:
+	_entry("modules", "laser")["capabilities"]["mine"]["contact_range_m"] = 2.5
+	_assert_error("not_whole")
+
+
+func test_cycle_reserve_is_a_share_of_the_tank() -> void:
+	_entry("modules", "core")["capabilities"]["ai_core"]["cycle_reserve_ppm"] = 1000001
+	_assert_error("out_of_range")
+	_entry("modules", "core")["capabilities"]["ai_core"].erase("cycle_reserve_ppm")
+	_assert_error("missing_field")
+
+
+func test_radiator_and_load_temperatures() -> void:
+	_entry("modules", "hull")["heat_temp_k"] = 500
+	assert_eq(DataValidator.validate(data), [] as Array[String])
+	_entry("modules", "hull")["heat_temp_k"] = 0
+	_assert_error("out_of_range")
+	_entry("modules", "hull").erase("heat_temp_k")
+	_entry("modules", "hull")["capabilities"]["radiator"].erase("temp_k")
+	_assert_error("missing_field")
+
+
+func test_a_conductor_states_its_resistance_whole() -> void:
+	_entry("items", "iron")["resistance_ppm"] = 1500000
+	assert_eq(DataValidator.validate(data), [] as Array[String])
+	_entry("items", "iron")["resistance_ppm"] = 1.5
+	_assert_error("not_whole")

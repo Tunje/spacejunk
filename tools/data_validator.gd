@@ -54,7 +54,13 @@ const RECIPE_OPTIONAL := ["energy_kj", "heat_kj", "points", "throughput_kg_per_s
 const MAX_RUN_KJ := 1_000_000_000
 ## A recipe draws its stated power at this rate, and in proportion at any other (PowerSystem).
 const FULL_RATE_WORK_PER_TICK := 100
-const MODULE_OPTIONAL := ["ideas"]
+## `heat_temp_k` (B30): the temperature a load gives its heat at, 300 K when left out. A load can
+## dump heat only into radiators at or below it (A's HeatSystem rule).
+const MODULE_OPTIONAL := ["ideas", "heat_temp_k"]
+## The hottest a load or radiator may state, in kelvin.
+const MAX_TEMP_K := 3000
+## What a scan step reveals (B30, C33): a rock's shape, its mineral class, its deposits' grades.
+const SCAN_REVEALS := ["shape", "class", "grade"]
 const THEORY_FIELDS := ["id", "name", "era", "requires", "evidence", "test", "unlocks"]
 ## A theory may replace the bench test's inputs for the designs it unlocks.
 const THEORY_OPTIONAL := ["qualify"]
@@ -126,14 +132,17 @@ const BODY_KINDS := ["star", "asteroid", "planet"]
 ## Capability fields as field -> [factor, whole number only].
 const CAPABILITIES := {
 	"scan": { "seconds": [1, true] },
-	"mine": { "rate_kg_per_s": [1000, false], "hardness_max": [1, true] },
-	"ai_core": { "tier": [1, true] },
+	"mine": {
+		"rate_kg_per_s": [1000, false], "hardness_max": [1, true], "contact_range_m": [1, true],
+		"contact_speed_m_s": [1000, false],
+	},
+	"ai_core": { "tier": [1, true], "cycle_reserve_ppm": [1, true] },
 	"generate": { "power_kw": [1000, false] },
 	"battery": {
 		"capacity_kj": [1000, false], "max_charge_kw": [1000, false],
 		"max_discharge_kw": [1000, false], "charge_efficiency_ppm": [1, true],
 	},
-	"radiator": { "reject_kw": [1000, false] },
+	"radiator": { "reject_kw": [1000, false], "temp_k": [1, true] },
 	"landing_gear": { "max_touchdown_m_s": [1000, false] },
 	"heat_capacity": { "limit_kj": [1000, false] },
 	"port": {
@@ -148,7 +157,8 @@ const CAPABILITIES := {
 const OTHER_CAPABILITIES := ["storage", "max_mass_kg", "facility", "always_on", "cryo"]
 ## Capability fields that may be left out, as capability -> fields (A55: an engine without a
 ## minimum throttle fires only at full thrust).
-const CAPABILITY_OPTIONAL := { "thruster": ["min_throttle_ppm"] }
+## A scan's `steps` are checked on their own (B30); `seconds` stays until B30b.
+const CAPABILITY_OPTIONAL := { "thruster": ["min_throttle_ppm"], "scan": ["steps"] }
 
 const MAX_STACK_G := 1_000_000_000_000_000
 const MAX_STORE_J := 1_000_000_000_000_000
@@ -160,9 +170,12 @@ const MAX_JSON_WHOLE := 9_007_199_254_740_992
 
 ## Refining yields may not pass the element's real mass share (spec section 7.1).
 ## Chain items whose source or use arrives with the switch-over (B30): chips go into processors,
-## steel into frames, frames' offcuts become steel scrap, and Black Rock yields carbonaceous ore.
-## B30 empties this.
-const PENDING_B30 := { "chip": "use", "steel": "use", "steel_scrap": "source", "carbonaceous_ore": "source" }
+## frames' offcuts become steel scrap, Black Rock yields carbonaceous ore, the hold's seed stock
+## brings the KOH, and parts take MI cable and solar cells (B30a). B30b empties this.
+const PENDING_B30 := {
+	"chip": "use", "steel_scrap": "source", "carbonaceous_ore": "source",
+	"potassium_hydroxide": "source", "mi_cable": "use", "solar_cell": "use",
+}
 ## Items kept for a later chain with no use yet: anode slime holds the precious metals the belt's
 ## chains will recover (production_chains.md section 5).
 const KEPT_FOR_LATER := ["anode_slime"]
@@ -400,8 +413,12 @@ func _check_name(where: String, entry: Dictionary) -> void:
 
 func _shape_item(item: Dictionary) -> void:
 	var where := "items.json:%s" % item["id"]
-	if not _has_fields(where, item, ITEM_FIELDS, ["unit_mass_kg"]):
+	if not _has_fields(where, item, ITEM_FIELDS, ["unit_mass_kg", "resistance_ppm"]):
 		return
+	# A conductor's resistance against refined-copper wiring, in parts per million (B30): blister-
+	# copper MI cable is about 1.5 times.
+	if item.has("resistance_ppm"):
+		_check_whole(where, "resistance_ppm", item["resistance_ppm"], 1, MAX_RATE)
 	_check_name(where, item)
 	_check_whole(where, "stage", item["stage"], 2, 5)
 	_check_enum(where, "cargo_class", item["cargo_class"], CARGO_CLASSES)
@@ -421,6 +438,8 @@ func _shape_module(module: Dictionary) -> void:
 	_check_positive(where, "volume_m3", module["volume_m3"], 1000, MAX_STORE_L)
 	_check_number(where, "power_kw", module["power_kw"], 1000, MAX_RATE)
 	_check_number(where, "heat_kw", module["heat_kw"], 1000, MAX_RATE)
+	if module.has("heat_temp_k"):
+		_check_whole(where, "heat_temp_k", module["heat_temp_k"], 1, MAX_TEMP_K)
 	_check_whole(where, "priority", module["priority"], 0, MAX_RATE)
 	_check_whole(where, "durability", module["durability"], 1, MAX_RATE)
 	_check_whole(where, "min_ai_tier", module["min_ai_tier"], 1, 6)
@@ -468,6 +487,8 @@ func _shape_capabilities(where: String, capabilities: Variant) -> void:
 		var at := "%s.%s" % [where, key]
 		if CAPABILITIES.has(key):
 			_shape_capability_fields(at, value, CAPABILITIES[key], CAPABILITY_OPTIONAL.get(key, []))
+			if key == "scan":
+				_shape_scan_steps(at, value)
 		elif key == "storage":
 			_shape_storage(at, value)
 		elif key == "max_mass_kg":
@@ -516,12 +537,42 @@ func _shape_capability_fields(where: String, value: Variant, fields: Dictionary,
 			_err("out_of_range", where, "charge_efficiency_ppm")
 	if value.has("tier"):
 		_check_whole(where, "tier", value["tier"], 1, 6)
+	if value.has("cycle_reserve_ppm"):
+		_check_whole(where, "cycle_reserve_ppm", value["cycle_reserve_ppm"], 1, PPM)
+	if value.has("temp_k"):
+		_check_whole(where, "temp_k", value["temp_k"], 1, MAX_TEMP_K)
 	if value.has("limit_kj"):
 		_check_number(where, "limit_kj", value["limit_kj"], 1000, MAX_STORE_J)
 
 
 ## A cryogenic tank (B29): what share of each class boils off a day unless its cooler runs, and the
 ## cooler's draw, which is also in the module's power_kw and heat_kw.
+## An instrument's scan steps (B30, C33): what each reveals, from how far, in how long. A step is
+## named once per instrument.
+func _shape_scan_steps(where: String, scan: Variant) -> void:
+	if not scan is Dictionary:
+		return
+	if not scan.has("steps"):
+		_err("missing_field", where, "steps")
+		return
+	var steps: Variant = scan["steps"]
+	if not steps is Array or steps.is_empty():
+		_err("bad_capability", where, "steps needs at least one step")
+		return
+	var seen := {}
+	for step: Variant in steps:
+		if not step is Dictionary or not _has_fields(where, step, ["reveals", "range_m", "seconds"]):
+			if not step is Dictionary:
+				_err("bad_capability", where, "a step is not an object")
+			continue
+		_check_enum(where, "reveals", step["reveals"], SCAN_REVEALS)
+		if seen.has(step["reveals"]):
+			_err("bad_capability", where, "%s is revealed twice" % step["reveals"])
+		seen[step["reveals"]] = true
+		_check_whole(where, "range_m", step["range_m"], 1, MAX_RATE)
+		_check_whole(where, "seconds", step["seconds"], 1, MAX_RATE)
+
+
 func _shape_cryo(where: String, cryo: Variant) -> void:
 	if not cryo is Dictionary or not _has_fields(where, cryo, ["boil_off_ppm_per_day", "cooler_kw"]):
 		if not cryo is Dictionary:

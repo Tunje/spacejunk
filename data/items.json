@@ -66,6 +66,14 @@
       "density_kg_m3": 5600
     },
     {
+      "id": "electrode",
+      "name": "Nickel-Plated Electrode",
+      "stage": 4,
+      "cargo_class": "goods",
+      "density_kg_m3": 7900,
+      "unit_mass_kg": 20
+    },
+    {
       "id": "glass",
       "name": "Glass",
       "stage": 4,
@@ -115,6 +123,22 @@
       "density_kg_m3": 1200
     },
     {
+      "id": "mi_cable",
+      "name": "Mineral-Insulated Cable",
+      "stage": 4,
+      "cargo_class": "goods",
+      "density_kg_m3": 6000,
+      "unit_mass_kg": 10,
+      "resistance_ppm": 1500000
+    },
+    {
+      "id": "nickel",
+      "name": "Nickel",
+      "stage": 3,
+      "cargo_class": "goods",
+      "density_kg_m3": 8900
+    },
+    {
       "id": "olivine",
       "name": "Olivine Ore",
       "stage": 2,
@@ -134,6 +158,13 @@
       "stage": 3,
       "cargo_class": "goods",
       "density_kg_m3": 1820
+    },
+    {
+      "id": "potassium_hydroxide",
+      "name": "Potassium Hydroxide",
+      "stage": 3,
+      "cargo_class": "goods",
+      "density_kg_m3": 2040
     },
     {
       "id": "processor",
@@ -184,6 +215,14 @@
       "stage": 3,
       "cargo_class": "ore",
       "density_kg_m3": 2500
+    },
+    {
+      "id": "solar_cell",
+      "name": "Solar Cell",
+      "stage": 5,
+      "cargo_class": "goods",
+      "density_kg_m3": 2400,
+      "unit_mass_kg": 1
     },
     {
       "id": "spent_acid",
