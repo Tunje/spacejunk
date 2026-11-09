@@ -667,9 +667,9 @@ func _open_flight() -> void:
 		values.append(0.0)
 	match parsed.get("fly-at", ""):
 		"peri":
-			screen.burn_at_apsis(0.0)
+			screen.burn_at_apsis(false)
 		"apo":
-			screen.burn_at_apsis(PI)
+			screen.burn_at_apsis(true)
 		"":
 			screen.burn_now()
 		var seconds:

@@ -232,7 +232,7 @@ func test_burn_at_apoapsis_lands_on_the_far_side() -> void:
 	var burn_ticks: int = screen.preview["detail"]["burn_ticks"]
 	screen.plan()
 	_ticks(burn_ticks + 10)
-	screen.burn_at_apsis(PI)
+	screen.burn_at_apsis(true)
 	var orbit: Dictionary = _unit()["orbit"]
 	assert_almost_eq(OrbitPath.mean_anomaly(orbit, screen.burn_tick), PI, 0.01)
 	assert_almost_eq(screen._when.value, float(screen.burn_tick - bridge.current_view["tick"] - 1) / 10.0, 0.11)
