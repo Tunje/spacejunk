@@ -222,7 +222,9 @@ func _draw_routes(view: Dictionary, centre: Array) -> void:
 	var target := _selected_position(view)
 	if not target.is_empty() and view["units"].has(local_view.commanded_unit):
 		var unit: Dictionary = view["units"][local_view.commanded_unit]
-		if unit["route"].is_empty():
+		# A pointer, not a path: left out while a trip's own arc is drawn, so it can't pass for one.
+		var on_a_trip: bool = not unit.get("transfer", {}).is_empty() or unit["op"]["type"] == "waiting"
+		if unit["route"].is_empty() and not on_a_trip:
 			_add_line(mesh, Vector3.ZERO, _relative(target, centre), ClientTheme.GOLD)
 
 
@@ -269,8 +271,11 @@ func _flown_arc(view: Dictionary, unit_id: int, end_tick: int) -> Array[PackedFl
 	if not cached.is_empty() and cached["end_tick"] == end_tick and now - int(cached["ms"]) < ARC_REFRESH_MS:
 		return cached["points"]
 	var path: Dictionary = bridge.sim.predict(unit_id, view["tick"], ticks, maxi(1, ticks / ROUTE_SEGMENTS), true)
-	for point: Array in path.get("world_points", []):
-		points.append(PackedFloat64Array(point))
+	# A frame's points are its own, not from the root, and don't follow a transfer yet:
+	# then the legs below draw it. Frames go in real-orbits stage 4.
+	if not path.get("place", {}).has("frame"):
+		for point: Array in path.get("world_points", []):
+			points.append(PackedFloat64Array(point))
 	_arcs[unit_id] = { "end_tick": end_tick, "ms": now, "points": points }
 	return points
 
