@@ -138,10 +138,10 @@ static func _motion_key(state: Dictionary, id: int) -> Array:
 			route["eta_tick"]]
 	if not unit["orbit"].is_empty():
 		# The whole record, copied: a hyperbola keeps different fields from an ellipse.
-		return ["orbit", unit["orbit"].duplicate(true), unit["transfer"].get("legs", []).size(), unit["low_flight"]]
+		return ["orbit", unit["orbit"].duplicate(true), unit["transfer"].get("legs", []).size(), unit["stepped"]]
 	if not unit.get("landed", {}).is_empty():
 		return ["landed", unit["landed"]["body"], unit["landed"]["cell"]]
-	return ["frame", unit["frame"], unit["pos_mm"], unit["vel_um_s"], unit["low_flight"]]
+	return ["frame", unit["frame"], unit["pos_mm"], unit["vel_um_s"], unit["stepped"]]
 
 
 ## The part tree. A unit with no parts shows an empty Dictionary.

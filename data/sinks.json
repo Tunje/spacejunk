@@ -2,6 +2,13 @@
   "schema_version": 1,
   "entries": [
     {
+      "id": "electrolyte_loss",
+      "name": "Electrolyte Loss",
+      "items": [
+        "potassium_hydroxide"
+      ]
+    },
+    {
       "id": "fab_scrap",
       "name": "Fabrication Scrap",
       "items": [

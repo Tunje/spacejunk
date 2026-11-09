@@ -96,6 +96,7 @@
       "volume_m3": 8,
       "power_kw": 500,
       "heat_kw": 450,
+      "heat_temp_k": 500,
       "priority": 2,
       "durability": 1000,
       "min_ai_tier": 1,
@@ -144,7 +145,8 @@
       "realism": "extrapolation",
       "capabilities": {
         "ai_core": {
-          "tier": 2
+          "tier": 2,
+          "cycle_reserve_ppm": 100000
         }
       },
       "fabrication": {
@@ -184,7 +186,8 @@
       "realism": "established",
       "capabilities": {
         "ai_core": {
-          "tier": 1
+          "tier": 1,
+          "cycle_reserve_ppm": 100000
         }
       },
       "fabrication": {
@@ -600,6 +603,7 @@
       "volume_m3": 4.5,
       "power_kw": 100,
       "heat_kw": 75,
+      "heat_temp_k": 500,
       "priority": 2,
       "durability": 1000,
       "min_ai_tier": 1,
@@ -694,6 +698,7 @@
       "volume_m3": 4,
       "power_kw": 200,
       "heat_kw": 90,
+      "heat_temp_k": 350,
       "priority": 2,
       "durability": 1000,
       "min_ai_tier": 1,
@@ -957,7 +962,8 @@
       "realism": "established",
       "capabilities": {
         "radiator": {
-          "reject_kw": 200
+          "reject_kw": 200,
+          "temp_k": 300
         }
       },
       "fabrication": {
@@ -982,6 +988,47 @@
       "visual": {
         "model": "heat_radiator_mk1",
         "tint": "#e8e4d8"
+      }
+    },
+    {
+      "id": "high_temp_radiator_mk1",
+      "name": "High-Temperature Radiator",
+      "mass_kg": 1000,
+      "volume_m3": 4,
+      "power_kw": 0,
+      "heat_kw": 0,
+      "priority": 0,
+      "durability": 1000,
+      "min_ai_tier": 1,
+      "realism": "established",
+      "capabilities": {
+        "radiator": {
+          "reject_kw": 200,
+          "temp_k": 500
+        }
+      },
+      "fabrication": {
+        "recipe": "high_temp_radiator_mk1"
+      },
+      "connectors": [
+        {
+          "id": "mount",
+          "type": "side",
+          "size": "medium",
+          "pos_mm": [0, 0, 0],
+          "facing": "-z",
+          "up": "+y",
+          "load_limit_kg": 1000
+        }
+      ],
+      "collision": {
+        "shape": "box",
+        "center_mm": [0, 0, 150],
+        "size_mm": [6000, 3000, 300]
+      },
+      "visual": {
+        "model": null,
+        "tint": "#e8641b"
       }
     },
     {
@@ -1136,7 +1183,14 @@
       "realism": "established",
       "capabilities": {
         "scan": {
-          "seconds": 30
+          "seconds": 30,
+          "steps": [
+            {
+              "reveals": "shape",
+              "range_m": 25000,
+              "seconds": 30
+            }
+          ]
         }
       },
       "fabrication": {
@@ -1177,7 +1231,9 @@
       "capabilities": {
         "mine": {
           "rate_kg_per_s": 20,
-          "hardness_max": 7
+          "hardness_max": 7,
+          "contact_range_m": 5,
+          "contact_speed_m_s": 0.1
         }
       },
       "fabrication": {
@@ -1301,6 +1357,7 @@
       "volume_m3": 15,
       "power_kw": 200,
       "heat_kw": 150,
+      "heat_temp_k": 500,
       "priority": 2,
       "durability": 1000,
       "min_ai_tier": 1,
@@ -1791,7 +1848,8 @@
       "realism": "established",
       "capabilities": {
         "radiator": {
-          "reject_kw": 40
+          "reject_kw": 40,
+          "temp_k": 300
         }
       },
       "fabrication": {
@@ -2139,7 +2197,9 @@
       "capabilities": {
         "mine": {
           "rate_kg_per_s": 5,
-          "hardness_max": 7
+          "hardness_max": 7,
+          "contact_range_m": 5,
+          "contact_speed_m_s": 0.05
         }
       },
       "fabrication": {
@@ -2414,6 +2474,58 @@
           "simplifies": true
         }
       ]
+    },
+    {
+      "id": "spectrometer_mk1",
+      "name": "Spectrometer",
+      "mass_kg": 17,
+      "volume_m3": 0.05,
+      "power_kw": 0.05,
+      "heat_kw": 0.05,
+      "priority": 3,
+      "durability": 1000,
+      "min_ai_tier": 1,
+      "realism": "established",
+      "capabilities": {
+        "scan": {
+          "seconds": 60,
+          "steps": [
+            {
+              "reveals": "class",
+              "range_m": 10000,
+              "seconds": 60
+            },
+            {
+              "reveals": "grade",
+              "range_m": 1000,
+              "seconds": 600
+            }
+          ]
+        }
+      },
+      "fabrication": {
+        "recipe": "spectrometer_mk1"
+      },
+      "connectors": [
+        {
+          "id": "mount",
+          "type": "side",
+          "size": "small",
+          "pos_mm": [0, 0, 0],
+          "facing": "-z",
+          "up": "+y",
+          "load_limit_kg": 500
+        }
+      ],
+      "collision": {
+        "shape": "box",
+        "center_mm": [0, 0, 150],
+        "size_mm": [400, 300, 300]
+      },
+      "visual": {
+        "model": null,
+        "tint": "#e8e4d8"
+      }
     },
     {
       "id": "starter_hull",

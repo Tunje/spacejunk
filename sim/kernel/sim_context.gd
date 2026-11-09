@@ -17,6 +17,9 @@ var index := {}
 ## radius of cells it has met. Only a starting point for the search, which ends at the same cell
 ## without it, so it is derived and never saved (A24).
 var ground_memo := {}
+## The view's surface_contact_tick flights by unit (A55), as { plan, until, segments, contact }:
+## reused while the unit is where its flight said and its plan is unchanged, so derived, never saved.
+var flight_cache := {}
 ## Why the last coast horizon was 0, set by the system that capped it (A33).
 var coast_cap := ""
 ## The view's power.sun_tick by unit (A48), as { key, tick }: the tick holds while the unit's motion

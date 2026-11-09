@@ -149,13 +149,12 @@ func _costs() -> void:
 	var position_us := _per_call(func() -> void: OrbitMath.position_at(cluster, 12_345))
 	var state_us := _per_call(func() -> void: OrbitMath.state_at(cluster, gm, 12_345))
 	var from_us := _per_call(func() -> void: OrbitMath.from_state(now["r"], now["v"], gm, 0))
-	var held: Array = [0, 0, 0]
-	var apply_us := _per_call(func() -> void: BurnSystem._apply(ctx, cluster.merged({ "parent": frost }), 0, [1000, 0, 0], held))
+	var apply_us := state_us + from_us
 	var carry: Array = [0, 0, 0]
-	var advance_us := _per_call(func() -> void: LowFlight.advance(ctx, frost, now["r"], now["v"], carry))
+	var advance_us := _per_call(func() -> void: LowFlight.advance(ctx, frost, now["r"], now["v"], carry, carry))
 	print("  position_at %.1f us, state_at %.1f us, from_state %.1f us" % [position_us, state_us, from_us])
 	print("  one burn tick on an orbit today (state_at + from_state): %.1f us" % apply_us)
-	print("  one Cartesian step (LowFlight.advance, position, velocity, gravity): %.1f us" % advance_us)
+	print("  one stepped tick (LowFlight.advance, velocity Verlet, two gravity evaluations): %.1f us" % advance_us)
 	# A 50 km trip along the cluster's orbit in 30 minutes: Lambert from the craft to a point 50 km
 	# ahead on the same circle.
 	var ahead := cluster.duplicate(true)
@@ -245,10 +244,34 @@ func _fleet() -> void:
 	print("  coast on the new start alone: skipped %d ticks (capped by %s) in %d us" % [bare_skip["ticks"],
 		bare_skip["capped_by"], bare_us])
 	sim = base_game
+	var probe_sim := Sim.from_save(sim.to_save())
+	var limited := {}
+	for round in 60:
+		probe_sim.step()
+		var low := SimSystem.NO_LIMIT
+		var who := ""
+		for system in probe_sim._systems:
+			probe_sim._ctx.coast_limit = 1_000_000
+			var h: int = system.horizon(probe_sim._ctx)
+			if h < low:
+				low = h
+				who = system.get_script().get_global_name()
+		probe_sim._ctx.coast_limit = 0
+		limited[who] = limited.get(who, []) + [low]
+		if low > 0:
+			probe_sim.step(0)
+	print("  first 60 ticks of six new drones, the lowest horizon by system: %s" % str(limited).left(600))
 	var fleet_started := Time.get_ticks_usec()
+	var rounds_before := sim.coast_rounds
 	var fleet_skip := sim.coast(1_000_000)
-	print("  coast with six idle drones: skipped %d ticks (capped by %s) in %d us" % [fleet_skip["ticks"],
-		fleet_skip["capped_by"], Time.get_ticks_usec() - fleet_started])
+	print("  coast with six idle drones: skipped %d ticks (capped by %s) in %d us, %d rounds" % [fleet_skip["ticks"],
+		fleet_skip["capped_by"], Time.get_ticks_usec() - fleet_started, sim.coast_rounds - rounds_before])
+	var caps := {}
+	for i in 40:
+		sim.step()
+		var skip := sim._horizon(1_000_000)
+		caps[sim._ctx.coast_cap + ":" + str(skip)] = caps.get(sim._ctx.coast_cap + ":" + str(skip), 0) + 1
+	print("  horizons on the next 40 ticks: %s" % str(caps))
 	sim.step(10)
 	_profile(200, "coasting")
 	var coasting := _step_samples(400)
@@ -267,6 +290,7 @@ func _fleet() -> void:
 			str(Units.can_run(sim._state["parts"][part])), str(RailSystem.in_shadow(sim._state, id))])
 		break
 	_profile(200, "burning")
+	_burn_pieces(drones[0])
 	var burning := _step_samples(1000)
 	var running := 0
 	for id in drones:
@@ -346,3 +370,26 @@ func _profile(ticks: int, label: String) -> void:
 	print("  profile, %s, us per tick:" % label)
 	for key: String in keys_sorted.slice(0, 8):
 		print("    %-36s %8.1f" % [key, float(spent[key]) / ticks])
+
+
+## What one burning drone's tick costs, piece by piece (A55).
+func _burn_pieces(id: int) -> void:
+	var ctx := sim._ctx
+	var unit: Dictionary = sim._state["units"][id]
+	if unit["burn"].is_empty():
+		print("  (the burn is over; no pieces timed)")
+		return
+	var stats: Dictionary = Units.module_of(sim._state, ctx.defs, unit["burn"]["thruster"])["capabilities"]["thruster"]
+	var here := Relative.sample(ctx, Relative.unit_track(ctx, id), sim.current_tick(), true)
+	var burn: Dictionary = unit["burn"].duplicate(true)
+	print("  pieces of a burning drone's tick, us:")
+	print("    Units.unit_mass          %6.1f" % _per_call(func() -> void: Units.unit_mass(sim._state, ctx.defs, id), 500))
+	print("    Reservations.free_stock  %6.1f" % _per_call(func() -> void: Reservations.free_stock(ctx, id, Travel.PROPELLANT), 500))
+	print("    module_of                %6.1f" % _per_call(func() -> void: Units.module_of(sim._state, ctx.defs, burn["thruster"]), 500))
+	print("    where it is (sample)     %6.1f" % _per_call(func() -> void: Relative.sample(ctx, Relative.unit_track(ctx, id), sim.current_tick(), true), 500))
+	print("    thrust_step              %6.1f" % _per_call(func() -> void: BurnSystem.thrust_step(ctx, burn, stats, 800_000, here, sim.current_tick()), 500))
+	print("    LowFlight.advance        %6.1f" % _per_call(func() -> void: LowFlight.advance(ctx, here[0], here[1], here[2], [0, 0, 0], [0, 0, 0]), 500))
+	print("    LowFlight.cross_sphere   %6.1f" % _per_call(func() -> void: LowFlight.cross_sphere(ctx, here[0], here[1], here[2], sim.current_tick()), 500))
+	var memo := {}
+	print("    LowFlight.ground_contact %6.1f" % _per_call(func() -> void: LowFlight.ground_contact(ctx, here[0], here[1], memo), 500))
+	print("    BurnSystem.thruster      %6.1f" % _per_call(func() -> void: BurnSystem.thruster(ctx, id), 500))

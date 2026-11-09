@@ -21,9 +21,11 @@ func test_new_start_probe_burns_out_of_the_cluster_into_a_frost_orbit_and_lands(
 	var left := _wait(game, "frame_left", 200)
 	assert_false(left.is_empty(), "left the cluster within the burn")
 	assert_eq(probe["frame"], 0)
-	assert_eq(probe["orbit"]["parent"], ids["Frost"])
+	# The rest of the burn is stepped round Frost (A55), and it ends on an orbit round Frost.
+	assert_eq(probe["stepped"], ids["Frost"])
 	var left_at: Array = probe["pos_mm"].duplicate()
 	_wait(game, "burn_done", 200)
+	assert_eq(probe["orbit"]["parent"], ids["Frost"])
 	var orbit: Dictionary = probe["orbit"]
 	var periapsis: int = orbit["a_mm"] - OrbitMath.smul_div(orbit["a_mm"], orbit["e_q30"], ONE)
 	var apoapsis := BurnSystem.apoapsis_mm(orbit)

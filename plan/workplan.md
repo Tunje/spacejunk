@@ -37,6 +37,48 @@ The core idea of the game is as follows:
 - **Gravity:** patched conics (one body's pull at a time) stay, as the owner accepted.
 - **Every other simplification** in A53's and the audits' lists is to be done; only the order is open.
 
+**Lead's working decisions, 2026-11-08 and 09.** The owner may overrule any of these. Most are data and cheap to change.
+- **Cluster layout:** mixed. Close rocks 3 to 8 km away near the start. White Rock and Black Rock (carbonaceous) out in a 30 to 45 km swirl.
+- **Bootstrap:**
+  - First steel by induction melt on the compact refinery.
+  - Hydrogen borrowed from the tank until the electrolyser pays it back.
+  - Blister-copper MI cable as the interim wiring.
+  - Nickel from Red Rock's Fe-Ni by the Mond process.
+- **Hold seeds**, all counted against hull mass:
+  - about 200 chips;
+  - KOH;
+  - solar cells for two panels;
+  - about 20 kg of graphite;
+  - about 2 kg of rare-earth dopant;
+  - laser pump diodes.
+- **Parts:**
+  - Real masses ([part_masses.md](../docs/design/part_masses.md)).
+  - Two radiator temperatures. A load's heat goes only to radiators at or below its temperature.
+  - Small parts at a few kW.
+  - Fuel-cell main battery and nickel-iron small bank.
+  - starter_hull gains ring side_d and a 16 t limit. command_hub becomes 16 m.
+- **Mining:** rate = beam power / the rock's spall energy (about 1 MJ/kg).
+- **Fitting:**
+  - Warns on mass, load, power and heat.
+  - Refuses only on connector type, size and occupancy, and on solid parts overlapping.
+- **Wiring:** a refined harness loses 2%. Alternative grades lose in proportion to resistance. A part built with an alternative is its own derived item (`module~alternative`).
+- **Scans:**
+  - Instruments reveal in steps, each with its own range.
+  - LIDAR: shape at 25 km.
+  - Spectrometer: class at 10 km, grade at 1 km.
+- **Docking:** a pair of ports uses the stricter port's capture limits.
+
+**Work list additions, not yet scheduled:**
+- stowed and deployed wings, deploy time and self-shading;
+- deposits at sites on a rock (today a rock's ore is one pool);
+- cryogenic boil-off in the sim;
+- the thruster mixture;
+- connector load in the view;
+- collision damage;
+- planet rotation (Frost is assumed not to rotate);
+- turning time for steering, which is instant today;
+- renaming leftover names from the frames.
+
 **Planets:** hexes are a fixed size of about 7 km ([planets.md](../docs/design/planets.md)).
 
 **Pacing:** leave the figures as they are for now ([balance.md](../docs/design/balance.md)).

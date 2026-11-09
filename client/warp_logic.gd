@@ -11,7 +11,7 @@ const BATCH := 50
 
 ## Events that need the player, so a warp above 8× drops to 1× on their tick.
 const ATTENTION: Array[String] = [
-	"burn_started", "burn_short", "departed", "arrived", "landed", "crashed", "low_flight_entered",
+	"burn_started", "burn_short", "departed", "arrived", "landed", "crashed",
 	"job_paused", "power_shed", "fault", "theory_proven", "design_qualified", "idea_discovered",
 	"command_rejected", "attach_failed", "task_blocked", "task_cancelled", "mining_stopped",
 ]
@@ -26,7 +26,7 @@ const CYCLE_ROUTINE: Array[String] = ["burn_started", "departed", "arrived", "mi
 const CAP_TEXT: Dictionary = {
 	"command": "starting an order",
 	"burning": "a burn is running",
-	"low_flight": "flying low",
+	"stepped": "flying a burn",
 	"drifting": "drifting in the cluster",
 	"near_a_boundary": "near a boundary",
 	"planned_burn": "a burn is due",

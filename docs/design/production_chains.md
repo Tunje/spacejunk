@@ -8,11 +8,12 @@ Status: **approved** by the Lead on 2026-11-08, task B29. It applies the owner's
 
 The data comes in two steps:
 - **B29, additive:** the chain items, recipes and machines, the fluid tanks, the cryo capability and the validator. Nothing in the new start changes.
-- **B30, the switch-over,** together with A53 stage 4 and C's route rewrite:
+- **B30a, additive:** the bootstrap recipes the probe can run before any arc furnace or electrolyser exists (section 5, "The bootstrap"), the alkaline electrolyser's nickel and KOH, Red Rock's iron-nickel, the spectrometer and the hot radiator, and the stage 4 fields beside today's. Nothing in the new start changes.
+- **B30b, the switch-over,** together with A53 stage 4 and C's route rewrite (C35):
   - the parts made from chain materials;
   - the abstract `refine_*` recipes removed;
   - Black Rock in the scenario;
-  - the probe's seed chips;
+  - the probe's seeds: chips, KOH, solar cells and graphite;
   - the fuel-cell battery;
   - hydrolox in the probe's tank, settled in the stage 4 rebalance.
 
@@ -32,7 +33,7 @@ Contract changes go through the Lead as usual.
   - A refining step's tail keeps the impurities as its own item.
   - This is a modelling convention for trace mass, not a skipped step: every step is there.
 - **Ores are rich deposits, not pure minerals.**
-  - Hematite ore is 90% Fe₂O₃ and 10% silica.
+  - Hematite ore is 82% Fe₂O₃, 8% iron-nickel metal at 10% nickel, and 10% silica (B30a). Chondritic rock carries real metal grains.
   - Chalcopyrite ore is 89.5% CuFeS₂, 10% silica and 0.5% trace metals.
   - White Rock's ice is 95% water and 5% dust.
   - Olivine is taken as forsterite, Mg₂SiO₄, the magnesium end of real asteroid olivine.
@@ -69,8 +70,13 @@ Three closed loops carry most of the mass. The player sees them as recycling. Ea
 | `water` | water | 1,000 | Melted ice, reduction, Bosch, pyrolysis | Electrolysis, the acid plant and regeneration |
 | `hydrogen` (LH₂) | fuel | 71 | Electrolysis | Engines, iron reduction, Bosch |
 | `oxygen` (LOX) | oxidiser | 1,141 | Electrolysis | Engines, smelting, converting, the acid plant |
-| `sponge_iron` | goods | 3,500 | Hydrogen reduction | Steel |
-| `steel` | goods | 7,850 | Arc furnace | Frames, tanks, thrusters, housings |
+| `sponge_iron` | goods | 3,500 | Hydrogen reduction | Steel; nickel |
+| `steel` | goods | 7,850 | Arc furnace; the refinery's induction melt | Frames, tanks, thrusters, housings, electrodes |
+| `nickel` | goods | 8,900 | The Mond process on sponge iron | Electrode plating |
+| `electrode` | goods, 20 kg each | 7,900 | Steel plate, nickel plated | The alkaline electrolyser |
+| `potassium_hydroxide` | goods | 2,040 | Seed stock in the hold (B30b); later the belt's potassium | The electrolyser's electrolyte |
+| `mi_cable` | goods, 10 kg each | 6,000 | Blister copper drawn in magnesia | Interim wiring, at 1.5 times copper's resistance |
+| `solar_cell` | goods, 1 kg each | 2,400 | Wafers, glass and copper | Solar panels (B30b) |
 | `steel_scrap` | ore | 2,000 bulk | Frame offcuts | Remelting |
 | `carbon` | goods | 1,500 bulk | Pyrolysis, Bosch | Steel, silica reduction |
 | `copper_matte` | goods | 5,600 | Smelting | Converting |
@@ -83,7 +89,7 @@ Three closed loops carry most of the mass. The player sees them as recycling. Ea
 | `silica` | goods | 600 bulk | The olivine leach | Silica reduction |
 | `magnesium_sulfate` | goods | 1,200 bulk | The leach | Acid regeneration |
 | `magnesia` | goods | 1,500 bulk | Regeneration | Furnace linings; later magnesium |
-| `carbon_monoxide` | gas | 230 (200 bar) | Silica reduction | Bosch |
+| `carbon_monoxide` | gas | 230 (200 bar) | Silica reduction; burning carbon | Bosch; the Mond loop |
 | `silicon` | goods | 2,330 | Silica reduction | Zone refining |
 | `pure_silicon` | goods | 2,330 | Zone refining | Wafers |
 | `silicon_scrap` | ore | 1,200 bulk | Refining tail, kerf, failed dies | Recast to silicon |
@@ -120,9 +126,9 @@ Each run, on its machine at full rating, with 200 kW of radiator headroom. The l
 | Recipe | Machine | In, per run | Out, per run | Energy | Heat | Run at full rating | Limit |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `melt_ice` | compact_refinery_mk1 | water ice 100 kg | slag 5 kg, water 95 kg | 68 MJ | 7 MJ | 33 min | throughput |
-| `electrolyse_water` | electrolyser_mk1 | water 100 kg | hydrogen 11.191 kg, oxygen 88.809 kg | 2,787 MJ | 1,199 MJ | 3.9 h | power |
-| `reduce_hematite` | compact_refinery_mk1 | hematite 100 kg, hydrogen 3.409 kg | water 30.46 kg, sponge iron 72.949 kg | 200 MJ | 144 MJ | 34 min | throughput |
-| `make_steel` | arc_furnace_mk1 | sponge iron 100 kg, carbon 0.173 kg | slag 13.708 kg, steel 86.465 kg | 190 MJ | 190 MJ | 17 min | throughput |
+| `electrolyse_water` | electrolyser_mk1 | water 100 kg, KOH 0.01 kg | hydrogen 11.191 kg, oxygen 88.809 kg, KOH 0.01 kg lost | 2,787 MJ | 1,199 MJ | 3.9 h | power |
+| `reduce_hematite` | compact_refinery_mk1 | hematite 100 kg, hydrogen 3.106 kg | water 27.752 kg, sponge iron 75.354 kg | 200 MJ | 149 MJ | 34 min | throughput |
+| `make_steel` | arc_furnace_mk1 | sponge iron 100 kg, carbon 0.174 kg | slag 13.271 kg, steel 86.903 kg | 191 MJ | 191 MJ | 17 min | throughput |
 | `remelt_steel_scrap` | arc_furnace_mk1 | steel scrap 100 kg | steel 100 kg | 220 MJ | 220 MJ | 18 min | heat |
 | `smelt_chalcopyrite` | compact_refinery_mk1 | chalcopyrite 100 kg, oxygen 31.211 kg | slag 45.039 kg, sulfur dioxide 46.863 kg, copper matte 39.309 kg | 30 MJ | 306 MJ | 44 min | throughput |
 | `convert_matte` | compact_refinery_mk1 | copper matte 100 kg, oxygen 19.85 kg | sulfur dioxide 39.738 kg, blister copper 80.112 kg | 20 MJ | 155 MJ | 40 min | throughput |
@@ -141,6 +147,23 @@ Each run, on its machine at full rating, with 200 kW of radiator headroom. The l
 Two more recipes, not in the table:
 - `fuse_silica`: 100 kg of silica to 100 kg of `glass` sheet, for solar-cell covers, on the arc furnace, at 250 MJ.
 - `recast_silicon_scrap`: scrap back to `silicon`, at 0.6 MJ/kg.
+
+### The bootstrap (B30a)
+
+The probe starts with only a compact refinery and a compact fabricator (C's route draft, section 2). These recipes make the first steel, wiring, nickel and power on those two, before any arc furnace or electrolyser exists. Each is a real process, slower or dearer than the full plant's.
+
+| Recipe | Machine | In, per run | Out, per run | Energy | Heat | Note |
+| --- | --- | --- | --- | --- | --- | --- |
+| `induction_melt_steel` | compact_refinery_mk1 | sponge iron 100 kg, carbon 0.174 kg | slag 13.271 kg, steel 86.903 kg | 226 MJ | 226 MJ | A small induction crucible, about 2.6 MJ/kg against the arc's 2.2, at 0.02 kg/s |
+| `draw_mi_cable` | compact_fabricator_mk1 | blister copper 8 kg, magnesia 2 kg | 1 MI cable, 10 kg | 15 MJ | 15 MJ | Mineral-insulated cable: no glass fibre, so no arc furnace. The magnesia comes from the acid loop, on tank oxygen |
+| `burn_carbon_to_monoxide` | compact_refinery_mk1 | carbon 100 kg, oxygen 133.203 kg | carbon monoxide 233.203 kg | 10 MJ | 930 MJ | 2 C + O₂ → 2 CO. Starts the Mond loop before silica reduction gives CO |
+| `extract_nickel` | compact_refinery_mk1 | sponge iron 100 kg, CO 1.9 kg | CO 1.9 kg, nickel 0.955 kg, sponge iron 99.045 kg | 10 MJ | 10 MJ | The Mond process: Ni(CO)₄ forms at 50 °C and gives its nickel back at 230 °C. 90% recovery. The CO circulates. 0.01 kg/s |
+| `plate_electrodes` | compact_refinery_mk1 | nickel 1 kg, steel 19 kg | 1 electrode, 20 kg | 43 MJ | 43 MJ | Perforated steel plate, Watts-bath nickel plated at 4 kWh per kg of nickel |
+| `make_solar_cells` | semiconductor_fab_mk1 | 8 wafers, glass 0.5 kg, copper 0.1 kg | 1 solar cell, 1 kg, 1 m² | 90 MJ | 90 MJ | Cell processing at about 25 kWh per m². Seeds stand in until the fab exists |
+
+**Red Rock's nickel.** The ore's 8% iron-nickel rides the reduction into the sponge iron, which comes out at 1.06% nickel. The Mond step takes 90% of it, leaving the iron for steel.
+
+**The alkaline electrolyser.** `electrolyser_mk1` is built from 20 electrodes (400 kg), a 60 kg KOH charge, 90 kg of copper busbars, 10 processors, 8 frames and 20 wiring, still 1,200 kg. Each run of 100 kg of water loses 10 g of KOH into the `electrolyte_loss` sink, so a charge lasts 6,000 runs, about 2.7 years at full rating, and needs topping up from the hold's seed.
 
 ### What a kilogram costs, through the loops
 
@@ -320,4 +343,4 @@ So, my proposal:
      - the gas gives the nickel back at about 230 °C;
      - the CO is reused.
    - **The KOH electrolyte is a seed stock** carried in the probe's hold, like the chips. It's lost slowly, at a realistic rate, so it needs a top-up in time. Potassium from the belt can replace it later.
-   - **These changes come in B30,** since they touch the start: the ore's composition, the reduction and carbonyl recipes, the electrolyser's recipe, its electrolyte and its loss rate, and the seed stock.
+   - **In the data since B30a:** the ore's composition, the reduction and carbonyl recipes, the electrolyser's recipe, its electrolyte and its loss rate. The seed stock comes with B30b.
