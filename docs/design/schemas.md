@@ -220,7 +220,7 @@ Machine throughputs:
 
 C33 sets what each step reveals and the science each earns. The old `seconds` stays beside the steps until B30b, for today's code.
 
-**Heat temperatures (B30).** Every radiator states its loop's `temp_k`, and a load may state its `heat_temp_k`, 300 K when left out. A load can dump heat only into radiators at or below its own temperature (A's HeatSystem rule), so a hot radiator never takes a cold load's heat. A hotter loop rejects far more per square metre, as the fourth power of its temperature, so it is lighter for its rating:
+**Heat temperatures (B30).** Every radiator states its loop's `temp_k`, and a load may state its `heat_temp_k`, 300 K when left out. A load can dump heat only into radiators at or below its own temperature (A's HeatSystem rule, A60), so a hot radiator never takes a cold load's heat. A facility's job gives its heat at the facility's `heat_temp_k`. Heat that finds no radiator at or below its temperature warms the unit's store, which counts as 300 K: only radiators at or below 300 K cool it (networks.md section 4, A60). The view's heat block shows it as `stranded_w`. Both fields are whole kelvin and load unchanged, and the sim takes 300 K for either when it is left out; the data states `temp_k` on every radiator. A hotter loop rejects far more per square metre, as the fourth power of its temperature, so it is lighter for its rating:
 
 | | Temperature | Mass per kW | Takes heat from |
 | --- | --- | --- | --- |
