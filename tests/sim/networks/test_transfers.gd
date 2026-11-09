@@ -271,3 +271,23 @@ func test_save_and_load_while_waiting_and_in_flight_is_byte_exact() -> void:
 		original.step(quoted["arrive_tick"] - at + 3)
 		assert_eq(copy.state_hash(), original.state_hash())
 		assert_eq(copy._state["units"][keys["Ship"]]["frame"], keys["Far"])
+
+
+## A62 (D's find): predict on a unit flying a transfer follows the transfer, and its world points are
+## from the root: each is where the unit really is at that tick.
+func test_predict_follows_a_transfer_in_flight() -> void:
+	var quoted := sim.quote(keys["Ship"], keys["Rock"], 1)
+	sim.submit(_move("Rock"))
+	sim.step(quoted["depart_tick"] + 2)
+	assert_eq(_ship()["op"]["type"], MoveStep.OP_MOVING)
+	var now := sim.current_tick()
+	var span: int = quoted["arrive_tick"] - 2 - now
+	var step := maxi(1, span / 20)
+	var ahead := sim.predict(keys["Ship"], now, span, step)
+	assert_eq(ahead["place"], { "orbit_parent": keys["Planet"] })
+	assert_eq(ahead["points"].size(), span / step + 1)
+	for k in ahead["points"].size():
+		if k > 0:
+			sim.step(step)
+		assert_eq(ahead["world_points"][k], RailSystem.world_mm(sim._state, "units", keys["Ship"]), "point %d" % k)
+	assert_ne(ahead["points"][0], ahead["points"][ahead["points"].size() - 1], "it moves along the transfer")

@@ -588,9 +588,22 @@ static func predict(ctx: SimContext, unit_id: int, from_tick: int, ticks: int, s
 			if with_burns:
 				result["burns"] = flown["burns"]
 			return result
+	if not unit["orbit"].is_empty():
+		# A transfer (FlightAhead doesn't fly one): its legs on rails, each from its tick (A62). Points
+		# are relative to the parent it is round now, through a leg's change of parent too.
+		var track := Relative.unit_track(ctx, unit_id)
+		var parent: int = unit["orbit"]["parent"]
+		var leg_points: Array = []
+		var leg_world: Array = []
+		for t in range(from_tick, from_tick + ticks + 1, step):
+			_add_point(ctx, track["segments"], t, parent, leg_points, leg_world)
+		var on_legs := { "place": { "orbit_parent": parent }, "points": leg_points, "world_points": leg_world,
+			"ended": ended }
+		if with_burns:
+			on_legs["burns"] = []
+		return on_legs
 	var points: Array = []
 	var world: Array = []
-	var orbit: Dictionary = unit["orbit"]
 	for t in range(from_tick, from_tick + ticks + 1, step):
 		var dt: int = t - int(ctx.state["tick"])
 		var point: Array[int] = []
