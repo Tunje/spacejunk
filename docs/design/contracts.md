@@ -245,7 +245,7 @@ Running short of power or radiators is handled in play: loads shed, facilities s
 **Energy (C30, v9).** Work points are gone, by the owner's ruling of 2026-11-07. A run needs its recipe's `energy_j`, and gives off its `heat_j` as waste heat, both spread over the run. A facility's `power_w` is the most it draws, and its `throughput_g_per_s` is how much material it handles, on the run's input mass. A recipe may give its own lower `throughput_g_per_s`.
 - **Rate.** In phase 4, after the unit's fixed loads (ops, cores and `always_on` parts) are kept or shed (networks.md section 3), each load-making job, by facility `priority` descending and then part ID, gets `rate_w`, the lowest of:
   - power: what is left of `budget_w`;
-  - heat: what is left of the heat headroom, times `energy_j / heat_j`. The headroom is the healthy radiators' `reject_w`, less the `heat_w` of the kept fixed loads and an allowance of `TICKS_PER_SECOND` watts for rounding, floored at 0. There is no heat limit (shown as -1) when `heat_j` is 0;
+  - heat: what is left of the heat headroom, times `energy_j / heat_j`. The headroom is the spare, after the kept fixed loads' heat is placed by temperature as [networks.md](networks.md) section 4 places it, on the healthy radiators at or below the facility's `heat_temp_k` (A60). An allowance of `TICKS_PER_SECOND` watts for rounding comes off the coldest radiators first. What the job is given is placed there in full, hottest first, so a job's heat never strands. A facility hotter than none of the radiators gets no headroom and pauses on `no_heat_headroom`. There is no heat limit (shown as -1) when `heat_j` is 0;
   - throughput: `throughput_g_per_s × energy_j / input grams`, never above the facility's `power_w`. A run of no input mass is held by `power_w` alone.
 - **`limit`** is the first of `power`, `heat` and `throughput` that equals `rate_w` and is below the power left. It is `feed` while the run takes its inputs through the docks. `limits_w = { power, heat, throughput }`.
 - **Drawing.** The job draws `rate_w`, and its facility puts `mul_div(rate_w, heat_j, energy_j)` into the heat loop instead of its module's `heat_w`. Jobs share the power and heat left in that order.
@@ -428,7 +428,7 @@ This shape is frozen. Fields may be added, but changes or removals go through th
     fit = { mass_g = 0, mass_limit_g = 0, power_budget_w = 0, power_rated_w = 0,
             heat_budget_w = 0, heat_rated_w = 0 },
     power = { supply_w = 0, in_shadow = false, demand_w = 0, stored_j = 0, capacity_j = 0, max_discharge_w = 0, sun_tick = 0 },
-    heat = { stored_j = 0, limit_j = 0, reject_w = 0, input_w = 0 },
+    heat = { stored_j = 0, limit_j = 0, reject_w = 0, input_w = 0, stranded_w = 0 },  # stranded_w: A60
   } },
   bodies = { 3: { kind = "asteroid", pos_mm = [], radius_mm = 0, visual_seed = 0, scanned = false,
                    frame = 0, orbit = {}, gm = 0, soi_mm = 0, world_mm = [] } },
@@ -453,6 +453,7 @@ This shape is frozen. Fields may be added, but changes or removals go through th
 - While waiting, the op keeps the trip it will fly as `plan`. It is the same dictionary `quote` gives, so a save mid-wait leaves on exactly the same legs. While `burning`, `part` is the thruster, which draws power and gives heat like any running load. A shed thruster gives no thrust that tick.
 - A unit also shows `vel_um_s`, its local velocity in a frame. It shows `burns`, its planned burns in tick order as `{ id, tick, prograde_um_s, normal_um_s, radial_um_s }`. And it shows `burn`, the running burn as `{ id, dv_um_s, done_um_s, start_tick }`, or `{}`.
 - A part's `state`: `on`, `shed` or `fault`.
+- `heat.stranded_w` (A60) is the heat of last tick's loads that found no radiator at or below their temperature, which warms the store. `reject_w` stays the healthy radiators' total; the ledger's heat flow carries the radiators that acted on the loop.
 - A job's `status`: `queued`, `waiting`, `running`, `paused` or `cancelling`. `queue_pos` is its place in its facility's queue, 0 for the active job. `energy_left_j` is the current run's energy still to put in, 0 until a run starts, and `energy_j` is one run's total (C30). `rate_w` is the power the run went at this tick, `limit` what held it (`power`, `heat`, `throughput`, or `feed` while its inputs come through the docks) and `limits_w` all three, with `heat` -1 when the run makes no heat. A client shows progress as `1 - energy_left_j / energy_j` and the time left at the present rate as `ceil(energy_left_j × TICKS_PER_SECOND / rate_w)` ticks. `feed` is `{}` or `{ need, route }` (section 5). `work`, `work_left` and `work_per_tick` are deprecated aliases kept until the client moves: `energy_j`, `energy_left_j`, and the joules a tick at `rate_w` or, with none yet, at the throughput limit. `points_held` is the science points a lab run holds. `install_to` is `{}`, or where the job builds its part in place.
 - `science.evidence` counts, per kind, the different keys that have paid. `research` is the state's research map as it is.
 - Each unit has one inventory, keyed by item. Capacity is by cargo class, summed across its storage modules.

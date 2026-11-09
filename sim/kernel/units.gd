@@ -34,7 +34,7 @@ static func new_record(id: int, def: String, kind: String, unit_name: String, po
 		"at_target": 0, "root": 0, "core": 0, "task": 0, "cycle_task": 0, "last_cycle": [],
 		"op": { "type": IDLE_OP, "target": 0, "part": 0, "start_tick": 0, "end_tick": 0 },
 		"route": {}, "dock": {}, "inventory": {}, "reserved": {},
-		"demand_w": 0, "heat_stored_j": 0, "heat_input_w": 0,
+		"demand_w": 0, "heat_stored_j": 0, "heat_input_w": 0, "heat_stranded_w": 0,
 		"heat_in_remainder": 0, "heat_out_remainder": 0,
 	}
 

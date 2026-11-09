@@ -85,6 +85,7 @@ func _unit_view(ctx: SimContext, id: int) -> Dictionary:
 			"stored_j": unit["heat_stored_j"],
 			"limit_j": index["limit_j"],
 			"reject_w": UnitIndex.healthy_total(ctx, index["radiators"]), "input_w": unit["heat_input_w"],
+			"stranded_w": unit.get("heat_stranded_w", 0),
 		},
 	}
 	return result
