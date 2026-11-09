@@ -129,10 +129,41 @@ static func body_name(view: Dictionary, body_id: int) -> String:
 ## An escape path has no apoapsis: "periapsis 150 km, escaping".
 static func orbit_text(view: Dictionary, orbit: Dictionary) -> String:
 	var radius: float = float(view["bodies"].get(orbit.get("parent", 0), {}).get("radius_mm", 0))
-	var apsides := OrbitPath.apsides_mm(orbit)
+	var apsides := FlightLogic.apsides_mm(orbit)
 	if OrbitPath.is_open(orbit):
 		return "periapsis %s, escaping" % OrderText.metres(roundi(apsides[0] - radius))
 	return "%s x %s" % [OrderText.metres(roundi(apsides[0] - radius)), OrderText.metres(roundi(apsides[1] - radius))]
+
+
+## Periapsis and apoapsis from the parent's centre, as the Sim gives them on an orbit
+## (A57's periapsis_mm and apoapsis_mm). Until A57, worked out from the elements.
+static func apsides_mm(orbit: Dictionary) -> PackedFloat64Array:
+	if orbit.has("periapsis_mm"):
+		return PackedFloat64Array([float(orbit["periapsis_mm"]), float(orbit.get("apoapsis_mm", -1))])
+	return OrbitPath.apsides_mm(orbit)
+
+
+## A closed orbit's turn in ticks, read off the Sim's own apsis ticks (A57): the next
+## periapsis and apoapsis are half a turn apart. -1 for an open path, or before A57.
+static func turn_ticks(orbit: Dictionary) -> int:
+	var peri := int(orbit.get("next_periapsis_tick", -1))
+	var apo := int(orbit.get("next_apoapsis_tick", -1))
+	if peri < 0 or apo < 0:
+		return -1
+	return 2 * absi(apo - peri)
+
+
+## The tick the orbit next reaches its periapsis (or with `apoapsis` its apoapsis), as the
+## Sim gives it (A57's next_periapsis_tick and next_apoapsis_tick), or -1 for none, such
+## as no apoapsis on an escape path. Until A57, worked out from the elements.
+static func apsis_tick(orbit: Dictionary, apoapsis: bool, tick: int) -> int:
+	var field := "next_apoapsis_tick" if apoapsis else "next_periapsis_tick"
+	if orbit.has(field):
+		return int(orbit[field])
+	if orbit.is_empty() or (apoapsis and OrbitPath.is_open(orbit)):
+		return -1
+	var wait := OrbitPath.ticks_until(orbit, tick, PI if apoapsis else 0.0)
+	return tick + wait if wait >= 0 else -1
 
 
 ## The preview's two lines from check's detail: cost, then what follows the burn.
@@ -174,7 +205,7 @@ static func preview_lines(detail: Dictionary, view: Dictionary, unit_id: int, ti
 			after = "That path is not flown yet"
 		elif OrbitPath.is_open(orbit):
 			var radius: float = float(view["bodies"].get(orbit.get("parent", 0), {}).get("radius_mm", 0))
-			after = "Then escaping %s, periapsis %s" % [parent, OrderText.metres(roundi(OrbitPath.apsides_mm(orbit)[0] - radius))]
+			after = "Then escaping %s, periapsis %s" % [parent, OrderText.metres(roundi(FlightLogic.apsides_mm(orbit)[0] - radius))]
 		else:
 			after = "Then %s above %s" % [FlightLogic.orbit_text(view, orbit), parent]
 	else:

@@ -10,6 +10,10 @@ class_name FlightScreen extends PanelContainer
 const WIDTH_PX := 400
 const MAX_DV_M_S := 5000.0
 const DV_STEP_M_S := 0.5
+## An open path's first predict step, how much coarser each retry is, and how many tries.
+const OPEN_PATH_STEP := 50
+const OPEN_PATH_COARSEN := 8
+const OPEN_PATH_TRIES := 4
 const MAX_LEAD_S := 36000.0
 const LOOP_POINTS := 128
 const PREDICT_POINTS := 96
@@ -152,9 +156,9 @@ func _ready() -> void:
 	_now_button = _add_button(jump_row, "Now")
 	_now_button.pressed.connect(burn_now)
 	_peri_button = _add_button(jump_row, "At periapsis")
-	_peri_button.pressed.connect(burn_at_apsis.bind(0.0))
+	_peri_button.pressed.connect(burn_at_apsis.bind(false))
 	_apo_button = _add_button(jump_row, "At apoapsis")
-	_apo_button.pressed.connect(burn_at_apsis.bind(PI))
+	_apo_button.pressed.connect(burn_at_apsis.bind(true))
 	for axis: String in ["Prograde", "Normal", "Radial out"]:
 		var row := HBoxContainer.new()
 		column.add_child(row)
@@ -340,15 +344,11 @@ func burn_now() -> void:
 	refresh()
 
 
-## Places the burn where the orbit next reaches mean anomaly `target`.
-func burn_at_apsis(target: float) -> void:
-	var orbit: Dictionary = unit().get("orbit", {})
-	if orbit.is_empty():
-		return
-	var tick: int = bridge.current_view["tick"]
-	var wait := OrbitPath.ticks_until(orbit, tick, target)
-	if wait > 0:
-		burn_tick = tick + wait
+## Places the burn at the orbit's next periapsis, or apoapsis, on the Sim's tick for it.
+func burn_at_apsis(apoapsis: bool) -> void:
+	var at := FlightLogic.apsis_tick(unit().get("orbit", {}), apoapsis, bridge.current_view["tick"])
+	if at > bridge.current_view["tick"]:
+		burn_tick = at
 	refresh()
 
 
@@ -400,8 +400,8 @@ func refresh() -> void:
 	# A19: a burn on the ground is a lift-off, so only docking stops one.
 	var flying: bool = shown["dock"].is_empty()
 	var orbit: Dictionary = shown.get("orbit", {})
-	_peri_button.disabled = orbit.is_empty() or OrbitPath.ticks_until(orbit, tick, 0.0) < 0
-	_apo_button.disabled = orbit.is_empty() or OrbitPath.is_open(orbit)
+	_peri_button.disabled = FlightLogic.apsis_tick(orbit, false, tick) < 0
+	_apo_button.disabled = FlightLogic.apsis_tick(orbit, true, tick) < 0
 	_sync_burns(shown, tick)
 	_show_burn_options()
 	var command := pending_command()
@@ -597,7 +597,13 @@ func _update_paths(view: Dictionary, command: Dictionary) -> void:
 	if preview.get("ok", false):
 		marker = _position_at(view, burn_tick)
 		var detail: Dictionary = preview["detail"]
-		if not detail.get("orbit", {}).is_empty():
+		if not detail.get("path", {}).is_empty():
+			# A57: the Sim's own path through the candidate burn, flown as the flight is.
+			var base := _place_world(view, detail["path"]["place"])
+			for point: Array in detail["path"]["points"]:
+				planned_path.append(OrbitPath.shifted(point, base))
+		elif not detail.get("orbit", {}).is_empty():
+			# Until A57: the orbit after the burn, worked out here from its elements.
 			var orbit: Dictionary = detail["orbit"]
 			var parent: int = orbit.get("parent", shown["orbit"].get("parent", 0))
 			var body: Dictionary = view["bodies"][parent]
@@ -639,20 +645,39 @@ func _current_path(view: Dictionary) -> Array[PackedFloat64Array]:
 		return _descent_path(view)
 	if not shown.get("landed", {}).is_empty():
 		return points
-	if OrbitPath.is_open(orbit):
-		var soi: float = float(view["bodies"][orbit["parent"]].get("soi_mm", 0))
-		ticks = OrbitPath.ticks_to_reach(orbit, view["tick"], soi)
-	elif not orbit.is_empty():
-		ticks = ceili(OrbitPath.period_ticks(orbit))
-	elif FlightLogic.speed_of(shown.get("vel_um_s", [0, 0, 0])) == 0:
-		return points
-	var path: Dictionary = bridge.sim.predict(unit_id(), view["tick"], ticks, maxi(1, ticks / PREDICT_POINTS))
+	var path: Dictionary = {}
+	if orbit.has("next_periapsis_tick"):
+		path = _one_turn(view, orbit)
+	else:
+		# Until A57: the turn's length worked out here from the elements.
+		if OrbitPath.is_open(orbit):
+			var soi: float = float(view["bodies"][orbit["parent"]].get("soi_mm", 0))
+			ticks = OrbitPath.ticks_to_reach(orbit, view["tick"], soi)
+		elif not orbit.is_empty():
+			ticks = ceili(OrbitPath.period_ticks(orbit))
+		elif FlightLogic.speed_of(shown.get("vel_um_s", [0, 0, 0])) == 0:
+			return points
+		path = bridge.sim.predict(unit_id(), view["tick"], ticks, maxi(1, ticks / PREDICT_POINTS))
 	if path.is_empty():
 		return points
 	var base := _place_world(view, path["place"])
 	for point: Array in path["points"]:
 		points.append(OrbitPath.shifted(point, base))
 	return points
+
+
+## A57: predict's own horizon, one turn or until the path leaves the sphere (ticks -1).
+## A closed orbit's step comes from its turn; an open path's length isn't known ahead,
+## so it starts coarse and coarsens until predict takes it within its point limit.
+func _one_turn(view: Dictionary, orbit: Dictionary) -> Dictionary:
+	var turn := FlightLogic.turn_ticks(orbit)
+	var step := maxi(1, turn / PREDICT_POINTS) if turn > 0 else OPEN_PATH_STEP
+	for attempt in OPEN_PATH_TRIES:
+		var path: Dictionary = bridge.sim.predict(unit_id(), view["tick"], -1, step)
+		if not path.is_empty():
+			return path
+		step *= OPEN_PATH_COARSEN
+	return {}
 
 
 ## In low flight, predict integrates the fall and says where it meets the ground.
