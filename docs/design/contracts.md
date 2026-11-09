@@ -113,6 +113,7 @@ Rules:
   - `place` is `{ orbit_parent }` or `{ frame }`.
   - `points` are in that place's coordinates, from `from_tick` every `step` ticks up to `from_tick + ticks`.
   - It returns `{}` for an unknown unit, or for 10,000 points or more.
+  - On a transfer (A62) the points follow its legs on rails, each from its `from_tick`. `place` is `{ orbit_parent }` for the parent it is round now, and the points stay relative to that parent through a leg's change of parent. `world_points` are from the root.
   - `place` is `{ stepped }` in stepped flight. It adds `contact`, `{ tick, cell, speed_um_s, outcome }` where the path meets the ground, or `{}`. Stepped stretches cost one step per tick; coasting on an orbit is jumped.
   - A docked unit predicts as its host.
 - `relative(unit, target, from_tick, horizon_ticks = 0) -> Dictionary` gives the target, another unit or a body, as seen from the unit (A54, real_orbits.md section 3.5). It is read-only, like `view()`. It gives `{ reason }` with `unknown_unit` for an unknown unit, or `invalid_target` for a target that is missing or the unit itself. Otherwise:
