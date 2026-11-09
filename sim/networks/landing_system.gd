@@ -57,8 +57,9 @@ func validate(ctx: SimContext, command: Dictionary) -> Dictionary:
 	var plan := _plan(ctx, unit_id, command["type"], args)
 	if plan.has("reason"):
 		return SimSystem.reject(plan["reason"])
-	var free := Reservations.free_stock(ctx, unit_id, Travel.PROPELLANT)
-	if plan["cost_g"] > free:
+	var mixture := Propellant.mixture_of(ctx, unit_id)
+	var free := Propellant.usable_g(ctx, unit_id, mixture)
+	if not Propellant.fits(ctx, unit_id, mixture, plan["cost_g"]):
 		return SimSystem.reject(REASON_NO_PROPELLANT, { "need_g": plan["cost_g"], "have_g": free })
 	var result := SimSystem.ok()
 	result["detail"] = { "dv_um_s": plan["dv_um_s"], "propellant_g": plan["cost_g"], "ticks": plan["ticks"] }
@@ -83,8 +84,9 @@ func apply(ctx: SimContext, command: Dictionary) -> void:
 		"end_tick": ctx.tick + plan["ticks"] - 1, "cell": plan["cell"], "altitude_mm": plan["altitude_mm"] }
 	unit["at_target"] = 0
 	if plan["cost_g"] > 0:
-		Reservations.claim_stock(ctx, unit_id, Travel.PROPELLANT, plan["cost_g"])
-		ctx.record_delta(unit_id, self, { "kind": DELTA_PROPELLANT, "unit": unit_id, "grams": plan["cost_g"] })
+		var shares := Propellant.claim(ctx, unit_id, Propellant.mixture_of(ctx, unit_id), plan["cost_g"])
+		ctx.record_delta(unit_id, self, { "kind": DELTA_PROPELLANT, "unit": unit_id, "grams": plan["cost_g"],
+			"items": shares })
 
 
 ## Phase 5: finish landings and takeoffs, then crash anything below a surface.
@@ -121,9 +123,7 @@ func horizon(ctx: SimContext) -> int:
 
 
 func apply_delta(ctx: SimContext, payload: Dictionary) -> void:
-	Units.remove_stock(ctx.state["units"][payload["unit"]]["inventory"], Travel.PROPELLANT, payload["grams"])
-	var sink: Dictionary = ctx.state["sinks"].get_or_add(Travel.SINK, {})
-	sink[Travel.PROPELLANT] = sink.get(Travel.PROPELLANT, 0) + payload["grams"]
+	Propellant.spend(ctx, payload)
 
 
 func fill_view(ctx: SimContext, view: Dictionary) -> void:

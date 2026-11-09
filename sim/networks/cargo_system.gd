@@ -66,9 +66,7 @@ func run(ctx: SimContext) -> void:
 func apply_delta(ctx: SimContext, payload: Dictionary) -> void:
 	var units: Dictionary = ctx.state["units"]
 	if payload["kind"] == DELTA_BURN:
-		Units.remove_stock(units[payload["unit"]]["inventory"], Travel.PROPELLANT, payload["grams"])
-		var sink: Dictionary = ctx.state["sinks"].get_or_add(Travel.SINK, {})
-		sink[Travel.PROPELLANT] = sink.get(Travel.PROPELLANT, 0) + payload["grams"]
+		Propellant.spend(ctx, payload)
 	else:
 		Units.remove_stock(units[payload["from"]]["inventory"], payload["item"], payload["grams"])
 		Units.add_stock(units[payload["to"]]["inventory"], payload["item"], payload["grams"])
@@ -96,12 +94,13 @@ func _depart(ctx: SimContext, id: int) -> void:
 			_depart_transfer(ctx, id, quoted)
 		return
 	var cost_g: int = quoted["cost_g"]
-	if cost_g > Reservations.free_stock(ctx, id, Travel.PROPELLANT):
+	var mixture := Propellant.mixture_of(ctx, id)
+	if not Propellant.fits(ctx, id, mixture, cost_g):
 		op["reason"] = MoveStep.REASON_NO_PROPELLANT
 		return
 	if cost_g > 0:
-		Reservations.claim_stock(ctx, id, Travel.PROPELLANT, cost_g)
-		ctx.record_delta(id, self, { "kind": DELTA_BURN, "unit": id, "grams": cost_g })
+		var shares := Propellant.claim(ctx, id, mixture, cost_g)
+		ctx.record_delta(id, self, { "kind": DELTA_BURN, "unit": id, "grams": cost_g, "items": shares })
 	op["end_tick"] = ctx.tick + quoted["ticks"] - 1
 	unit["route"] = {
 		"target": op["target"], "from_mm": quoted["from_mm"], "to_mm": quoted["to_mm"],
@@ -120,7 +119,8 @@ func _depart(ctx: SimContext, id: int) -> void:
 func _depart_transfer(ctx: SimContext, id: int, quoted: Dictionary) -> void:
 	var unit: Dictionary = ctx.state["units"][id]
 	var target: int = quoted["target"]
-	if quoted["cost_g"] > Reservations.free_stock(ctx, id, Travel.PROPELLANT):
+	var mixture := Propellant.mixture_of(ctx, id)
+	if not Propellant.fits(ctx, id, mixture, quoted["cost_g"]):
 		MoveStep.wait_for(ctx, id, ctx.tick)
 		unit["op"]["reason"] = MoveStep.REASON_NO_PROPELLANT
 		return
@@ -135,8 +135,8 @@ func _depart_transfer(ctx: SimContext, id: int, quoted: Dictionary) -> void:
 		unit["op"]["reason"] = Travel.REASON_OTHER_PLACE
 		return
 	if quoted["cost_g"] > 0:
-		Reservations.claim_stock(ctx, id, Travel.PROPELLANT, quoted["cost_g"])
-		ctx.record_delta(id, self, { "kind": DELTA_BURN, "unit": id, "grams": quoted["cost_g"] })
+		var shares := Propellant.claim(ctx, id, mixture, quoted["cost_g"])
+		ctx.record_delta(id, self, { "kind": DELTA_BURN, "unit": id, "grams": quoted["cost_g"], "items": shares })
 	unit["transfer"] = { "target": target, "depart_tick": ctx.tick, "arrive_tick": quoted["arrive_tick"],
 		"legs": legs }
 	unit["orbit"] = orbit

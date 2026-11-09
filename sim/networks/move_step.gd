@@ -50,8 +50,9 @@ func validate(ctx: SimContext, unit_id: int, args: Dictionary) -> Dictionary:
 	if quoted["kind"] == Transfer.KIND:
 		detail["depart_tick"] = quoted["depart_tick"]
 		detail["arrive_tick"] = quoted["arrive_tick"]
-	var have_g: int = unit["inventory"].get(Travel.PROPELLANT, 0)
-	if quoted["cost_g"] > have_g:
+	var mixture := Propellant.mixture_of(ctx, unit_id)
+	var have_g := Propellant.usable_g(ctx, unit_id, mixture)
+	if not Propellant.fits(ctx, unit_id, mixture, quoted["cost_g"]):
 		detail["need_g"] = quoted["cost_g"]
 		detail["have_g"] = have_g
 		return SimSystem.reject(REASON_NO_PROPELLANT, detail)
@@ -112,7 +113,7 @@ func retry(ctx: SimContext, unit_id: int) -> void:
 	if op["type"] != OP_WAITING or op.get("reason", "") != REASON_NO_PROPELLANT:
 		return
 	var quoted := Travel.quote_trip(ctx, unit_id, op["target"], ctx.tick, prefer_of(op))
-	if quoted.has("reason") or quoted["cost_g"] > Reservations.free_stock(ctx, unit_id, Travel.PROPELLANT):
+	if quoted.has("reason") or not Propellant.fits(ctx, unit_id, Propellant.mixture_of(ctx, unit_id), quoted["cost_g"]):
 		return
 	op.erase("reason")
 	op["plan"] = quoted.duplicate(true)
