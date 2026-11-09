@@ -189,7 +189,7 @@ Every command has this envelope. `submit` fills in `id` and `tick`.
 
 | Type | Args | Meaning |
 | ---- | ---- | ------- |
-| `scan` | `target` | Scan a body for deposits. A finished scan also pays `survey` points |
+| `scan` | `target`, `reveals` (optional: `shape`, `class` or `grade`) | Run one scan step on a body, within that step's range (C34, below). With no `reveals`, the deepest step any healthy instrument can do from where the unit is. A finished step pays its science kind |
 | `measure` | `target`, `kind` | Take a measurement of a body for science points (C12) |
 | `move_to` | `target`, optional `prefer` | Travel to an entity along a route. Inside the unit's frame, or in the old world, as today. A target on an orbit or in another frame is refused with `unsupported_orbit` until A13's planner, which waits for a window and flies an atomic transfer. `prefer` is `"cheap"` (the default) or `"fast"`, and picks between two plans as `quote` does; anything else is `malformed_command`. A cycle's move step takes it the same way (A43). |
 | `dock` | `port`, `target_port` | Dock at a port |
@@ -268,10 +268,17 @@ Running short of power or radiators is handled in play: loads shed, facilities s
 
 **Science (C12).** A finished measurement pays science points, held in `state.science = { points, earned, spent, paid }`.
 - `measure` kinds come from `data/science.json`. `survey` is the scan step itself, and a finished scan pays it.
-  - `composition` is taken at an asteroid, undocked, with the part that has `scan`.
+  - **Scan steps (C34).** A `scan` capability lists `steps: [{ reveals, range_m, ticks }]`.
+    - `shape` marks the body `scanned`. `class` finds its deposits, by item only. `grade` finds and grades them: grams and hardness too.
+    - A step runs only while the unit is within its `range_m` of the body's centre, judged by real relative position. A docked unit scans from its host's place, so `docked` is no longer a scan refusal.
+    - Out of every step's range, `scan` is refused with `out_of_range` and `{ range_m, need_m }`. Leaving range during the step interrupts it with `out_of_range`, and it pays and reveals nothing. A faulted instrument still refuses with `module_fault`.
+    - A finished step pays the kind in science.json whose `reveals` names it, and `survey` for a legacy step.
+    - An instrument whose data has only `ticks` (before B30) has one legacy step that reveals all three within 1,000 m. A unit placed by the "is at" flag counts as at range 0 until A53's stage 4 removes the flag.
+    - A measure kind with `reveals`, or `survey`, is that scan step.
+  - `composition` is taken at an asteroid, within the scan part's longest step range, docked or not (C34), with the part that has `scan`. Leaving that range ends it with `out_of_range`.
   - `surface` is taken landed on the target body, with that part.
-  - `gravity_field` is taken on an elliptic orbit round the target, with an assigned core and no other part. It lasts one period of that orbit, rounded up to whole ticks. Its op keeps the orbit it started on, and any change to the unit's orbit ends it unpaid with `orbit_changed`.
-  - It may also be taken by a unit in a frame, or docked within one, whose own orbit is an ellipse round the target (C18). It then lasts one period of the frame's orbit, and leaving the frame ends it unpaid with `orbit_changed`. So a unit in an asteroid cluster round a moon can map the moon's gravity field without leaving the cluster.
+  - `gravity_field` is taken on an elliptic orbit round the target, with an assigned core and no other part. A docked unit takes it on its host's orbit, through every dock down to the unit that is not docked (C34). It lasts one period of that orbit, rounded up to whole ticks. Its op keeps the orbit it started on, and any change to that orbit, or to whose orbit it is by docking or undocking, ends it unpaid with `orbit_changed`.
+  - It may also be taken by a unit in a frame, or docked within one, whose own orbit is an ellipse round the target (C18). It then lasts one period of the frame's orbit, and leaving the frame ends it unpaid with `orbit_changed`. So a unit in an asteroid cluster round a moon can map the moon's gravity field without leaving the cluster. This goes with the frames at A53's stage 4.
   - The time is the kind's `ticks`, or the scan part's own when it has none. The op type is `measuring`, with the op's `kind`.
   - A kind with no points for the target's class (`asteroid`, `moon` for a body round a planet, or `planet`) is refused with `invalid_target`. Placement gives `out_of_range`, `docked`, `no_core` or `tier_too_low`.
   - Like a scan, a part shed on the last tick does no work, and an interrupted measurement pays nothing. `measure` may be a cycle step when its kind is taken at an asteroid.
@@ -356,8 +363,9 @@ Events are ordered by phase, then the event's `unit`, then emission order. Unit 
 | `task_cancelled` | `task`, `reason` |
 | `task_blocked`, `task_resumed` | `task`, `reason` |
 | `task_cycle_done` | `task`, `cycle` |
-| `scan_finished` | `target`, `deposits` |
-| `deposit_found` | `deposit`, `item`, `grams` |
+| `scan_finished` | `target`, `deposits`, `reveals`: the step's, or `legacy` (C34) |
+| `deposit_found` | `deposit`, `item`, and `grams` when the step also grades it (C34) |
+| `deposit_graded` | `deposit`, `item`, `grams`: a deposit found by class, now graded (C34) |
 | `mining_stopped` | `deposit`, `grams`, `reason`: `cargo_full`, `deposit_exhausted`, `amount_mined` when the order's `grams` were mined (C19), or the task's cancel reason |
 | `arrived`, `docked`, `undocked` | `target` |
 | `departed` | `target`, `arrive_tick`: a trip between places leaves on its window, paid (A34) |
@@ -466,7 +474,7 @@ This shape is frozen. Fields may be added, but changes or removals go through th
 - `science.evidence` counts, per kind, the different keys that have paid. `research` is the state's research map as it is.
 - Each unit has one inventory, keyed by item. Capacity is by cargo class, summed across its storage modules.
 - `pos_mm` is in the object's own place (section 1): relative to its orbit's parent, local to its frame, or in the old world. `world_mm` adds up the chain to the root body, for drawing a system map. Floats are for drawing only: an orbit is drawn from its record with 64-bit floats as `position_float` in tests/sim/kernel/test_orbit_math.gd does, never Godot's 32-bit `Vector3`.
-- Unfound deposits stay out of the view. Decorative asteroids are client-only, generated from `seed`; only targetable bodies appear here.
+- Unfound deposits stay out of the view. A deposit found by a `class` step but not yet graded shows its `body` and `item`, with `remaining_g` and `hardness` -1 (C34). Decorative asteroids are client-only, generated from `seed`; only targetable bodies appear here.
 
 ## 8. Canonical serialization
 
