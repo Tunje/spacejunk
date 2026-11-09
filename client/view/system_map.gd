@@ -20,6 +20,9 @@ const ROUTE_SEGMENTS := 24
 const CLICK_SLOP_PX := 5.0
 ## quote() may search for a window, so the selection's trip is asked at most this often.
 const QUOTE_REFRESH_MS := 250
+## A craft's flown trip arc (A57) is asked again at most this often.
+const ARC_REFRESH_MS := 500
+var _arcs: Dictionary = {}
 
 var bridge: SimBridge
 var local_view: LocalView
@@ -211,9 +214,11 @@ func _draw_routes(view: Dictionary, centre: Array) -> void:
 			_add_line(mesh, _relative(WorldPosition.of(unit), centre),
 				_relative(WorldPosition.local_to_world(unit, unit["route"]["to_mm"]), centre), ClientTheme.ORANGE)
 		elif not unit.get("transfer", {}).is_empty() and not unit.get("orbit", {}).is_empty():
-			_add_arc(mesh, SystemMap.transfer_arc(view, unit, ROUTE_SEGMENTS), centre, ClientTheme.ORANGE)
+			var flown := _flown_arc(view, id, int(unit["transfer"]["arrive_tick"]))
+			_add_arc(mesh, flown if not flown.is_empty() else SystemMap.transfer_arc(view, unit, ROUTE_SEGMENTS), centre, ClientTheme.ORANGE)
 		elif unit["op"]["type"] == "waiting" and not unit["op"].get("plan", {}).get("legs", []).is_empty():
-			_add_arc(mesh, SystemMap.plan_arc(view, unit["op"]["plan"], ROUTE_SEGMENTS), centre, ClientTheme.GOLD)
+			var flown := _flown_arc(view, id, int(unit["op"]["plan"]["arrive_tick"]))
+			_add_arc(mesh, flown if not flown.is_empty() else SystemMap.plan_arc(view, unit["op"]["plan"], ROUTE_SEGMENTS), centre, ClientTheme.GOLD)
 	var target := _selected_position(view)
 	if not target.is_empty() and view["units"].has(local_view.commanded_unit):
 		var unit: Dictionary = view["units"][local_view.commanded_unit]
@@ -248,6 +253,26 @@ static func plan_arc(view: Dictionary, plan: Dictionary, segments: int) -> Array
 	for leg: Dictionary in plan.get("legs", []):
 		pieces.append(leg)
 	return SystemMap.chain_arc(view, pieces, plan["arrive_tick"], segments)
+
+
+## A57: the trip as the Sim flies it, its burns and all, to `end_tick`: predict's
+## world_points, from the root, so a moon moving meanwhile is the Sim's to place. []
+## before A57, when the arcs below are drawn from the legs instead.
+## A flight ahead costs, so each craft's arc is asked again at most every ARC_REFRESH_MS.
+func _flown_arc(view: Dictionary, unit_id: int, end_tick: int) -> Array[PackedFloat64Array]:
+	var points: Array[PackedFloat64Array] = []
+	var ticks: int = end_tick - int(view["tick"])
+	if ticks <= 0 or not bridge.sim.has_method("predict") or not view["units"][unit_id].get("orbit", {}).has("next_periapsis_tick"):
+		return points
+	var cached: Dictionary = _arcs.get(unit_id, {})
+	var now := Time.get_ticks_msec()
+	if not cached.is_empty() and cached["end_tick"] == end_tick and now - int(cached["ms"]) < ARC_REFRESH_MS:
+		return cached["points"]
+	var path: Dictionary = bridge.sim.predict(unit_id, view["tick"], ticks, maxi(1, ticks / ROUTE_SEGMENTS), true)
+	for point: Array in path.get("world_points", []):
+		points.append(PackedFloat64Array(point))
+	_arcs[unit_id] = { "end_tick": end_tick, "ms": now, "points": points }
+	return points
 
 
 ## Points along a chain of { orbit, from_tick }, each piece up to the next piece's

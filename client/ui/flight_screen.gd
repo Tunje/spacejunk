@@ -10,6 +10,10 @@ class_name FlightScreen extends PanelContainer
 const WIDTH_PX := 400
 const MAX_DV_M_S := 5000.0
 const DV_STEP_M_S := 0.5
+## An open path's first predict step, how much coarser each retry is, and how many tries.
+const OPEN_PATH_STEP := 50
+const OPEN_PATH_COARSEN := 8
+const OPEN_PATH_TRIES := 4
 const MAX_LEAD_S := 36000.0
 const LOOP_POINTS := 128
 const PREDICT_POINTS := 96
@@ -641,20 +645,39 @@ func _current_path(view: Dictionary) -> Array[PackedFloat64Array]:
 		return _descent_path(view)
 	if not shown.get("landed", {}).is_empty():
 		return points
-	if OrbitPath.is_open(orbit):
-		var soi: float = float(view["bodies"][orbit["parent"]].get("soi_mm", 0))
-		ticks = OrbitPath.ticks_to_reach(orbit, view["tick"], soi)
-	elif not orbit.is_empty():
-		ticks = ceili(OrbitPath.period_ticks(orbit))
-	elif FlightLogic.speed_of(shown.get("vel_um_s", [0, 0, 0])) == 0:
-		return points
-	var path: Dictionary = bridge.sim.predict(unit_id(), view["tick"], ticks, maxi(1, ticks / PREDICT_POINTS))
+	var path: Dictionary = {}
+	if orbit.has("next_periapsis_tick"):
+		path = _one_turn(view, orbit)
+	else:
+		# Until A57: the turn's length worked out here from the elements.
+		if OrbitPath.is_open(orbit):
+			var soi: float = float(view["bodies"][orbit["parent"]].get("soi_mm", 0))
+			ticks = OrbitPath.ticks_to_reach(orbit, view["tick"], soi)
+		elif not orbit.is_empty():
+			ticks = ceili(OrbitPath.period_ticks(orbit))
+		elif FlightLogic.speed_of(shown.get("vel_um_s", [0, 0, 0])) == 0:
+			return points
+		path = bridge.sim.predict(unit_id(), view["tick"], ticks, maxi(1, ticks / PREDICT_POINTS))
 	if path.is_empty():
 		return points
 	var base := _place_world(view, path["place"])
 	for point: Array in path["points"]:
 		points.append(OrbitPath.shifted(point, base))
 	return points
+
+
+## A57: predict's own horizon, one turn or until the path leaves the sphere (ticks -1).
+## A closed orbit's step comes from its turn; an open path's length isn't known ahead,
+## so it starts coarse and coarsens until predict takes it within its point limit.
+func _one_turn(view: Dictionary, orbit: Dictionary) -> Dictionary:
+	var turn := FlightLogic.turn_ticks(orbit)
+	var step := maxi(1, turn / PREDICT_POINTS) if turn > 0 else OPEN_PATH_STEP
+	for attempt in OPEN_PATH_TRIES:
+		var path: Dictionary = bridge.sim.predict(unit_id(), view["tick"], -1, step)
+		if not path.is_empty():
+			return path
+		step *= OPEN_PATH_COARSEN
+	return {}
 
 
 ## In low flight, predict integrates the fall and says where it meets the ground.

@@ -143,6 +143,16 @@ static func apsides_mm(orbit: Dictionary) -> PackedFloat64Array:
 	return OrbitPath.apsides_mm(orbit)
 
 
+## A closed orbit's turn in ticks, read off the Sim's own apsis ticks (A57): the next
+## periapsis and apoapsis are half a turn apart. -1 for an open path, or before A57.
+static func turn_ticks(orbit: Dictionary) -> int:
+	var peri := int(orbit.get("next_periapsis_tick", -1))
+	var apo := int(orbit.get("next_apoapsis_tick", -1))
+	if peri < 0 or apo < 0:
+		return -1
+	return 2 * absi(apo - peri)
+
+
 ## The tick the orbit next reaches its periapsis (or with `apoapsis` its apoapsis), as the
 ## Sim gives it (A57's next_periapsis_tick and next_apoapsis_tick), or -1 for none, such
 ## as no apoapsis on an escape path. Until A57, worked out from the elements.
