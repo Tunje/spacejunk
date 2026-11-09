@@ -75,9 +75,13 @@ One loop per unit. Docking does not join loops.
 
 **Phase 6.** Faulted parts contribute nothing.
 - `input_w` is the sum of `heat_w` across parts that ran this tick, with each facility's job heat in place of its module's (C30).
-- `reject_w` is the sum of `radiator.reject_w`.
+- **Temperatures (A60, the Lead's rule).** A load's heat goes only to radiators at or below its temperature. A module's heat leaves at its `heat_temp_k`, and a radiator works at its `radiator.temp_k`, both 300 K when not given. The loads that ran are placed from coldest to hottest, ties by part ID. Each puts its heat into the healthy radiators at or below its temperature, hottest of those first, up to each one's `reject_w`. A hotter load may use every radiator a colder one may, so this places as much as the rule allows.
+  - Heat that finds no radiator is stranded (`stranded_w`). It goes to the store, which counts as 300 K.
+  - `reject_w` is the radiators that act on the loop: the heat placed this tick, plus the spare left on radiators at or below 300 K, which cool the store. A hot radiator's spare can't cool it.
+  - With every load and radiator at 300 K, `reject_w` is the sum of `radiator.reject_w` and nothing strands, so the loop is as it was before A60.
 - `added_j = Rate.amount(input_w, heat_in_remainder)`, and heat rises by that first.
 - `rejected_j = min(stored_j, Rate.amount(reject_w, heat_out_remainder))`. A clamped amount is dropped, so radiators build no credit while the loop is cold.
+- A job's heat is never stranded: PowerSystem offers each job, in keep order, only the spare on radiators at or below its facility's temperature, after the kept fixed loads are placed, and places what it takes there, hottest first (A60, C30).
 
 **Phase 7, faults.** `limit_j` is the sum of `heat_capacity.limit_j`, which B4 requires on every unit that makes heat.
 - If `stored_j > limit_j`, walk the parts that ran this tick with `heat_w` above 0, in reverse keep order. Fault each with `over_heat_limit` until the remaining `input_w` is at or below `reject_w`. This repeats on each tick the loop stays over its limit.

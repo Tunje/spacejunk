@@ -59,7 +59,7 @@ func allocate(ctx: SimContext) -> void:
 		var loads := _loads(ctx, id)
 		var kept_w := _choose(loads, flow["budget_w"])
 		loads.append_array(_job_loads(ctx, id, jobs.get(id, []), flow["budget_w"] - kept_w,
-			_heat_headroom(ctx, id, loads), flow))
+			_heat_spares(ctx, id, loads), flow))
 		_apply_choice(ctx, id, loads)
 		_settle_flows(flow, loads)
 
@@ -69,7 +69,7 @@ func allocate(ctx: SimContext) -> void:
 ## the radiators' heat headroom still left. A job given no power is shed as any load is; one held
 ## at no speed by heat alone is kept, and pauses on no_heat_headroom. What each job is given goes
 ## into the flows for JobSystem's phase 5, and the heat it makes for HeatSystem's phase 6.
-func _job_loads(ctx: SimContext, unit: int, jobs: Array, power_w: int, heat_w: int, flow: Dictionary) -> Array[Dictionary]:
+func _job_loads(ctx: SimContext, unit: int, jobs: Array, power_w: int, spares: Array, flow: Dictionary) -> Array[Dictionary]:
 	var parts: Dictionary = ctx.state["parts"]
 	var ordered: Array = jobs.filter(func(job: Dictionary) -> bool: return parts[job["facility"]]["fault"] == "")
 	ordered.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
@@ -82,9 +82,12 @@ func _job_loads(ctx: SimContext, unit: int, jobs: Array, power_w: int, heat_w: i
 	for job: Dictionary in ordered:
 		var part_id: int = job["facility"]
 		var held: bool = parts[part_id]["shed_until_tick"] > ctx.tick
-		var given := JobSystem.rate_for(ctx, job, 0 if held else power_w, heat_w)
+		# A60: the job may use the spare on radiators at or below its facility's heat temperature, and
+		# what it is given is placed there in full, so a job never strands heat.
+		var temp_k := HeatSystem.heat_temp_k(ctx, part_id)
+		var given := JobSystem.rate_for(ctx, job, 0 if held else power_w, HeatSystem.spare_at(spares, temp_k))
 		power_w -= given["rate_w"]
-		heat_w -= given["heat_w"]
+		HeatSystem.place(spares, temp_k, given["heat_w"])
 		flow["jobs"][job["id"]] = given
 		flow["job_heat_w"][part_id] = given["heat_w"]
 		result.append({
@@ -95,17 +98,25 @@ func _job_loads(ctx: SimContext, unit: int, jobs: Array, power_w: int, heat_w: i
 	return result
 
 
-## C30: the heat the healthy radiators can reject this tick beyond what the kept fixed loads give
-## off, less TICKS_PER_SECOND watts, floored at 0. Jobs share it, so they never add heat faster than
-## it is taken off. The allowance covers the joule a tick the two remainders can differ by, so a
-## cold loop stays cold, as HeatSystem's horizon needs, rather than holding a joule now and then.
-func _heat_headroom(ctx: SimContext, unit: int, loads: Array[Dictionary]) -> int:
+## C30, A60: the radiators' spare this tick, as HeatSystem.radiator_spares gives it, once the kept
+## fixed loads' heat is placed as HeatSystem places it, coldest load first. TICKS_PER_SECOND watts come
+## off the coldest radiators' spare, coldest first: they cover the joule a tick the two remainders can differ by, so
+## a cold loop stays cold, as HeatSystem's horizon needs, rather than holding a joule now and then.
+## Jobs share what is left, each on the radiators its heat may use.
+func _heat_spares(ctx: SimContext, unit: int, loads: Array[Dictionary]) -> Array:
 	var index := UnitIndex.of(ctx, unit)
-	var headroom := UnitIndex.healthy_total(ctx, index["radiators"]) - Sim.TICKS_PER_SECOND
+	var spares := HeatSystem.radiator_spares(ctx, unit)
+	var fixed: Array = []
 	for entry: Dictionary in loads:
-		if entry["keep"]:
-			headroom -= index["heat_w"][entry["part"]]
-	return maxi(0, headroom)
+		if entry["keep"] and int(index["heat_w"][entry["part"]]) > 0:
+			fixed.append([HeatSystem.heat_temp_k(ctx, entry["part"]), index["heat_w"][entry["part"]], entry["part"]])
+	HeatSystem.place_all(spares, fixed)
+	var allowance := Sim.TICKS_PER_SECOND
+	for i in range(spares.size() - 1, -1, -1):
+		var taken := mini(allowance, int(spares[i][1]))
+		spares[i][1] = int(spares[i][1]) - taken
+		allowance -= taken
+	return spares
 
 
 func update_stores(ctx: SimContext) -> void:
