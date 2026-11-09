@@ -212,7 +212,9 @@ Every command has this envelope. `submit` fills in `id` and `tick`.
 
 **Tasks.** Every long-running unit order is a task: scan, move, dock, undock, load, unload and mining. A single order is a one-step task, so tier 1 and tier 2 share one state machine and one owner rule.
 
-**Transfers.** Omitting `grams` means all that fits, since a fixed cycle cannot name an amount in advance. Refuelling is `load_cargo` of the propellant item.
+**Transfers.** Omitting `grams` means all that fits, since a fixed cycle cannot name an amount in advance. Refuelling is `load_cargo` of the propellant item, or of each item in a mixture.
+
+**Propellant mixtures (A61).** A thruster's `mixture` gives parts by mass of each propellant item, for example `{ hydrogen: 1, oxygen: 6 }`. A thruster without one burns the single `propellant` item. Every gram a burn, a `move_to` or a `land` or `take_off` spends is split across the mixture's items in ratio: items go in ID order, and the last takes the rounding remainder, so the parts sum exactly. A unit spends with its burn thruster's mixture (`BurnSystem.thruster`). It can spend only what its scarcest item allows: `min(free_g × total_parts ÷ parts)` over the items. A burn ends `burn_short` with `no_propellant` on the first tick any item can't cover its share, and `move_to`, `land` and `take_off` are refused or held on `no_propellant` the same way. Any excess of the other items stays unusable until it is rebalanced (the Lead's ruling). The detail's `have_g` is that usable amount. Each item spent goes to the `propellant_exhaust` sink under its own ID.
 
 **Cycles.** `set_cycle` steps are `{ type, args }`, taken from a whitelist of the unit orders above: `move_to`, `dock`, `undock`, `load_cargo`, `unload_cargo`, `start_mining`, `measure` and `scan` (C28). A cycle's `scan` of a body already scanned passes as done in one tick, revealing and paying nothing. A `start_mining` step still names a deposit already found, so a cycle cannot plan to mine what a scan in it would reveal.
 
@@ -510,7 +512,7 @@ Task B3 owns the schemas. These fields are fixed here because other agents depen
 - **Modules:** `id`, `name`, `mass_kg`, `volume_m3`, `power_kw`, `heat_kw`, `priority`, `durability`, `min_ai_tier`, `realism`, `capabilities`, `fabrication`, `connectors`, `collision`, `visual`. `power_kw` and `heat_kw` are non-negative draw while active; generation is a capability. A higher `priority` sheds last.
 - **Items:** `id`, `name`, `cargo_class`, `density_kg_m3`, and `unit_mass_kg` for discrete items.
 - **Deposits:** item, grams, `hardness`.
-- **Cargo classes:** `ore`, `goods`, `propellant`.
+- **Cargo classes:** `ore`, `goods`, `propellant`, `water`, `fuel`, `oxidiser`, `acid`, `gas` (A56).
 - **Capabilities:** the closed list in `docs/design/schemas.md` section 5.
 - **`realism`:** `established`, `extrapolation`, `speculative` or `fictional`.
 - **Connectors:** `id` (unique within a module), `type` (`stack`, `side`, `dock`), `size`, `pos_mm`, `facing`, `up`, `load_limit_kg`. `facing` and `up` are axis values (+/-x, +/-y, +/-z), written in the module's own frame. A child part is turned as it mates, so that in the craft's frame the connectors have opposite facings and equal ups. `load_limit_kg` is the mass carried below the connector.
